@@ -23,6 +23,15 @@
       },
       "versions": [
         {
+          "version": "1.0.0-nightly.20260929.74",
+          "buildVersion": "74",
+          "date": "2026-09-29T16:14:20Z",
+          "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/nightly-20260929-74/Ito-1.0.0-nightly.20260929.74-unsigned.ipa",
+          "size": 10264206,
+          "localizedDescription": "Automated unsigned nightly from main at 02a33df. This build may be unstable.",
+          "minOSVersion": "15.4"
+        },
+        {
           "version": "1.0.0-nightly.20260928.73",
           "buildVersion": "73",
           "date": "2026-09-28T17:57:54Z",
@@ -138,22 +147,13 @@
           "size": 10264275,
           "localizedDescription": "Automated unsigned nightly from main at 02a33df. This build may be unstable.",
           "minOSVersion": "15.4"
-        },
-        {
-          "version": "1.0.0-nightly.20260914.59",
-          "buildVersion": "59",
-          "date": "2026-09-14T16:08:56Z",
-          "downloadURL": "https://github.com/itoapp/Ito/releases/download/nightly-20260914-59/Ito-1.0.0-nightly.20260914.59-unsigned.ipa",
-          "size": 10264205,
-          "localizedDescription": "Automated unsigned nightly from main at 02a33df. This build may be unstable.",
-          "minOSVersion": "15.4"
         }
       ],
-      "version": "1.0.0-nightly.20260928.73",
-      "buildVersion": "73",
-      "date": "2026-09-28T17:57:54Z",
-      "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/nightly-20260928-73/Ito-1.0.0-nightly.20260928.73-unsigned.ipa",
-      "size": 10264205,
+      "version": "1.0.0-nightly.20260929.74",
+      "buildVersion": "74",
+      "date": "2026-09-29T16:14:20Z",
+      "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/nightly-20260929-74/Ito-1.0.0-nightly.20260929.74-unsigned.ipa",
+      "size": 10264206,
       "minOSVersion": "15.4",
       "versionDescription": "Automated unsigned nightly from main at 02a33df. This build may be unstable."
     }
