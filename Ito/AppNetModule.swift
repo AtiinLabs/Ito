@@ -22,7 +22,7 @@ enum AppNetRetryDiagnostic {
     }
 }
 
-protocol AppNetRetryLogging: Sendable {
+nonisolated protocol AppNetRetryLogging: Sendable {
     nonisolated func log(_ event: AppNetRetryEvent)
 }
 
@@ -37,7 +37,7 @@ struct AppNetCloudflareResolution: @unchecked Sendable {
     let cookies: [HTTPCookie]
 }
 
-protocol AppNetCloudflareHandling: Sendable {
+nonisolated protocol AppNetCloudflareHandling: Sendable {
     nonisolated func cachedUserAgent(for host: String) async -> String
     nonisolated func resolveChallenge(for url: URL) async throws -> AppNetCloudflareResolution
 }
