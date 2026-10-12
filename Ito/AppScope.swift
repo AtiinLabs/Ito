@@ -8,6 +8,7 @@ struct PreparedApplicationDependencies {
     let mangaReader: PreparedMangaReaderDependencies
     let novelReader: PreparedNovelReaderDependencies
     let videoPlayer: PreparedVideoPlayerDependencies
+    let backupSettings: PreparedBackupSettingsDependencies
     let library: PreparedLibraryDependencies
     let categoryHistory: PreparedCategoryHistoryDependencies
     let searchExecutor: any SearchPluginExecuting
@@ -32,6 +33,7 @@ struct PreparedApplicationDependencies {
         mangaReader: PreparedMangaReaderDependencies? = nil,
         novelReader: PreparedNovelReaderDependencies? = nil,
         videoPlayer: PreparedVideoPlayerDependencies? = nil,
+        backupSettings: PreparedBackupSettingsDependencies? = nil,
         library: PreparedLibraryDependencies? = nil,
         categoryHistory: PreparedCategoryHistoryDependencies? = nil,
         searchExecutor: any SearchPluginExecuting,
@@ -55,6 +57,7 @@ struct PreparedApplicationDependencies {
         self.mangaReader = mangaReader ?? .unavailable()
         self.novelReader = novelReader ?? .unavailable()
         self.videoPlayer = videoPlayer ?? .unavailable()
+        self.backupSettings = backupSettings ?? .unavailable()
         self.library = library ?? .unavailable()
         self.categoryHistory = categoryHistory ?? .unavailable()
         self.searchExecutor = searchExecutor
@@ -151,6 +154,7 @@ struct PreparedApplicationDependencies {
                 pluginManager: pluginManager,
                 presentationLogger: presentationLogger
             ),
+            backupSettings: .production(backupManager: backupManager),
             library: .production(
                 libraryManager: libraryManager,
                 settingsStore: settingsStore,
@@ -458,6 +462,7 @@ final class AppScope {
             mangaReaderDependencies: preparedDependencies.mangaReader,
             novelReaderDependencies: preparedDependencies.novelReader,
             videoPlayerDependencies: preparedDependencies.videoPlayer,
+            backupSettingsDependencies: preparedDependencies.backupSettings,
             mediaDetailMessagePresenter: mediaDetailMessagePresenter,
             libraryDependencies: preparedDependencies.library,
             categoryHistoryDependencies: preparedDependencies.categoryHistory,

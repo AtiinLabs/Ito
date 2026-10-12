@@ -479,6 +479,7 @@ final class AppScopeIdentityTests: XCTestCase {
         XCTAssertTrue(dependencies.library.layout === settingsStore)
         XCTAssertTrue(dependencies.library.updates === updateManager)
         XCTAssertTrue(dependencies.library.export === backupManager)
+        XCTAssertTrue(dependencies.backupSettings.service === backupManager)
         XCTAssertTrue(dependencies.library.discord === discordRPCManager)
         XCTAssertTrue(dependencies.library.plugins === pluginManager)
         XCTAssertTrue(dependencies.library.installer === repoManager)
@@ -510,6 +511,15 @@ final class AppScopeIdentityTests: XCTestCase {
                 atPath: pluginsDirectory.appendingPathComponent("fixture.ito").path
             )
         )
+    }
+
+    func testBackupSettingsFactoryCreatesFreshNavigatedViewModels() {
+        let scope = makeScope()
+
+        let first = scope.viewFactory.makeBackupSettingsViewModel()
+        let second = scope.viewFactory.makeBackupSettingsViewModel()
+
+        XCTAssertFalse(first === second)
     }
 
     func testDiscoverDetailFactoryUsesCanonicalPreparedGRDBRepository() async throws {

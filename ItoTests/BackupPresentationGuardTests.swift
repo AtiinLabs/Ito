@@ -4,137 +4,113 @@ import Testing
 
 struct BackupPresentationGuardTests {
     @MainActor
-    @Test func operationGateRejectsRapidDuplicatesUntilReleased() {
-        var gate = BackupPresentationOperationGate()
+    @Test func operationOwnershipRejectsRapidDuplicatesUntilReleased() async {
+        let service = BackupSettingsServiceFake()
+        service.analysisResponses = [.suspended]
+        let viewModel = BackupSettingsViewModel(
+            dependencies: PreparedBackupSettingsDependencies(service: service),
+            presentationLogger: PresentationEventCaptureSpy()
+        )
+        let url = URL(fileURLWithPath: "/tmp/guard.itobackup")
+        viewModel.selectImportURL(url)
 
-        let first = gate.begin()
-        let duplicate = gate.begin()
-        #expect(first)
-        #expect(!duplicate)
-        #expect(gate.isRunning)
+        let first = viewModel.chooseMergeStrategy()
+        let duplicate = viewModel.chooseMergeStrategy()
+        #expect(first != nil)
+        #expect(duplicate == nil)
+        #expect(viewModel.isOperationRunning)
+        await service.waitForPending(.mergeAnalysis)
+        #expect(service.analysisURLs == [url])
 
-        gate.end()
-        #expect(!gate.isRunning)
-
-        let afterRelease = gate.begin()
-        #expect(afterRelease)
+        service.resolveAnalysis(.success([]))
+        await first?.value
+        #expect(!viewModel.isOperationRunning)
+        #expect(service.restoreRequests.count == 1)
     }
 
     @Test func productionBindingRequiresTwoWipeConfirmationsAndSynchronousGuards() throws {
-        let source = try read("Ito/Views/Settings/BackupSettingsView.swift")
+        let viewSource = try read("Ito/Views/Settings/BackupSettingsView.swift")
+        let viewModelSource = try read("Ito/ViewModels/BackupSettingsViewModel.swift")
 
-        #expect(source.contains("@State private var showWipeConfirmation = false"))
-        #expect(source.contains("showWipeConfirmation = true"))
-        #expect(source.contains(".alert(\"Wipe and Replace Library?\", isPresented: $showWipeConfirmation)"))
-
+        #expect(viewSource.contains("@StateObject private var viewModel: BackupSettingsViewModel"))
         let strategyDialog = try #require(
-            source.range(of: ".confirmationDialog(\"How would you like to restore?\"")
+            viewSource.range(of: ".confirmationDialog(")
         )
         let wipeAlert = try #require(
-            source.range(
-                of: ".alert(\"Wipe and Replace Library?\", isPresented: $showWipeConfirmation)",
-                range: strategyDialog.upperBound..<source.endIndex
+            viewSource.range(
+                of: "\"Wipe and Replace Library?\"",
+                range: strategyDialog.upperBound..<viewSource.endIndex
             )
         )
-        let strategyBody = source[strategyDialog.lowerBound..<wipeAlert.lowerBound]
+        let strategyBody = viewSource[strategyDialog.lowerBound..<wipeAlert.lowerBound]
         #expect(strategyBody.contains("Button(\"Wipe and Replace Library\", role: .destructive)"))
-        #expect(strategyBody.contains("showWipeConfirmation = true"))
-        #expect(!strategyBody.contains("executeFinalImport(url: url, mode: .wipe)"))
-        let strategyCancel = try cancelAction(in: strategyBody)
-        assertCancellationHasNoRestore(in: strategyCancel)
+        #expect(strategyBody.contains("viewModel.chooseWipeStrategy()"))
+        #expect(!strategyBody.contains("confirmWipeRestore"))
+        #expect(!strategyBody.contains("restoreBackup"))
+        #expect(strategyBody.contains("viewModel.cancelRestoreStrategy()"))
 
-        let generalAlert = try #require(
-            source.range(
-                of: ".alert(isPresented: $showAlert)",
-                range: wipeAlert.upperBound..<source.endIndex
+        let conflictSheet = try #require(
+            viewSource.range(
+                of: ".sheet(",
+                range: wipeAlert.upperBound..<viewSource.endIndex
             )
         )
-        let wipeAlertBody = source[wipeAlert.lowerBound..<generalAlert.lowerBound]
+        let wipeAlertBody = viewSource[wipeAlert.lowerBound..<conflictSheet.lowerBound]
         #expect(wipeAlertBody.contains("Button(\"Wipe and Replace\", role: .destructive)"))
-        #expect(wipeAlertBody.contains("executeFinalImport(url: url, mode: .wipe)"))
-        let wipeCancel = try cancelAction(in: wipeAlertBody)
-        assertCancellationHasNoRestore(in: wipeCancel)
+        #expect(wipeAlertBody.contains("viewModel.confirmWipeRestore()"))
+        #expect(wipeAlertBody.contains("viewModel.cancelWipeConfirmation()"))
 
-        let importerCompletion = try body(
-            in: source,
-            from: "case .success(let urls):",
-            through: "case .failure(let error):"
+        let firstWipeDecision = try functionBody(
+            named: "func chooseWipeStrategy()",
+            next: "func setWipeConfirmationPresented",
+            in: viewModelSource
         )
-        let selectionGuard = try #require(
-            importerCompletion.range(of: "guard !operationGate.isRunning else { return }")
-        )
-        let pendingAssignment = try #require(
-            importerCompletion.range(of: "pendingImportURL = url")
-        )
-        #expect(selectionGuard.lowerBound < pendingAssignment.lowerBound)
-        let importSelection = try body(
-            in: source,
-            from: "Section(header: Text(\"Import\")",
-            through: ".disabled(backupManager.isRestoring || isImporting || operationGate.isRunning)"
-        )
-        let buttonGuard = try #require(
-            importSelection.range(of: "guard !operationGate.isRunning else { return }")
-        )
-        let importerPresentation = try #require(
-            importSelection.range(of: "isImporting = true")
-        )
-        #expect(buttonGuard.lowerBound < importerPresentation.lowerBound)
+        #expect(firstWipeDecision.contains("importPresentation = .wipeConfirmation"))
+        #expect(!firstWipeDecision.contains("claimOperation"))
+        #expect(!firstWipeDecision.contains("launchRestore"))
+        #expect(!firstWipeDecision.contains("restoreBackup"))
 
-        let reportAcknowledgment = try body(
-            in: source,
-            from: "BackupRestoreReportView(report: report) {",
-            through: ".interactiveDismissDisabled()"
+        let finalWipeDecision = try functionBody(
+            named: "func confirmWipeRestore()",
+            next: "func chooseMergeStrategy",
+            in: viewModelSource
         )
-        try assertSynchronousGateBeforeTask(in: reportAcknowledgment)
+        try assertSynchronousClaimBeforeTaskLaunch(in: finalWipeDecision)
+        #expect(finalWipeDecision.contains("let url = pendingImportURL"))
+        #expect(finalWipeDecision.contains("mode: .wipe"))
+        #expect(finalWipeDecision.contains("resolutions: [:]"))
 
-        let mergeAnalysis = try functionBody(
-            named: "private func executeMergeAnalysis(url: URL)",
-            next: "private func executeFinalImport",
-            in: source
-        )
-        try assertSynchronousGateBeforeTask(in: mergeAnalysis)
-
-        let finalImport = try functionBody(
-            named: "private func executeFinalImport",
-            next: "private func performFinalImport",
-            in: source
-        )
-        try assertSynchronousGateBeforeTask(in: finalImport)
-
-        let refreshRetry = try body(
-            in: source,
-            from: "Button(\"Retry\") {",
-            through: "Button(\"Not Now\", role: .cancel)"
-        )
-        try assertSynchronousGateBeforeTask(in: refreshRetry)
+        for (name, next) in [
+            ("func beginExport()", "func setFileExporterPresented"),
+            ("func chooseMergeStrategy()", "func updateConflicts"),
+            ("func retryCommittedRefresh()", "func setRefreshPendingPresented"),
+            ("func acknowledgeRestoreReport()", "func setRestoreReportPresented")
+        ] {
+            let body = try functionBody(named: name, next: next, in: viewModelSource)
+            try assertSynchronousClaimBeforeTaskLaunch(in: body)
+        }
 
         let noConflictMerge = try body(
-            in: String(mergeAnalysis),
+            in: viewModelSource,
             from: "if conflicts.isEmpty {",
             through: "} else {"
         )
-        #expect(noConflictMerge.contains("await performFinalImport(url: url, mode: .merge)"))
-        #expect(!noConflictMerge.contains("executeFinalImport"))
+        #expect(noConflictMerge.contains("activeOperation = restoreOperation"))
+        #expect(noConflictMerge.contains("await performRestore("))
+        #expect(!noConflictMerge.contains("claimOperation"))
+        #expect(!noConflictMerge.contains("launchRestore"))
 
-        #expect(source.contains("@State private var activeConflictURL: URL?"))
-        #expect(source.contains("activeConflictURL = url"))
-        #expect(source.contains("if let conflictURL = activeConflictURL"))
-        #expect(source.contains("executeFinalImport(url: conflictURL, mode: .merge, resolutions: resolutions)"))
+        #expect(viewModelSource.contains("let sourceURL: URL"))
+        #expect(viewModelSource.contains("url: presentation.sourceURL"))
+        #expect(viewModelSource.contains("($0.id, $0.resolution)"))
+        #expect(viewModelSource.contains("guard activeOperation == operation else { return }"))
     }
 
-    private func assertCancellationHasNoRestore(in source: Substring) {
-        #expect(source.contains("pendingImportURL = nil"))
-        #expect(!source.contains("restoreBackup"))
-        #expect(!source.contains("executeMergeAnalysis"))
-        #expect(!source.contains("executeFinalImport"))
-        #expect(!source.contains("performFinalImport"))
-    }
-
-    private func assertSynchronousGateBeforeTask(in source: Substring) throws {
-        let gate = try #require(source.range(of: "guard operationGate.begin() else { return }"))
-        let task = try #require(source.range(of: "Task {"))
-        #expect(gate.lowerBound < task.lowerBound)
-        #expect(source.contains("defer { operationGate.end() }"))
+    private func assertSynchronousClaimBeforeTaskLaunch(in source: Substring) throws {
+        let claim = try #require(source.range(of: "claimOperation("))
+        let taskOrLaunch = source.range(of: "Task {") ?? source.range(of: "launchRestore(")
+        let launch = try #require(taskOrLaunch)
+        #expect(claim.lowerBound < launch.lowerBound)
     }
 
     private func functionBody(
@@ -159,14 +135,6 @@ struct BackupPresentationGuardTests {
             source.range(of: endText, range: start.upperBound..<source.endIndex)
         )
         return source[start.lowerBound..<end.upperBound]
-    }
-
-    private func cancelAction(in source: Substring) throws -> Substring {
-        let start = try #require(source.range(of: "Button(\"Cancel\", role: .cancel) {"))
-        let end = try #require(
-            source.range(of: "} message:", range: start.upperBound..<source.endIndex)
-        )
-        return source[start.lowerBound..<end.lowerBound]
     }
 
     private func read(_ path: String) throws -> String {

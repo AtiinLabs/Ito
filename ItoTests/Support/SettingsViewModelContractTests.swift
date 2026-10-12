@@ -8,11 +8,14 @@ extension SettingsViewModelTests {
             "Ito/AppScope.swift",
             "Ito/Views/MainTabView.swift",
             "Ito/Views/Settings/SettingsView.swift",
+            "Ito/Services/BackupSettings/BackupSettingsDependencies.swift",
+            "Ito/ViewModels/BackupSettingsViewModel.swift",
             "Ito/ViewModels/Settings/AppearanceSettingsViewModel.swift",
             "Ito/ViewModels/Settings/LibrarySettingsViewModel.swift",
             "Ito/ViewModels/Settings/PrivacySettingsViewModel.swift",
             "Ito/ViewModels/Settings/StorageSettingsViewModel.swift",
             "Ito/ViewModels/Settings/DebugLogViewModel.swift",
+            "Ito/Views/Settings/BackupSettingsView.swift",
             "Ito/Views/Settings/AppearanceSettingsView.swift",
             "Ito/Views/Settings/LibrarySettingsView.swift",
             "Ito/Views/Settings/PrivacySettingsView.swift",
@@ -180,6 +183,7 @@ extension SettingsViewModelTests {
                 "library",
                 "privacy",
                 "trackers",
+                "backup",
                 "readerUnavailable",
                 "storage",
                 "networkUnavailable",
@@ -206,6 +210,7 @@ extension SettingsViewModelTests {
             "case .library:\n            makeLibrarySettingsView()",
             "case .privacy:\n            makePrivacySettingsView()",
             "case .trackers:\n            makeTrackerSettingsView()",
+            "case .backup:\n            makeBackupSettingsView()",
             "case .storage:\n            makeStorageSettingsView()",
             "case .debugLogs:\n            makeDebugLogView()"
         ] {
@@ -236,7 +241,9 @@ extension SettingsViewModelTests {
         XCTAssertTrue(settingsSource.contains(
             "destination: viewFactory.makeSettingsDestination(for: .trackers)"
         ))
-        XCTAssertTrue(settingsSource.contains("destination: BackupSettingsView()"))
+        XCTAssertTrue(settingsSource.contains(
+            "destination: viewFactory.makeSettingsDestination(for: .backup)"
+        ))
         XCTAssertTrue(settingsSource.contains("NavigationView"))
         XCTAssertTrue(settingsSource.contains("NavigationLink"))
         XCTAssertFalse(settingsSource.contains("NavigationStack"))
@@ -246,7 +253,6 @@ extension SettingsViewModelTests {
         XCTAssertFalse(appFactorySource.contains("ManageExtensionsView("))
 
         for excludedCase in [
-            "backup",
             "repository",
             "source",
             "plugin",

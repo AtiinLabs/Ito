@@ -15,6 +15,7 @@ public enum PresentationFeature: String, Equatable, Sendable {
     case mangaReader = "manga_reader"
     case novelReader = "novel_reader"
     case videoPlayer = "video_player"
+    case backupSettings = "backup_settings"
 }
 
 public enum PresentationEventKind: String, Equatable, Sendable {
@@ -35,6 +36,10 @@ public enum PresentationEventKind: String, Equatable, Sendable {
     case relink
     case baseline
     case backupExport = "backup_export"
+    case backupMergeAnalysis = "backup_merge_analysis"
+    case backupRestore = "backup_restore"
+    case backupRefresh = "backup_refresh"
+    case backupReportAcknowledgment = "backup_report_acknowledgment"
     case pluginInstall = "plugin_install"
     case runnerLoad = "runner_load"
     case payloadDecode = "payload_decode"

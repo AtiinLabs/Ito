@@ -12,6 +12,7 @@ struct AppViewFactory {
     private let sourceMessagePresenter: any SourceMessagePresenting
     private let discoverDetailDependencies: PreparedDiscoverDetailDependencies
     private let discoverDetailMessagePresenter: any DiscoverDetailMessagePresenting
+    private let backupSettingsDependencies: PreparedBackupSettingsDependencies
     private let libraryDependencies: PreparedLibraryDependencies
     private let presentationLogger: any PresentationEventLogging
     let categoryHistoryViewFactory: CategoryHistoryViewFactory
@@ -33,6 +34,7 @@ struct AppViewFactory {
         mangaReaderDependencies: PreparedMangaReaderDependencies,
         novelReaderDependencies: PreparedNovelReaderDependencies = .unavailable(),
         videoPlayerDependencies: PreparedVideoPlayerDependencies = .unavailable(),
+        backupSettingsDependencies: PreparedBackupSettingsDependencies,
         mediaDetailMessagePresenter: any MediaDetailMessagePresenting,
         libraryDependencies: PreparedLibraryDependencies,
         categoryHistoryDependencies: PreparedCategoryHistoryDependencies,
@@ -48,6 +50,7 @@ struct AppViewFactory {
         self.sourceMessagePresenter = sourceMessagePresenter
         self.discoverDetailDependencies = discoverDetailDependencies
         self.discoverDetailMessagePresenter = discoverDetailMessagePresenter
+        self.backupSettingsDependencies = backupSettingsDependencies
         self.libraryDependencies = libraryDependencies
         self.presentationLogger = presentationLogger
         let categoryHistoryViewFactory = CategoryHistoryViewFactory(
@@ -338,6 +341,8 @@ struct AppViewFactory {
             makePrivacySettingsView()
         case .trackers:
             makeTrackerSettingsView()
+        case .backup:
+            makeBackupSettingsView()
         case .readerUnavailable:
             Text("Reader Settings View")
         case .storage:
@@ -369,6 +374,17 @@ struct AppViewFactory {
 
     func makeTrackerSettingsView() -> TrackerSettingsView {
         trackingViewFactory.makeTrackerSettingsView()
+    }
+
+    func makeBackupSettingsViewModel() -> BackupSettingsViewModel {
+        BackupSettingsViewModel(
+            dependencies: backupSettingsDependencies,
+            presentationLogger: presentationLogger
+        )
+    }
+
+    func makeBackupSettingsView() -> BackupSettingsView {
+        BackupSettingsView(viewModel: makeBackupSettingsViewModel())
     }
 
     func makeDebugLogView() -> DebugLogView {
