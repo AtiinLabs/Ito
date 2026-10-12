@@ -56,6 +56,15 @@ extension BackupManager: BackupSettingsServing {
 @MainActor
 struct PreparedBackupSettingsDependencies {
     let service: any BackupSettingsServing
+    let claimCommittedRefreshRetry: @MainActor () -> Bool
+    let releaseCommittedRefreshRetry: @MainActor () -> Void
+
+    init(service: any BackupSettingsServing) {
+        let ownership = BackupSettingsRefreshRetryOwnership()
+        self.service = service
+        claimCommittedRefreshRetry = { ownership.claim() }
+        releaseCommittedRefreshRetry = { ownership.release() }
+    }
 
     static func production(backupManager: BackupManager) -> Self {
         Self(service: backupManager)
@@ -63,6 +72,21 @@ struct PreparedBackupSettingsDependencies {
 
     static func unavailable() -> Self {
         Self(service: UnavailableBackupSettingsService())
+    }
+}
+
+@MainActor
+private final class BackupSettingsRefreshRetryOwnership {
+    private var isClaimed = false
+
+    func claim() -> Bool {
+        guard !isClaimed else { return false }
+        isClaimed = true
+        return true
+    }
+
+    func release() {
+        isClaimed = false
     }
 }
 

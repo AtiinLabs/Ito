@@ -371,6 +371,44 @@ final class BackupSettingsViewModelTests: XCTestCase {
         await first?.value
     }
 
+    func testRefreshRetryOwnershipIsSharedAcrossViewModelsDuringNavigation() async throws {
+        let service = BackupSettingsServiceFake(
+            snapshot: BackupSettingsManagerSnapshot(
+                isExporting: false,
+                isRestoring: false,
+                lastRestoreReport: nil,
+                committedRefreshPendingOperationId: "pending"
+            )
+        )
+        service.refreshResponses = [.suspended, .success(())]
+        let dependencies = PreparedBackupSettingsDependencies(service: service)
+        let logger = PresentationEventCaptureSpy()
+        var firstViewModel: BackupSettingsViewModel? = BackupSettingsViewModel(
+            dependencies: dependencies,
+            presentationLogger: logger
+        )
+
+        let first = try XCTUnwrap(firstViewModel?.retryCommittedRefresh())
+        await service.waitForPending(.refreshRetry)
+        firstViewModel?.screenDidDisappear()
+        firstViewModel = nil
+
+        let replacementViewModel = BackupSettingsViewModel(
+            dependencies: dependencies,
+            presentationLogger: logger
+        )
+        XCTAssertNil(replacementViewModel.retryCommittedRefresh())
+        XCTAssertFalse(replacementViewModel.isOperationRunning)
+        XCTAssertEqual(service.refreshCallCount, 1)
+
+        service.resolveRefresh(.failure(BackupSettingsTestError.expected("still pending")))
+        await first.value
+
+        let later = try XCTUnwrap(replacementViewModel.retryCommittedRefresh())
+        await later.value
+        XCTAssertEqual(service.refreshCallCount, 2)
+    }
+
     func testAcknowledgmentSuccessDismissesWhenNoAuthoritativeReportRemains() async throws {
         let report = try backupSettingsTestReport(id: "acknowledge")
         let subject = reportSubject(report)

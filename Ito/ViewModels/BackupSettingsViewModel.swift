@@ -94,6 +94,8 @@ final class BackupSettingsViewModel: ObservableObject {
 
     private let service: any BackupSettingsServing
     private let presentationLogger: any PresentationEventLogging
+    private let claimCommittedRefreshRetry: @MainActor () -> Bool
+    private let releaseCommittedRefreshRetry: @MainActor () -> Void
     private var activeOperation: Operation?
     private var operationTask: Task<Void, Never>?
     private var presentationGeneration: UInt64 = 0
@@ -107,6 +109,8 @@ final class BackupSettingsViewModel: ObservableObject {
         presentationLogger: any PresentationEventLogging
     ) {
         service = dependencies.service
+        claimCommittedRefreshRetry = dependencies.claimCommittedRefreshRetry
+        releaseCommittedRefreshRetry = dependencies.releaseCommittedRefreshRetry
         self.presentationLogger = presentationLogger
         let snapshot = dependencies.service.backupSettingsSnapshot
         managerSnapshot = snapshot
@@ -421,9 +425,14 @@ final class BackupSettingsViewModel: ObservableObject {
     @discardableResult
     func retryCommittedRefresh() -> Task<Void, Never>? {
         guard showsRefreshPending,
-              let operation = claimOperation(.refreshRetry) else { return nil }
+              let operation = claimOperation(
+                  .refreshRetry,
+                  admissionClaim: claimCommittedRefreshRetry
+              ) else { return nil }
         showsRefreshPending = false
-        let task = Task { @MainActor [weak self, service] in
+        let releaseCommittedRefreshRetry = releaseCommittedRefreshRetry
+        let task = Task { @MainActor [weak self, service, releaseCommittedRefreshRetry] in
+            defer { releaseCommittedRefreshRetry() }
             do {
                 try await service.retryCommittedRefresh()
                 self?.publishRefreshSuccess(
@@ -517,11 +526,15 @@ final class BackupSettingsViewModel: ObservableObject {
         activeOperation?.kind == .export
     }
 
-    private func claimOperation(_ kind: BackupSettingsOperationKind) -> Operation? {
+    private func claimOperation(
+        _ kind: BackupSettingsOperationKind,
+        admissionClaim: (@MainActor () -> Bool)? = nil
+    ) -> Operation? {
         guard isPresentationActive,
               activeOperation == nil,
               !managerSnapshot.isExporting,
-              !managerSnapshot.isRestoring else { return nil }
+              !managerSnapshot.isRestoring,
+              admissionClaim?() ?? true else { return nil }
         let operation = Operation(
             id: UUID(),
             kind: kind,
