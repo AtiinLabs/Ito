@@ -22,7 +22,7 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
             return defaultLoader.loadData(with: request, didReceiveData: didReceiveData, completion: completion)
         }
 
-        let fallbackCancellable = LockIsolated<Cancellable?>(nil)
+        let cancellationLatch = CancellationLatch()
         let task = Task {
             do {
                 // url format: ito://<plugin_id>/<real_url>
@@ -56,8 +56,9 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                     if let realUrl = URL(string: realUrlString) {
                         var realRequest = request
                         realRequest.url = realUrl
+                        guard !cancellationLatch.isCancelled && !Task.isCancelled else { return }
                         let sub = defaultLoader.loadData(with: realRequest, didReceiveData: didReceiveData, completion: completion)
-                        fallbackCancellable.setValue(sub)
+                        cancellationLatch.setUnderlying(sub)
                     } else {
                         throw URLError(.badURL)
                     }
@@ -69,30 +70,54 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
 
         return AnyCancellable {
             task.cancel()
-            fallbackCancellable.value?.cancel()
+            cancellationLatch.cancel()
         }
     }
 }
-
 nonisolated
-private final class LockIsolated<Value>: @unchecked Sendable {
+final class CancellationLatch: @unchecked Sendable {
+    private enum State {
+        case idle
+        case active(Cancellable)
+        case cancelled
+    }
+
     private let lock = NSLock()
-    private var _value: Value
+    private var state: State = .idle
 
-    init(_ value: Value) {
-        self._value = value
-    }
-
-    var value: Value {
+    var isCancelled: Bool {
         lock.lock()
         defer { lock.unlock() }
-        return _value
+        if case .cancelled = state { return true }
+        return false
     }
 
-    func setValue(_ newValue: Value) {
+    func setUnderlying(_ cancellable: Cancellable) {
         lock.lock()
         defer { lock.unlock() }
-        _value = newValue
+        switch state {
+        case .idle:
+            state = .active(cancellable)
+        case .active(let existing):
+            existing.cancel()
+            state = .active(cancellable)
+        case .cancelled:
+            cancellable.cancel()
+        }
+    }
+
+    func cancel() {
+        lock.lock()
+        defer { lock.unlock() }
+        switch state {
+        case .idle:
+            state = .cancelled
+        case .active(let cancellable):
+            cancellable.cancel()
+            state = .cancelled
+        case .cancelled:
+            break
+        }
     }
 }
 

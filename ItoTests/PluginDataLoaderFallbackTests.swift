@@ -5,13 +5,14 @@ import ito_runner
 
 @MainActor
 final class PluginDataLoaderFallbackTests: XCTestCase {
+
     override func tearDown() {
         super.tearDown()
         MockFallbackURLProtocol.reset()
     }
 
-    func testFallbackCancellableCancelsUnderlyingLoaderOnCancellation() async throws {
-        let host = "fallback-test.example.com"
+    func testPassthroughLoaderCancellation() async throws {
+        let host = "passthrough-test.example.com"
         MockFallbackURLProtocol.register(host: host)
 
         let config = URLSessionConfiguration.ephemeral
@@ -22,7 +23,6 @@ final class PluginDataLoaderFallbackTests: XCTestCase {
             .appendingPathComponent("PluginDataLoaderTest_\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
 
-        // Setup a mock plugin that returns nil for handleImage so it falls back to real URL
         let pluginManager = PluginManager(
             pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
             pluginsDirectory: pluginsDirectory
@@ -33,11 +33,7 @@ final class PluginDataLoaderFallbackTests: XCTestCase {
             pluginManager: pluginManager
         )
 
-        // When ito:// URL is used but the plugin doesn't intercept (or runner has nil handleImage),
-        // fallback triggers defaultLoader.loadData.
-        // We verify that cancelling the returned Cancellable cancels the fallback request.
-        let nonInterceptedURL = URL(string: "https://\(host)/plain-image.jpg")!
-        let request = URLRequest(url: nonInterceptedURL)
+        let request = URLRequest(url: URL(string: "https://\(host)/plain-image.jpg")!)
 
         let expectation = expectation(description: "cancelled or completed")
         let cancellable = loader.loadData(
@@ -48,10 +44,42 @@ final class PluginDataLoaderFallbackTests: XCTestCase {
             }
         )
 
-        // Cancel immediately
         cancellable.cancel()
-
         await fulfillment(of: [expectation], timeout: 5.0)
+    }
+
+    func testCustomItoSchemeFallbackCancellationLatch() async throws {
+        // Direct test of the CancellationLatch state machine
+        let cancelledLatch = CancellationLatch()
+        XCTAssertFalse(cancelledLatch.isCancelled)
+
+        var cancelCalled = false
+        let dummyCancellable = AnyCancellable {
+            cancelCalled = true
+        }
+
+        // When latch is cancelled before underlying cancellable is set:
+        cancelledLatch.cancel()
+        XCTAssertTrue(cancelledLatch.isCancelled)
+
+        // Setting underlying on an already-cancelled latch must immediately cancel it:
+        cancelledLatch.setUnderlying(dummyCancellable)
+        XCTAssertTrue(cancelCalled, "Underlying cancellable must be immediately cancelled when latch is cancelled")
+    }
+
+    func testCancellationLatchActiveCancellation() async throws {
+        let latch = CancellationLatch()
+        var cancelCalled = false
+        let dummyCancellable = AnyCancellable {
+            cancelCalled = true
+        }
+
+        latch.setUnderlying(dummyCancellable)
+        XCTAssertFalse(cancelCalled)
+
+        latch.cancel()
+        XCTAssertTrue(cancelCalled)
+        XCTAssertTrue(latch.isCancelled)
     }
 }
 
@@ -83,7 +111,6 @@ private class MockFallbackURLProtocol: URLProtocol {
     }
 
     override func startLoading() {
-        // Delay slightly to allow cancellation
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self = self else { return }
             let response = HTTPURLResponse(
@@ -100,5 +127,15 @@ private class MockFallbackURLProtocol: URLProtocol {
 
     override func stopLoading() {
         client?.urlProtocol(self, didFailWithError: URLError(.cancelled))
+    }
+}
+
+private final class AnyCancellable: Cancellable, @unchecked Sendable {
+    let closure: () -> Void
+    init(_ closure: @escaping () -> Void) {
+        self.closure = closure
+    }
+    func cancel() {
+        closure()
     }
 }

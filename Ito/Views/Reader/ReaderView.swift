@@ -508,7 +508,7 @@ struct MangaImage: View {
         }
     }
 
-    private func createRequest(url: URL) -> URLRequest {
+    func createRequest(url: URL) -> URLRequest {
         var request = URLRequest(url: url)
 
         if let customHeaders = headers, !customHeaders.isEmpty {

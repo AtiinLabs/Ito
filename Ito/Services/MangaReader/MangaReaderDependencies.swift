@@ -171,7 +171,7 @@ final class NukeMangaReaderImagePrefetcher: MangaReaderImagePrefetching {
         prefetcher.stopPrefetching()
     }
 
-    private static func request(for page: Page) -> ImageRequest? {
+    static func request(for page: Page) -> ImageRequest? {
         guard case .url(let urlString) = page.content,
               let url = URL(string: urlString) else {
             return nil

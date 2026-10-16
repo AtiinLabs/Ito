@@ -17,11 +17,18 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
         0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
     ])
 
-    override func tearDown() {
-        super.tearDown()
-        MockImageURLProtocol.reset()
+    private var originalPipeline: ImagePipeline!
+
+    override func setUp() {
+        super.setUp()
+        originalPipeline = ImagePipeline.shared
     }
 
+    override func tearDown() {
+        super.tearDown()
+        ImagePipeline.shared = originalPipeline
+        MockImageURLProtocol.reset()
+    }
     // MARK: - Test A: Plain Nuke pipeline with valid PNG
     func testControlA_PlainNukePipeline_ValidPNG_DecodesSuccessfully() async throws {
         let host = "test-a.example.com"
@@ -90,6 +97,31 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
         // Verify request received the User-Agent header from config
         let lastReq = MockImageURLProtocol.lastRequest(forHost: host)
         XCTAssertEqual(lastReq?.value(forHTTPHeaderField: "User-Agent"), defaultUA)
+    }
+
+    // MARK: - Test C: NukeUI LazyImage lifecycle and display decoding
+    func testControlC_NukeImageRequest_DecodesAndExtractsImage() async throws {
+        let host = "test-c.example.com"
+        MockImageURLProtocol.register(
+            host: host,
+            statusCode: 200,
+            headers: ["Content-Type": "image/png"],
+            data: Self.tinyPNGData
+        )
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockImageURLProtocol.self]
+        let pipeline = ImagePipeline {
+            $0.dataLoader = DataLoader(configuration: config)
+            $0.imageCache = nil
+            $0.dataCache = nil
+        }
+
+        let url = try XCTUnwrap(URL(string: "https://\(host)/page.png"))
+        let request = ImageRequest(url: url)
+        let image = try await pipeline.image(for: request)
+        XCTAssertEqual(image.size.width, 1.0)
+        XCTAssertEqual(image.size.height, 1.0)
     }
 
     // MARK: - Test D: HTTP 200 with HTML instead of image produces decode failure
@@ -162,28 +194,26 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
             "Authorization": "Bearer test-token",
             "X-Custom-Auth": "secret"
         ]
+        let pageWithHeaders = Page(index: 0, content: .url(testURL), headers: customHeaders)
+        let prefetchRequestWithHeaders = NukeMangaReaderImagePrefetcher.request(for: pageWithHeaders)
+        XCTAssertNotNil(prefetchRequestWithHeaders)
+        let urlRequestWithHeaders = prefetchRequestWithHeaders?.urlRequest
+        XCTAssertEqual(urlRequestWithHeaders?.value(forHTTPHeaderField: "Referer"), "https://source.example.com/manga/123")
+        XCTAssertEqual(urlRequestWithHeaders?.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
+        XCTAssertEqual(urlRequestWithHeaders?.value(forHTTPHeaderField: "X-Custom-Auth"), "secret")
 
-        // Case 2: Nil headers -> Default headers in MangaImage:
-        // User-Agent: iPhone 16.0 Safari
-        // Referer: urlStr itself
-        var visibleRequestDefault = URLRequest(url: url)
-        visibleRequestDefault.setValue(
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
-            forHTTPHeaderField: "User-Agent"
-        )
-        visibleRequestDefault.setValue(testURL, forHTTPHeaderField: "Referer")
+        // Case 2: Nil headers -> Default headers in prefetcher:
+        let pageDefault = Page(index: 1, content: .url(testURL), headers: nil)
+        let prefetchRequestDefault = NukeMangaReaderImagePrefetcher.request(for: pageDefault)
+        let urlRequestDefault = prefetchRequestDefault?.urlRequest
+        XCTAssertEqual(urlRequestDefault?.value(forHTTPHeaderField: "Referer"), testURL)
+        XCTAssertTrue(urlRequestDefault?.value(forHTTPHeaderField: "User-Agent")?.contains("iPhone OS 16_0") == true)
 
-        var visibleRequestWithHeaders = URLRequest(url: url)
-        for (k, v) in customHeaders {
-            visibleRequestWithHeaders.setValue(v, forHTTPHeaderField: k)
-        }
-
-        XCTAssertEqual(visibleRequestWithHeaders.value(forHTTPHeaderField: "Referer"), "https://source.example.com/manga/123")
-        XCTAssertEqual(visibleRequestWithHeaders.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
-        XCTAssertEqual(visibleRequestWithHeaders.value(forHTTPHeaderField: "X-Custom-Auth"), "secret")
-
-        XCTAssertEqual(visibleRequestDefault.value(forHTTPHeaderField: "Referer"), testURL)
-        XCTAssertTrue(visibleRequestDefault.value(forHTTPHeaderField: "User-Agent")?.contains("iPhone OS 16_0") == true)
+        // Verify MangaImage's createRequest logic matches prefetcher exactly
+        let mangaImage = MangaImage(urlStr: testURL, headers: customHeaders)
+        let viewRequest = mangaImage.createRequest(url: url)
+        XCTAssertEqual(viewRequest.value(forHTTPHeaderField: "Referer"), urlRequestWithHeaders?.value(forHTTPHeaderField: "Referer"))
+        XCTAssertEqual(viewRequest.value(forHTTPHeaderField: "Authorization"), urlRequestWithHeaders?.value(forHTTPHeaderField: "Authorization"))
     }
 
     // MARK: - Test G: Custom ito:// scheme routing via PluginDataLoader
@@ -245,8 +275,8 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
         }
     }
 
-    // MARK: - Test I: StorageManager fallback setup retains PluginDataLoader and NukeDiagnosticDelegate
-    func testControlI_StorageManagerFallbackRetainsPluginDataLoader() async throws {
+    // MARK: - Test I: StorageManager setup retains PluginDataLoader and NukeDiagnosticDelegate
+    func testControlI_StorageManagerSetupRetainsPluginDataLoader() async throws {
         let database = try TestDatabase()
         let pluginsDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ItoTestPlugins_\(UUID().uuidString)", isDirectory: true)
@@ -259,8 +289,8 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
         let storageManager = StorageManager(pluginManager: pluginManager)
         XCTAssertNotNil(storageManager)
         XCTAssertNotNil(ImagePipeline.shared)
+        // ImagePipeline.shared is restored in tearDown() to prevent global pollution
     }
-
 }
 
 // MARK: - MockImageURLProtocol
