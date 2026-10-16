@@ -51,7 +51,7 @@ public class StorageManager: ObservableObject {
             self.dataCache = dataCache
 
             // Set up Nuke to use our aggressive data cache instead of URLCache
-            ImagePipeline.shared = ImagePipeline {
+            ImagePipeline.shared = ImagePipeline(delegate: NukeDiagnosticDelegate.shared) {
                 $0.dataCache = dataCache
                 let config = URLSessionConfiguration.default
                 config.urlCache = nil
@@ -63,8 +63,15 @@ public class StorageManager: ObservableObject {
             }
         } catch {
             AppLogger.general.error("Failed to initialize Nuke DataCache: \(error)")
-            // Fallback to default aggressive cache if custom instantiation fails
-            ImagePipeline.shared = ImagePipeline(configuration: .withDataCache)
+            // Fallback preserves PluginDataLoader and diagnostic delegate even if DataCache fails
+            let config = URLSessionConfiguration.default
+            config.httpAdditionalHeaders = ["User-Agent": CloudflareManager.defaultUserAgent]
+            ImagePipeline.shared = ImagePipeline(delegate: NukeDiagnosticDelegate.shared) {
+                $0.dataLoader = PluginDataLoader(
+                    configuration: config,
+                    pluginManager: pluginManager
+                )
+            }
         }
     }
 

@@ -22,6 +22,7 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
             return defaultLoader.loadData(with: request, didReceiveData: didReceiveData, completion: completion)
         }
 
+        let fallbackCancellable = LockIsolated<Cancellable?>(nil)
         let task = Task {
             do {
                 // url format: ito://<plugin_id>/<real_url>
@@ -55,7 +56,8 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                     if let realUrl = URL(string: realUrlString) {
                         var realRequest = request
                         realRequest.url = realUrl
-                        _ = defaultLoader.loadData(with: realRequest, didReceiveData: didReceiveData, completion: completion)
+                        let sub = defaultLoader.loadData(with: realRequest, didReceiveData: didReceiveData, completion: completion)
+                        fallbackCancellable.setValue(sub)
                     } else {
                         throw URLError(.badURL)
                     }
@@ -67,7 +69,30 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
 
         return AnyCancellable {
             task.cancel()
+            fallbackCancellable.value?.cancel()
         }
+    }
+}
+
+nonisolated
+private final class LockIsolated<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value: Value
+
+    init(_ value: Value) {
+        self._value = value
+    }
+
+    var value: Value {
+        lock.lock()
+        defer { lock.unlock() }
+        return _value
+    }
+
+    func setValue(_ newValue: Value) {
+        lock.lock()
+        defer { lock.unlock() }
+        _value = newValue
     }
 }
 
