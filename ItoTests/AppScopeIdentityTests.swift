@@ -234,6 +234,18 @@ final class AppScopeIdentityTests: XCTestCase {
         XCTAssertFalse(source.contains("hasLoadedDiscoverDetailViewModel"))
     }
 
+    func testMigrationReportFactoryCreatesFreshRemediatingModelsOutsideRootStore() {
+        let scope = makeScope()
+        let report = MigrationReport(unresolvedPlugins: [], totalItemsImported: 0, totalItemsSkipped: 0)
+
+        let first = scope.viewFactory.makeMigrationReportViewModel(report: report)
+        let second = scope.viewFactory.makeMigrationReportViewModel(report: report)
+
+        XCTAssertFalse(first === second)
+        XCTAssertTrue(first.isRemediationAllowed)
+        XCTAssertTrue(second.isRemediationAllowed)
+    }
+
     func testSettingsRootFactoryDoesNotEagerlyLoadAnySettingsViewModel() {
         let scope = makeScope()
 
@@ -423,9 +435,15 @@ final class AppScopeIdentityTests: XCTestCase {
         let sourceMappingRepository = GRDBSourceMappingRepository(
             dbWriter: database.dbPool
         )
+        let pluginResolver = PluginResolver(
+            dbPool: database.dbPool,
+            repoManager: repoManager,
+            installedPluginIds: { [] }
+        )
         let dependencies = PreparedApplicationDependencies.production(
             pluginManager: pluginManager,
             repoManager: repoManager,
+            pluginResolver: pluginResolver,
             settingsStore: settingsStore,
             trackerManager: trackerManager,
             readProgressManager: readProgressManager,
@@ -471,6 +489,12 @@ final class AppScopeIdentityTests: XCTestCase {
         XCTAssertTrue(dependencies.repositoryManagement.repositoryDetailManager === repoManager)
         XCTAssertTrue(dependencies.source.runnerProvider === pluginManager)
         XCTAssertTrue(dependencies.source.settingsStore === pluginSettings)
+        XCTAssertTrue(dependencies.migrationReport.repositories === repoManager)
+        XCTAssertTrue(dependencies.migrationReport.plugins === pluginManager)
+        XCTAssertTrue(
+            (dependencies.migrationReport.remapper as? LibrarySourceRemapperMigrationAdapter)?.remapper
+                === librarySourceRemapper
+        )
         XCTAssertTrue(dependencies.source.pluginStatePublisher === pluginManager)
         XCTAssertTrue(dependencies.discoverDetail.pluginProvider === pluginManager)
         XCTAssertTrue(dependencies.discoverDetail.detailService === DiscoverManager.shared)

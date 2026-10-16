@@ -66,19 +66,16 @@ final class BackupSettingsDependencyBoundaryTests: XCTestCase {
         XCTAssertFalse(settingsSource.contains("destination: BackupSettingsView()"))
     }
 
-    func testRootModelStoreAndMigrationBoundaryRemainUntouched() throws {
+    func testRootModelStoreExcludesScreenModelsAndReportStaysReadOnly() throws {
         let scopeSource = try read("Ito/AppScope.swift")
         let rootStore = try XCTUnwrap(
             scopeSource.components(separatedBy: "@MainActor\nfinal class AppScope").first
         )
         let reportSource = try read("Ito/Views/Settings/BackupRestoreReportView.swift")
-        let viewModelNames = try FileManager.default.contentsOfDirectory(
-            atPath: repositoryRoot.appendingPathComponent("Ito/ViewModels").path
-        )
 
         XCTAssertFalse(rootStore.contains("BackupSettingsViewModel"))
-        XCTAssertTrue(reportSource.contains("MigrationReportView("))
-        XCTAssertFalse(viewModelNames.contains("MigrationReportViewModel.swift"))
+        XCTAssertFalse(rootStore.contains("MigrationReportViewModel"))
+        XCTAssertTrue(reportSource.contains("MigrationReportView.readOnly(report: migrationReport)"))
     }
 
     func testMigratedSourcesContainNoRawURLPathOrErrorLogging() throws {

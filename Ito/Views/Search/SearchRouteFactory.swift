@@ -13,6 +13,7 @@ struct AppViewFactory {
     private let discoverDetailDependencies: PreparedDiscoverDetailDependencies
     private let discoverDetailMessagePresenter: any DiscoverDetailMessagePresenting
     private let backupSettingsDependencies: PreparedBackupSettingsDependencies
+    private let migrationReportDependencies: PreparedMigrationReportDependencies
     private let libraryDependencies: PreparedLibraryDependencies
     private let presentationLogger: any PresentationEventLogging
     let categoryHistoryViewFactory: CategoryHistoryViewFactory
@@ -35,6 +36,7 @@ struct AppViewFactory {
         novelReaderDependencies: PreparedNovelReaderDependencies = .unavailable(),
         videoPlayerDependencies: PreparedVideoPlayerDependencies = .unavailable(),
         backupSettingsDependencies: PreparedBackupSettingsDependencies,
+        migrationReportDependencies: PreparedMigrationReportDependencies,
         mediaDetailMessagePresenter: any MediaDetailMessagePresenting,
         libraryDependencies: PreparedLibraryDependencies,
         categoryHistoryDependencies: PreparedCategoryHistoryDependencies,
@@ -51,6 +53,7 @@ struct AppViewFactory {
         self.discoverDetailDependencies = discoverDetailDependencies
         self.discoverDetailMessagePresenter = discoverDetailMessagePresenter
         self.backupSettingsDependencies = backupSettingsDependencies
+        self.migrationReportDependencies = migrationReportDependencies
         self.libraryDependencies = libraryDependencies
         self.presentationLogger = presentationLogger
         let categoryHistoryViewFactory = CategoryHistoryViewFactory(
@@ -385,6 +388,14 @@ struct AppViewFactory {
 
     func makeBackupSettingsView() -> BackupSettingsView {
         BackupSettingsView(viewModel: makeBackupSettingsViewModel())
+    }
+
+    func makeMigrationReportViewModel(report: MigrationReport) -> MigrationReportViewModel {
+        MigrationReportViewModel(
+            report: report,
+            dependencies: migrationReportDependencies,
+            presentationLogger: presentationLogger
+        )
     }
 
     func makeDebugLogView() -> DebugLogView {

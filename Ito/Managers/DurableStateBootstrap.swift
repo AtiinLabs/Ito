@@ -449,6 +449,7 @@ public final class DurableStateBootstrap: ObservableObject {
         appScope = AppScope.prepared(
             pluginManager: runtime.pluginManager,
             repoManager: runtime.repoManager,
+            pluginResolver: runtime.pluginResolver,
             settingsStore: runtime.settingsStore,
             trackerManager: runtime.trackerManager,
             readProgressManager: runtime.readProgressManager,

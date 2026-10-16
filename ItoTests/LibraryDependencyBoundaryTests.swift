@@ -139,7 +139,7 @@ final class LibraryDependencyBoundaryTests: XCTestCase {
         XCTAssertEqual(loader.requests, [first.id, replacement.id])
     }
 
-    func testPR16ABackupSettingsExistsWithoutMigrationReportViewModel() throws {
+    func testPR16BMigrationReportViewModelJoinsCompletedScreenModels() throws {
         let viewModelsURL = repositoryRoot.appendingPathComponent("Ito/ViewModels")
         let names = try FileManager.default.contentsOfDirectory(
             at: viewModelsURL,
@@ -147,7 +147,7 @@ final class LibraryDependencyBoundaryTests: XCTestCase {
         ).map(\.lastPathComponent)
 
         XCTAssertTrue(names.contains("BackupSettingsViewModel.swift"))
-        XCTAssertFalse(names.contains("MigrationReportViewModel.swift"))
+        XCTAssertTrue(names.contains("MigrationReportViewModel.swift"))
         XCTAssertTrue(names.contains("MangaReaderViewModel.swift"))
         XCTAssertTrue(names.contains("NovelReaderViewModel.swift"))
         XCTAssertTrue(names.contains("VideoPlayerViewModel.swift"))

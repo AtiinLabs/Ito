@@ -46,12 +46,7 @@ struct BackupRestoreReportView: View {
                     Section("Migration details") {
                         NavigationLink(
                             destination:
-                            MigrationReportView(
-                                report: migrationReport,
-                                onDismiss: {},
-                                remediationAllowed: false,
-                                showsDismissButton: false
-                            )
+                            MigrationReportView.readOnly(report: migrationReport)
                         ) {
                             Text("View read-only migration report")
                         }

@@ -16,6 +16,7 @@ public enum PresentationFeature: String, Equatable, Sendable {
     case novelReader = "novel_reader"
     case videoPlayer = "video_player"
     case backupSettings = "backup_settings"
+    case migrationReport = "migration_report"
 }
 
 public enum PresentationEventKind: String, Equatable, Sendable {

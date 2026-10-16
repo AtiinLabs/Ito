@@ -9,6 +9,7 @@ struct PreparedApplicationDependencies {
     let novelReader: PreparedNovelReaderDependencies
     let videoPlayer: PreparedVideoPlayerDependencies
     let backupSettings: PreparedBackupSettingsDependencies
+    let migrationReport: PreparedMigrationReportDependencies
     let library: PreparedLibraryDependencies
     let categoryHistory: PreparedCategoryHistoryDependencies
     let searchExecutor: any SearchPluginExecuting
@@ -34,6 +35,7 @@ struct PreparedApplicationDependencies {
         novelReader: PreparedNovelReaderDependencies? = nil,
         videoPlayer: PreparedVideoPlayerDependencies? = nil,
         backupSettings: PreparedBackupSettingsDependencies? = nil,
+        migrationReport: PreparedMigrationReportDependencies? = nil,
         library: PreparedLibraryDependencies? = nil,
         categoryHistory: PreparedCategoryHistoryDependencies? = nil,
         searchExecutor: any SearchPluginExecuting,
@@ -58,6 +60,7 @@ struct PreparedApplicationDependencies {
         self.novelReader = novelReader ?? .unavailable()
         self.videoPlayer = videoPlayer ?? .unavailable()
         self.backupSettings = backupSettings ?? .unavailable()
+        self.migrationReport = migrationReport ?? .unavailable()
         self.library = library ?? .unavailable()
         self.categoryHistory = categoryHistory ?? .unavailable()
         self.searchExecutor = searchExecutor
@@ -79,6 +82,7 @@ struct PreparedApplicationDependencies {
     static func production(
         pluginManager: PluginManager,
         repoManager: RepoManager,
+        pluginResolver: PluginResolver,
         settingsStore: AppSettingsStore,
         trackerManager: TrackerManager,
         readProgressManager: ReadProgressManager,
@@ -155,6 +159,12 @@ struct PreparedApplicationDependencies {
                 presentationLogger: presentationLogger
             ),
             backupSettings: .production(backupManager: backupManager),
+            migrationReport: .production(
+                repoManager: repoManager,
+                pluginManager: pluginManager,
+                librarySourceRemapper: librarySourceRemapper,
+                pluginResolver: pluginResolver
+            ),
             library: .production(
                 libraryManager: libraryManager,
                 settingsStore: settingsStore,
@@ -463,6 +473,7 @@ final class AppScope {
             novelReaderDependencies: preparedDependencies.novelReader,
             videoPlayerDependencies: preparedDependencies.videoPlayer,
             backupSettingsDependencies: preparedDependencies.backupSettings,
+            migrationReportDependencies: preparedDependencies.migrationReport,
             mediaDetailMessagePresenter: mediaDetailMessagePresenter,
             libraryDependencies: preparedDependencies.library,
             categoryHistoryDependencies: preparedDependencies.categoryHistory,
@@ -474,6 +485,7 @@ final class AppScope {
     static func prepared(
         pluginManager: PluginManager,
         repoManager: RepoManager,
+        pluginResolver: PluginResolver,
         settingsStore: AppSettingsStore,
         trackerManager: TrackerManager,
         readProgressManager: ReadProgressManager,
@@ -496,6 +508,7 @@ final class AppScope {
             preparedDependencies: .production(
                 pluginManager: pluginManager,
                 repoManager: repoManager,
+                pluginResolver: pluginResolver,
                 settingsStore: settingsStore,
                 trackerManager: trackerManager,
                 readProgressManager: readProgressManager,

@@ -1,7 +1,4 @@
-import OSLog
 import SwiftUI
-import GRDB
-import ito_runner
 
 // MARK: - MigrationReportView
 
@@ -10,22 +7,28 @@ import ito_runner
 /// additional information after an action. The user initiated a restore,
 /// so surfacing resolution options in a sheet is the correct pattern.
 struct MigrationReportView: View {
-    let report: MigrationReport
-    let onDismiss: () -> Void
-    var remediationAllowed = true
-    var showsDismissButton = true
+    @StateObject private var viewModel: MigrationReportViewModel
+    private let onDismiss: () -> Void
+    private let showsDismissButton: Bool
 
-    @EnvironmentObject private var repoManager: RepoManager
-    @EnvironmentObject private var pluginResolver: PluginResolver
-    @EnvironmentObject private var librarySourceRemapper: LibrarySourceRemapper
-    @EnvironmentObject private var pluginManager: PluginManager
+    init(
+        viewModel: @autoclosure @escaping () -> MigrationReportViewModel,
+        onDismiss: @escaping () -> Void,
+        showsDismissButton: Bool = true
+    ) {
+        _viewModel = StateObject(wrappedValue: viewModel())
+        self.onDismiss = onDismiss
+        self.showsDismissButton = showsDismissButton
+    }
 
-    @State private var installingSourceId: String?
-    @State private var remappingPlugin: MigrationReport.UnresolvedPlugin?
-    @State private var showRemapPicker = false
-    @State private var resolvedSources: Set<String> = []
-    @State private var installError: String?
-    @State private var showInstallError = false
+    /// Read-only acknowledgment-route report: no remediation dependencies, no Done button.
+    static func readOnly(report: MigrationReport) -> MigrationReportView {
+        MigrationReportView(
+            viewModel: MigrationReportViewModel(readOnlyReport: report),
+            onDismiss: {},
+            showsDismissButton: false
+        )
+    }
 
     var body: some View {
         NavigationView {
@@ -44,28 +47,28 @@ struct MigrationReportView: View {
                         .disabled(!showsDismissButton)
                 }
             }
-            .sheet(isPresented: $showRemapPicker) {
-                if let target = remappingPlugin {
-                    RemapPickerView(
-                        foreignId: target.foreignId,
-                        onSelect: { selectedPluginId in
-                            applyRemap(foreignId: target.foreignId, newPluginId: selectedPluginId)
-                            showRemapPicker = false
-                            remappingPlugin = nil
-                        },
-                        onCancel: {
-                            showRemapPicker = false
-                            remappingPlugin = nil
-                        }
-                    )
-                }
+            .sheet(item: Binding(
+                get: { viewModel.remapPicker },
+                set: { if $0 == nil { viewModel.cancelRemapPicker() } }
+            )) { picker in
+                RemapPickerView(
+                    foreignId: picker.foreignID,
+                    options: viewModel.filteredPickerOptions,
+                    searchText: $viewModel.pickerSearchText,
+                    onSelect: { _ = viewModel.selectRemapTarget(pluginID: $0) },
+                    onCancel: viewModel.cancelRemapPicker
+                )
             }
             // HIG: Alerts inform people about a problem or a change.
-            // Installation failure is an unexpected problem → alert is correct.
-            .alert("Installation Failed", isPresented: $showInstallError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(installError ?? "An unknown error occurred.")
+            .alert(item: Binding(
+                get: { viewModel.alert },
+                set: { if $0 == nil { viewModel.dismissAlert() } }
+            )) { alert in
+                Alert(
+                    title: Text(alert.title),
+                    message: Text(alert.message),
+                    dismissButton: .cancel(Text("OK"))
+                )
             }
         }
     }
@@ -78,12 +81,12 @@ struct MigrationReportView: View {
             VStack(alignment: .leading, spacing: 10) {
                 // HIG: Use SF Symbols that match the semantic meaning.
                 // checkmark.circle for success tone, exclamationmark.triangle for warning.
-                let activeCount = report.unresolvedPlugins.filter { !resolvedSources.contains($0.foreignId) }.count
-                let allResolved = activeCount == 0
+                let activeCount = viewModel.activeUnresolvedCount
+                let allResolved = viewModel.isAllResolved
 
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(report.totalItemsImported) items imported")
+                        Text("\(viewModel.report.totalItemsImported) items imported")
                             .font(.headline)
                         if allResolved {
                             Text("All sources resolved")
@@ -112,13 +115,13 @@ struct MigrationReportView: View {
     private var unresolvedSourcesSection: some View {
         // HIG: Section headers should be clear, single-word or short-phrase labels.
         Section {
-            ForEach(report.unresolvedPlugins) { plugin in
+            ForEach(viewModel.report.unresolvedPlugins) { plugin in
                 unresolvedPluginRow(plugin)
             }
         } header: {
             Text("Sources")
         } footer: {
-            if remediationAllowed {
+            if viewModel.isRemediationAllowed {
                 Text("Install missing extensions, remap them to an existing Ito plugin, or skip to handle later from your library.")
             } else {
                 Text("Remediation is unavailable until the restore report has been acknowledged.")
@@ -130,7 +133,7 @@ struct MigrationReportView: View {
 
     @ViewBuilder
     private func unresolvedPluginRow(_ plugin: MigrationReport.UnresolvedPlugin) -> some View {
-        let isResolved = resolvedSources.contains(plugin.foreignId)
+        let isResolved = viewModel.disposition(for: plugin.foreignId) != nil
 
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -157,17 +160,17 @@ struct MigrationReportView: View {
                 }
             }
 
-            if !isResolved && remediationAllowed {
+            if !isResolved && viewModel.isRemediationAllowed {
                 // HIG: Button roles communicate intent. Normal for install/remap,
                 // no destructive action here. Capsule shape provides clear tap targets.
                 // HIG: "Maintain movement in progress indicators" — ProgressView shown inline.
                 HStack(spacing: 8) {
-                    if !plugin.isInstalled && plugin.confidence >= 45 {
+                    if viewModel.canInstall(plugin) {
                         Button {
-                            Task { await autoInstall(plugin: plugin) }
+                            _ = viewModel.install(foreignID: plugin.foreignId)
                         } label: {
                             Group {
-                                if installingSourceId == plugin.foreignId {
+                                if viewModel.isInstalling(foreignID: plugin.foreignId) {
                                     ProgressView()
                                         .controlSize(.mini)
                                 } else {
@@ -181,12 +184,11 @@ struct MigrationReportView: View {
                             .foregroundStyle(.blue)
                             .clipShape(Capsule())
                         }
-                        .disabled(installingSourceId != nil)
+                        .disabled(viewModel.isBusy)
                     }
 
                     Button {
-                        remappingPlugin = plugin
-                        showRemapPicker = true
+                        _ = viewModel.presentRemapPicker(foreignID: plugin.foreignId)
                     } label: {
                         Label("Remap", systemImage: "arrow.triangle.swap")
                             .font(.subheadline)
@@ -196,9 +198,10 @@ struct MigrationReportView: View {
                             .foregroundStyle(.purple)
                             .clipShape(Capsule())
                     }
+                    .disabled(viewModel.isBusy)
 
                     Button {
-                        withAnimation { _ = resolvedSources.insert(plugin.foreignId) }
+                        withAnimation { _ = viewModel.skip(foreignID: plugin.foreignId) }
                     } label: {
                         Text("Skip")
                             .font(.subheadline)
@@ -208,6 +211,7 @@ struct MigrationReportView: View {
                             .foregroundStyle(.secondary)
                             .clipShape(Capsule())
                     }
+                    .disabled(viewModel.isBusy)
                 }
             }
         }
@@ -251,74 +255,6 @@ struct MigrationReportView: View {
                 .clipShape(Capsule())
         }
     }
-
-    // MARK: - Actions
-
-    private func autoInstall(plugin: MigrationReport.UnresolvedPlugin) async {
-        installingSourceId = plugin.foreignId
-
-        await repoManager.refreshAll()
-
-        var targetPkg: RepoPackage?
-        var foundRepoUrl: String?
-
-        for repo in repoManager.repositories {
-            if let pkg = repo.index?.packages.first(where: { $0.id == plugin.resolvedId }) {
-                targetPkg = pkg
-                foundRepoUrl = repo.url
-                break
-            }
-        }
-
-        if let pkg = targetPkg, let url = foundRepoUrl {
-            do {
-                try await repoManager.installPackage(pkg, repositoryUrl: url)
-                // Refresh plugin cache so library stops showing "missing plugin"
-                await pluginManager.reloadInstalledPlugins()
-                withAnimation { _ = resolvedSources.insert(plugin.foreignId) }
-            } catch {
-                installError = "Could not install \"\(plugin.foreignId)\": \(error.localizedDescription)"
-                showInstallError = true
-            }
-        } else {
-            installError = "The extension \"\(plugin.resolvedId)\" was not found in any of your repositories."
-            showInstallError = true
-        }
-
-        installingSourceId = nil
-    }
-
-    private func applyRemap(foreignId: String, newPluginId: String) {
-        guard let plugin = report.unresolvedPlugins.first(where: { $0.foreignId == foreignId }) else { return }
-
-        Task {
-            do {
-                let result = try await librarySourceRemapper.remapAndPersistAlias(
-                    foreignId: foreignId,
-                    oldPluginId: plugin.resolvedId,
-                    newPluginId: newPluginId,
-                    affectedItemIds: plugin.affectedItemIds
-                ) { foreignId, newPluginId in
-                    try await pluginResolver.saveUserAlias(
-                        foreignId: foreignId,
-                        itoPluginId: newPluginId
-                    )
-                }
-                AppLogger.database.info("Remapped \(result.remappedItemCount) items from \(plugin.resolvedId) to \(newPluginId), moving \(result.movedLinkCount) links and \(result.movedHistoryCount) history rows")
-                await MainActor.run {
-                    _ = withAnimation { resolvedSources.insert(foreignId) }
-                }
-                // Refresh plugin cache so library picks up the remapped IDs
-                await pluginManager.reloadInstalledPlugins()
-            } catch {
-                AppLogger.database.error("\("Remap failed for \(foreignId)"): \(error)")
-                await MainActor.run {
-                    installError = error.localizedDescription
-                    showInstallError = true
-                }
-            }
-        }
-    }
 }
 
 // MARK: - Remap Picker
@@ -326,48 +262,20 @@ struct MigrationReportView: View {
 /// HIG: This is a selection sheet (sub-modal). It uses .searchable for filtering,
 /// a Cancel button in .cancellationAction placement, and clear row layout
 /// distinguishing installed vs. available plugins.
+/// Pure renderer: the ViewModel owns the option set and search filtering inputs.
 struct RemapPickerView: View {
     let foreignId: String
+    let options: [MigrationPluginOption]
+    @Binding var searchText: String
     let onSelect: (String) -> Void
     let onCancel: () -> Void
-
-    @EnvironmentObject private var pluginManager: PluginManager
-    @EnvironmentObject private var repoManager: RepoManager
-    @State private var searchText = ""
-
-    private var allOptions: [(id: String, name: String, isInstalled: Bool)] {
-        var options: [(id: String, name: String, isInstalled: Bool)] = []
-
-        for (id, plugin) in pluginManager.installedPlugins {
-            options.append((id: id, name: plugin.info.name, isInstalled: true))
-        }
-
-        for repo in repoManager.repositories {
-            guard let packages = repo.index?.packages else { continue }
-            for pkg in packages {
-                if !options.contains(where: { $0.id == pkg.id }) {
-                    options.append((id: pkg.id, name: pkg.name, isInstalled: false))
-                }
-            }
-        }
-
-        return options.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    }
-
-    private var filteredOptions: [(id: String, name: String, isInstalled: Bool)] {
-        if searchText.isEmpty { return allOptions }
-        return allOptions.filter {
-            $0.name.localizedCaseInsensitiveContains(searchText) ||
-            $0.id.localizedCaseInsensitiveContains(searchText)
-        }
-    }
 
     var body: some View {
         NavigationView {
             List {
                 // HIG: Section footer provides guidance without cluttering the header.
                 Section {
-                    ForEach(filteredOptions, id: \.id) { option in
+                    ForEach(options, id: \.id) { option in
                         Button {
                             onSelect(option.id)
                         } label: {

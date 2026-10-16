@@ -700,6 +700,66 @@ struct LibrarySourceRemapperTests {
         }
     }
 
+    @Test @MainActor func migrationAdapterReportsAliasFailureAfterCommittedRemap() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let source = makeItem(id: "series", pluginId: "old")
+        try await database.dbPool.write { db in
+            try source.insert(db)
+        }
+
+        let outcome = try await LibrarySourceRemapperMigrationAdapter(
+            remapper: LibrarySourceRemapper(dbPool: database.dbPool),
+            aliasWriter: { _, _ in throw AliasWriteStubFailure() }
+        ).remapSource(MigrationRemapRequest(
+            foreignID: "foreign",
+            oldPluginID: "old",
+            newPluginID: "new",
+            affectedItemIDs: [source.id]
+        ))
+
+        #expect(outcome == .remappedAliasNotSaved)
+        try await database.dbPool.read { db in
+            let removedSource = try LibraryItem.fetchOne(db, key: source.id)
+            let destination = try LibraryItem.fetchOne(db, key: "new_series")
+            #expect(removedSource == nil)
+            #expect(destination?.pluginId == "new")
+        }
+    }
+
+    @Test @MainActor func migrationAdapterRethrowsPreCommitFailureWithoutAliasWrite() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let source = makeItem(id: "series", pluginId: "old")
+        let collision = makeItem(id: "new_series", pluginId: "new")
+        let aliasSpy = AliasWriterSpy()
+        try await database.dbPool.write { db in
+            try source.insert(db)
+            try collision.insert(db)
+        }
+
+        do {
+            _ = try await LibrarySourceRemapperMigrationAdapter(
+                remapper: LibrarySourceRemapper(dbPool: database.dbPool),
+                aliasWriter: { foreignId, newPluginId in
+                    await aliasSpy.write(foreignId: foreignId, newPluginId: newPluginId)
+                }
+            ).remapSource(MigrationRemapRequest(
+                foreignID: "foreign",
+                oldPluginID: "old",
+                newPluginID: "new",
+                affectedItemIDs: [source.id]
+            ))
+            Issue.record("Expected destination collision")
+        } catch let error as LibrarySourceRemapper.RemapError {
+            #expect(error == .destinationExists("new_series"))
+        }
+
+        #expect(await aliasSpy.writes.isEmpty)
+    }
+
+    private struct AliasWriteStubFailure: Error {}
+
     private func makeItem(id: String, pluginId: String) -> LibraryItem {
         LibraryItem(
             id: id,
