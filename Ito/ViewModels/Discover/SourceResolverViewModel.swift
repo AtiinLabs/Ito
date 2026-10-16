@@ -153,6 +153,12 @@ public final class SourceResolverViewModel: ObservableObject {
     private let repository: any SourceMappingRepository
     private let pluginProvider: any SourceResolverPluginProviding
     private let routeFactory: any SourceRouteBuilding
+    private let libraryObserver: any SourceResolverLibraryObserving
+    private let trackerLinker: any SourceResolverTrackerLinking
+
+    private var autoLinkTask: Task<Void, Never>?
+    private var linkingMediaIdentity: MediaIdentity?
+    private var cancellables = Set<AnyCancellable>()
 
     private var mappingCheckTask: Task<Void, Never>?
     private var resolutionTask: Task<Void, Never>?
@@ -171,12 +177,39 @@ public final class SourceResolverViewModel: ObservableObject {
         media: DiscoverMedia,
         repository: any SourceMappingRepository,
         pluginProvider: any SourceResolverPluginProviding,
-        routeFactory: any SourceRouteBuilding
+        routeFactory: any SourceRouteBuilding,
+        libraryObserver: any SourceResolverLibraryObserving,
+        trackerLinker: any SourceResolverTrackerLinking
     ) {
         self.media = media
         self.repository = repository
         self.pluginProvider = pluginProvider
         self.routeFactory = routeFactory
+        self.libraryObserver = libraryObserver
+        self.trackerLinker = trackerLinker
+
+        libraryObserver.libraryItemsPublisher
+            .sink { [weak self] items in
+                self?.linkAniListIfNeeded(items: items)
+            }
+            .store(in: &cancellables)
+    }
+
+    convenience init(
+        media: DiscoverMedia,
+        repository: any SourceMappingRepository,
+        pluginProvider: any SourceResolverPluginProviding,
+        routeFactory: any SourceRouteBuilding
+    ) {
+        let unavailable = UnavailableDiscoverDetailDependency()
+        self.init(
+            media: media,
+            repository: repository,
+            pluginProvider: pluginProvider,
+            routeFactory: routeFactory,
+            libraryObserver: unavailable,
+            trackerLinker: unavailable
+        )
     }
 
     deinit {
@@ -184,6 +217,7 @@ public final class SourceResolverViewModel: ObservableObject {
         resolutionTask?.cancel()
         routePreparationTask?.cancel()
         rejectionTask?.cancel()
+        autoLinkTask?.cancel()
     }
 
     public func isProcessing(_ match: MatchedSource) -> Bool {
@@ -192,6 +226,7 @@ public final class SourceResolverViewModel: ObservableObject {
 
     public func present(route: SourceRoute) {
         routePresentation.present(route)
+        linkAniListIfNeeded(items: libraryObserver.libraryItems)
     }
 
     public func navigationBindingDidSet(_ isActive: Bool) {
@@ -200,6 +235,7 @@ public final class SourceResolverViewModel: ObservableObject {
 
     public func destinationDidAppear() {
         routePresentation.destinationDidAppear()
+        linkAniListIfNeeded(items: libraryObserver.libraryItems)
     }
 
     public func manualDestinationPopRequested() {
@@ -208,6 +244,41 @@ public final class SourceResolverViewModel: ObservableObject {
 
     public func destinationDidDisappear() {
         routePresentation.destinationDidDisappear()
+        if routePresentation.route == nil {
+            autoLinkTask?.cancel()
+            autoLinkTask = nil
+            linkingMediaIdentity = nil
+        }
+    }
+
+    private func linkAniListIfNeeded(items: [LibraryItem]) {
+        guard let route = sourceRoute,
+              let anilistID = route.anilistID else { return }
+        let itemKey = route.media.key()
+        let legacyID = "\(route.pluginID)_\(itemKey)"
+        guard items.contains(where: {
+            $0.id == itemKey || ($0.pluginId == route.pluginID && $0.id == legacyID)
+        }) else { return }
+
+        let mediaIdentity = MediaIdentity(pluginId: route.pluginID, itemId: itemKey)
+        guard trackerLinker.anilistTrackerID(for: mediaIdentity) == nil,
+              linkingMediaIdentity != mediaIdentity else { return }
+
+        linkingMediaIdentity = mediaIdentity
+        let remoteMediaID = String(anilistID)
+        let trackerLinker = trackerLinker
+        autoLinkTask = Task { [weak self, trackerLinker] in
+            defer {
+                if self?.linkingMediaIdentity == mediaIdentity {
+                    self?.linkingMediaIdentity = nil
+                    self?.autoLinkTask = nil
+                }
+            }
+            try? await trackerLinker.linkAniList(
+                media: mediaIdentity,
+                remoteMediaID: remoteMediaID
+            )
+        }
     }
 
     private func beginInitialLookup() -> Bool {
@@ -506,6 +577,9 @@ public final class SourceResolverViewModel: ObservableObject {
         rejectionTask = nil
         isSearching = false
         processingMatchIdentity = nil
+        autoLinkTask?.cancel()
+        autoLinkTask = nil
+        linkingMediaIdentity = nil
     }
 
     public func checkExistingMapping() async -> (SourceMappingRecord, ResolvedPluginMedia)? {

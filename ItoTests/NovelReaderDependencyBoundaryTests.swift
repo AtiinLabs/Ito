@@ -194,12 +194,18 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
         }
     }
 
-    func testLegacyGenericReaderAndPR15PlusModelsRemainOutsideNovelMigration() throws {
-        let legacy = try source("Ito/ViewModels/ReaderViewModel.swift")
+    func testLegacyGenericReaderIsRemovedAndOtherModelsRemainOutsideNovelMigration() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
         let novelView = try source("Ito/Views/Reader/NovelReaderView.swift")
         let novelViewModel = try source("Ito/ViewModels/NovelReaderViewModel.swift")
 
-        XCTAssertTrue(legacy.contains("public final class ReaderViewModel"))
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("Ito/ViewModels/ReaderViewModel.swift").path
+            )
+        )
         XCTAssertFalse(novelView.contains("ReaderViewModel("))
         XCTAssertFalse(novelViewModel.contains("ReaderViewModel<"))
         for excluded in [

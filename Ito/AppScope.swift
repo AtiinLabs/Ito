@@ -200,7 +200,9 @@ struct PreparedApplicationDependencies {
                 pluginProvider: pluginManager,
                 detailService: discoverDetailService,
                 themeService: discoverDetailThemeService,
-                sourceRouteFactory: SourceRouteFactory()
+                sourceRouteFactory: SourceRouteFactory(),
+                libraryObserver: libraryManager,
+                trackerLinker: trackerManager
             )
         )
     }

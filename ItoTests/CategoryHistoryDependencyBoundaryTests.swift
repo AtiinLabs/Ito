@@ -59,6 +59,8 @@ final class CategoryHistoryDependencyBoundaryTests: XCTestCase {
         XCTAssertTrue(library.contains("viewFactory.makeHistoryView()"))
         XCTAssertTrue(mediaDetail.contains("categoryHistoryViewFactory.makeCategoryAssignmentSheet(itemID: intent.itemID)"))
         XCTAssertTrue(snackBar.contains("categoryHistoryViewFactory.makeCategoryAssignmentSheet(itemID: wrapper.id)"))
+        XCTAssertFalse(snackBar.contains("SnackBarManager"))
+        XCTAssertTrue(snackBar.contains("messageCenter.dismiss(messageID: toast.id)"))
         XCTAssertTrue(appFactory.contains("let categoryHistoryViewFactory: CategoryHistoryViewFactory"))
         XCTAssertTrue(focusedFactory.contains("CategoryAssignmentSheet(viewModel:"))
         XCTAssertTrue(focusedFactory.contains("CategorySettingsView(viewModel:"))

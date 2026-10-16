@@ -98,36 +98,17 @@ private struct BootstrapGateView: View {
             }
             .padding()
         case .ready:
-            if let settingsStore = bootstrap.settingsStore,
-               let progressManager = bootstrap.readProgressManager,
+            if bootstrap.hasCompleteRuntimeDependencies,
+               let settingsStore = bootstrap.settingsStore,
                let trackerManager = bootstrap.trackerManager,
-               let updateManager = bootstrap.updateManager,
-               let repoManager = bootstrap.repoManager,
-               let pluginResolver = bootstrap.pluginResolver,
                let libraryManager = bootstrap.libraryManager,
-               let pluginManager = bootstrap.pluginManager,
-               let storageManager = bootstrap.storageManager,
-               let discordRPCManager = bootstrap.discordRPCManager,
-               let historyManager = bootstrap.historyManager,
-               let notificationManager = bootstrap.notificationManager,
                let backupManager = bootstrap.backupManager,
-               let librarySourceRemapper = bootstrap.librarySourceRemapper,
                let appScope = bootstrap.appScope {
                 DurableApplicationView(
                     settingsStore: settingsStore,
-                    progressManager: progressManager,
                     trackerManager: trackerManager,
-                    updateManager: updateManager,
-                    repoManager: repoManager,
-                    pluginResolver: pluginResolver,
                     libraryManager: libraryManager,
-                    pluginManager: pluginManager,
-                    storageManager: storageManager,
-                    discordRPCManager: discordRPCManager,
-                    historyManager: historyManager,
-                    notificationManager: notificationManager,
                     backupManager: backupManager,
-                    librarySourceRemapper: librarySourceRemapper,
                     appScope: appScope
                 )
             } else {
@@ -174,19 +155,8 @@ private struct BootstrapFailureView: View {
 @MainActor
 private struct DurableApplicationView: View {
     @ObservedObject var settingsStore: AppSettingsStore
-    @ObservedObject var progressManager: ReadProgressManager
-    @ObservedObject var trackerManager: TrackerManager
-    @ObservedObject var updateManager: UpdateManager
-    @ObservedObject var repoManager: RepoManager
-    let pluginResolver: PluginResolver
     let libraryManager: LibraryManager
-    let pluginManager: PluginManager
-    let storageManager: StorageManager
-    let discordRPCManager: DiscordRPCManager
-    let historyManager: HistoryManager
-    let notificationManager: NotificationManager
     let backupManager: BackupManager
-    let librarySourceRemapper: LibrarySourceRemapper
     let appScope: AppScope
     private let trackerCredentialLifecycle: TrackerCredentialLifecycle
     @Environment(\.scenePhase) private var scenePhase
@@ -196,55 +166,20 @@ private struct DurableApplicationView: View {
 
     init(
         settingsStore: AppSettingsStore,
-        progressManager: ReadProgressManager,
         trackerManager: TrackerManager,
-        updateManager: UpdateManager,
-        repoManager: RepoManager,
-        pluginResolver: PluginResolver,
         libraryManager: LibraryManager,
-        pluginManager: PluginManager,
-        storageManager: StorageManager,
-        discordRPCManager: DiscordRPCManager,
-        historyManager: HistoryManager,
-        notificationManager: NotificationManager,
         backupManager: BackupManager,
-        librarySourceRemapper: LibrarySourceRemapper,
         appScope: AppScope
     ) {
         self.settingsStore = settingsStore
-        self.progressManager = progressManager
-        self.trackerManager = trackerManager
-        self.updateManager = updateManager
-        self.repoManager = repoManager
-        self.pluginResolver = pluginResolver
         self.libraryManager = libraryManager
-        self.pluginManager = pluginManager
-        self.storageManager = storageManager
-        self.discordRPCManager = discordRPCManager
-        self.historyManager = historyManager
-        self.notificationManager = notificationManager
         self.backupManager = backupManager
-        self.librarySourceRemapper = librarySourceRemapper
         self.appScope = appScope
         trackerCredentialLifecycle = TrackerCredentialLifecycle(manager: trackerManager)
     }
 
     var body: some View {
         MainTabView(appScope: appScope)
-            .environmentObject(progressManager)
-            .environmentObject(trackerManager)
-            .environmentObject(updateManager)
-            .environmentObject(repoManager)
-            .environmentObject(pluginResolver)
-            .environmentObject(settingsStore)
-            .environmentObject(libraryManager)
-            .environmentObject(pluginManager)
-            .environmentObject(storageManager)
-            .environmentObject(discordRPCManager)
-            .environmentObject(historyManager)
-            .environmentObject(notificationManager)
-            .environmentObject(backupManager)
-            .environmentObject(librarySourceRemapper)
             .preferredColorScheme(settingsStore.appTheme.colorScheme)
             .onOpenURL { url in
                 appScope.router.handleRepositoryDeepLink(url)

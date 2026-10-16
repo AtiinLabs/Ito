@@ -830,22 +830,21 @@ final class SourceResolverViewModelTests: XCTestCase {
     // Library saving
     func testLibrarySaving() async throws {
         let testDatabase = try TestDatabase()
+        defer { testDatabase.cleanup() }
         let libraryManager = LibraryManager(dbPool: testDatabase.dbPool)
-        let exp1 = expectation(description: "Item saved")
-        let sub1 = libraryManager.$items.sink { items in
-            if items.contains(where: { $0.id == "m1" }) { exp1.fulfill() }
-        }
-        libraryManager.toggleSaveManga(manga: Manga(key: "m1", title: "T"), pluginId: "p1")
-        await fulfillment(of: [exp1], timeout: 2.0)
-        sub1.cancel()
+        let mangaID = try await libraryManager.saveMangaDurably(
+            manga: Manga(key: "m1", title: "T"),
+            pluginId: "p1"
+        )
+        XCTAssertEqual(mangaID, "m1")
+        XCTAssertTrue(libraryManager.items.contains(where: { $0.id == "m1" }))
 
-        let exp3 = expectation(description: "Anime saved")
-        let sub3 = libraryManager.$items.sink { items in
-            if items.contains(where: { $0.id == "a1" }) { exp3.fulfill() }
-        }
-        libraryManager.toggleSaveAnime(anime: Anime(key: "a1", title: "A"), pluginId: "p1")
-        await fulfillment(of: [exp3], timeout: 2.0)
-        sub3.cancel()
+        let animeID = try await libraryManager.saveAnimeDurably(
+            anime: Anime(key: "a1", title: "A"),
+            pluginId: "p1"
+        )
+        XCTAssertEqual(animeID, "a1")
+        XCTAssertTrue(libraryManager.items.contains(where: { $0.id == "a1" }))
     }
     // Helpers
     func makeDiscoverMedia(type: String = "MANGA") -> DiscoverMedia {

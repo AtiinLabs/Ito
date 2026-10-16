@@ -42,11 +42,34 @@ struct DurableStateAPIScanTests {
 
     @Test func libraryAniListBareAdaptersAreAbsent() throws {
         let production = try allProductionSwift()
-        for forbidden in ["setAnilistId", "removeAnilistId", "getAnilistId"] {
+        for forbidden in [
+            "setAnilistId",
+            "removeAnilistId",
+            "getAnilistId",
+            "protocol LibraryManaging",
+            ": LibraryManaging",
+            "protocol ProgressTracking",
+            ": ProgressTracking",
+            "toggleSaveManga",
+            "toggleSaveNovel",
+            "toggleSaveAnime",
+            "saveOrRemoveItem",
+            "removeItem(withId:"
+        ] {
             #expect(!production.contains(forbidden), "Production contains \(forbidden)")
         }
-        let protocolSource = try read("Ito/Core/Protocols/LibraryManaging.swift")
-        #expect(!protocolSource.contains("anilistId"))
+        for removedPath in [
+            "Ito/Core/Protocols/LibraryManaging.swift",
+            "Ito/Core/Protocols/ProgressTracking.swift",
+            "Ito/ViewModels/ReaderViewModel.swift"
+        ] {
+            #expect(
+                !FileManager.default.fileExists(
+                    atPath: repositoryRoot.appendingPathComponent(removedPath).path
+                ),
+                "\(removedPath) still exists"
+            )
+        }
     }
 
     @Test func mediaDetailRelinkDelegatesToSharedRemapperTransaction() throws {
@@ -105,6 +128,16 @@ struct DurableStateAPIScanTests {
                 "Production runtime accesses \(manager).shared"
             )
         }
+        for path in [
+            "Ito/Managers/DiscordRPCManager.swift",
+            "Ito/Managers/HistoryManager.swift",
+            "Ito/Managers/LibraryManager.swift",
+            "Ito/Managers/NotificationManager.swift",
+            "Ito/Views/Shared/SnackBarOverlay.swift"
+        ] {
+            let source = try read(path)
+            #expect(!source.contains("static let shared"), "\(path) still declares static let shared")
+        }
     }
 
     @Test func durableManagersExposeNoPublicStringKeyedMap() throws {
@@ -128,7 +161,7 @@ struct DurableStateAPIScanTests {
 
     @Test func everyScopedConsumerConstructsOrForwardsMediaIdentity() throws {
         let consumers = [
-            "Ito/ViewModels/ReaderViewModel.swift",
+            "Ito/ViewModels/Discover/SourceResolverViewModel.swift",
             "Ito/ViewModels/MangaReaderViewModel.swift",
             "Ito/ViewModels/NovelReaderViewModel.swift",
             "Ito/ViewModels/VideoPlayerViewModel.swift",
@@ -137,7 +170,10 @@ struct DurableStateAPIScanTests {
             "Ito/ViewModels/LibraryViewModel.swift"
         ]
         let scopedCallPatterns = [
-            "Ito/ViewModels/ReaderViewModel.swift": ["markAsRead(", "updateProgress(media:"],
+            "Ito/ViewModels/Discover/SourceResolverViewModel.swift": [
+                "MediaIdentity(pluginId:route.pluginID,itemId:itemKey)",
+                "trackerLinker.linkAniList(media:mediaIdentity"
+            ],
             "Ito/ViewModels/MangaReaderViewModel.swift": [
                 "MediaIdentity(pluginId:pluginID,itemId:manga.key)",
                 "progress.markChapterRead(",

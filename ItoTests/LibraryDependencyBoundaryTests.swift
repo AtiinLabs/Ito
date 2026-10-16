@@ -151,6 +151,7 @@ final class LibraryDependencyBoundaryTests: XCTestCase {
         XCTAssertTrue(names.contains("MangaReaderViewModel.swift"))
         XCTAssertTrue(names.contains("NovelReaderViewModel.swift"))
         XCTAssertTrue(names.contains("VideoPlayerViewModel.swift"))
+        XCTAssertFalse(names.contains("ReaderViewModel.swift"))
     }
 
     private var repositoryRoot: URL {

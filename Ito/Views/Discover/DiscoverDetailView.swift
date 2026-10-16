@@ -279,7 +279,7 @@ struct DiscoverDetailView: View {
                            let iconData = plugin.iconData, let uiImage = UIImage(data: iconData) {
                             Image(uiImage: uiImage)
                                 .resizable()
-                                .aspectRatio(contentMode: .fill)
+                                .scaledToFill()
                                 .frame(width: 40, height: 40)
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
                         } else {
@@ -463,8 +463,6 @@ struct DiscoverDetailView: View {
 struct SourceDestinationHost: View {
     @ObservedObject var resolverViewModel: SourceResolverViewModel
     let viewFactory: AppViewFactory
-    @EnvironmentObject private var libraryManager: LibraryManager
-    @EnvironmentObject private var trackerManager: TrackerManager
 
     var body: some View {
         Group {
@@ -506,9 +504,6 @@ struct SourceDestinationHost: View {
             ) { updated in
                 try await route.runner.getMangaUpdate(manga: updated)
             }
-            .onReceive(libraryManager.$items) { items in
-                linkAniListIfNeeded(itemKey: manga.key, route: route, items: items)
-            }
         case .anime(let anime):
             viewFactory.makeAnimeDetailView(
                 runner: route.runner,
@@ -521,30 +516,6 @@ struct SourceDestinationHost: View {
                     needsEpisodes: true
                 )
             }
-            .onReceive(libraryManager.$items) { items in
-                linkAniListIfNeeded(itemKey: anime.key, route: route, items: items)
-            }
-        }
-    }
-
-    private func linkAniListIfNeeded(
-        itemKey: String,
-        route: SourceRoute,
-        items: [LibraryItem]
-    ) {
-        guard let anilistID = route.anilistID,
-              items.contains(where: { $0.id == itemKey }),
-              trackerManager.trackerId(
-                  for: MediaIdentity(pluginId: route.pluginID, itemId: itemKey),
-                  providerId: "anilist"
-              ) == nil else { return }
-
-        Task {
-            try? await trackerManager.link(
-                media: MediaIdentity(pluginId: route.pluginID, itemId: itemKey),
-                providerId: "anilist",
-                remoteMediaId: String(anilistID)
-            )
         }
     }
 }
@@ -559,7 +530,7 @@ private struct DiscoverRecommendationCard: View {
             if let coverURL = media.coverImage, let url = URL(string: coverURL) {
                 LazyImage(url: url) { state in
                     if let image = state.image {
-                        image.resizable().aspectRatio(contentMode: .fill)
+                        image.resizable().scaledToFill()
                             .frame(width: 110, height: 160)
                             .clipped()
                     } else if state.error != nil {
@@ -614,7 +585,7 @@ private struct ResolvedSourceRow: View {
                let iconData = plugin.iconData, let uiImage = UIImage(data: iconData) {
                 Image(uiImage: uiImage)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .scaledToFill()
                     .frame(width: 40, height: 40)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .opacity(match.decision == .discard ? 0.4 : 1.0)

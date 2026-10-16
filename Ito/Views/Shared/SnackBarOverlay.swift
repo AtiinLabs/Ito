@@ -33,58 +33,9 @@ public struct ToastMessage: Identifiable, Equatable {
     }
 }
 
-@MainActor
-public class SnackBarManager: ObservableObject {
-    public static let shared = SnackBarManager()
-
-    @Published public var currentToast: ToastMessage?
-    @Published public var isShowing: Bool = false
-
-    private var hideWorkItem: DispatchWorkItem?
-
-    private init() {}
-
-    public func show(style: ToastMessage.Style, title: String, message: String? = nil, actionTitle: String? = nil, actionId: String? = nil) {
-        // Cancel any pending hide
-        hideWorkItem?.cancel()
-
-        let toast = ToastMessage(style: style, title: title, message: message, actionId: actionId, actionTitle: actionTitle)
-
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-            self.currentToast = toast
-            self.isShowing = true
-        }
-
-        let workItem = DispatchWorkItem { [weak self] in
-            Task { @MainActor in
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                    self?.isShowing = false
-                }
-            }
-        }
-        self.hideWorkItem = workItem
-        // Errors stay a bit longer so user can read them
-        let duration: TimeInterval = style == .error ? 4.5 : 3.0
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: workItem)
-    }
-
-    public func showSaved(itemId: String) {
-        show(style: .success, title: "Saved to Uncategorized", actionTitle: "Move", actionId: itemId)
-    }
-
-    public func showError(_ error: Error, title: String = "Error") {
-        show(style: .error, title: title, message: error.localizedDescription)
-    }
-
-    public func showError(_ text: String, title: String = "Error") {
-        show(style: .error, title: title, message: text)
-    }
-}
-
 struct SnackBarOverlay: View {
     @ObservedObject private var messageCenter: AppMessageCenter
     private let categoryHistoryViewFactory: CategoryHistoryViewFactory
-    @StateObject private var manager = SnackBarManager.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var showingSheetForId: String?
@@ -129,7 +80,7 @@ struct SnackBarOverlay: View {
                                 forActionID: actionId
                             ) ?? actionId
                             withAnimation {
-                                manager.isShowing = false
+                                messageCenter.dismiss(messageID: toast.id)
                             }
                         } label: {
                             Text(actionTitle)
@@ -176,19 +127,16 @@ struct SnackBarOverlay: View {
     }
 
     private var currentToast: ToastMessage? {
-        if let message = messageCenter.currentMessage {
-            let presentation = message.kind.presentation
-            return ToastMessage(
-                id: message.id,
-                style: presentation.style,
-                title: presentation.title,
-                message: presentation.detail,
-                actionId: presentation.actionID,
-                actionTitle: presentation.actionTitle
-            )
-        }
-        guard manager.isShowing else { return nil }
-        return manager.currentToast
+        guard let message = messageCenter.currentMessage else { return nil }
+        let presentation = message.kind.presentation
+        return ToastMessage(
+            id: message.id,
+            style: presentation.style,
+            title: presentation.title,
+            message: presentation.detail,
+            actionId: presentation.actionID,
+            actionTitle: presentation.actionTitle
+        )
     }
 
     private func scheduleDismissal(for message: AppMessage?) {

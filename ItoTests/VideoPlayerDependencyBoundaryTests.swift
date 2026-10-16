@@ -194,14 +194,20 @@ final class VideoPlayerDependencyBoundaryTests: XCTestCase {
         XCTAssertTrue(dependencies.presentationLogger as AnyObject === logger)
     }
 
-    func testMangaNovelAndLegacyReaderOwnershipRemainStable() throws {
+    func testMangaNovelOwnershipRemainsStableAndLegacyReaderIsRemoved() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
         let manga = try source("Ito/ViewModels/MangaReaderViewModel.swift")
         let novel = try source("Ito/ViewModels/NovelReaderViewModel.swift")
-        let legacy = try source("Ito/ViewModels/ReaderViewModel.swift")
 
         XCTAssertFalse(manga.contains("VideoPlayerViewModel"))
         XCTAssertFalse(novel.contains("VideoPlayerViewModel"))
-        XCTAssertTrue(legacy.contains("public final class ReaderViewModel"))
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("Ito/ViewModels/ReaderViewModel.swift").path
+            )
+        )
     }
 
     private func source(_ path: String) throws -> String {

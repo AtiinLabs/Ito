@@ -171,12 +171,18 @@ final class MangaReaderDependencyBoundaryTests: XCTestCase {
         XCTAssertTrue(behavior.contains("static let chapterNumberEpsilon: Float32 = 0.0001"))
     }
 
-    func testLegacyGenericReaderModelRemainsUnusedByMangaPresentation() throws {
-        let legacy = try source("Ito/ViewModels/ReaderViewModel.swift")
+    func testLegacyGenericReaderModelIsRemovedAndUnusedByMangaPresentation() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
         let view = try source("Ito/Views/Reader/ReaderView.swift")
         let viewModel = try source("Ito/ViewModels/MangaReaderViewModel.swift")
 
-        XCTAssertTrue(legacy.contains("public final class ReaderViewModel"))
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("Ito/ViewModels/ReaderViewModel.swift").path
+            )
+        )
         XCTAssertFalse(view.contains("ReaderViewModel("))
         XCTAssertFalse(viewModel.contains("ReaderViewModel<"))
     }

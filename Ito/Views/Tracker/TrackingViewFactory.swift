@@ -135,14 +135,3 @@ struct TrackingViewFactory {
         )
     }
 }
-
-private struct TrackingViewFactoryEnvironmentKey: EnvironmentKey {
-    static let defaultValue: TrackingViewFactory? = nil
-}
-
-extension EnvironmentValues {
-    var trackingViewFactory: TrackingViewFactory? {
-        get { self[TrackingViewFactoryEnvironmentKey.self] }
-        set { self[TrackingViewFactoryEnvironmentKey.self] = newValue }
-    }
-}

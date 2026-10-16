@@ -12,8 +12,6 @@ public enum DiscordRPCState: Equatable {
 
 @MainActor
 public class DiscordRPCManager: NSObject, ObservableObject, URLSessionWebSocketDelegate {
-    public static let shared = DiscordRPCManager(libraryManager: .shared)
-
     @Published public var state: DiscordRPCState = .disconnected
 
     public var isEnabled: Bool {

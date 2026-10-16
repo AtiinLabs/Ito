@@ -254,7 +254,9 @@ struct AppViewFactory {
             media: media,
             repository: discoverDetailDependencies.sourceMappingRepository,
             pluginProvider: discoverDetailDependencies.pluginProvider,
-            routeFactory: discoverDetailDependencies.sourceRouteFactory
+            routeFactory: discoverDetailDependencies.sourceRouteFactory,
+            libraryObserver: discoverDetailDependencies.libraryObserver,
+            trackerLinker: discoverDetailDependencies.trackerLinker
         )
         return DiscoverDetailViewModel(
             media: media,

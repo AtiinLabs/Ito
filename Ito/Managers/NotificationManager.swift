@@ -6,8 +6,6 @@ import Combine
 
 @MainActor
 public class NotificationManager: ObservableObject {
-    public static let shared = NotificationManager()
-
     @Published public private(set) var isAuthorized = false
     private var settingsStore: AppSettingsStore?
     private weak var updateManager: UpdateManager?

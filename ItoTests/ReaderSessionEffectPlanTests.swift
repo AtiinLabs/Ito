@@ -163,8 +163,14 @@ final class ReaderSessionEffectPlanTests: XCTestCase {
         XCTAssertFalse(paging.contains("ReaderViewModel("))
         XCTAssertFalse(paging.contains("@StateObject"))
 
-        let legacy = try sourceFile("Ito/ViewModels/ReaderViewModel.swift")
-        XCTAssertTrue(legacy.contains("public final class ReaderViewModel"))
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("Ito/ViewModels/ReaderViewModel.swift").path
+            )
+        )
     }
 
     func testPureChapterReadPlanLocksHistoryProgressAndTrackerOrder() {

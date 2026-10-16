@@ -3,7 +3,7 @@ import Foundation
 import GRDB
 
 @MainActor
-public final class ReadProgressManager: ObservableObject, ProgressTracking {
+public final class ReadProgressManager: ObservableObject {
     @Published private var readChapters: [MediaIdentity: Set<String>] = [:]
     @Published private var readChapterNumbers: [MediaIdentity: Set<Float>] = [:]
     @Published private var lastReadChapter: [MediaIdentity: String] = [:]

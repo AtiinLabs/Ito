@@ -86,12 +86,10 @@ nonisolated private struct LibraryPublicationOrder: Sendable {
 }
 
 @MainActor
-public class LibraryManager: ObservableObject, LibraryManaging {
+public class LibraryManager: ObservableObject {
     enum DurableMutationError: Error {
         case identifierCollision
     }
-
-    public static let shared = LibraryManager(dbPool: AppDatabase.shared.dbPool)
 
     @Published public private(set) var categories: [LibraryCategory] = []
     @Published public private(set) var items: [LibraryItem] = []
@@ -159,71 +157,6 @@ public class LibraryManager: ObservableObject, LibraryManaging {
 
     public func isSaved(id: String) -> Bool {
         return items.contains(where: { $0.id == id || $0.id == "\($0.pluginId)_\(id)" })
-    }
-
-    public func removeItem(withId id: String) {
-        Task {
-            do {
-                try await dbPool.write { db in
-                    if let existing = try LibraryItem.fetchOne(db, key: id) {
-                        try existing.delete(db)
-                    }
-                }
-            } catch {
-                AppLogger.database.error("Failed to remove item: \(error)")
-            }
-        }
-    }
-
-    private func saveOrRemoveItem(id: String, itemProvider: () -> LibraryItem) {
-        let generatedItem = itemProvider()
-        let legacyId = "\(generatedItem.pluginId)_\(id)"
-
-        Task {
-            do {
-                try await dbPool.write { db in
-                    // Check for either the standard ID or the legacy plugin-prefixed ID
-                    let existingItem = try LibraryItem.fetchOne(db, sql: "SELECT * FROM libraryItem WHERE id = ? OR id = ?", arguments: [id, legacyId])
-
-                    if let existing = existingItem {
-                        try existing.delete(db) // CASCADE will delete links
-                    } else {
-                        let newItem = generatedItem
-                        try newItem.insert(db)
-                        if let uncategorized = try LibraryCategory.filter(Column("isSystemCategory") == true).fetchOne(db) {
-                            let link = ItemCategoryLink(itemId: id, categoryId: uncategorized.id)
-                            try link.insert(db)
-                        }
-                    }
-                }
-            } catch {
-                AppLogger.database.error("Failed to toggle item: \(error)")
-            }
-        }
-    }
-
-    public func toggleSaveManga(manga: Manga, pluginId: String) {
-        let payload = (try? JSONEncoder().encode(manga)) ?? Data()
-        let count = manga.chapters?.count ?? 0
-        saveOrRemoveItem(id: manga.key) {
-            LibraryItem(id: manga.key, title: manga.title, coverUrl: manga.cover, pluginId: pluginId, isAnime: false, pluginType: .manga, rawPayload: payload, anilistId: nil, knownChapterCount: count)
-        }
-    }
-
-    public func toggleSaveNovel(novel: Novel, pluginId: String) {
-        let payload = (try? JSONEncoder().encode(novel)) ?? Data()
-        let count = novel.chapters?.count ?? 0
-        saveOrRemoveItem(id: novel.key) {
-            LibraryItem(id: novel.key, title: novel.title, coverUrl: novel.cover, pluginId: pluginId, isAnime: false, pluginType: .novel, rawPayload: payload, anilistId: nil, knownChapterCount: count)
-        }
-    }
-
-    public func toggleSaveAnime(anime: Anime, pluginId: String) {
-        let payload = (try? JSONEncoder().encode(anime)) ?? Data()
-        let count = anime.episodes?.count ?? 0
-        saveOrRemoveItem(id: anime.key) {
-            LibraryItem(id: anime.key, title: anime.title, coverUrl: anime.cover, pluginId: pluginId, isAnime: true, pluginType: .anime, rawPayload: payload, anilistId: nil, knownChapterCount: count)
-        }
     }
 
     // MARK: - Awaitable Media Detail Mutations

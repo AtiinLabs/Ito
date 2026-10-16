@@ -285,40 +285,38 @@ final class AppScopeIdentityTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(bootstrap.appScope).rootModels.hasLoadedLibraryViewModel)
     }
 
-    func testRootFactoriesAndLegacyEnvironmentObjectFanOutRemainAvailable() throws {
+    func testRootFactoriesAndViewsContainNoLegacyEnvironmentObjectWiring() throws {
         let appSource = try sourceFile("Ito/ItoApp.swift")
         let tabSource = try sourceFile("Ito/Views/MainTabView.swift")
-        let environmentObjects = [
-            "progressManager",
-            "trackerManager",
-            "updateManager",
-            "repoManager",
-            "pluginResolver",
-            "settingsStore",
-            "libraryManager",
-            "pluginManager",
-            "storageManager",
-            "discordRPCManager",
-            "historyManager",
-            "notificationManager",
-            "backupManager",
-            "librarySourceRemapper"
-        ]
+        let viewsRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Ito/Views")
+        let enumerator = try XCTUnwrap(
+            FileManager.default.enumerator(at: viewsRoot, includingPropertiesForKeys: nil)
+        )
+        let viewSources = try enumerator
+            .compactMap { $0 as? URL }
+            .filter { $0.pathExtension == "swift" }
+            .map { try String(contentsOf: $0, encoding: .utf8) }
 
-        for environmentObject in environmentObjects {
-            XCTAssertTrue(
-                appSource.contains(".environmentObject(\(environmentObject))"),
-                "Missing legacy environment object: \(environmentObject)"
-            )
+        XCTAssertFalse(appSource.contains(".environmentObject("))
+        XCTAssertFalse(appSource.contains("@EnvironmentObject"))
+        XCTAssertFalse(tabSource.contains("trackingViewFactory"))
+        for viewSource in viewSources {
+            XCTAssertFalse(viewSource.contains("@EnvironmentObject"))
+            XCTAssertFalse(viewSource.contains(".environmentObject("))
+            XCTAssertFalse(viewSource.contains("TrackingViewFactoryEnvironmentKey"))
         }
-        for unmigratedTab in [
+        for tabFactoryCall in [
             "appScope.viewFactory.makeLibraryView()",
+            "appScope.viewFactory.makeBrowseView()",
+            "appScope.viewFactory.makeDiscoverView()",
+            "appScope.viewFactory.makeSearchView()",
             "appScope.viewFactory.makeSettingsView()"
         ] {
-            XCTAssertTrue(tabSource.contains(unmigratedTab))
+            XCTAssertTrue(tabSource.contains(tabFactoryCall))
         }
-        XCTAssertTrue(tabSource.contains("appScope.viewFactory.makeBrowseView()"))
-        XCTAssertTrue(tabSource.contains("appScope.viewFactory.makeDiscoverView()"))
     }
 
     func testUITestFixtureStorageAndDefaultsAreIsolatedFromProduction() throws {
@@ -499,6 +497,8 @@ final class AppScopeIdentityTests: XCTestCase {
         XCTAssertTrue(dependencies.discoverDetail.pluginProvider === pluginManager)
         XCTAssertTrue(dependencies.discoverDetail.detailService === DiscoverManager.shared)
         XCTAssertTrue(dependencies.discoverDetail.themeService === ThemeManager.shared)
+        XCTAssertTrue(dependencies.discoverDetail.libraryObserver === libraryManager)
+        XCTAssertTrue(dependencies.discoverDetail.trackerLinker === trackerManager)
         XCTAssertTrue(dependencies.library.library === libraryManager)
         XCTAssertTrue(dependencies.library.layout === settingsStore)
         XCTAssertTrue(dependencies.library.updates === updateManager)

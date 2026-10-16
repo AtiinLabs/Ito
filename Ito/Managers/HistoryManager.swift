@@ -61,11 +61,6 @@ nonisolated struct HistoryPublicationOrder: Sendable {
 
 @MainActor
 public class HistoryManager: ObservableObject {
-    public static let shared = HistoryManager(
-        dbPool: AppDatabase.shared.dbPool,
-        libraryManager: .shared
-    )
-
     @Published public private(set) var history: [HistoryEntry] = []
 
     private let dbPool: DatabasePool

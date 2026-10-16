@@ -88,12 +88,67 @@ extension SourceResolverPluginProviding {
 extension PluginManager: SourceResolverPluginProviding {}
 
 @MainActor
+protocol SourceResolverLibraryObserving: AnyObject {
+    var libraryItems: [LibraryItem] { get }
+    var libraryItemsPublisher: AnyPublisher<[LibraryItem], Never> { get }
+}
+
+extension LibraryManager: SourceResolverLibraryObserving {
+    var libraryItems: [LibraryItem] { items }
+
+    var libraryItemsPublisher: AnyPublisher<[LibraryItem], Never> {
+        $items.eraseToAnyPublisher()
+    }
+}
+
+@MainActor
+protocol SourceResolverTrackerLinking: AnyObject {
+    func anilistTrackerID(for media: MediaIdentity) -> String?
+    func linkAniList(media: MediaIdentity, remoteMediaID: String) async throws
+}
+
+extension TrackerManager: SourceResolverTrackerLinking {
+    func anilistTrackerID(for media: MediaIdentity) -> String? {
+        trackerId(for: media, providerId: "anilist")
+    }
+
+    func linkAniList(media: MediaIdentity, remoteMediaID: String) async throws {
+        try await link(
+            media: media,
+            providerId: "anilist",
+            remoteMediaId: remoteMediaID
+        )
+    }
+}
+
+@MainActor
 struct PreparedDiscoverDetailDependencies {
     let sourceMappingRepository: any SourceMappingRepository
     let pluginProvider: any SourceResolverPluginProviding
     let detailService: any DiscoverDetailServing
     let themeService: any DiscoverDetailThemeServing
     let sourceRouteFactory: any SourceRouteBuilding
+    let libraryObserver: any SourceResolverLibraryObserving
+    let trackerLinker: any SourceResolverTrackerLinking
+
+    init(
+        sourceMappingRepository: any SourceMappingRepository,
+        pluginProvider: any SourceResolverPluginProviding,
+        detailService: any DiscoverDetailServing,
+        themeService: any DiscoverDetailThemeServing,
+        sourceRouteFactory: any SourceRouteBuilding,
+        libraryObserver: (any SourceResolverLibraryObserving)? = nil,
+        trackerLinker: (any SourceResolverTrackerLinking)? = nil
+    ) {
+        let fallback = UnavailableDiscoverDetailDependency()
+        self.sourceMappingRepository = sourceMappingRepository
+        self.pluginProvider = pluginProvider
+        self.detailService = detailService
+        self.themeService = themeService
+        self.sourceRouteFactory = sourceRouteFactory
+        self.libraryObserver = libraryObserver ?? fallback
+        self.trackerLinker = trackerLinker ?? fallback
+    }
 
     static func unavailable() -> Self {
         let dependency = UnavailableDiscoverDetailDependency()
@@ -102,7 +157,9 @@ struct PreparedDiscoverDetailDependencies {
             pluginProvider: dependency,
             detailService: dependency,
             themeService: dependency,
-            sourceRouteFactory: SourceRouteFactory()
+            sourceRouteFactory: SourceRouteFactory(),
+            libraryObserver: dependency,
+            trackerLinker: dependency
         )
     }
 }
@@ -112,13 +169,19 @@ private enum DiscoverDetailDependencyUnavailableError: Error {
 }
 
 @MainActor
-private final class UnavailableDiscoverDetailDependency: DiscoverDetailServing,
+final class UnavailableDiscoverDetailDependency: DiscoverDetailServing,
     DiscoverDetailThemeServing, SourceResolverPluginProviding, SourceMappingRepository,
+    SourceResolverLibraryObserving, SourceResolverTrackerLinking,
     @unchecked Sendable {
     let installedPlugins: [String: InstalledPlugin] = [:]
+    let libraryItems: [LibraryItem] = []
 
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> {
         Just(installedPlugins).eraseToAnyPublisher()
+    }
+
+    var libraryItemsPublisher: AnyPublisher<[LibraryItem], Never> {
+        Just(libraryItems).eraseToAnyPublisher()
     }
 
     func fetchDiscoverDetails(id: Int) async throws -> DiscoverMedia? {
@@ -215,6 +278,17 @@ private final class UnavailableDiscoverDetailDependency: DiscoverDetailServing,
         _ = mediaType
         _ = pluginId
         _ = pluginMediaKey
+        throw DiscoverDetailDependencyUnavailableError.unavailable
+    }
+
+    func anilistTrackerID(for media: MediaIdentity) -> String? {
+        _ = media
+        return nil
+    }
+
+    func linkAniList(media: MediaIdentity, remoteMediaID: String) async throws {
+        _ = media
+        _ = remoteMediaID
         throw DiscoverDetailDependencyUnavailableError.unavailable
     }
 }

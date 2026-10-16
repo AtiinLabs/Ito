@@ -334,7 +334,10 @@ final class DiscoverDetailViewModelTests: XCTestCase {
             "UserDefaults.standard",
             "UIApplication.shared",
             "func configure(",
-            "AnyView"
+            "AnyView",
+            "@EnvironmentObject",
+            "LibraryManager",
+            "TrackerManager"
         ]
 
         for path in paths {

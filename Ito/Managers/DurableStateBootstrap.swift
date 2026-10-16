@@ -490,7 +490,7 @@ public final class DurableStateBootstrap: ObservableObject {
         appScope = nil
     }
 
-    private var hasCompleteRuntimeDependencies: Bool {
+    var hasCompleteRuntimeDependencies: Bool {
         settingsStore != nil
             && pluginSettingsStore != nil
             && readProgressManager != nil

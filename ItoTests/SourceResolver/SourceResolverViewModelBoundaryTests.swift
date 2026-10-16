@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import XCTest
 @testable import Ito
@@ -467,11 +468,103 @@ extension SourceResolverViewModelTests {
 
         XCTAssertTrue(initializer.contains("repository: any SourceMappingRepository"))
         XCTAssertTrue(initializer.contains("routeFactory: any SourceRouteBuilding"))
+        XCTAssertTrue(initializer.contains("libraryObserver: any SourceResolverLibraryObserving"))
+        XCTAssertTrue(initializer.contains("trackerLinker: any SourceResolverTrackerLinking"))
         XCTAssertFalse(initializer.contains("="))
         XCTAssertFalse(source.contains("AppDatabase.shared"))
         XCTAssertFalse(source.contains("public protocol PluginProviding"))
         XCTAssertFalse(source.contains("any PluginProviding"))
         XCTAssertFalse(source.contains("AppLogger"))
+    }
+
+    func testSourceDestinationAutoLinksAniListOnDirectAndCollisionPrefixedSave() async {
+        let libraryObserver = SourceResolverLibraryObserverFake()
+        let trackerLinker = SourceResolverTrackerLinkerSpy()
+        let vm = SourceResolverViewModel(
+            media: makeDiscoverMedia(),
+            repository: repository,
+            pluginProvider: pluginProvider,
+            routeFactory: SourceRouteFactory(),
+            libraryObserver: libraryObserver,
+            trackerLinker: trackerLinker
+        )
+        let route = SourceRoute(
+            media: .manga(Manga(key: "m1", title: "Title")),
+            pluginID: "p1",
+            runner: ItoRunner(),
+            anilistID: 42
+        )
+
+        vm.present(route: route)
+        XCTAssertTrue(trackerLinker.linked.isEmpty)
+
+        libraryObserver.publish([
+            Ito.LibraryItem(
+                id: "p1_m1",
+                title: "Title",
+                coverUrl: nil,
+                pluginId: "p1",
+                isAnime: false,
+                pluginType: .manga,
+                rawPayload: Data(),
+                anilistId: nil,
+                knownChapterCount: 0
+            )
+        ])
+        await waitUntil { trackerLinker.linked.count == 1 }
+
+        XCTAssertEqual(trackerLinker.linked.count, 1)
+        XCTAssertEqual(trackerLinker.linked.first?.media, MediaIdentity(pluginId: "p1", itemId: "m1"))
+        XCTAssertEqual(trackerLinker.linked.first?.remoteMediaID, "42")
+    }
+
+    func testSourceDestinationSkipsAlreadyLinkedAndCancelsAutoLinkOnDismiss() async {
+        let libraryObserver = SourceResolverLibraryObserverFake(items: [
+            Ito.LibraryItem(
+                id: "m1",
+                title: "Title",
+                coverUrl: nil,
+                pluginId: "p1",
+                isAnime: false,
+                pluginType: .manga,
+                rawPayload: Data(),
+                anilistId: nil,
+                knownChapterCount: 0
+            )
+        ])
+        let trackerLinker = SourceResolverTrackerLinkerSpy()
+        let identity = MediaIdentity(pluginId: "p1", itemId: "m1")
+        trackerLinker.existingIDs[identity] = "99"
+        let vm = SourceResolverViewModel(
+            media: makeDiscoverMedia(),
+            repository: repository,
+            pluginProvider: pluginProvider,
+            routeFactory: SourceRouteFactory(),
+            libraryObserver: libraryObserver,
+            trackerLinker: trackerLinker
+        )
+        let route = SourceRoute(
+            media: .manga(Manga(key: "m1", title: "Title")),
+            pluginID: "p1",
+            runner: ItoRunner(),
+            anilistID: 99
+        )
+
+        vm.present(route: route)
+        vm.destinationDidAppear()
+        XCTAssertTrue(trackerLinker.linked.isEmpty)
+
+        trackerLinker.existingIDs.removeAll()
+        trackerLinker.suspendLinks = true
+        vm.destinationDidAppear()
+        await waitUntil { trackerLinker.callCount == 1 }
+
+        vm.manualDestinationPopRequested()
+        vm.destinationDidDisappear()
+        XCTAssertNil(vm.sourceRoute)
+        trackerLinker.resumeSuspendedLink()
+        await Task.yield()
+        XCTAssertTrue(trackerLinker.linked.isEmpty)
     }
 
 }
@@ -607,6 +700,58 @@ private actor SuspendedPluginSearchAdapter: PluginSearching {
 
     func resume(with results: [ResolvedPluginMedia]) {
         continuation?.resume(returning: results)
+        continuation = nil
+    }
+}
+
+@MainActor
+private final class SourceResolverLibraryObserverFake: SourceResolverLibraryObserving {
+    @Published private(set) var libraryItems: [Ito.LibraryItem]
+
+    init(items: [Ito.LibraryItem] = []) {
+        self.libraryItems = items
+    }
+
+    var libraryItemsPublisher: AnyPublisher<[Ito.LibraryItem], Never> {
+        $libraryItems.eraseToAnyPublisher()
+    }
+
+    func publish(_ items: [Ito.LibraryItem]) {
+        libraryItems = items
+    }
+}
+
+@MainActor
+private final class SourceResolverTrackerLinkerSpy: SourceResolverTrackerLinking {
+    struct LinkCall {
+        let media: MediaIdentity
+        let remoteMediaID: String
+    }
+
+    var existingIDs: [MediaIdentity: String] = [:]
+    var suspendLinks = false
+    private(set) var callCount = 0
+    private(set) var linked: [LinkCall] = []
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func anilistTrackerID(for media: MediaIdentity) -> String? {
+        existingIDs[media]
+    }
+
+    func linkAniList(media: MediaIdentity, remoteMediaID: String) async throws {
+        callCount += 1
+        if suspendLinks {
+            await withCheckedContinuation { continuation in
+                self.continuation = continuation
+            }
+        }
+        try Task.checkCancellation()
+        existingIDs[media] = remoteMediaID
+        linked.append(LinkCall(media: media, remoteMediaID: remoteMediaID))
+    }
+
+    func resumeSuspendedLink() {
+        continuation?.resume()
         continuation = nil
     }
 }
