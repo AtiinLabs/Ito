@@ -1,0 +1,46 @@
+{
+  "name": "Ito Beta",
+  "identifier": "moe.itoapp.source.beta",
+  "subtitle": "Beta and release-candidate builds of Ito",
+  "description": "Ito IPAs built without an App Store signing identity. AltStore and SideStore re-sign downloads with the user's Apple account.",
+  "website": "https://github.com/AtiinLabs/Ito",
+  "sourceURL": "https://atiinlabs.github.io/Ito/apps-beta.json",
+  "iconURL": "https://atiinlabs.github.io/Ito/icon.png",
+  "tintColor": "6C5CE7",
+  "apps": [
+    {
+      "name": "Ito Beta",
+      "bundleIdentifier": "moe.itoapp.ito",
+      "developerName": "Ito contributors",
+      "subtitle": "Beta and release-candidate channel",
+      "localizedDescription": "An unsigned Ito build for installation through AltStore, SideStore, TrollStore-compatible setups, or jailbreak tooling.",
+      "iconURL": "https://atiinlabs.github.io/Ito/icon.png",
+      "tintColor": "6C5CE7",
+      "category": "entertainment",
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {}
+      },
+      "versions": [
+        {
+          "version": "1.1.0",
+          "buildVersion": "124",
+          "date": "2026-10-18T12:35:26Z",
+          "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/v1.1.0-beta.1/Ito-1.1.0-beta.1-unsigned.ipa",
+          "size": 10531795,
+          "sha256": "334de1b5694cf6c89bf69e837082bd57408a7a33c6299edf22adc46d650702df",
+          "localizedDescription": "Ito 1.1.0-beta.1 (build 124). Unsigned Ito 1.1.0-beta.1 build. AltStore and SideStore re-sign it with the user's Apple account.",
+          "minOSVersion": "15.4"
+        }
+      ],
+      "version": "1.1.0",
+      "buildVersion": "124",
+      "date": "2026-10-18T12:35:26Z",
+      "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/v1.1.0-beta.1/Ito-1.1.0-beta.1-unsigned.ipa",
+      "size": 10531795,
+      "minOSVersion": "15.4",
+      "versionDescription": "Ito 1.1.0-beta.1 (build 124). Unsigned Ito 1.1.0-beta.1 build. AltStore and SideStore re-sign it with the user's Apple account."
+    }
+  ],
+  "news": []
+}
