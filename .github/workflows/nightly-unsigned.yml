@@ -125,6 +125,7 @@ jobs:
             -configuration Debug \
             -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
             -only-testing:ItoTests \
+            -parallel-testing-enabled NO \
             -resultBundlePath TestResults.xcresult \
             -skipPackagePluginValidation \
             COMPILER_INDEX_STORE_ENABLE=NO \

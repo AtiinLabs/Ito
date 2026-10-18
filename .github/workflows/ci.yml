@@ -103,6 +103,8 @@ jobs:
             COMPILER_INDEX_STORE_ENABLE=NO \
             | tee build.log
 
+      # Parallel testing clones the simulator. Every test ran on Clone 1, while
+      # Clone 2 boot/launch failures exited 65 after all tests passed (#53, #76, #79).
       - name: Run unit tests
         working-directory: Ito
         env:
@@ -116,6 +118,7 @@ jobs:
             -configuration Debug \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -only-testing:ItoTests \
+            -parallel-testing-enabled NO \
             -resultBundlePath TestResults.xcresult \
             -skipPackagePluginValidation \
             | tee test.log
