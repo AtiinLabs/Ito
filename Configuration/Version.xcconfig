@@ -1,8 +1,9 @@
 // The app version for every target. See docs/RELEASING.md.
 //
-// MARKETING_VERSION is the version under development on main: numeric X.Y.Z only
-// (it becomes CFBundleShortVersionString). Bump it when a release cycle starts.
-MARKETING_VERSION = 1.1.0
+// MARKETING_VERSION is the version main would be released as: numeric X.Y.Z only
+// (it becomes CFBundleShortVersionString). After a release, bump the patch;
+// a feature bumps the minor. See docs/RELEASING.md.
+MARKETING_VERSION = 1.1.1
 
 // CI overrides this with the commit count of the built commit
 // (`git rev-list --count HEAD`). Local builds use 1.
