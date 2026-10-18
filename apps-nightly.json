@@ -23,6 +23,15 @@
       },
       "versions": [
         {
+          "version": "1.0.0-nightly.20261018.93",
+          "buildVersion": "93",
+          "date": "2026-10-18T09:18:28Z",
+          "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/nightly-20261018-93/Ito-1.0.0-nightly.20261018.93-unsigned.ipa",
+          "size": 10227890,
+          "localizedDescription": "Automated unsigned nightly from main at 60e4af3. This build may be unstable.",
+          "minOSVersion": "15.4"
+        },
+        {
           "version": "1.0.0-nightly.20261017.92",
           "buildVersion": "92",
           "date": "2026-10-17T13:18:50Z",
@@ -138,24 +147,15 @@
           "size": 10264411,
           "localizedDescription": "Automated unsigned nightly from main at 02a33df. This build may be unstable.",
           "minOSVersion": "15.4"
-        },
-        {
-          "version": "1.0.0-nightly.20261004.79",
-          "buildVersion": "79",
-          "date": "2026-10-04T15:10:43Z",
-          "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/nightly-20261004-79/Ito-1.0.0-nightly.20261004.79-unsigned.ipa",
-          "size": 10264224,
-          "localizedDescription": "Automated unsigned nightly from main at 02a33df. This build may be unstable.",
-          "minOSVersion": "15.4"
         }
       ],
-      "version": "1.0.0-nightly.20261017.92",
-      "buildVersion": "92",
-      "date": "2026-10-17T13:18:50Z",
-      "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/nightly-20261017-92/Ito-1.0.0-nightly.20261017.92-unsigned.ipa",
-      "size": 10227559,
+      "version": "1.0.0-nightly.20261018.93",
+      "buildVersion": "93",
+      "date": "2026-10-18T09:18:28Z",
+      "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/nightly-20261018-93/Ito-1.0.0-nightly.20261018.93-unsigned.ipa",
+      "size": 10227890,
       "minOSVersion": "15.4",
-      "versionDescription": "Automated unsigned nightly from main at cfcd6fc. This build may be unstable."
+      "versionDescription": "Automated unsigned nightly from main at 60e4af3. This build may be unstable."
     }
   ],
   "news": []
