@@ -53,6 +53,7 @@ public class StorageManager: ObservableObject {
             // Set up Nuke to use our aggressive data cache instead of URLCache
             ImagePipeline.shared = ImagePipeline(delegate: NukeDiagnosticDelegate.shared) {
                 $0.dataCache = dataCache
+                $0.makeImageDecoder = ItoImageDecoders.make(for:)
                 let config = URLSessionConfiguration.default
                 config.urlCache = nil
                 config.httpAdditionalHeaders = ["User-Agent": CloudflareManager.defaultUserAgent]
@@ -67,6 +68,7 @@ public class StorageManager: ObservableObject {
             let config = URLSessionConfiguration.default
             config.httpAdditionalHeaders = ["User-Agent": CloudflareManager.defaultUserAgent]
             ImagePipeline.shared = ImagePipeline(delegate: NukeDiagnosticDelegate.shared) {
+                $0.makeImageDecoder = ItoImageDecoders.make(for:)
                 $0.dataLoader = PluginDataLoader(
                     configuration: config,
                     pluginManager: pluginManager

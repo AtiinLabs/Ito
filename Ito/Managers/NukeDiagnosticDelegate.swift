@@ -28,15 +28,36 @@ public final class NukeDiagnosticDelegate: ImagePipelineDelegate, @unchecked Sen
                 let host = task.request.url?.host ?? "unknown-host"
                 let scheme = task.request.url?.scheme ?? "unknown-scheme"
                 let fileExtension = task.request.url?.pathExtension ?? "none"
+                let reason = Self.failureSummary(for: error)
 
-                var statusInfo = "none"
-                var underlyingInfo = "none"
-                let nsError = error as NSError
-                statusInfo = "\(nsError.domain)_\(nsError.code)"
-                underlyingInfo = String(describing: type(of: error))
-
-                AppLogger.network.error("[Nuke] Image load failed scheme=\(scheme) host=\(host) ext=\(fileExtension) status=\(statusInfo) cause=\(underlyingInfo)")
+                AppLogger.network.error("[Nuke] Image load failed scheme=\(scheme) host=\(host) ext=\(fileExtension) \(reason)")
             }
         }
+    }
+
+    /// `status=<pipeline error case>`, then `http=<status>` for rejected HTTP
+    /// responses or `cause=<domain>_<code>` for other underlying errors.
+    /// Uses only names and codes: an underlying error's description or
+    /// userInfo can carry the request URL.
+    nonisolated static func failureSummary(for error: ImagePipeline.Error) -> String {
+        let status: String
+        let underlying: (any Error)?
+        switch error {
+        case .dataMissingInCache: (status, underlying) = ("dataMissingInCache", nil)
+        case .dataLoadingFailed(let cause): (status, underlying) = ("dataLoadingFailed", cause)
+        case .dataIsEmpty: (status, underlying) = ("dataIsEmpty", nil)
+        case .decoderNotRegistered: (status, underlying) = ("decoderNotRegistered", nil)
+        case .decodingFailed(_, _, let cause): (status, underlying) = ("decodingFailed", cause)
+        case .processingFailed(_, _, let cause): (status, underlying) = ("processingFailed", cause)
+        case .imageRequestMissing: (status, underlying) = ("imageRequestMissing", nil)
+        case .pipelineInvalidated: (status, underlying) = ("pipelineInvalidated", nil)
+        }
+
+        guard let underlying else { return "status=\(status)" }
+        if case DataLoader.Error.statusCodeUnacceptable(let code) = underlying {
+            return "status=\(status) http=\(code)"
+        }
+        let nsError = underlying as NSError
+        return "status=\(status) cause=\(nsError.domain)_\(nsError.code)"
     }
 }

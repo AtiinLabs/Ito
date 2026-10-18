@@ -1,0 +1,4 @@
+module dav1d {
+    header "dav1d/dav1d.h"
+    export *
+}

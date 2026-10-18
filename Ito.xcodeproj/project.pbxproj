@@ -15,6 +15,7 @@
 		3AC825722F5FD9300054AD29 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = 3AC825712F5FD9300054AD29 /* NukeUI */; };
 		3ADF8E0F2F6CE2E6007A5EA0 /* ito-runner in Frameworks */ = {isa = PBXBuildFile; productRef = 3ADF8E0E2F6CE2E6007A5EA0 /* ito-runner */; };
 		3B8E1A012FF0000000000001 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 391483252FE4B140002F5EA7 /* GRDB */; };
+		3C0A71F02FF1000000000001 /* ItoAVIF in Frameworks */ = {isa = PBXBuildFile; productRef = 3C0A71F02FF1000000000002 /* ItoAVIF */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -83,6 +84,7 @@
 				397BF7242FE6F4E600EFFFC4 /* ito-runner in Frameworks */,
 				3A7509552F57FFE40057955D /* ito-runner in Frameworks */,
 				3AC825702F5FD9300054AD29 /* Nuke in Frameworks */,
+				3C0A71F02FF1000000000001 /* ItoAVIF in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -152,6 +154,7 @@
 				3A64EED72F7969F700B76A90 /* GRDB */,
 				391483252FE4B140002F5EA7 /* GRDB */,
 				397BF7232FE6F4E600EFFFC4 /* ito-runner */,
+				3C0A71F02FF1000000000002 /* ItoAVIF */,
 			);
 			productName = Ito;
 			productReference = 3A43D87F2F57E4BD008E061E /* Ito.app */;
@@ -241,6 +244,7 @@
 				3AC825732F5FF84D0054AD29 /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */,
 				391483242FE4B140002F5EA7 /* XCRemoteSwiftPackageReference "GRDB" */,
 				397BF7222FE6F4E600EFFFC4 /* XCLocalSwiftPackageReference "../ito-runner" */,
+				3C0A71F02FF1000000000003 /* XCLocalSwiftPackageReference "Packages/ItoAVIF" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3A43D8802F57E4BD008E061E /* Products */;
@@ -643,6 +647,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "../ito-runner";
 		};
+		3C0A71F02FF1000000000003 /* XCLocalSwiftPackageReference "Packages/ItoAVIF" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/ItoAVIF;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -708,6 +716,11 @@
 		3ADF8E0E2F6CE2E6007A5EA0 /* ito-runner */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = "ito-runner";
+		};
+		3C0A71F02FF1000000000002 /* ItoAVIF */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3C0A71F02FF1000000000003 /* XCLocalSwiftPackageReference "Packages/ItoAVIF" */;
+			productName = ItoAVIF;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
