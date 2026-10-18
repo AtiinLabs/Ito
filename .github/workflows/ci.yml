@@ -69,6 +69,16 @@ jobs:
           xcodebuild -version
           xcrun simctl list runtimes
 
+      # Keep package checkouts outside DerivedData so they can be cached. The key
+      # covers every input to the package graph, including the pinned local packages.
+      - name: Cache Swift packages
+        uses: actions/cache@v6
+        with:
+          path: SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('Ito/Ito.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Ito/.github/ito-runner.ref', 'Ito/.github/wasmkit.ref') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
       - name: Resolve Swift packages
         working-directory: Ito
         run: |
@@ -76,6 +86,7 @@ jobs:
           xcodebuild -resolvePackageDependencies \
             -project "$PROJECT" \
             -scheme "$SCHEME" \
+            -clonedSourcePackagesDirPath "$GITHUB_WORKSPACE/SourcePackages" \
             -skipPackagePluginValidation \
             | tee resolve-packages.log
 
@@ -98,6 +109,7 @@ jobs:
             -scheme "$SCHEME" \
             -configuration Debug \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -clonedSourcePackagesDirPath "$GITHUB_WORKSPACE/SourcePackages" \
             -skipPackagePluginValidation \
             DEVELOPMENT_TEAM= \
             COMPILER_INDEX_STORE_ENABLE=NO \
@@ -120,6 +132,7 @@ jobs:
             -only-testing:ItoTests \
             -parallel-testing-enabled NO \
             -resultBundlePath TestResults.xcresult \
+            -clonedSourcePackagesDirPath "$GITHUB_WORKSPACE/SourcePackages" \
             -skipPackagePluginValidation \
             | tee test.log
 
