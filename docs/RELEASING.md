@@ -105,12 +105,16 @@ Also apply the fix to any still-maintained release branch that needs it.
 After the first publication in each channel:
 
 ```text
-Stable: https://itoapp.github.io/Ito/apps.json
-Beta:   https://itoapp.github.io/Ito/apps-beta.json
-Nightly:https://itoapp.github.io/Ito/apps-nightly.json
+Stable: https://atiinlabs.github.io/Ito/apps.json
+Beta:   https://atiinlabs.github.io/Ito/apps-beta.json
+Nightly:https://atiinlabs.github.io/Ito/apps-nightly.json
 ```
 
 All three feeds currently describe the same bundle identifier. Installing one channel replaces another.
+
+Each source entry's `version` is the app's numeric version and `buildVersion` its build number, matching the IPA's Info.plist; AltStore and SideStore refuse an install when they differ. The channel version (for example `1.3.0-nightly.20261019.95`) goes in the entry's release notes. Every entry also carries the IPA's `sha256`, which both stores verify after downloading.
+
+GitHub Pages must deploy from the `gh-pages` branch (**Settings → Pages → Deploy from a branch**); otherwise the feeds are committed but never served.
 
 ## What each publication does
 

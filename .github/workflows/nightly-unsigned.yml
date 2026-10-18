@@ -182,6 +182,7 @@ jobs:
           TAG: ${{ steps.nightly.outputs.tag }}
           CHANNEL: nightly
           VERSION: ${{ steps.nightly.outputs.display_version }}
+          APP_VERSION: ${{ steps.nightly.outputs.base_version }}
           BUILD_NUMBER: ${{ steps.nightly.outputs.build }}
           IPA_PATH: ${{ steps.ipa.outputs.ipa_path }}
           IPA_NAME: ${{ steps.ipa.outputs.ipa_name }}

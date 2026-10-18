@@ -5,10 +5,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 DEFAULT_BUNDLE_ID = "moe.itoapp.ito"
+WEBSITE = "https://github.com/AtiinLabs/Ito"
+
+# AltStore and SideStore reject an install unless the downloaded app's
+# CFBundleShortVersionString equals the source "version", so feed versions are
+# the app's numeric X.Y.Z. Channel labels belong in the release notes.
+APP_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+LABELED_VERSION = re.compile(r"^(\d+\.\d+\.\d+)-")
 
 CHANNEL_METADATA = {
     "stable": {
@@ -41,7 +49,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-url", required=True)
     parser.add_argument("--channel", required=True, choices=tuple(CHANNEL_METADATA))
     parser.add_argument("--bundle-id", default=DEFAULT_BUNDLE_ID)
-    parser.add_argument("--version", required=True)
+    parser.add_argument("--version", required=True, help="App CFBundleShortVersionString, X.Y.Z")
+    parser.add_argument("--display-version", help="Channel version for release notes, e.g. 1.1.0-beta.1")
+    parser.add_argument("--sha256", required=True, help="Hex SHA-256 of the IPA")
     parser.add_argument("--build-version", required=True)
     parser.add_argument("--date", required=True)
     parser.add_argument("--download-url", required=True)
@@ -61,7 +71,7 @@ def default_source(source_url: str, source_filename: str, channel: str) -> dict[
             "Ito IPAs built without an App Store signing identity. "
             "AltStore and SideStore re-sign downloads with the user's Apple account."
         ),
-        "website": "https://github.com/itoapp/Ito",
+        "website": WEBSITE,
         "sourceURL": f"{source_url}/{source_filename}",
         "iconURL": f"{source_url}/icon.png",
         "tintColor": "6C5CE7",
@@ -96,6 +106,7 @@ def main() -> int:
             "subtitle": metadata["source_subtitle"],
             "sourceURL": f"{source_url}/{source_filename}",
             "iconURL": icon_url,
+            "website": WEBSITE,
         }
     )
     apps = source.setdefault("apps", [])
@@ -126,24 +137,39 @@ def main() -> int:
     app["subtitle"] = metadata["app_subtitle"]
     app["iconURL"] = icon_url
 
+    if not APP_VERSION.match(args.version):
+        raise SystemExit(f"--version must be the app's numeric X.Y.Z version; got {args.version!r}")
+    if not re.fullmatch(r"[0-9a-f]{64}", args.sha256):
+        raise SystemExit(f"--sha256 must be 64 lowercase hex characters; got {args.sha256!r}")
+    display_version = args.display_version or args.version
+    description = f"Ito {display_version} (build {args.build_version})."
+    if args.release_notes:
+        description = f"{description} {args.release_notes}"
+
     version_entry = {
         "version": args.version,
         "buildVersion": str(args.build_version),
         "date": args.date,
         "downloadURL": args.download_url,
         "size": args.size,
-        "localizedDescription": args.release_notes,
+        "sha256": args.sha256,
+        "localizedDescription": description,
         "minOSVersion": "15.4",
     }
 
-    versions = [
-        item
-        for item in app.setdefault("versions", [])
-        if not (
+    versions = []
+    for item in app.setdefault("versions", []):
+        # Earlier entries carried the channel label in "version", which no store
+        # accepts; the IPAs themselves report the numeric prefix.
+        labeled = LABELED_VERSION.match(str(item.get("version", "")))
+        if labeled:
+            item["version"] = labeled.group(1)
+        if (
             str(item.get("version")) == args.version
             and str(item.get("buildVersion")) == str(args.build_version)
-        )
-    ]
+        ):
+            continue
+        versions.append(item)
     versions.insert(0, version_entry)
     app["versions"] = versions[: args.max_versions]
 

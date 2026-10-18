@@ -22,7 +22,7 @@ fi
 
 if [[ ! -f ../ito-runner/Package.swift ]]; then
   echo "Missing ../ito-runner/Package.swift." >&2
-  echo "Clone https://github.com/itoapp/ito-runner beside the Ito repository." >&2
+  echo "Clone https://github.com/AtiinLabs/ito-runner beside the Ito repository." >&2
   exit 1
 fi
 

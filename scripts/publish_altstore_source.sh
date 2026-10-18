@@ -5,6 +5,7 @@ set -euo pipefail
 : "${TAG:?TAG is required}"
 : "${CHANNEL:?CHANNEL is required}"
 : "${VERSION:?VERSION is required}"
+: "${APP_VERSION:?APP_VERSION is required}"
 : "${BUILD_NUMBER:?BUILD_NUMBER is required}"
 : "${IPA_PATH:?IPA_PATH is required}"
 : "${IPA_NAME:?IPA_NAME is required}"
@@ -20,13 +21,15 @@ case "$CHANNEL" in
   *) echo "Unsupported channel: $CHANNEL" >&2; exit 1 ;;
 esac
 
-OWNER="${GITHUB_REPOSITORY_OWNER}"
+# GitHub Pages hostnames are lowercase; the stores keep sourceURL as the source's identity.
+OWNER="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
 REPO="${GITHUB_REPOSITORY#*/}"
 SOURCE_URL="https://${OWNER}.github.io/${REPO}"
 DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${IPA_NAME}"
 PAGES_DIR="${RUNNER_TEMP}/ito-pages"
 RELEASE_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 IPA_SIZE="$(stat -f '%z' "$IPA_PATH")"
+IPA_SHA256="$(shasum -a 256 "$IPA_PATH" | cut -d ' ' -f 1)"
 
 rm -rf "$PAGES_DIR"
 if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
@@ -43,7 +46,9 @@ python3 scripts/update_altstore_source.py \
   --source-url "$SOURCE_URL" \
   --channel "$CHANNEL" \
   --bundle-id "$BUNDLE_ID" \
-  --version "$VERSION" \
+  --version "$APP_VERSION" \
+  --display-version "$VERSION" \
+  --sha256 "$IPA_SHA256" \
   --build-version "$BUILD_NUMBER" \
   --date "$RELEASE_DATE" \
   --download-url "$DOWNLOAD_URL" \

@@ -70,7 +70,7 @@ They are intentionally temporary; the nightly workflow retains the newest 14 and
 | Beta/RC | `vX.Y.Z-beta.N` or `vX.Y.Z-rc.N` | Prerelease | `apps-beta.json` | Release testers |
 | Stable | `vX.Y.Z` | Full release | `apps.json` | General users |
 
-The app's `MARKETING_VERSION`, set in `Configuration/Version.xcconfig`, stays numeric (`X.Y.Z`) while the complete channel version is used in artifact names and source metadata. This avoids invalid iOS bundle-version strings such as `1.3.0-beta.1`. Build numbers are the commit count of the built commit in every channel.
+The app's `MARKETING_VERSION`, set in `Configuration/Version.xcconfig`, stays numeric (`X.Y.Z`); the complete channel version (for example `1.3.0-beta.1`) appears in artifact names, release titles, and source release notes. Source `version` fields carry the numeric app version, because AltStore and SideStore refuse installs whose app version differs from the source. Build numbers are the commit count of the built commit in every channel.
 
 ## Current installation behavior
 

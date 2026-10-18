@@ -246,6 +246,7 @@ jobs:
           TAG: ${{ steps.release.outputs.tag }}
           CHANNEL: ${{ steps.release.outputs.channel }}
           VERSION: ${{ steps.release.outputs.display_version }}
+          APP_VERSION: ${{ steps.release.outputs.base_version }}
           BUILD_NUMBER: ${{ steps.version.outputs.build }}
           IPA_PATH: ${{ steps.ipa.outputs.ipa_path }}
           IPA_NAME: ${{ steps.ipa.outputs.ipa_name }}
