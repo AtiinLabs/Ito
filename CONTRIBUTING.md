@@ -1,6 +1,6 @@
 # Contributing to Ito
 
-Ito uses a hybrid release flow: protected `main` for normal integration, temporary release and hotfix branches for stabilization, and explicit tags for beta, release-candidate, and stable binaries.
+Ito uses a trunk flow: all work merges to protected `main` through reviewed pull requests, every push to `main` publishes a Dev build, and an annotated `vX.Y.Z` tag on `main` publishes a Stable build.
 
 ## Local setup
 
@@ -25,28 +25,20 @@ Create short-lived branches from current `main`:
 - `chore/<brief-name>` for maintenance
 - `docs/<brief-name>` for documentation
 
-For release work:
-
-- `release/X.Y.Z` is cut from `main` when that version becomes feature-complete.
-- `hotfix/X.Y.Z` is cut from the last stable tag when an urgent released-version fix is needed.
-- No permanent `develop` branch is used.
-
-Release and hotfix branches accept stabilization work only: bug fixes, version metadata, release notes, localization corrections, and store/distribution preparation. New features continue on `main`.
+There are no release or hotfix branches and no permanent `develop` branch. `main` declares the next stable version in `Configuration/Version.xcconfig`; a stable release is an annotated tag `vX.Y.Z` on `main`.
 
 ## Pull requests
 
 1. Keep each pull request focused and reviewable.
 2. Include screenshots or a recording for meaningful UI changes.
 3. Let GitHub Actions pass before merge.
-4. Use squash merge for normal feature and fix pull requests.
-5. Merge release/hotfix work back into `main` before creating a stable tag.
+4. Use squash merge.
 
 Use a Conventional Commit-style pull-request title, such as:
 
 - `feat: add account switching`
 - `fix: prevent duplicate timeline requests`
-- `release: prepare 1.3.0`
-- `hotfix: repair startup migration in 1.3.1`
+- `chore: bump version to 1.3.1`
 
 ## Testing without signing
 
@@ -54,10 +46,9 @@ CI builds and tests with code signing disabled. Locally, select an iOS Simulator
 
 ## Build channels
 
-- **Nightly:** scheduled from current `main`; intended for early testing.
-- **Beta/RC:** tags such as `v1.3.0-beta.1` or `v1.3.0-rc.1`, normally created from `release/1.3.0`.
-- **Stable:** tags such as `v1.3.0`, created only from a commit already contained in `main`.
+- **Stable:** tags such as `v1.3.0`, created only on a commit already contained in `main`.
+- **Dev:** built automatically from every push to `main`; intended for early testing.
 
-All current unsigned channels use the same bundle identifier, so installing one replaces another. Side-by-side channel installs require separate Xcode configurations, bundle identifiers, and entitlement review.
+Both channels use the same bundle identifier, so installing one replaces the other. Side-by-side channel installs require separate Xcode configurations, bundle identifiers, and entitlement review.
 
 See `docs/BRANCHING_AND_CHANNELS.md` and `docs/RELEASING.md`.

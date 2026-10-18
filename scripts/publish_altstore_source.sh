@@ -16,8 +16,7 @@ MAX_VERSIONS="${MAX_VERSIONS:-50}"
 
 case "$CHANNEL" in
   stable) SOURCE_FILE="apps.json" ;;
-  beta) SOURCE_FILE="apps-beta.json" ;;
-  nightly) SOURCE_FILE="apps-nightly.json" ;;
+  dev) SOURCE_FILE="apps-dev.json" ;;
   *) echo "Unsupported channel: $CHANNEL" >&2; exit 1 ;;
 esac
 
@@ -31,33 +30,37 @@ RELEASE_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 IPA_SIZE="$(stat -f '%z' "$IPA_PATH")"
 IPA_SHA256="$(shasum -a 256 "$IPA_PATH" | cut -d ' ' -f 1)"
 
-rm -rf "$PAGES_DIR"
-if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
-  git clone --depth=1 --branch gh-pages "https://github.com/${GITHUB_REPOSITORY}.git" "$PAGES_DIR"
-else
-  mkdir -p "$PAGES_DIR"
-  git -C "$PAGES_DIR" init
-  git -C "$PAGES_DIR" checkout --orphan gh-pages
-  git -C "$PAGES_DIR" remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-fi
+# Stable and dev runs can publish concurrently. Each attempt rebuilds the update
+# from the current gh-pages head; a rejected push means another channel landed
+# first, so start over from its result.
+publish_once() {
+  rm -rf "$PAGES_DIR"
+  if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+    git clone --depth=1 --branch gh-pages "https://github.com/${GITHUB_REPOSITORY}.git" "$PAGES_DIR"
+  else
+    mkdir -p "$PAGES_DIR"
+    git -C "$PAGES_DIR" init
+    git -C "$PAGES_DIR" checkout --orphan gh-pages
+    git -C "$PAGES_DIR" remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+  fi
 
-python3 scripts/update_altstore_source.py \
-  --file "$PAGES_DIR/$SOURCE_FILE" \
-  --source-url "$SOURCE_URL" \
-  --channel "$CHANNEL" \
-  --bundle-id "$BUNDLE_ID" \
-  --version "$APP_VERSION" \
-  --display-version "$VERSION" \
-  --sha256 "$IPA_SHA256" \
-  --build-version "$BUILD_NUMBER" \
-  --date "$RELEASE_DATE" \
-  --download-url "$DOWNLOAD_URL" \
-  --size "$IPA_SIZE" \
-  --release-notes "$RELEASE_NOTES" \
-  --max-versions "$MAX_VERSIONS"
+  python3 scripts/update_altstore_source.py \
+    --file "$PAGES_DIR/$SOURCE_FILE" \
+    --source-url "$SOURCE_URL" \
+    --channel "$CHANNEL" \
+    --bundle-id "$BUNDLE_ID" \
+    --version "$APP_VERSION" \
+    --display-version "$VERSION" \
+    --sha256 "$IPA_SHA256" \
+    --build-version "$BUILD_NUMBER" \
+    --date "$RELEASE_DATE" \
+    --download-url "$DOWNLOAD_URL" \
+    --size "$IPA_SIZE" \
+    --release-notes "$RELEASE_NOTES" \
+    --max-versions "$MAX_VERSIONS"
 
-cp Ito/Assets.xcassets/AppIcon.appiconset/app.png "$PAGES_DIR/icon.png"
-cat > "$PAGES_DIR/index.html" <<EOF_HTML
+  cp Ito/Assets.xcassets/AppIcon.appiconset/app.png "$PAGES_DIR/icon.png"
+  cat > "$PAGES_DIR/index.html" <<EOF_HTML
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -65,16 +68,38 @@ cat > "$PAGES_DIR/index.html" <<EOF_HTML
 <h1>Ito AltStore / SideStore Sources</h1>
 <ul>
   <li>Stable: <code>${SOURCE_URL}/apps.json</code></li>
-  <li>Beta and RC: <code>${SOURCE_URL}/apps-beta.json</code></li>
-  <li>Nightly: <code>${SOURCE_URL}/apps-nightly.json</code></li>
+  <li>Dev: <code>${SOURCE_URL}/apps-dev.json</code></li>
 </ul>
-<p>All current channels use the same app bundle identifier, so installing one channel replaces another.</p>
+<p>Both channels use the same app bundle identifier, so installing one channel replaces the other.</p>
 EOF_HTML
-touch "$PAGES_DIR/.nojekyll"
+  touch "$PAGES_DIR/.nojekyll"
 
-git -C "$PAGES_DIR" config user.name "github-actions[bot]"
-git -C "$PAGES_DIR" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-git -C "$PAGES_DIR" add "$SOURCE_FILE" icon.png index.html .nojekyll
-git -C "$PAGES_DIR" commit -m "chore: publish Ito ${CHANNEL} ${VERSION}" || exit 0
-git -C "$PAGES_DIR" remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-git -C "$PAGES_DIR" push origin HEAD:gh-pages
+  git -C "$PAGES_DIR" config user.name "github-actions[bot]"
+  git -C "$PAGES_DIR" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+  git -C "$PAGES_DIR" add "$SOURCE_FILE" icon.png index.html .nojekyll
+  if git -C "$PAGES_DIR" diff --cached --quiet; then
+    return 0
+  fi
+  git -C "$PAGES_DIR" commit -m "chore: publish Ito ${CHANNEL} ${VERSION}"
+  git -C "$PAGES_DIR" remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+  git -C "$PAGES_DIR" push origin HEAD:gh-pages || return "$PUSH_REJECTED"
+}
+
+PUSH_REJECTED=75
+for attempt in 1 2 3 4 5; do
+  # Run the attempt in a subshell outside any condition, with errexit re-enabled,
+  # so any failure inside publish_once stops it.
+  set +e
+  (set -e; publish_once)
+  status=$?
+  set -e
+  if [[ "$status" -eq 0 ]]; then
+    exit 0
+  fi
+  if [[ "$status" -ne "$PUSH_REJECTED" ]]; then
+    exit "$status"
+  fi
+  echo "gh-pages moved during publication (attempt $attempt); retrying from the new head." >&2
+done
+echo "Could not publish ${SOURCE_FILE} after 5 attempts." >&2
+exit 1

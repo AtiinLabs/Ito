@@ -1,4 +1,4 @@
-name: Publish beta or stable unsigned IPA
+name: Publish stable unsigned IPA
 
 on:
   push:
@@ -7,16 +7,16 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag, such as v1.2.3-beta.1, v1.2.3-rc.1, or v1.2.3
+        description: Existing stable tag, such as v1.2.3
         required: true
         type: string
 
 permissions:
   contents: write
 
-# Stable, beta, and nightly workflows all update the same gh-pages branch.
+# gh-pages writes are serialized by publish_altstore_source.sh, not by this group.
 concurrency:
-  group: ito-pages-publication
+  group: ito-release
   cancel-in-progress: false
 
 env:
@@ -40,29 +40,13 @@ jobs:
           set -euo pipefail
           TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
 
-          if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-            BASE_VERSION="${BASH_REMATCH[1]}"
-            DISPLAY_VERSION="$BASE_VERSION"
-            CHANNEL="stable"
-            PRERELEASE="false"
-            RETENTION_DAYS="90"
-          elif [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-(beta|rc)\.([0-9]+)$ ]]; then
-            BASE_VERSION="${BASH_REMATCH[1]}"
-            DISPLAY_VERSION="${TAG#v}"
-            CHANNEL="beta"
-            PRERELEASE="true"
-            RETENTION_DAYS="30"
-          else
-            echo "Expected v1.2.3, v1.2.3-beta.1, or v1.2.3-rc.1; got: $TAG" >&2
+          if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "Expected a stable tag such as v1.2.3; got: $TAG" >&2
             exit 1
           fi
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "display_version=$DISPLAY_VERSION" >> "$GITHUB_OUTPUT"
-          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
-          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
-          echo "retention_days=$RETENTION_DAYS" >> "$GITHUB_OUTPUT"
+          echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout Ito at the tag
         uses: actions/checkout@v7
@@ -75,35 +59,13 @@ jobs:
       - name: Verify release tag location
         working-directory: Ito
         shell: bash
-        env:
-          CHANNEL: ${{ steps.release.outputs.channel }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*' --prune
-
-          if [[ "$CHANNEL" == "stable" ]]; then
-            git merge-base --is-ancestor HEAD origin/main || {
-              echo "Stable tags must point to a commit contained in main." >&2
-              exit 1
-            }
-            exit 0
-          fi
-
-          # Prerelease tags may be cut from main, release/X.Y.Z, or hotfix/X.Y.Z.
-          while IFS= read -r ref; do
-            if git merge-base --is-ancestor HEAD "$ref"; then
-              echo "Prerelease tag is contained in $ref"
-              exit 0
-            fi
-          done < <(
-            {
-              echo origin/main
-              git for-each-ref --format='%(refname:short)' refs/remotes/origin/release refs/remotes/origin/hotfix
-            } | sort -u
-          )
-
-          echo "Prerelease tags must be contained in main, release/*, or hotfix/*." >&2
-          exit 1
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          git merge-base --is-ancestor HEAD origin/main || {
+            echo "Stable tags must point to a commit contained in main." >&2
+            exit 1
+          }
 
       - name: Verify app version and compute build number
         id: version
@@ -111,14 +73,14 @@ jobs:
         shell: bash
         env:
           TAG: ${{ steps.release.outputs.tag }}
-          BASE_VERSION: ${{ steps.release.outputs.base_version }}
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
           # Configuration/Version.xcconfig is the source of truth; the tag must match it.
           FILE_VERSION="$(awk -F ' *= *' '$1 == "MARKETING_VERSION" { print $2 }' Configuration/Version.xcconfig)"
-          if [[ "$FILE_VERSION" != "$BASE_VERSION" ]]; then
-            echo "$TAG is version $BASE_VERSION, but Configuration/Version.xcconfig at the tag says ${FILE_VERSION:-nothing}." >&2
-            echo "Bump MARKETING_VERSION on the release branch before tagging." >&2
+          if [[ "$FILE_VERSION" != "$VERSION" ]]; then
+            echo "$TAG is version $VERSION, but Configuration/Version.xcconfig at the tag says ${FILE_VERSION:-nothing}." >&2
+            echo "Bump MARKETING_VERSION on main before tagging." >&2
             exit 1
           fi
           echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
@@ -194,21 +156,21 @@ jobs:
         id: ipa
         working-directory: Ito
         env:
-          MARKETING_VERSION: ${{ steps.release.outputs.base_version }}
-          ARTIFACT_VERSION: ${{ steps.release.outputs.display_version }}
+          MARKETING_VERSION: ${{ steps.release.outputs.version }}
+          ARTIFACT_VERSION: ${{ steps.release.outputs.version }}
           BUILD_NUMBER: ${{ steps.version.outputs.build }}
-          CHANNEL: ${{ steps.release.outputs.channel }}
+          CHANNEL: stable
         run: scripts/build_unsigned_ipa.sh build/release
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: Ito-${{ steps.release.outputs.display_version }}-unsigned
+          name: Ito-${{ steps.release.outputs.version }}-unsigned
           path: |
             Ito/${{ steps.ipa.outputs.ipa_path }}
             Ito/${{ steps.ipa.outputs.checksum_path }}
           if-no-files-found: error
-          retention-days: ${{ fromJSON(steps.release.outputs.retention_days) }}
+          retention-days: 90
           compression-level: 0
 
       - name: Create or update GitHub Release
@@ -216,8 +178,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
-          DISPLAY_VERSION: ${{ steps.release.outputs.display_version }}
-          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+          VERSION: ${{ steps.release.outputs.version }}
           IPA_PATH: ${{ steps.ipa.outputs.ipa_path }}
           CHECKSUM_PATH: ${{ steps.ipa.outputs.checksum_path }}
         run: |
@@ -225,31 +186,23 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$IPA_PATH" "$CHECKSUM_PATH" --clobber
           else
-            args=(
-              "$TAG"
-              "$IPA_PATH"
-              "$CHECKSUM_PATH"
-              --verify-tag
-              --generate-notes
-              --title "Ito $DISPLAY_VERSION"
-            )
-            if [[ "$PRERELEASE" == "true" ]]; then
-              args+=(--prerelease)
-            fi
-            gh release create "${args[@]}"
+            gh release create "$TAG" "$IPA_PATH" "$CHECKSUM_PATH" \
+              --verify-tag \
+              --generate-notes \
+              --title "Ito $VERSION"
           fi
 
-      - name: Publish AltStore and SideStore channel source
+      - name: Publish stable AltStore and SideStore source
         working-directory: Ito
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
-          CHANNEL: ${{ steps.release.outputs.channel }}
-          VERSION: ${{ steps.release.outputs.display_version }}
-          APP_VERSION: ${{ steps.release.outputs.base_version }}
+          CHANNEL: stable
+          VERSION: ${{ steps.release.outputs.version }}
+          APP_VERSION: ${{ steps.release.outputs.version }}
           BUILD_NUMBER: ${{ steps.version.outputs.build }}
           IPA_PATH: ${{ steps.ipa.outputs.ipa_path }}
           IPA_NAME: ${{ steps.ipa.outputs.ipa_name }}
           BUNDLE_ID: ${{ env.BUNDLE_ID }}
-          RELEASE_NOTES: Unsigned Ito ${{ steps.release.outputs.display_version }} build. AltStore and SideStore re-sign it with the user's Apple account.
+          RELEASE_NOTES: Unsigned Ito ${{ steps.release.outputs.version }} build. AltStore and SideStore re-sign it with the user's Apple account.
         run: scripts/publish_altstore_source.sh

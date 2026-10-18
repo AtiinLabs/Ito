@@ -4,84 +4,58 @@
 
 ```text
 feat/* ─────┐
-fix/* ──────┤
+fix/* ──────┤  reviewed PR, squash merge
             ▼
 main ──●────●────●────────●────────────► next version
-       │         │        │
-       │         │        └─ scheduled nightly
-       │         │
-       │         └─ release/1.3.0 ─●─●─ v1.3.0-beta.1
-       │                            └─── v1.3.0-rc.1
-       │                                  │
-       │                       merge back ▼
-       └─────────────────────────────────●─ v1.3.0 stable
-                                           │
-                                           └─ hotfix/1.3.1 ─●─ merge ─ v1.3.1
+       │    │    │        │
+       │    │    │        └─ v1.3.0 (stable tag)
+       │    │    └─ dev build on every push
+       │    └─ dev build on every push
+       └─ dev build on every push
 ```
 
 ## Branch responsibilities
 
-### `main`
+`main` is the only long-lived branch (besides the generated `gh-pages`). It declares the next stable version in `Configuration/Version.xcconfig`, should remain buildable, and receives all work through short-lived pull-request branches merged with squash. There are no release or hotfix branches; a stable release is a tag on `main`.
 
-`main` is the integration branch for the next version and should remain buildable. Normal work reaches it through short-lived pull-request branches.
-
-### `release/X.Y.Z`
-
-Cut this branch when version `X.Y.Z` is feature-complete. Permit only stabilization changes:
-
-- bug fixes;
-- version/build metadata;
-- localization corrections;
-- release notes;
-- distribution and App Store metadata;
-- release-specific migrations.
-
-Create beta and RC tags from this branch. Merge all final changes back into `main`, then create the stable tag from the merged commit.
-
-### `hotfix/X.Y.Z`
-
-Cut this from the last stable tag for an urgent production fix. After validation, merge it into `main` and any still-maintained release branch, then tag the merged stable commit.
+A stable release ships everything already on `main`. There is no stabilization branch, so an urgent fix after a release is merged into `main` and released as the version `main` declares: a patch if only fixes landed since the last release, otherwise the minor version that already includes new features.
 
 ## Tag rules
 
-Accepted public release tags are:
+Stable release tags are annotated tags of the form:
 
 ```text
-v1.3.0-beta.1
-v1.3.0-rc.1
 v1.3.0
 ```
 
-Do not move or reuse `v*` tags. Configure a GitHub tag ruleset that blocks updates and deletion for `v*`.
+The tagged commit must be contained in `main`, and the tag must match `MARKETING_VERSION` in `Configuration/Version.xcconfig` at that commit. Do not move or reuse `v*` tags. Configure a GitHub tag ruleset that blocks updates and deletion for `v*`.
 
-Nightly tags use an automated form such as:
+Dev tags are created automatically in the form:
 
 ```text
-nightly-20260724-318
+dev-124
 ```
 
-They are intentionally temporary; the nightly workflow retains the newest 14 and removes older nightly releases and tags.
+where the number is the build number. They are intentionally temporary; the dev workflow retains the newest 14 dev releases and removes older dev releases and tags.
 
 ## Binary channels
 
 | Channel | Trigger | GitHub release | Source file | Intended audience |
 |---|---|---|---|---|
-| Nightly | Daily schedule or manual run from `main` | Prerelease | `apps-nightly.json` | Early testers |
-| Beta/RC | `vX.Y.Z-beta.N` or `vX.Y.Z-rc.N` | Prerelease | `apps-beta.json` | Release testers |
-| Stable | `vX.Y.Z` | Full release | `apps.json` | General users |
+| Dev | Every push to `main`, or manual run | Prerelease | `apps-dev.json` | Early testers |
+| Stable | `vX.Y.Z` tag on `main` | Full release | `apps.json` | General users |
 
-The app's `MARKETING_VERSION`, set in `Configuration/Version.xcconfig`, stays numeric (`X.Y.Z`); the complete channel version (for example `1.3.0-beta.1`) appears in artifact names, release titles, and source release notes. Source `version` fields carry the numeric app version, because AltStore and SideStore refuse installs whose app version differs from the source. Build numbers are the commit count of the built commit in every channel.
+The app's `MARKETING_VERSION`, set in `Configuration/Version.xcconfig`, stays numeric (`X.Y.Z`); the display version of a dev build (for example `1.3.0-dev.124`) appears in artifact names, release titles, and source release notes. Source `version` fields carry the numeric app version, because AltStore and SideStore refuse installs whose app version differs from the source. Build numbers are the commit count of the built commit in both channels, so a dev build and a stable tag of the same commit share one.
 
 ## Current installation behavior
 
-All channels currently use `moe.itoapp.ito`. A nightly, beta, or stable installation therefore replaces any other installed Ito channel.
+Both channels use `moe.itoapp.ito`. A Dev or Stable installation therefore replaces the other.
 
 To support side-by-side installs later, introduce Xcode configurations or schemes with separate values such as:
 
 ```text
-Stable:  moe.itoapp.ito
-Beta:    moe.itoapp.ito.beta
-Nightly: moe.itoapp.ito.nightly
+Stable: moe.itoapp.ito
+Dev:    moe.itoapp.ito.dev
 ```
 
 That change must also review App Groups, keychain groups, URL schemes, extensions, associated domains, and other entitlements before the bundle identifier is overridden in CI.

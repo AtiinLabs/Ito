@@ -16,7 +16,6 @@ WEBSITE = "https://github.com/AtiinLabs/Ito"
 # CFBundleShortVersionString equals the source "version", so feed versions are
 # the app's numeric X.Y.Z. Channel labels belong in the release notes.
 APP_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
-LABELED_VERSION = re.compile(r"^(\d+\.\d+\.\d+)-")
 
 CHANNEL_METADATA = {
     "stable": {
@@ -26,19 +25,12 @@ CHANNEL_METADATA = {
         "app_name": "Ito",
         "app_subtitle": "Stable release channel",
     },
-    "beta": {
-        "source_name": "Ito Beta",
-        "source_identifier": "moe.itoapp.source.beta",
-        "source_subtitle": "Beta and release-candidate builds of Ito",
-        "app_name": "Ito Beta",
-        "app_subtitle": "Beta and release-candidate channel",
-    },
-    "nightly": {
-        "source_name": "Ito Nightly",
-        "source_identifier": "moe.itoapp.source.nightly",
-        "source_subtitle": "Automated nightly builds from main",
-        "app_name": "Ito Nightly",
-        "app_subtitle": "Unstable nightly channel",
+    "dev": {
+        "source_name": "Ito Dev",
+        "source_identifier": "moe.itoapp.source.dev",
+        "source_subtitle": "Automated builds of Ito's main branch",
+        "app_name": "Ito Dev",
+        "app_subtitle": "Unstable development channel",
     },
 }
 
@@ -50,7 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--channel", required=True, choices=tuple(CHANNEL_METADATA))
     parser.add_argument("--bundle-id", default=DEFAULT_BUNDLE_ID)
     parser.add_argument("--version", required=True, help="App CFBundleShortVersionString, X.Y.Z")
-    parser.add_argument("--display-version", help="Channel version for release notes, e.g. 1.1.0-beta.1")
+    parser.add_argument("--display-version", help="Channel version for release notes, e.g. 1.1.0-dev.124")
     parser.add_argument("--sha256", required=True, help="Hex SHA-256 of the IPA")
     parser.add_argument("--build-version", required=True)
     parser.add_argument("--date", required=True)
@@ -157,20 +149,17 @@ def main() -> int:
         "minOSVersion": "15.4",
     }
 
-    versions = []
-    for item in app.setdefault("versions", []):
-        # Earlier entries carried the channel label in "version", which no store
-        # accepts; the IPAs themselves report the numeric prefix.
-        labeled = LABELED_VERSION.match(str(item.get("version", "")))
-        if labeled:
-            item["version"] = labeled.group(1)
-        if (
+    versions = [
+        item
+        for item in app.setdefault("versions", [])
+        if not (
             str(item.get("version")) == args.version
             and str(item.get("buildVersion")) == str(args.build_version)
-        ):
-            continue
-        versions.append(item)
-    versions.insert(0, version_entry)
+        )
+    ]
+    versions.append(version_entry)
+    # Newest build first, even when an older commit's run publishes late.
+    versions.sort(key=lambda item: tuple(int(part) for part in str(item["buildVersion"]).split(".")), reverse=True)
     app["versions"] = versions[: args.max_versions]
 
     latest = app["versions"][0]

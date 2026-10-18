@@ -1,35 +1,38 @@
-name: Publish nightly unsigned IPA
+name: Publish dev unsigned IPA
 
 on:
-  schedule:
-    # 02:15 America/Phoenix (09:15 UTC). GitHub cron schedules use UTC.
-    - cron: '15 9 * * *'
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: write
 
+# A newer main supersedes an in-progress dev build. gh-pages writes are
+# serialized by publish_altstore_source.sh, not by this group.
 concurrency:
-  group: ito-pages-publication
-  cancel-in-progress: false
+  group: ito-dev
+  cancel-in-progress: true
 
 env:
   PROJECT: Ito.xcodeproj
   SCHEME: Ito
   BUNDLE_ID: moe.itoapp.ito
-  NIGHTLY_RELEASES_TO_KEEP: '14'
+  DEV_RELEASES_TO_KEEP: '14'
 
 jobs:
-  nightly:
-    name: Test, package, and publish nightly
+  dev:
+    name: Test, package, and publish dev
+    if: github.ref == 'refs/heads/main'
     runs-on: macos-26
     timeout-minutes: 60
 
     steps:
-      - name: Checkout current main
+      - name: Checkout the pushed main commit
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ github.sha }}
           path: Ito
           fetch-depth: 0
           persist-credentials: false
@@ -77,8 +80,8 @@ jobs:
             -skipPackagePluginValidation \
             | tee resolve-packages.log
 
-      - name: Resolve nightly metadata
-        id: nightly
+      - name: Resolve dev metadata
+        id: dev
         working-directory: Ito
         shell: bash
         run: |
@@ -98,15 +101,13 @@ jobs:
             exit 1
           fi
 
-          DATE_UTC="$(date -u +'%Y%m%d')"
-          DISPLAY_VERSION="${BASE_VERSION}-nightly.${DATE_UTC}.${GITHUB_RUN_NUMBER}"
-          TAG="nightly-${DATE_UTC}-${GITHUB_RUN_NUMBER}"
+          # Build numbers are the commit count of the built commit, shared with stable tags.
+          BUILD="$(git rev-list --count HEAD)"
 
           echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "display_version=$DISPLAY_VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          # Build numbers are the commit count of the built commit, shared by every channel.
-          echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+          echo "display_version=${BASE_VERSION}-dev.${BUILD}" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-${BUILD}" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
           echo "sha_short=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
 
       - name: Select an available iPhone simulator
@@ -115,7 +116,7 @@ jobs:
         shell: bash
         run: echo "id=$(python3 scripts/select_simulator.py)" >> "$GITHUB_OUTPUT"
 
-      - name: Run unit tests before nightly publication
+      - name: Run unit tests before dev publication
         working-directory: Ito
         run: |
           set -o pipefail
@@ -133,20 +134,20 @@ jobs:
             COMPILER_INDEX_STORE_ENABLE=NO \
             | tee test.log
 
-      - name: Build unsigned nightly IPA
+      - name: Build unsigned dev IPA
         id: ipa
         working-directory: Ito
         env:
-          MARKETING_VERSION: ${{ steps.nightly.outputs.base_version }}
-          ARTIFACT_VERSION: ${{ steps.nightly.outputs.display_version }}
-          BUILD_NUMBER: ${{ steps.nightly.outputs.build }}
-          CHANNEL: nightly
-        run: scripts/build_unsigned_ipa.sh build/nightly
+          MARKETING_VERSION: ${{ steps.dev.outputs.base_version }}
+          ARTIFACT_VERSION: ${{ steps.dev.outputs.display_version }}
+          BUILD_NUMBER: ${{ steps.dev.outputs.build }}
+          CHANNEL: dev
+        run: scripts/build_unsigned_ipa.sh build/dev
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: Ito-${{ steps.nightly.outputs.display_version }}-unsigned
+          name: Ito-${{ steps.dev.outputs.display_version }}-unsigned
           path: |
             Ito/${{ steps.ipa.outputs.ipa_path }}
             Ito/${{ steps.ipa.outputs.checksum_path }}
@@ -154,13 +155,13 @@ jobs:
           retention-days: 14
           compression-level: 0
 
-      - name: Create nightly prerelease
+      - name: Create dev prerelease
         working-directory: Ito
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.nightly.outputs.tag }}
-          DISPLAY_VERSION: ${{ steps.nightly.outputs.display_version }}
-          SHA_SHORT: ${{ steps.nightly.outputs.sha_short }}
+          TAG: ${{ steps.dev.outputs.tag }}
+          DISPLAY_VERSION: ${{ steps.dev.outputs.display_version }}
+          SHA_SHORT: ${{ steps.dev.outputs.sha_short }}
           IPA_PATH: ${{ steps.ipa.outputs.ipa_path }}
           CHECKSUM_PATH: ${{ steps.ipa.outputs.checksum_path }}
         run: |
@@ -171,40 +172,40 @@ jobs:
             gh release create "$TAG" "$IPA_PATH" "$CHECKSUM_PATH" \
               --target "$GITHUB_SHA" \
               --prerelease \
-              --title "Ito nightly $DISPLAY_VERSION" \
-              --notes "Automated unsigned nightly from main at commit $SHA_SHORT. This build is for testing and may be unstable."
+              --title "Ito dev $DISPLAY_VERSION" \
+              --notes "Automated unsigned dev build from main at commit $SHA_SHORT. This build is for testing and may be unstable."
           fi
 
-      - name: Publish nightly AltStore and SideStore source
+      - name: Publish dev AltStore and SideStore source
         working-directory: Ito
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.nightly.outputs.tag }}
-          CHANNEL: nightly
-          VERSION: ${{ steps.nightly.outputs.display_version }}
-          APP_VERSION: ${{ steps.nightly.outputs.base_version }}
-          BUILD_NUMBER: ${{ steps.nightly.outputs.build }}
+          TAG: ${{ steps.dev.outputs.tag }}
+          CHANNEL: dev
+          VERSION: ${{ steps.dev.outputs.display_version }}
+          APP_VERSION: ${{ steps.dev.outputs.base_version }}
+          BUILD_NUMBER: ${{ steps.dev.outputs.build }}
           IPA_PATH: ${{ steps.ipa.outputs.ipa_path }}
           IPA_NAME: ${{ steps.ipa.outputs.ipa_name }}
           BUNDLE_ID: ${{ env.BUNDLE_ID }}
-          MAX_VERSIONS: ${{ env.NIGHTLY_RELEASES_TO_KEEP }}
-          RELEASE_NOTES: Automated unsigned nightly from main at ${{ steps.nightly.outputs.sha_short }}. This build may be unstable.
+          MAX_VERSIONS: ${{ env.DEV_RELEASES_TO_KEEP }}
+          RELEASE_NOTES: Automated unsigned dev build from main at ${{ steps.dev.outputs.sha_short }}. This build may be unstable.
         run: scripts/publish_altstore_source.sh
 
-      - name: Prune old nightly releases and tags
+      - name: Prune old dev releases and tags
         working-directory: Ito
         env:
           GH_TOKEN: ${{ github.token }}
-          KEEP: ${{ env.NIGHTLY_RELEASES_TO_KEEP }}
+          KEEP: ${{ env.DEV_RELEASES_TO_KEEP }}
         run: |
           set -euo pipefail
           gh api --paginate "/repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq '.[] | select(.prerelease == true and (.tag_name | startswith("nightly-"))) | [.created_at, (.id | tostring), .tag_name] | @tsv' \
+            --jq '.[] | select(.prerelease == true and (.tag_name | startswith("dev-"))) | [.created_at, (.id | tostring), .tag_name] | @tsv' \
             | sort -r \
             | tail -n "+$((KEEP + 1))" \
             | while IFS=$'\t' read -r _created release_id tag; do
                 [[ -n "$release_id" ]] || continue
-                echo "Deleting old nightly release $tag"
+                echo "Deleting old dev release $tag"
                 gh api --method DELETE "/repos/${GITHUB_REPOSITORY}/releases/${release_id}"
                 gh api --method DELETE "/repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}" || true
               done

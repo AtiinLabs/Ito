@@ -43,8 +43,8 @@ if [[ ! "$ARTIFACT_VERSION" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
   exit 1
 fi
 
-if [[ ! "$CHANNEL" =~ ^(stable|beta|nightly)$ ]]; then
-  echo "CHANNEL must be stable, beta, or nightly; got: $CHANNEL" >&2
+if [[ ! "$CHANNEL" =~ ^(stable|dev)$ ]]; then
+  echo "CHANNEL must be stable or dev; got: $CHANNEL" >&2
   exit 1
 fi
 

@@ -6,99 +6,66 @@ Ito currently distributes unsigned device IPAs. AltStore and SideStore can re-si
 
 1. Copy this starter kit into the Ito repository.
 2. In **Settings → Pages**, publish from the `gh-pages` branch and `/ (root)`.
-3. Protect `main` and require the `Build and unit test` check.
-4. Protect `release/*` and `hotfix/*` from force-pushes and deletion; require CI before merging.
-5. Add a tag ruleset for `v*` that blocks tag updates and deletion.
-6. Keep `.github/ito-runner.ref` pinned to a reviewed companion-repository commit.
-7. Ensure the repository's Actions token has `contents: write` for release workflows.
+3. Protect `main`, require pull requests, and require the `Build and unit test` check.
+4. Add a tag ruleset for `v*` that blocks tag updates and deletion.
+5. Keep `.github/ito-runner.ref` pinned to a reviewed companion-repository commit.
+6. Ensure the repository's Actions token has `contents: write` for release workflows.
 
-## Nightly channel
+## Dev channel
 
-The nightly workflow runs daily from current `main` and can also be started manually.
+The dev workflow runs on every push to `main` and can also be started manually. A newer push to `main` cancels an in-progress dev run.
 
 It publishes:
 
 ```text
-Ito-X.Y.Z-nightly.YYYYMMDD.RUN-unsigned.ipa
-Ito-X.Y.Z-nightly.YYYYMMDD.RUN-unsigned.ipa.sha256
+Ito-X.Y.Z-dev.BUILD-unsigned.ipa
+Ito-X.Y.Z-dev.BUILD-unsigned.ipa.sha256
 ```
 
-It creates a GitHub prerelease, updates `apps-nightly.json`, and keeps the newest 14 nightly releases. Nightly builds are not release candidates and may be unstable.
+For example `Ito-1.3.0-dev.124-unsigned.ipa`. It creates a GitHub prerelease tagged `dev-BUILD` and titled `X.Y.Z-dev.BUILD`, updates `apps-dev.json`, and keeps the newest 14 dev releases, deleting older dev releases and tags. Dev builds may be unstable.
 
 ## App version and build number
 
 `Configuration/Version.xcconfig` is the only place the version is set:
 
-- `MARKETING_VERSION` is the numeric `X.Y.Z` version under development. It becomes `CFBundleShortVersionString`, is shown in Settings, and is compared with each plugin's `min_app_version`.
-- The build number (`CFBundleVersion`) is the commit count of the built commit, `git rev-list --count HEAD`. Nightly and release workflows set it, so the same commit has the same build number in every channel and builds increase along `main`. Local builds use 1.
+- `MARKETING_VERSION` is the numeric `X.Y.Z` version of the next stable release. It becomes `CFBundleShortVersionString`, is shown in Settings, and is compared with each plugin's `min_app_version`.
+- The build number (`CFBundleVersion`) is the commit count of the built commit, `git rev-list --count HEAD`. Dev and release workflows set it, so the same commit has the same build number in both channels and builds increase along `main`. Local builds use 1.
 
-Release tags must match the file: `v1.3.0`, `v1.3.0-beta.1`, and `v1.3.0-rc.1` all require `MARKETING_VERSION = 1.3.0` at the tagged commit, or the release workflow stops.
+Release tags must match the file: `v1.3.0` requires `MARKETING_VERSION = 1.3.0` at the tagged commit, or the release workflow stops. Tags with a suffix after the version are rejected.
 
-When `main` starts the next version, bump `MARKETING_VERSION` there in a pull request.
-
-## Prepare a version
-
-```bash
-git switch main
-git pull --ff-only
-git switch -c release/1.3.0
-git push -u origin release/1.3.0
-```
-
-`main` already declares `1.3.0` in `Configuration/Version.xcconfig` when the branch is cut. Only stabilization work should enter `release/1.3.0`. New features continue on `main`; bump `main` to the next version (for example `1.4.0`) after cutting the branch.
-
-## Publish beta and RC builds
-
-Create explicit prerelease tags from the release branch:
-
-```bash
-git switch release/1.3.0
-git pull --ff-only
-git tag -a v1.3.0-beta.1 -m "Ito 1.3.0 beta 1"
-git push origin v1.3.0-beta.1
-```
-
-Later candidates use:
-
-```text
-v1.3.0-beta.2
-v1.3.0-rc.1
-v1.3.0-rc.2
-```
-
-The workflow tests the tagged commit, builds an unsigned IPA, creates a GitHub prerelease, and updates `apps-beta.json`.
+`main` declares the version its contents would be released as. After tagging `v1.3.0`, bump `main` to the patch version `1.3.1` so dev builds stop claiming the released version. The first pull request after that which adds a feature also bumps the minor version (`1.4.0`); breaking changes bump the major version. The version on `main` only moves forward.
 
 ## Publish a stable version
 
-Merge the completed release branch back into `main` first. Do not tag an unmerged release-branch-only commit as stable.
+1. Confirm the latest `main` commit has a passing CI run.
+2. Confirm `Configuration/Version.xcconfig` on that commit declares the version to release (for example `1.3.0`).
+3. Tag the commit and push the tag:
 
 ```bash
 git switch main
 git pull --ff-only
-# Merge release/1.3.0 through a reviewed pull request.
 git tag -a v1.3.0 -m "Ito 1.3.0"
 git push origin v1.3.0
 ```
 
-Stable tags must point to a commit contained in `main`. The workflow creates a full GitHub Release and updates `apps.json`.
+The tagged commit must be contained in `main`. The workflow tests it, builds an unsigned IPA, creates a full GitHub Release, and updates `apps.json`.
 
-After release, delete `release/1.3.0` unless it remains an intentionally maintained release line.
+4. Open a pull request that bumps `MARKETING_VERSION` on `main` to the patch version (for example `1.3.1`).
 
-## Hotfix
+## Urgent fix after a release
 
-For an urgent fix to `v1.3.0`:
+There is no stabilization branch, so a stable release ships everything already on `main`, and an urgent fix is the next release of `main`:
+
+1. Merge the fix into `main` through a reviewed pull request.
+2. Release the version `main` declares. If only fixes landed since `v1.3.0`, that is `1.3.1`; if a feature landed, it is `1.4.0` and the fix ships with it.
+3. Tag and push, for example:
 
 ```bash
-git switch --detach v1.3.0
-git switch -c hotfix/1.3.1
-# Commit and test the fix, then merge through a pull request into main.
 git switch main
 git pull --ff-only
 git tag -a v1.3.1 -m "Ito 1.3.1"
 git push origin v1.3.1
 ```
-
-Also apply the fix to any still-maintained release branch that needs it.
 
 ## AltStore and SideStore sources
 
@@ -106,19 +73,18 @@ After the first publication in each channel:
 
 ```text
 Stable: https://atiinlabs.github.io/Ito/apps.json
-Beta:   https://atiinlabs.github.io/Ito/apps-beta.json
-Nightly:https://atiinlabs.github.io/Ito/apps-nightly.json
+Dev:    https://atiinlabs.github.io/Ito/apps-dev.json
 ```
 
-All three feeds currently describe the same bundle identifier. Installing one channel replaces another.
+Both feeds describe the same bundle identifier. Installing one channel replaces the other.
 
-Each source entry's `version` is the app's numeric version and `buildVersion` its build number, matching the IPA's Info.plist; AltStore and SideStore refuse an install when they differ. The channel version (for example `1.3.0-nightly.20261019.95`) goes in the entry's release notes. Every entry also carries the IPA's `sha256`, which both stores verify after downloading.
+Each source entry's `version` is the app's numeric version and `buildVersion` its build number, matching the IPA's Info.plist; AltStore and SideStore refuse an install when they differ. The channel display version (for example `1.3.0-dev.124`) goes in the entry's release notes. Every entry also carries the IPA's `sha256`, which both stores verify after downloading.
 
 GitHub Pages must deploy from the `gh-pages` branch (**Settings → Pages → Deploy from a branch**); otherwise the feeds are committed but never served.
 
 ## What each publication does
 
-1. validates the tag or nightly metadata;
+1. validates the tag or dev build metadata;
 2. checks out Ito and the pinned `ito-runner` sibling;
 3. resolves Swift packages;
 4. runs unit tests on an available iPhone simulator;
@@ -136,13 +102,13 @@ Keep signed distribution in a separate workflow. When an Apple Developer Program
 - create an App Store archive from the same stable tag;
 - install distribution certificates and provisioning profiles from encrypted secrets;
 - export and upload the signed build;
-- use beta/RC tags or release-branch commits for TestFlight;
+- use a TestFlight lane from `main` for pre-release testing;
 - keep the unsigned IPA publication available for alternative distribution when desired.
 
 Do not add unavailable signing credentials to the unsigned workflows.
 
 ## Rollback
 
-For beta or stable releases, mark the release unavailable or publish a newer patch; do not move or reuse a `v*` tag. Remove an unsafe version from the matching source JSON on `gh-pages` if necessary.
+For a stable release, mark the release unavailable or publish a newer patch version; do not move or reuse a `v*` tag. Remove an unsafe version from the matching source JSON on `gh-pages` if necessary.
 
-Nightly releases are temporary and automatically pruned.
+Dev releases are temporary and automatically pruned.
