@@ -1,0 +1,46 @@
+{
+  "name": "Ito Dev",
+  "identifier": "moe.itoapp.source.dev",
+  "subtitle": "Automated builds of Ito's main branch",
+  "description": "Ito IPAs built without an App Store signing identity. AltStore and SideStore re-sign downloads with the user's Apple account.",
+  "website": "https://github.com/AtiinLabs/Ito",
+  "sourceURL": "https://atiinlabs.github.io/Ito/apps-dev.json",
+  "iconURL": "https://atiinlabs.github.io/Ito/icon.png",
+  "tintColor": "6C5CE7",
+  "apps": [
+    {
+      "name": "Ito Dev",
+      "bundleIdentifier": "moe.itoapp.ito",
+      "developerName": "Ito contributors",
+      "subtitle": "Unstable development channel",
+      "localizedDescription": "An unsigned Ito build for installation through AltStore, SideStore, TrollStore-compatible setups, or jailbreak tooling.",
+      "iconURL": "https://atiinlabs.github.io/Ito/icon.png",
+      "tintColor": "6C5CE7",
+      "category": "entertainment",
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {}
+      },
+      "versions": [
+        {
+          "version": "1.1.0",
+          "buildVersion": "125",
+          "date": "2026-10-18T13:24:58Z",
+          "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/dev-125/Ito-1.1.0-dev.125-unsigned.ipa",
+          "size": 10531966,
+          "sha256": "d8384d69530166eafe75c41746071fdc1fc6d40454faf22768a92231f4303ae1",
+          "localizedDescription": "Ito 1.1.0-dev.125 (build 125). Automated unsigned dev build from main at 7cf1f9a. This build may be unstable.",
+          "minOSVersion": "15.4"
+        }
+      ],
+      "version": "1.1.0",
+      "buildVersion": "125",
+      "date": "2026-10-18T13:24:58Z",
+      "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/dev-125/Ito-1.1.0-dev.125-unsigned.ipa",
+      "size": 10531966,
+      "minOSVersion": "15.4",
+      "versionDescription": "Ito 1.1.0-dev.125 (build 125). Automated unsigned dev build from main at 7cf1f9a. This build may be unstable."
+    }
+  ],
+  "news": []
+}
