@@ -1,0 +1,46 @@
+{
+  "name": "Ito",
+  "identifier": "moe.itoapp.source",
+  "subtitle": "Stable unsigned releases of Ito",
+  "description": "Ito IPAs built without an App Store signing identity. AltStore and SideStore re-sign downloads with the user's Apple account.",
+  "website": "https://github.com/AtiinLabs/Ito",
+  "sourceURL": "https://atiinlabs.github.io/Ito/apps.json",
+  "iconURL": "https://atiinlabs.github.io/Ito/icon.png",
+  "tintColor": "6C5CE7",
+  "apps": [
+    {
+      "name": "Ito",
+      "bundleIdentifier": "moe.itoapp.ito",
+      "developerName": "Ito contributors",
+      "subtitle": "Stable release channel",
+      "localizedDescription": "An unsigned Ito build for installation through AltStore, SideStore, TrollStore-compatible setups, or jailbreak tooling.",
+      "iconURL": "https://atiinlabs.github.io/Ito/icon.png",
+      "tintColor": "6C5CE7",
+      "category": "entertainment",
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {}
+      },
+      "versions": [
+        {
+          "version": "1.1.0",
+          "buildVersion": "125",
+          "date": "2026-10-18T13:38:12Z",
+          "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/v1.1.0/Ito-1.1.0-unsigned.ipa",
+          "size": 10531548,
+          "sha256": "8aacba58174289ff581ce0d98133f388e33930166447a30b6bc77a0d2d6bfb18",
+          "localizedDescription": "Ito 1.1.0 (build 125). Unsigned Ito 1.1.0 build. AltStore and SideStore re-sign it with the user's Apple account.",
+          "minOSVersion": "15.4"
+        }
+      ],
+      "version": "1.1.0",
+      "buildVersion": "125",
+      "date": "2026-10-18T13:38:12Z",
+      "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/v1.1.0/Ito-1.1.0-unsigned.ipa",
+      "size": 10531548,
+      "minOSVersion": "15.4",
+      "versionDescription": "Ito 1.1.0 (build 125). Unsigned Ito 1.1.0 build. AltStore and SideStore re-sign it with the user's Apple account."
+    }
+  ],
+  "news": []
+}
