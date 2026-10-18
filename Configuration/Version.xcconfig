@@ -2,7 +2,7 @@
 //
 // MARKETING_VERSION is the version under development on main: numeric X.Y.Z only
 // (it becomes CFBundleShortVersionString). Bump it when a release cycle starts.
-MARKETING_VERSION = 1.1.0
+MARKETING_VERSION = 1.2.0
 
 // CI overrides this with the commit count of the built commit
 // (`git rev-list --count HEAD`). Local builds use 1.
