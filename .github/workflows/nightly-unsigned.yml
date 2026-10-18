@@ -105,7 +105,8 @@ jobs:
           echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
           echo "display_version=$DISPLAY_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "build=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          # Build numbers are the commit count of the built commit, shared by every channel.
+          echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
           echo "sha_short=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
 
       - name: Select an available iPhone simulator

@@ -131,8 +131,8 @@ public class RepoManager: ObservableObject {
         String: (id: UUID, request: PackageInstallationRequest, task: Task<Void, Error>)
     ] = [:]
 
-    // The current app version for compatibility checks
-    public let currentAppVersion = "1.0.0"
+    /// The running app's version, compared with each package's `min_app_version`.
+    public let currentAppVersion = AppVersion.marketing
 
     public convenience init(
         dbPool: DatabasePool,

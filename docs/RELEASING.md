@@ -25,6 +25,17 @@ Ito-X.Y.Z-nightly.YYYYMMDD.RUN-unsigned.ipa.sha256
 
 It creates a GitHub prerelease, updates `apps-nightly.json`, and keeps the newest 14 nightly releases. Nightly builds are not release candidates and may be unstable.
 
+## App version and build number
+
+`Configuration/Version.xcconfig` is the only place the version is set:
+
+- `MARKETING_VERSION` is the numeric `X.Y.Z` version under development. It becomes `CFBundleShortVersionString`, is shown in Settings, and is compared with each plugin's `min_app_version`.
+- The build number (`CFBundleVersion`) is the commit count of the built commit, `git rev-list --count HEAD`. Nightly and release workflows set it, so the same commit has the same build number in every channel and builds increase along `main`. Local builds use 1.
+
+Release tags must match the file: `v1.3.0`, `v1.3.0-beta.1`, and `v1.3.0-rc.1` all require `MARKETING_VERSION = 1.3.0` at the tagged commit, or the release workflow stops.
+
+When `main` starts the next version, bump `MARKETING_VERSION` there in a pull request.
+
 ## Prepare a version
 
 ```bash
@@ -34,7 +45,7 @@ git switch -c release/1.3.0
 git push -u origin release/1.3.0
 ```
 
-Only stabilization work should enter `release/1.3.0`. New features continue on `main`.
+`main` already declares `1.3.0` in `Configuration/Version.xcconfig` when the branch is cut. Only stabilization work should enter `release/1.3.0`. New features continue on `main`; bump `main` to the next version (for example `1.4.0`) after cutting the branch.
 
 ## Publish beta and RC builds
 

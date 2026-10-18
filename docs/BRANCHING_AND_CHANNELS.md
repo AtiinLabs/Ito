@@ -70,7 +70,7 @@ They are intentionally temporary; the nightly workflow retains the newest 14 and
 | Beta/RC | `vX.Y.Z-beta.N` or `vX.Y.Z-rc.N` | Prerelease | `apps-beta.json` | Release testers |
 | Stable | `vX.Y.Z` | Full release | `apps.json` | General users |
 
-The workflow keeps the app's internal `MARKETING_VERSION` numeric (`X.Y.Z`) while using the complete channel version in artifact names and source metadata. This avoids invalid iOS bundle-version strings such as `1.3.0-beta.1`.
+The app's `MARKETING_VERSION`, set in `Configuration/Version.xcconfig`, stays numeric (`X.Y.Z`) while the complete channel version is used in artifact names and source metadata. This avoids invalid iOS bundle-version strings such as `1.3.0-beta.1`. Build numbers are the commit count of the built commit in every channel.
 
 ## Current installation behavior
 

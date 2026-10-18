@@ -57,9 +57,8 @@ extension SettingsViewModelTests {
         ))
     }
 
-    func testAppearanceAndSettingsRootPresentationContracts() throws {
+    func testAppearancePresentationContracts() throws {
         let appearanceSource = try source(at: "Ito/Views/Settings/AppearanceSettingsView.swift")
-        let settingsSource = try source(at: "Ito/Views/Settings/SettingsView.swift")
 
         XCTAssertTrue(appearanceSource.contains(
             "Section(header: Text(\"Theme\"), footer: Text(\"Choose your preferred appearance.\"))"
@@ -67,9 +66,6 @@ extension SettingsViewModelTests {
         XCTAssertTrue(appearanceSource.contains("Picker(\"Appearance\", selection:"))
         XCTAssertTrue(appearanceSource.contains(".pickerStyle(SegmentedPickerStyle())"))
         XCTAssertTrue(appearanceSource.contains(".navigationTitle(\"Appearance\")"))
-        XCTAssertTrue(settingsSource.contains(
-            "Text(\"Version\")\n                        Spacer()\n                        Text(\"1.0.0\")"
-        ))
     }
 
     func testLibraryConditionalPresentationAndAlertActionsRemainWired() throws {
