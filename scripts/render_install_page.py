@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the gh-pages index from the channel sources present in a directory."""
+"""Render install/index.html on gh-pages from the channel sources present."""
 
 from __future__ import annotations
 
@@ -14,11 +14,24 @@ CHANNELS = (
     ("Dev", "apps-dev.json"),
 )
 
+STYLE = """
+:root { color-scheme: dark; }
+body { margin: 0 auto; max-width: 640px; padding: 40px 22px 64px; background: #000; color: #f5f5f7;
+  font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
+a { color: #9de3c6; }
+h1 { margin: 24px 0 8px; font-size: 32px; letter-spacing: -0.02em; }
+h2 { margin: 40px 0 6px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.12); font-size: 21px; }
+p, li { color: rgba(245, 245, 247, 0.72); }
+ul { padding-left: 20px; }
+li { margin: 6px 0; }
+code { font: 13px ui-monospace, "SF Mono", Menlo, monospace; color: #f5f5f7; overflow-wrap: anywhere; }
+""".strip()
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dir", required=True, type=Path)
-    parser.add_argument("--source-url", required=True)
+    parser.add_argument("--dir", required=True, type=Path, help="gh-pages checkout holding the sources")
+    parser.add_argument("--source-url", required=True, help="public base URL of the gh-pages site")
     return parser.parse_args()
 
 
@@ -29,7 +42,10 @@ def channel_section(title: str, source_url: str, source: dict) -> str:
         raise SystemExit(f"{title} downloadURL does not end in .ipa: {ipa_url}")
     # build_unsigned_ipa.sh publishes the .tipa next to the IPA under the same name.
     tipa_url = ipa_url[: -len(".ipa")] + ".tipa"
+    encoded_source = quote(source_url, safe="")
     links = (
+        (f"altstore://source?url={encoded_source}", "Add source to AltStore"),
+        (f"sidestore://source?url={encoded_source}", "Add source to SideStore"),
         # Feather takes the raw URL after /source/ and requires https://.
         (f"feather://source/{source_url}", "Add source to Feather"),
         (f"apple-magnifier://install?url={quote(tipa_url, safe='')}", "Install with TrollStore"),
@@ -42,7 +58,7 @@ def channel_section(title: str, source_url: str, source: dict) -> str:
     version = f"{latest['version']} ({latest['buildVersion']})"
     return (
         f"<h2>{html.escape(title)} {html.escape(version)}</h2>\n"
-        f"<p>AltStore, SideStore, and Feather source: <code>{html.escape(source_url)}</code></p>\n"
+        f"<p>Source: <code>{html.escape(source_url)}</code></p>\n"
         f"<ul>\n{items}\n</ul>"
     )
 
@@ -59,14 +75,23 @@ def main() -> int:
 
     body = "\n".join(sections)
     page = f"""<!doctype html>
+<html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ito</title>
-<h1>Ito</h1>
+<title>Ito builds</title>
+<style>
+{STYLE}
+</style>
+<p><a href="../">← Ito</a></p>
+<h1>Builds</h1>
+<p>Stable is the latest release. Dev is built from every change to <code>main</code>.</p>
 {body}
 <p>Both channels use the same bundle identifier, so installing one replaces the other. TrollStore signs the unsigned app with ldid on install; install ldid from TrollStore settings first.</p>
+</html>
 """
-    (args.dir / "index.html").write_text(page, encoding="utf-8")
+    out = args.dir / "install" / "index.html"
+    out.parent.mkdir(exist_ok=True)
+    out.write_text(page, encoding="utf-8")
     return 0
 
 

@@ -84,9 +84,12 @@ Each source entry's `version` is the app's numeric version and `buildVersion` it
 
 Every release also carries a `.tipa`, byte-identical to the IPA, for TrollStore. TrollStore fake-signs the unsigned app with ldid on install; Ito needs no entitlements beyond TrollStore's defaults.
 
-`https://atiinlabs.github.io/Ito/` is regenerated on each publication from the sources present (`scripts/render_pages_index.py`). For each channel it links `feather://source/<source URL>` and `apple-magnifier://install?url=<.tipa URL>`, the TrollStore install scheme. GitHub release notes strip custom URL schemes, so these links live only on that page.
+GitHub release notes strip custom URL schemes, so the one-tap links live on GitHub Pages:
 
-GitHub Pages must deploy from the `gh-pages` branch (**Settings → Pages → Deploy from a branch**); otherwise the feeds are committed but never served.
+- `https://atiinlabs.github.io/Ito/` is the site, `site/index.html` on `main`. `.github/workflows/site.yml` copies it to the root of `gh-pages` whenever `site/` changes on `main`, or when started manually. Its install selector targets Stable: AltStore, SideStore, and Feather add `apps.json`; TrollStore installs the `.tipa` named by the latest `apps.json` entry, fetched when the page loads.
+- `https://atiinlabs.github.io/Ito/install/` is regenerated on every feed and site publication from the sources present (`scripts/render_install_page.py`). For each channel it links `altstore://source?url=`, `sidestore://source?url=`, `feather://source/<source URL>`, `apple-magnifier://install?url=<.tipa URL>` (TrollStore), and the direct downloads.
+
+Feed and site publications push to `gh-pages` independently through `scripts/gh_pages.sh`, which redoes an update when another publisher landed first. GitHub Pages must deploy from the `gh-pages` branch (**Settings → Pages → Deploy from a branch**); otherwise the feeds are committed but never served.
 
 ## What each publication does
 
@@ -99,7 +102,7 @@ GitHub Pages must deploy from the `gh-pages` branch (**Settings → Pages → De
 7. packages `Payload/Ito.app` as an IPA and a `.tipa` copy;
 8. creates SHA-256 checksums;
 9. publishes a GitHub release or prerelease;
-10. updates the channel-specific source and the index page on `gh-pages`.
+10. updates the channel-specific source and the builds page (`install/`) on `gh-pages`.
 
 ## Future App Store/TestFlight path
 

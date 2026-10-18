@@ -1,0 +1,3263 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="supported-color-schemes" content="dark" />
+    <title>Ito — Every story. One place.</title>
+    <meta
+      name="description"
+      content="Ito is a free, open-source native iPhone and iPad client for anime, manga, and novels."
+    />
+
+    <!-- Open Graph -->
+    <link rel="canonical" href="https://atiinlabs.github.io/Ito/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Ito" />
+    <meta property="og:title" content="Ito — Every story. One place." />
+    <meta
+      property="og:description"
+      content="Anime, manga, and novels. Beautifully together on iOS."
+    />
+    <meta property="og:url" content="https://atiinlabs.github.io/Ito/" />
+    <meta
+      property="og:image"
+      content="https://raw.githubusercontent.com/AtiinLabs/Ito/main/Ito/Assets.xcassets/AppIcon.appiconset/app.png"
+    />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1024" />
+    <meta property="og:image:height" content="1024" />
+    <meta
+      property="og:image:alt"
+      content="Ito interwoven mint knot app icon on a dark background"
+    />
+    <meta name="twitter:card" content="summary" />
+
+    <!-- Favicon & Apple Touch Icon -->
+    <link
+      rel="icon"
+      type="image/png"
+      href="https://raw.githubusercontent.com/AtiinLabs/Ito/main/Ito/Assets.xcassets/AppIcon.appiconset/app.png"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="https://raw.githubusercontent.com/AtiinLabs/Ito/main/Ito/Assets.xcassets/AppIcon.appiconset/app.png"
+    />
+
+    <!-- Image optimization CDN & fallback Inter font for non-Apple platforms -->
+    <link rel="preconnect" href="https://wsrv.nl" crossorigin />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      /* ---------------------------------------------------------------- tokens */
+
+      @property --spin {
+        syntax: "<angle>";
+        inherits: false;
+        initial-value: 0deg;
+      }
+
+      @property --accent {
+        syntax: "<color>";
+        inherits: true;
+        initial-value: #9de3c6;
+      }
+
+      :root {
+        color-scheme: only dark;
+        --background: #000000;
+        --surface: #0d0d0f;
+        --text: #f5f5f7;
+        --text-muted: rgba(245, 245, 247, 0.72);
+        --text-faint: rgba(245, 245, 247, 0.58);
+        --hairline: rgba(255, 255, 255, 0.12);
+        --accent: #9de3c6;
+        --gutter: clamp(20px, 5.6vw, 88px);
+        /* The 24° weave lean of Ito's knot strands & perpendicular wipe axis */
+        --weave: 24deg;
+        --across: 114deg;
+        --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+        --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+        --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter",
+          "Helvetica Neue", sans-serif;
+        --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+        --screen-aspect: 1284 / 2778;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: var(--background);
+        scroll-behavior: smooth;
+        -webkit-text-size-adjust: 100%;
+      }
+
+      body {
+        margin: 0;
+        background: var(--background);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 16px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+        overflow-x: clip;
+      }
+
+      ::selection {
+        background: var(--accent);
+        color: var(--background);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      button {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--text);
+        outline-offset: 4px;
+        border-radius: 6px;
+      }
+
+      img {
+        display: block;
+        max-width: 100%;
+        user-select: none;
+        -webkit-user-drag: none;
+      }
+
+      h1,
+      h2,
+      h3,
+      p,
+      dl,
+      dt,
+      dd {
+        margin: 0;
+      }
+
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      .skip-link {
+        position: fixed;
+        top: 16px;
+        left: var(--gutter);
+        z-index: 100;
+        padding: 10px 18px;
+        border-radius: 999px;
+        background: var(--text);
+        color: var(--background);
+        font-size: 13.5px;
+        font-weight: 600;
+        transform: translateY(-160%);
+        transition: transform 0.3s var(--ease-out);
+      }
+
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      .link {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.35em;
+        color: var(--text-muted);
+        font-size: 14px;
+        padding-bottom: 2px;
+        background: linear-gradient(currentColor, currentColor) 0 100% / 100% 1px
+          no-repeat;
+        transition:
+          color 0.3s,
+          background-size 0.5s var(--ease-out);
+      }
+
+      .link::after {
+        content: "↗";
+        font-size: 0.9em;
+        transition: transform 0.35s var(--ease-out);
+      }
+
+      .link:hover {
+        color: var(--text);
+      }
+
+      .link:hover::after {
+        transform: translate(1.5px, -1.5px);
+      }
+
+      .link--internal::after {
+        content: "→";
+      }
+
+      .link--internal:hover::after {
+        transform: translateX(2px);
+      }
+
+      /* ------------------------------------------------------------- keyframes */
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(18px);
+        }
+      }
+
+      @keyframes fade {
+        from {
+          opacity: 0;
+        }
+      }
+
+      @keyframes wipe-in {
+        from {
+          -webkit-mask-position: 100% 0;
+          mask-position: 100% 0;
+        }
+        to {
+          -webkit-mask-position: 0 0;
+          mask-position: 0 0;
+        }
+      }
+
+      @keyframes glyph-in {
+        from {
+          transform: translateY(108%);
+        }
+      }
+
+      @keyframes strand-draw {
+        to {
+          stroke-dashoffset: 0;
+        }
+      }
+
+      @keyframes knot-echo {
+        0% {
+          opacity: 0;
+          stroke-dashoffset: 1;
+        }
+        35% {
+          opacity: 0.72;
+        }
+        100% {
+          opacity: 0;
+          stroke-dashoffset: 0;
+        }
+      }
+
+      @keyframes spin {
+        to {
+          --spin: 360deg;
+        }
+      }
+
+      @keyframes drip {
+        0% {
+          transform: translateY(-100%);
+        }
+        55%,
+        100% {
+          transform: translateY(100%);
+        }
+      }
+
+      /* --------------------------------------------------------- section 01: hero */
+
+      .hero {
+        position: relative;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        min-height: 100vh;
+        min-height: 100svh;
+        padding: 26px var(--gutter) 28px;
+        overflow: hidden;
+        isolation: isolate;
+      }
+
+      .hero__field {
+        position: absolute;
+        inset: 0;
+        z-index: -2;
+        width: 100%;
+        height: 100%;
+        animation: fade 1.6s ease-out both;
+      }
+
+      .hero__veil {
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background:
+          linear-gradient(
+            90deg,
+            rgb(0 0 0 / 0.96) 0%,
+            rgb(0 0 0 / 0.85) 34%,
+            rgb(0 0 0 / 0) 64%
+          ),
+          linear-gradient(
+            180deg,
+            rgb(0 0 0 / 0.96) 0,
+            rgb(0 0 0 / 0.58) 70px,
+            rgb(0 0 0 / 0) 140px
+          ),
+          linear-gradient(0deg, #000 0%, rgb(0 0 0 / 0) 24%);
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 13.5px;
+        animation: fade 1.2s 0.2s ease-out both;
+      }
+
+      .nav__home {
+        font-weight: 600;
+        font-size: 14px;
+        letter-spacing: -0.01em;
+        color: var(--text);
+      }
+
+      .nav__links {
+        display: flex;
+        align-items: center;
+        gap: clamp(20px, 2.8vw, 36px);
+      }
+
+      .nav__links a {
+        color: var(--text-muted);
+        transition: color 0.3s;
+      }
+
+      .nav__links a:hover {
+        color: var(--text);
+      }
+
+      .hero__content {
+        align-self: center;
+        width: min(100%, 620px);
+        padding: clamp(20px, 5.5vh, 64px) 0 clamp(16px, 4vh, 40px)
+          clamp(0px, 8.5vw - 40px, 160px);
+      }
+
+      @keyframes ribbon-in {
+        from {
+          opacity: 0;
+          transform: scale(0.84);
+        }
+      }
+
+      @keyframes knot-pulse {
+        0% {
+          filter: brightness(1) drop-shadow(0 0 0 rgba(157, 227, 198, 0));
+        }
+        40% {
+          filter: brightness(1.25)
+            drop-shadow(0 0 14px rgba(157, 227, 198, 0.48));
+        }
+        100% {
+          filter: brightness(1) drop-shadow(0 0 0 rgba(157, 227, 198, 0));
+        }
+      }
+
+      /* Bespoke SVG Ito Lockup (4-Ribbon Interwoven Knot + ITO Wordmark) */
+      .wordmark {
+        --wordmark-shift: -0.4%;
+        display: block;
+        width: clamp(148px, 17vw, 218px);
+        height: auto;
+        overflow: visible;
+        transform: translateX(var(--wordmark-shift));
+        margin-bottom: clamp(16px, 2.8vh, 34px);
+      }
+
+      .glyph {
+        transform-box: fill-box;
+        animation: glyph-in 1.15s calc(0.14s + var(--i, 0) * 0.07s)
+          var(--ease-out) both;
+      }
+
+      .knot-ribbon {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: ribbon-in 0.95s calc(0.06s + var(--r, 0) * 0.07s)
+          var(--ease-out) both;
+      }
+
+      .knot-group.is-pulsing {
+        animation: knot-pulse 1.25s var(--ease-in-out);
+      }
+
+      /* Hero display headline */
+      .hero__title {
+        margin-left: -0.055em;
+        font-size: clamp(46px, 6.2vw, 88px);
+        font-weight: 600;
+        line-height: 0.96;
+        letter-spacing: -0.028em;
+        font-kerning: normal;
+      }
+
+      .hero__title-line {
+        display: block;
+        overflow: hidden;
+        padding-bottom: 0.12em;
+        margin-bottom: -0.12em;
+      }
+
+      .hero__title-inner {
+        display: block;
+        animation: glyph-in 1.18s calc(0.28s + var(--line, 0) * 0.11s)
+          var(--ease-out) both;
+      }
+
+      .hero__title-soft {
+        color: rgba(245, 245, 247, 0.48);
+      }
+
+      .hero__lede {
+        margin-top: clamp(16px, 2.6vh, 30px);
+        max-width: 34ch;
+        font-size: clamp(17px, 1.35vw, 20px);
+        line-height: 1.45;
+        letter-spacing: -0.012em;
+        color: var(--text);
+        animation: rise 1.1s 0.72s var(--ease-out) both;
+      }
+
+      .hero__lede span {
+        color: var(--text-muted);
+      }
+
+      .hero__actions {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 14px;
+        width: min(100%, 408px);
+        margin-top: clamp(22px, 3.8vh, 44px);
+        animation: rise 1.1s 0.88s var(--ease-out) both;
+      }
+
+      .cta {
+        position: relative;
+        display: grid;
+        grid-template-columns: 44px 1fr 20px;
+        align-items: center;
+        gap: 15px;
+        width: 100%;
+        padding: 12px 18px 12px 12px;
+        border-radius: 22px;
+        background: rgb(13 13 15 / 0.68);
+        -webkit-backdrop-filter: blur(18px) saturate(140%);
+        backdrop-filter: blur(18px) saturate(140%);
+        transition:
+          --accent 0.85s var(--ease-out),
+          transform 0.5s var(--ease-out),
+          background-color 0.4s;
+        isolation: isolate;
+      }
+
+      .cta::before {
+        content: "";
+        position: absolute;
+        inset: 22% 10% -12%;
+        z-index: -1;
+        border-radius: inherit;
+        background: var(--accent);
+        filter: blur(36px);
+        opacity: 0.18;
+        transition:
+          background-color 0.85s var(--ease-out),
+          opacity 0.5s;
+      }
+
+      .cta:hover {
+        background: rgb(20 20 24 / 0.76);
+        transform: translateY(-2px);
+      }
+
+      .cta:hover::before {
+        opacity: 0.3;
+      }
+
+      .cta:active {
+        transform: scale(0.985);
+      }
+
+      .cta__ring {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        padding: 1px;
+        pointer-events: none;
+        background:
+          conic-gradient(
+            from var(--spin),
+            transparent 0deg 215deg,
+            var(--accent) 285deg,
+            #ffffff 320deg,
+            var(--accent) 342deg,
+            transparent 360deg
+          ),
+          linear-gradient(rgb(255 255 255 / 0.13), rgb(255 255 255 / 0.13));
+        -webkit-mask:
+          linear-gradient(#000 0 0) content-box,
+          linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+        mask:
+          linear-gradient(#000 0 0) content-box exclude,
+          linear-gradient(#000 0 0);
+        animation: spin 6s linear infinite;
+      }
+
+      .cta picture {
+        display: block;
+        width: 44px;
+        height: 44px;
+      }
+
+      .device__screen picture {
+        display: contents;
+      }
+
+      .reader-study__device picture {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      .closing__lead picture {
+        display: block;
+      }
+
+      .cta__icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 11px;
+        box-shadow: 0 4px 14px rgb(0 0 0 / 0.45);
+      }
+
+      .cta__text {
+        display: grid;
+        min-width: 0;
+      }
+
+      .cta__kicker {
+        font-size: 12px;
+        color: var(--text-muted);
+        letter-spacing: 0.01em;
+      }
+
+      .cta__names {
+        position: relative;
+        height: 1.25em;
+        overflow: hidden;
+        font-size: clamp(16.5px, 4.4vw, 20px);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1.22;
+        color: var(--text);
+      }
+
+      .cta__names > span {
+        position: absolute;
+        left: 0;
+        top: 0;
+        white-space: nowrap;
+        transform: translateY(108%);
+        opacity: 0;
+        transition:
+          transform 0.72s var(--ease-out),
+          opacity 0.38s ease;
+      }
+
+      .cta__names > span.is-past {
+        transform: translateY(-108%);
+      }
+
+      .cta__names > span.is-on {
+        transform: none;
+        opacity: 1;
+      }
+
+      .cta__via {
+        font-weight: 500;
+        color: var(--text-muted);
+      }
+
+      .cta__arrow {
+        width: 20px;
+        height: 20px;
+        color: var(--text-muted);
+        transition:
+          transform 0.5s var(--ease-out),
+          color 0.3s;
+      }
+
+      .cta:hover .cta__arrow {
+        color: var(--text);
+        transform: translate(2.5px, -2.5px);
+      }
+
+      /* Installation method radio selector beneath the Hero CTA */
+      .cta-tabs {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px 14px;
+        padding: 0 2px;
+      }
+
+      .cta-tab {
+        padding: 3px 0;
+        text-align: left;
+        font-size: 12px;
+        letter-spacing: -0.01em;
+        color: rgba(245, 245, 247, 0.66);
+        transition: color 0.35s;
+      }
+
+      .cta-tab:hover,
+      .cta-tab.is-on {
+        color: var(--text);
+      }
+
+      .cta-tab__track {
+        display: block;
+        height: 2px;
+        margin-top: 7px;
+        border-radius: 2px;
+        background: rgb(255 255 255 / 0.18);
+        overflow: hidden;
+      }
+
+      .cta-tab__fill {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--text);
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform 0.45s var(--ease-out);
+      }
+
+      .cta-tab.is-on .cta-tab__fill {
+        transform: scaleX(1);
+      }
+
+      .hero__sublink {
+        align-self: flex-start;
+        margin-left: 4px;
+        margin-top: 2px;
+      }
+
+      .hero__foot {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
+        animation: fade 1.2s 1.15s ease-out both;
+      }
+
+      .scroll-cue {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: rgba(245, 245, 247, 0.66);
+        transition: color 0.3s;
+      }
+
+      .scroll-cue:hover {
+        color: var(--text);
+      }
+
+      .scroll-cue__line {
+        position: relative;
+        width: 1px;
+        height: 34px;
+        overflow: hidden;
+        background: rgb(255 255 255 / 0.22);
+      }
+
+      .scroll-cue__line::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: var(--text);
+        animation: drip 2.4s var(--ease-in-out) infinite;
+      }
+
+      .hero__meta {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+
+      .hero__meta span {
+        color: rgba(245, 245, 247, 0.64);
+      }
+
+      /* -------------------------------------------------------- shared sections */
+
+      .section {
+        width: min(100%, 1360px);
+        margin: 0 auto;
+        padding: clamp(110px, 14vw, 200px) var(--gutter) 0;
+      }
+
+      .section__head {
+        display: grid;
+        grid-template-columns: 1.15fr 1fr;
+        column-gap: 48px;
+        row-gap: 28px;
+        align-items: end;
+      }
+
+      .display {
+        padding-bottom: 0.14em;
+        margin-bottom: -0.14em;
+        margin-left: -0.075em;
+        font-size: clamp(42px, 6.2vw, 96px);
+        font-weight: 600;
+        line-height: 0.96;
+        letter-spacing: -0.025em;
+        font-kerning: normal;
+      }
+
+      .display__soft {
+        color: rgba(245, 245, 247, 0.48);
+      }
+
+      .section__lede {
+        max-width: 39ch;
+        font-size: clamp(16px, 1.3vw, 18.5px);
+        line-height: 1.55;
+        color: var(--text-muted);
+      }
+
+      .reveal {
+        opacity: 0;
+        transform: translateY(34px);
+        transition:
+          opacity 1s ease,
+          transform 1.3s var(--ease-out);
+        transition-delay: calc(var(--order, 0) * 120ms);
+      }
+
+      .reveal.is-in {
+        opacity: 1;
+        transform: none;
+      }
+
+      .reveal .display {
+        -webkit-mask-image: linear-gradient(
+          var(--across),
+          #000 50%,
+          transparent 64%
+        );
+        mask-image: linear-gradient(var(--across), #000 50%, transparent 64%);
+        -webkit-mask-size: 380% 100%;
+        mask-size: 380% 100%;
+        -webkit-mask-position: 100% 0;
+        mask-position: 100% 0;
+      }
+
+      .reveal.is-in .display {
+        animation: wipe-in 1.55s 0.08s var(--ease-in-out) both;
+      }
+
+      /* ---------------------------------------------------- section 02: product */
+
+      .product__runway {
+        position: relative;
+        margin-top: clamp(56px, 7vw, 100px);
+        height: 220vh;
+      }
+
+      .product__sticky {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        height: 100svh;
+        display: grid;
+        grid-template-columns: 0.95fr 1.05fr;
+        align-items: center;
+        gap: clamp(32px, 5.5vw, 88px);
+        padding: clamp(16px, 3.6vh, 36px) 0;
+      }
+
+      .product__chapters {
+        display: flex;
+        flex-direction: column;
+        max-width: 440px;
+      }
+
+      .chapter {
+        position: relative;
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: clamp(14px, 2.4vh, 28px) 0;
+        border-top: 1px solid var(--hairline);
+        transition: opacity 0.4s;
+      }
+
+      .chapter:last-child {
+        border-bottom: 1px solid var(--hairline);
+      }
+
+      .chapter__bar {
+        position: absolute;
+        top: -1px;
+        left: 0;
+        width: 100%;
+        height: 1px;
+        background: var(--text);
+        transform: scaleX(var(--progress, 0));
+        transform-origin: left;
+        transition: transform 0.15s linear;
+      }
+
+      .chapter__head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .chapter__title {
+        font-size: clamp(20px, 2vw, 28px);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1.15;
+        color: var(--text-faint);
+        transition: color 0.4s;
+      }
+
+      .chapter__index {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        letter-spacing: 0.12em;
+        color: var(--text-faint);
+        transition: color 0.4s;
+      }
+
+      .chapter__desc {
+        display: block;
+        margin-top: clamp(6px, 1.1vh, 10px);
+        max-width: 38ch;
+        font-size: clamp(13.5px, 1.85vh, 15px);
+        line-height: 1.58;
+        color: var(--text-faint);
+        transition: color 0.4s;
+      }
+
+      .chapter.is-active .chapter__title {
+        color: var(--text);
+      }
+
+      .chapter.is-active .chapter__index {
+        color: var(--accent);
+      }
+
+      .chapter.is-active .chapter__desc {
+        color: var(--text-muted);
+      }
+
+      .chapter:hover .chapter__title {
+        color: var(--text);
+      }
+
+      /* Single Cohesive iPhone Stage */
+      .product__stage {
+        position: relative;
+        display: grid;
+        place-items: center;
+      }
+
+      .product__glow {
+        position: absolute;
+        width: min(82%, 380px);
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle,
+          rgba(157, 227, 198, 0.14) 0%,
+          rgba(157, 227, 198, 0.03) 50%,
+          transparent 74%
+        );
+        filter: blur(42px);
+        pointer-events: none;
+        transition:
+          transform 0.9s var(--ease-out),
+          opacity 0.9s ease;
+      }
+
+      .device {
+        position: relative;
+        width: min(100%, 348px, calc((100vh - 72px) * 1284 / 2778));
+        width: min(100%, 348px, calc((100svh - 72px) * 1284 / 2778));
+        max-height: calc(100vh - 72px);
+        max-height: calc(100svh - 72px);
+        aspect-ratio: var(--screen-aspect);
+        padding: clamp(7px, 1.25vh, 10px);
+        border-radius: clamp(34px, 6.2vh, 50px);
+        background: linear-gradient(165deg, #1b1b1f 0%, #09090b 48%, #121216 100%);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+          inset 0 1px 0 0 rgba(255, 255, 255, 0.22),
+          0 44px 100px -20px rgba(0, 0, 0, 0.92),
+          0 0 0 1px rgba(0, 0, 0, 0.9);
+        transform: translateY(var(--device-y, 0px))
+          scale(var(--device-scale, 1));
+        transition:
+          transform 0.85s var(--ease-out),
+          box-shadow 0.85s var(--ease-out);
+      }
+
+      .device__screen {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        border-radius: clamp(27px, 5vh, 40px);
+        overflow: hidden;
+        background: #000000;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+      }
+
+      .device__frame {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0;
+        transform: scale(1.035) translateY(10px);
+        filter: blur(6px);
+        transition:
+          opacity 0.75s var(--ease-out),
+          transform 0.95s var(--ease-out),
+          filter 0.75s var(--ease-out);
+        pointer-events: none;
+      }
+
+      .device__frame.is-active {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+        filter: blur(0);
+        pointer-events: auto;
+      }
+
+      .device__frame.is-past {
+        opacity: 0;
+        transform: scale(0.975) translateY(-10px);
+        filter: blur(4px);
+      }
+
+      /* Mobile selector tabs for the single device (hidden on desktop) */
+      .product__mobile-tabs {
+        display: none;
+      }
+
+      /* ------------------------------------------------- section 03: experience */
+
+      .experience__spread {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: clamp(36px, 6.5vw, 108px);
+        align-items: start;
+        margin-top: clamp(64px, 8vw, 120px);
+      }
+
+      .reader-study {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .reader-study--offset {
+        margin-top: clamp(72px, 11vw, 164px);
+      }
+
+      .reader-study__stage {
+        position: relative;
+        display: grid;
+        place-items: center;
+        padding: clamp(28px, 4.5vw, 56px);
+        border-radius: 32px;
+        background:
+          radial-gradient(
+            120% 80% at 50% 0%,
+            rgba(255, 255, 255, 0.04) 0%,
+            rgba(13, 13, 15, 0.9) 72%
+          ),
+          var(--surface);
+        box-shadow: inset 0 0 0 1px var(--hairline);
+        overflow: hidden;
+      }
+
+      .reader-study__device {
+        width: min(100%, 304px);
+        aspect-ratio: var(--screen-aspect);
+        border-radius: 36px;
+        overflow: hidden;
+        background: #000;
+        box-shadow:
+          0 32px 72px rgba(0, 0, 0, 0.82),
+          0 0 0 1px rgba(255, 255, 255, 0.13);
+      }
+
+      .reader-study__device img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .reader-study__copy {
+        margin-top: clamp(24px, 3vw, 36px);
+        max-width: 44ch;
+      }
+
+      .reader-study__title {
+        font-size: clamp(26px, 2.4vw, 34px);
+        font-weight: 600;
+        letter-spacing: -0.025em;
+        line-height: 1.1;
+      }
+
+      .reader-study__desc {
+        margin-top: 12px;
+        font-size: clamp(15.5px, 1.2vw, 17px);
+        line-height: 1.62;
+        color: var(--text-muted);
+      }
+
+      /* Editorial 3-row architectural ledger */
+      .ledger {
+        margin-top: clamp(88px, 11vw, 160px);
+        border-top: 1px solid var(--hairline);
+      }
+
+      .ledger__row {
+        display: grid;
+        grid-template-columns: 1.15fr 1fr;
+        column-gap: 48px;
+        row-gap: 14px;
+        align-items: baseline;
+        padding: clamp(32px, 4.2vw, 52px) 0;
+        border-bottom: 1px solid var(--hairline);
+      }
+
+      .ledger__title {
+        font-size: clamp(26px, 2.8vw, 40px);
+        font-weight: 600;
+        letter-spacing: -0.026em;
+        line-height: 1.08;
+      }
+
+      .ledger__desc {
+        max-width: 42ch;
+        font-size: clamp(15.5px, 1.25vw, 17.5px);
+        line-height: 1.62;
+        color: var(--text-muted);
+      }
+
+      /* ---------------------------------------------------- section 04: get ito */
+
+      .closing__grid {
+        display: grid;
+        grid-template-columns: 1.15fr 1fr;
+        column-gap: 48px;
+        row-gap: 36px;
+        align-items: end;
+      }
+
+      .closing__lead {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .closing__icon {
+        width: clamp(76px, 8vw, 104px);
+        height: auto;
+        border-radius: 22.5%;
+        margin-bottom: clamp(24px, 3vw, 36px);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+        filter:
+          drop-shadow(0 24px 34px rgba(0, 0, 0, 0.65))
+          drop-shadow(0 0 42px rgba(157, 227, 198, 0.16));
+      }
+
+      .closing__body {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .closing__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 32px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 46px;
+        padding: 0 20px 0 22px;
+        border-radius: 999px;
+        background: var(--text);
+        color: var(--background);
+        font-size: 14.5px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        transition:
+          transform 0.5s var(--ease-out),
+          box-shadow 0.5s var(--ease-out),
+          background-color 0.3s;
+      }
+
+      .button svg {
+        width: 16px;
+        height: 16px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        transition: transform 0.5s var(--ease-out);
+      }
+
+      .button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 14px 34px -12px rgba(157, 227, 198, 0.45);
+      }
+
+      .button:hover svg {
+        transform: translate(2px, -2px);
+      }
+
+      .button--ghost {
+        background: transparent;
+        color: var(--text);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+      }
+
+      .button--ghost:hover {
+        background: rgba(255, 255, 255, 0.06);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.32);
+      }
+
+      .closing__meta {
+        display: grid;
+        grid-template-columns: repeat(4, auto);
+        justify-content: start;
+        gap: 14px clamp(24px, 3.2vw, 48px);
+        width: 100%;
+        margin-top: 36px;
+      }
+
+      .closing__meta div {
+        padding-top: 16px;
+        border-top: 1px solid var(--hairline);
+      }
+
+      .closing__meta dt {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: rgba(245, 245, 247, 0.64);
+      }
+
+      .closing__meta dd {
+        margin-top: 6px;
+        font-size: 14px;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ----------------------------------------------------------------- footer */
+
+      .footer {
+        width: min(100%, 1360px);
+        margin: 0 auto;
+        padding: clamp(120px, 16vw, 220px) var(--gutter) 32px;
+      }
+
+      .footer__mark {
+        display: block;
+        width: 100%;
+        height: auto;
+        -webkit-mask-image: linear-gradient(
+          180deg,
+          #000 15%,
+          rgb(0 0 0 / 0.06) 100%
+        );
+        mask-image: linear-gradient(180deg, #000 15%, rgb(0 0 0 / 0.06) 100%);
+      }
+
+      .footer__mark-wrap.reveal {
+        transform: none;
+        -webkit-mask-image: linear-gradient(
+          var(--across),
+          #000 50%,
+          transparent 64%
+        );
+        mask-image: linear-gradient(var(--across), #000 50%, transparent 64%);
+        -webkit-mask-size: 380% 100%;
+        mask-size: 380% 100%;
+        -webkit-mask-position: 100% 0;
+        mask-position: 100% 0;
+      }
+
+      .footer__mark-wrap.reveal.is-in {
+        animation: wipe-in 1.9s var(--ease-in-out) both;
+      }
+
+      .footer__row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 14px 32px;
+        margin-top: 32px;
+        padding-top: 22px;
+        border-top: 1px solid var(--hairline);
+        font-size: 13px;
+        color: rgba(245, 245, 247, 0.66);
+      }
+
+      .footer__note {
+        flex: 1 1 320px;
+        max-width: 66ch;
+        line-height: 1.55;
+      }
+
+      .footer__links {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+      }
+
+      .footer__row .link {
+        font-size: 13px;
+        color: rgba(245, 245, 247, 0.78);
+      }
+
+      /* ------------------------------------------------------------- responsive */
+
+      @media (max-width: 1080px) {
+        .hero__content {
+          padding-left: 0;
+        }
+      }
+
+      @media (max-width: 900px) {
+        .section__head,
+        .closing__grid,
+        .ledger__row {
+          grid-template-columns: 1fr;
+        }
+
+        /* On tablet & mobile, avoid long sticky scroll runways; make the single
+           device scene immediately accessible with clean stage tabs + scroll sync */
+        .product__runway {
+          height: auto;
+          margin-top: clamp(40px, 5.5vw, 56px);
+        }
+
+        .product__sticky {
+          position: relative;
+          height: auto;
+          min-height: 0;
+          grid-template-columns: 1fr;
+          gap: 20px;
+          padding: 0;
+        }
+
+        .product__stage {
+          order: -1;
+        }
+
+        .device {
+          width: min(74vw, 276px);
+          max-height: none;
+          border-radius: 42px;
+          padding: 8px;
+        }
+
+        .device__screen {
+          border-radius: 34px;
+        }
+
+        .product__mobile-tabs {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+          width: min(100%, 420px);
+          margin: 22px auto 0;
+        }
+
+        .mobile-tab {
+          padding: 6px 0;
+          text-align: left;
+          font-size: 13px;
+          color: rgba(245, 245, 247, 0.66);
+          transition: color 0.35s;
+        }
+
+        .mobile-tab.is-active {
+          color: var(--text);
+        }
+
+        .mobile-tab__track {
+          display: block;
+          height: 2px;
+          margin-top: 8px;
+          border-radius: 2px;
+          background: rgba(255, 255, 255, 0.12);
+          overflow: hidden;
+        }
+
+        .mobile-tab__fill {
+          display: block;
+          height: 100%;
+          background: var(--text);
+          transform: scaleX(0);
+          transform-origin: left;
+          transition: transform 0.45s var(--ease-out);
+        }
+
+        .mobile-tab.is-active .mobile-tab__fill {
+          transform: scaleX(1);
+        }
+
+        .product__chapters {
+          max-width: 420px;
+          width: 100%;
+          margin: 0 auto;
+        }
+
+        .chapter {
+          display: none;
+          border-top: 0;
+          border-bottom: 0 !important;
+          padding: 2px 0 0;
+          text-align: left;
+        }
+
+        .chapter.is-active {
+          display: block;
+        }
+
+        .chapter__bar {
+          display: none;
+        }
+
+        .experience__spread {
+          grid-template-columns: 1fr;
+          gap: 56px;
+        }
+
+        .reader-study--offset {
+          margin-top: 0;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .hero {
+          padding-top: 20px;
+          padding-bottom: 22px;
+        }
+
+        .hero__veil {
+          background:
+            linear-gradient(
+              180deg,
+              rgb(0 0 0 / 0.95) 0,
+              rgb(0 0 0 / 0.56) 64px,
+              rgb(0 0 0 / 0) 128px
+            ),
+            linear-gradient(
+              0deg,
+              #000 0%,
+              rgb(0 0 0 / 0.88) 46%,
+              rgb(0 0 0 / 0.18) 78%
+            );
+        }
+
+        .hero__content {
+          align-self: end;
+          padding: 28vh 0 28px;
+        }
+
+        .wordmark {
+          width: clamp(128px, 36vw, 176px);
+          margin-bottom: 18px;
+        }
+
+        .hero__actions {
+          width: 100%;
+          margin-top: 28px;
+        }
+
+        .scroll-cue {
+          display: none;
+        }
+
+        .hero__foot {
+          justify-content: flex-start;
+        }
+
+        .reader-study__stage {
+          border-radius: 26px;
+          padding: 24px 20px;
+        }
+
+        .reader-study__device {
+          width: min(76vw, 272px);
+          border-radius: 32px;
+        }
+
+        .closing__meta {
+          grid-template-columns: repeat(2, auto);
+        }
+      }
+
+      @media (max-width: 380px) {
+        .hero__content {
+          padding-top: 18vh;
+        }
+
+        .hero__title {
+          font-size: 40px;
+        }
+
+        .display {
+          font-size: 36px;
+        }
+
+        .closing__actions .button {
+          width: 100%;
+          justify-content: center;
+        }
+      }
+
+      @media (hover: none) {
+        .cta:hover,
+        .button:hover {
+          transform: none;
+        }
+      }
+
+      /* --------------------------------------------------------- reduced motion */
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          animation-delay: 0s !important;
+          transition-duration: 0.01ms !important;
+        }
+
+        .reveal {
+          opacity: 1 !important;
+          transform: none !important;
+        }
+
+        .reveal .display,
+        .footer__mark-wrap.reveal {
+          -webkit-mask-image: none !important;
+          mask-image: none !important;
+        }
+
+        .scroll-cue__line::after {
+          display: none;
+        }
+      }
+    </style>
+    <noscript>
+      <style>
+        .reveal {
+          opacity: 1 !important;
+          transform: none !important;
+        }
+        .reveal .display,
+        .footer__mark-wrap.reveal {
+          -webkit-mask-image: none !important;
+          mask-image: none !important;
+        }
+      </style>
+    </noscript>
+  </head>
+
+  <body id="top">
+    <a class="skip-link" href="#product">Skip to content</a>
+
+    <main>
+      <!-- ============================================================
+           SECTION 01 — HERO
+           ============================================================ -->
+      <section class="hero" id="hero" aria-labelledby="hero-heading">
+        <canvas class="hero__field" id="hero-field" aria-hidden="true"></canvas>
+        <div class="hero__veil" aria-hidden="true"></div>
+
+        <header class="nav">
+          <a class="nav__home" href="#top">Ito</a>
+          <nav class="nav__links" aria-label="Primary">
+            <a
+              href="https://github.com/AtiinLabs/Ito"
+              target="_blank"
+              rel="noreferrer"
+            >
+              GitHub
+            </a>
+            <a
+              href="https://discord.gg/Es5qTB9BcN"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Discord
+            </a>
+          </nav>
+        </header>
+
+        <div class="hero__content">
+          <!-- Bespoke SVG Ito Lockup: Exact 4-Ribbon Interwoven Knot + Geometric ITO Wordmark -->
+          <svg
+            class="wordmark"
+            viewBox="0 0 224 64"
+            fill="none"
+            aria-hidden="true"
+          >
+            <defs>
+              <clipPath id="wm-glyph-clip">
+                <rect x="68" y="0" width="156" height="62" />
+              </clipPath>
+              <linearGradient
+                id="ito-rib-0"
+                x1="8"
+                y1="8"
+                x2="48"
+                y2="30"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop offset="0%" stop-color="#9DE3C6" />
+                <stop offset="100%" stop-color="#53B89C" />
+              </linearGradient>
+              <linearGradient
+                id="ito-rib-1"
+                x1="56"
+                y1="12"
+                x2="32"
+                y2="48"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop offset="0%" stop-color="#9DE3C6" />
+                <stop offset="100%" stop-color="#4DB095" />
+              </linearGradient>
+              <linearGradient
+                id="ito-rib-2"
+                x1="28"
+                y1="16"
+                x2="10"
+                y2="56"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop offset="0%" stop-color="#9DE3C6" />
+                <stop offset="100%" stop-color="#45A88E" />
+              </linearGradient>
+              <linearGradient
+                id="ito-rib-3"
+                x1="56"
+                y1="56"
+                x2="18"
+                y2="34"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop offset="0%" stop-color="#9DE3C6" />
+                <stop offset="100%" stop-color="#4DB095" />
+              </linearGradient>
+            </defs>
+
+            <!-- Exact 4-Ribbon Interwoven Ito Knot (vector-traced from Ito's emblem) -->
+            <g id="knot-echo" class="knot-group">
+              <path
+                class="knot-ribbon"
+                style="--r: 0"
+                fill="url(#ito-rib-0)"
+                d="M49.14 24.69 C48.88 25.03 48.36 25.81 47.59 26.71 C46.82 27.61 45.03 29.51 44.52 30.07 C42.67 28.19 36.35 21.65 33.44 18.77 C30.53 15.89 28.67 14.19 27.04 12.78 C25.41 11.37 24.44 10.81 23.68 10.31 C22.92 9.81 22.99 9.94 22.5 9.76 C22.01 9.58 21.47 9.36 20.73 9.26 C19.99 9.16 18.71 9.15 18.04 9.17 C17.37 9.19 17.23 9.24 16.7 9.37 C16.17 9.5 15.54 9.65 14.85 9.97 C14.16 10.29 13.29 10.73 12.58 11.31 C11.87 11.89 11.09 12.67 10.57 13.43 C10.05 14.19 9.71 14.99 9.44 15.87 C9.17 16.75 9 17.8 8.98 18.72 C8.96 19.64 9.08 20.47 9.34 21.41 C9.6 22.35 10.36 23.86 10.56 24.35 L6.28 29.57 C6.11 29.33 5.77 29.01 5.25 28.14 C4.73 27.27 3.65 25.42 3.18 24.35 C2.71 23.29 2.64 22.95 2.44 21.75 C2.24 20.55 2 18.35 2 17.13 C2 15.91 2.27 15.2 2.45 14.44 C2.63 13.68 2.8 13.26 3.09 12.59 C3.38 11.92 3.77 11.12 4.19 10.4 C4.61 9.69 5.14 8.92 5.6 8.3 C6.06 7.69 6.48 7.19 6.96 6.71 C7.44 6.23 7.94 5.82 8.46 5.42 C8.98 5.02 9.46 4.66 10.06 4.31 C10.66 3.96 11.37 3.59 12.08 3.3 C12.79 3.01 13.58 2.76 14.35 2.56 C15.12 2.36 15.83 2.2 16.7 2.11 C17.57 2.02 18.45 1.92 19.56 2.01 C20.67 2.1 22.22 2.35 23.34 2.64 C24.46 2.93 25.29 3.28 26.28 3.77 C27.28 4.26 28.17 4.77 29.31 5.59 C30.45 6.41 31.69 7.44 33.09 8.66 C34.49 9.88 35.95 11.24 37.71 12.93 C39.48 14.62 41.77 16.85 43.68 18.81 C45.59 20.77 48.23 23.71 49.14 24.69 Z"
+              />
+              <path
+                class="knot-ribbon"
+                style="--r: 1"
+                fill="url(#ito-rib-1)"
+                d="M37.54 50.33 C37.16 50.05 36.15 49.39 35.27 48.62 C34.39 47.85 32.75 46.19 32.25 45.7 L32.25 45.62 C34.2 43.68 41.21 36.8 43.98 33.99 C46.75 31.18 47.71 30.03 48.86 28.73 C50.01 27.43 50.3 26.95 50.85 26.19 C51.4 25.43 51.81 24.8 52.17 24.19 C52.53 23.58 52.77 23.07 52.99 22.51 C53.21 21.95 53.38 21.58 53.49 20.82 C53.6 20.06 53.75 18.91 53.66 17.97 C53.57 17.03 53.31 16.06 52.96 15.19 C52.61 14.32 52.13 13.49 51.54 12.76 C50.95 12.03 50.08 11.33 49.39 10.83 C48.7 10.33 48.18 10.04 47.38 9.76 C46.58 9.48 45.55 9.22 44.6 9.15 C43.65 9.08 42.37 9.26 41.66 9.35 C40.95 9.44 40.85 9.52 40.32 9.71 C39.79 9.9 38.78 10.36 38.47 10.49 L33 5.53 C33.38 5.29 34.6 4.46 35.27 4.09 C35.94 3.72 36.33 3.56 37.04 3.29 C37.75 3.02 38.75 2.68 39.56 2.48 C40.37 2.28 41.11 2.18 41.91 2.1 C42.71 2.02 43.58 1.98 44.35 2 C45.12 2.02 45.85 2.12 46.54 2.23 C47.23 2.34 47.73 2.44 48.47 2.67 C49.21 2.9 50.15 3.21 50.99 3.6 C51.83 3.99 52.82 4.59 53.51 5.03 C54.2 5.47 54.65 5.87 55.11 6.26 C55.57 6.65 55.83 6.88 56.26 7.38 C56.69 7.88 57.28 8.61 57.71 9.23 C58.14 9.85 58.54 10.48 58.86 11.08 C59.18 11.68 59.39 12.18 59.63 12.84 C59.87 13.5 60.14 14.24 60.32 15.03 C60.5 15.81 60.66 16.67 60.72 17.55 C60.78 18.43 60.85 19.2 60.71 20.32 C60.57 21.44 60.2 23.19 59.88 24.27 C59.56 25.35 59.33 25.81 58.81 26.79 C58.29 27.77 57.6 28.97 56.77 30.15 C55.94 31.33 54.94 32.55 53.82 33.85 C52.7 35.15 52 35.95 50.06 37.97 C48.12 39.99 44.26 43.89 42.17 45.95 C40.08 48.01 38.31 49.6 37.54 50.33 Z"
+              />
+              <path
+                class="knot-ribbon"
+                style="--r: 2"
+                fill="url(#ito-rib-2)"
+                d="M24.35 13.6 C24.77 13.94 25.97 14.82 26.87 15.63 C27.77 16.44 29.25 18 29.73 18.47 C29.14 19.03 27.72 20.27 26.19 21.81 C24.66 23.35 21.87 26.33 20.58 27.72 C19.29 29.11 19.07 29.37 18.45 30.15 C17.83 30.93 17.48 31.61 16.85 32.42 C16.22 33.23 15.35 34.15 14.65 35.03 C13.95 35.91 13.22 36.89 12.66 37.72 C12.1 38.55 11.66 39.3 11.3 39.99 C10.94 40.68 10.71 41.2 10.49 41.84 C10.27 42.48 10.1 43.3 10 43.85 C9.9 44.4 9.89 44.67 9.89 45.11 C9.89 45.55 9.87 45.77 10.03 46.46 C10.19 47.15 10.52 48.44 10.87 49.23 C11.21 50.02 11.55 50.54 12.1 51.17 C12.65 51.8 13.43 52.49 14.18 53.01 C14.93 53.53 15.82 53.98 16.62 54.27 C17.42 54.56 18.1 54.71 18.97 54.77 C19.84 54.83 20.88 54.81 21.83 54.63 C22.78 54.45 24.2 53.85 24.68 53.69 L30.15 58.56 C30.02 58.69 30.04 58.95 29.39 59.33 C28.75 59.71 27.14 60.48 26.28 60.84 C25.43 61.2 24.95 61.31 24.26 61.49 C23.57 61.67 23.25 61.84 22.16 61.91 C21.07 61.98 19.13 62.07 17.71 61.9 C16.3 61.73 14.65 61.2 13.67 60.9 C12.69 60.6 12.41 60.4 11.82 60.09 C11.23 59.79 10.73 59.48 10.14 59.07 C9.55 58.66 8.9 58.19 8.29 57.63 C7.68 57.07 7 56.34 6.47 55.7 C5.94 55.06 5.49 54.41 5.09 53.77 C4.69 53.13 4.33 52.43 4.05 51.84 C3.77 51.25 3.64 50.91 3.44 50.24 C3.24 49.57 2.98 48.82 2.85 47.8 C2.72 46.78 2.6 45.29 2.67 44.11 C2.73 42.93 2.93 41.86 3.24 40.74 C3.55 39.62 3.97 38.51 4.52 37.38 C5.07 36.25 5.83 35.01 6.52 33.94 C7.21 32.87 8.16 31.71 8.64 30.98 C9.12 30.25 8.88 30.27 9.38 29.57 C9.89 28.87 10.07 28.54 11.67 26.76 C13.27 24.98 16.86 21.08 18.97 18.89 C21.08 16.7 23.45 14.48 24.35 13.6 Z"
+              />
+              <path
+                class="knot-ribbon"
+                style="--r: 3"
+                fill="url(#ito-rib-3)"
+                d="M18.63 33.94 C19.9 35.26 24.9 40.3 26.26 41.84 C27.62 43.38 26.46 42.65 26.79 43.18 C27.12 43.71 27.37 44.18 28.23 45.02 C29.09 45.87 30.82 47.2 31.97 48.25 C33.12 49.3 34.24 50.54 35.14 51.33 C36.04 52.12 36.56 52.49 37.37 52.98 C38.18 53.46 39.19 53.94 39.98 54.24 C40.77 54.54 41.22 54.68 42.08 54.76 C42.94 54.84 44.06 54.89 45.11 54.74 C46.16 54.59 47.1 53.85 48.39 53.87 C49.68 53.89 52.1 54.7 52.84 54.86 C52.85 54.76 53.03 54.98 52.89 54.28 C52.75 53.58 51.93 51.72 51.99 50.66 C52.05 49.59 52.95 48.69 53.23 47.89 C53.5 47.09 53.57 46.45 53.64 45.87 C53.71 45.29 53.75 45.08 53.67 44.44 C53.59 43.8 53.45 42.84 53.16 42 C52.87 41.16 52.13 39.83 51.92 39.4 L56.87 33.94 C57.12 34.34 57.93 35.52 58.38 36.37 C58.83 37.22 59.26 38.23 59.58 39.06 C59.9 39.89 60.11 40.53 60.3 41.33 C60.49 42.13 60.65 42.95 60.72 43.85 C60.79 44.75 60.78 45.88 60.73 46.71 C60.68 47.54 60.6 48.03 60.41 48.81 C60.22 49.59 59.91 50.57 59.58 51.42 C59.25 52.27 58.31 52.47 58.43 53.94 C58.55 55.41 59.99 59.08 60.29 60.24 C60.59 61.4 60.31 60.71 60.25 60.92 C60.19 61.13 59.96 61.4 59.9 61.5 C59.75 61.52 60.21 61.87 58.98 61.59 C57.75 61.31 54.34 59.83 52.5 59.81 C50.66 59.79 49.35 61.09 47.96 61.46 C46.57 61.83 45.43 61.96 44.18 62 C42.93 62.04 41.39 61.81 40.48 61.69 C39.57 61.57 39.31 61.44 38.72 61.26 C38.13 61.08 37.85 61.06 36.95 60.6 C36.05 60.14 34.71 59.44 33.34 58.5 C31.97 57.56 30.08 56.15 28.72 54.94 C27.36 53.73 26.1 52.24 25.2 51.25 C24.3 50.26 25.14 50.95 23.3 49 C21.46 47.05 15.7 41.14 14.18 39.57 C14.61 38.97 16.02 36.89 16.76 35.95 C17.5 35.01 18.32 34.27 18.63 33.94 Z"
+              />
+            </g>
+
+            <!-- Geometric ITO Wordmark Glyphs rising from baseline clip -->
+            <g clip-path="url(#wm-glyph-clip)" fill="#F5F5F7">
+              <!-- I -->
+              <rect
+                class="glyph"
+                style="--i: 0"
+                x="78"
+                y="10"
+                width="9.5"
+                height="44"
+                rx="1.5"
+              />
+              <!-- T -->
+              <path
+                class="glyph"
+                style="--i: 1"
+                d="M102 10 H142 V18.5 H126.75 V54 H117.25 V18.5 H102 Z"
+              />
+              <!-- O -->
+              <path
+                class="glyph"
+                style="--i: 2"
+                fill-rule="evenodd"
+                clip-rule="evenodd"
+                d="M176 8.5 C190.4 8.5 200.5 18.2 200.5 32 C200.5 45.8 190.4 55.5 176 55.5 C161.6 55.5 151.5 45.8 151.5 32 C151.5 18.2 161.6 8.5 176 8.5 Z M176 17.2 C167.2 17.2 161.2 23.3 161.2 32 C161.2 40.7 167.2 46.8 176 46.8 C184.8 46.8 190.8 40.7 190.8 32 C190.8 23.3 184.8 17.2 176 17.2 Z"
+              />
+            </g>
+          </svg>
+
+          <h1 id="hero-heading" class="hero__title">
+            <span class="hero__title-line">
+              <span class="hero__title-inner" style="--line: 0"
+                >Every story.</span
+              >
+            </span>
+            <span class="hero__title-line">
+              <span
+                class="hero__title-inner hero__title-soft"
+                style="--line: 1"
+                >One place.</span
+              >
+            </span>
+          </h1>
+
+          <p class="hero__lede">
+            Anime, manga, and novels.
+            <span> Beautifully together on iOS.</span>
+          </p>
+
+          <div class="hero__actions" id="hero-actions">
+            <a
+              id="hero-cta"
+              class="cta"
+              href="altstore://source?url=https%3A%2F%2Fatiinlabs.github.io%2FIto%2Fapps.json"
+              style="--accent: #9de3c6"
+              aria-label="Get Ito with AltStore"
+            >
+              <span class="cta__ring" aria-hidden="true"></span>
+              <picture>
+                <source
+                  type="image/webp"
+                  srcset="
+                    https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/Ito/Assets.xcassets/AppIcon.appiconset/app.png&amp;w=88&amp;output=webp&amp;q=85 1x,
+                    https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/Ito/Assets.xcassets/AppIcon.appiconset/app.png&amp;w=132&amp;output=webp&amp;q=85 2x
+                  "
+                />
+                <img
+                  class="cta__icon"
+                  src="https://raw.githubusercontent.com/AtiinLabs/Ito/main/Ito/Assets.xcassets/AppIcon.appiconset/app.png"
+                  alt=""
+                  width="44"
+                  height="44"
+                  decoding="async"
+                />
+              </picture>
+              <span class="cta__text" aria-hidden="true">
+                <span class="cta__kicker">Free &amp; Open Source</span>
+                <span class="cta__names" id="hero-cta-names">
+                  <span class="is-on" data-cta-name="0">
+                    Get Ito <span class="cta__via">· AltStore</span>
+                  </span>
+                  <span data-cta-name="1">
+                    Get Ito <span class="cta__via">· SideStore</span>
+                  </span>
+                  <span data-cta-name="2">
+                    Get Ito <span class="cta__via">· Feather</span>
+                  </span>
+                  <span data-cta-name="3">
+                    Get Ito <span class="cta__via">· TrollStore</span>
+                  </span>
+                  <span data-cta-name="4">
+                    Get Ito <span class="cta__via">· Sideloadly</span>
+                  </span>
+                  <span data-cta-name="5">
+                    Get Ito <span class="cta__via">· Build Manually</span>
+                  </span>
+                </span>
+              </span>
+              <svg class="cta__arrow" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M7 17 17 7M9 7h8v8"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </a>
+
+            <div
+              class="cta-tabs"
+              role="radiogroup"
+              aria-label="Installation method"
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked="true"
+                tabindex="0"
+                class="cta-tab is-on"
+                data-cta-tab="0"
+              >
+                <span>AltStore</span>
+                <span class="cta-tab__track" aria-hidden="true">
+                  <span class="cta-tab__fill"></span>
+                </span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked="false"
+                tabindex="-1"
+                class="cta-tab"
+                data-cta-tab="1"
+              >
+                <span>SideStore</span>
+                <span class="cta-tab__track" aria-hidden="true">
+                  <span class="cta-tab__fill"></span>
+                </span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked="false"
+                tabindex="-1"
+                class="cta-tab"
+                data-cta-tab="2"
+              >
+                <span>Feather</span>
+                <span class="cta-tab__track" aria-hidden="true">
+                  <span class="cta-tab__fill"></span>
+                </span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked="false"
+                tabindex="-1"
+                class="cta-tab"
+                data-cta-tab="3"
+              >
+                <span>TrollStore</span>
+                <span class="cta-tab__track" aria-hidden="true">
+                  <span class="cta-tab__fill"></span>
+                </span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked="false"
+                tabindex="-1"
+                class="cta-tab"
+                data-cta-tab="4"
+              >
+                <span>Sideloadly</span>
+                <span class="cta-tab__track" aria-hidden="true">
+                  <span class="cta-tab__fill"></span>
+                </span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked="false"
+                tabindex="-1"
+                class="cta-tab"
+                data-cta-tab="5"
+              >
+                <span>Source</span>
+                <span class="cta-tab__track" aria-hidden="true">
+                  <span class="cta-tab__fill"></span>
+                </span>
+              </button>
+            </div>
+
+            <a
+              class="link hero__sublink"
+              href="https://github.com/AtiinLabs/Ito"
+              target="_blank"
+              rel="noreferrer"
+            >
+              View source on GitHub
+            </a>
+          </div>
+        </div>
+
+        <div class="hero__foot">
+          <a class="scroll-cue" href="#product">
+            <span class="scroll-cue__line" aria-hidden="true"></span>
+            Scroll
+          </a>
+          <p class="hero__meta">
+            iOS &amp; iPadOS 15.4+ <span>· MPL-2.0</span>
+          </p>
+        </div>
+      </section>
+
+      <!-- ============================================================
+           SECTION 02 — THE PRODUCT
+           ============================================================ -->
+      <section
+        id="product"
+        class="section product"
+        aria-labelledby="product-title"
+      >
+        <div class="section__head reveal">
+          <h2 id="product-title" class="display">
+            Everything you love.
+            <br />
+            <span class="display__soft">Together.</span>
+          </h2>
+          <p class="section__lede">
+            One calm, native interface for everything you follow. Move
+            effortlessly from discovering a new series to inspecting chapters
+            and curating your personal collection.
+          </p>
+        </div>
+
+        <div class="product__runway" id="product-runway">
+          <div class="product__sticky">
+            <!-- Narrative stages synced to scroll & direct selection -->
+            <div
+              class="product__chapters"
+              role="region"
+              aria-label="Interface views"
+            >
+              <button
+                type="button"
+                class="chapter is-active"
+                data-stage-btn="0"
+                aria-pressed="true"
+              >
+                <span class="chapter__bar" aria-hidden="true"></span>
+                <span class="chapter__head">
+                  <span class="chapter__title">Discover</span>
+                  <span class="chapter__index">01</span>
+                </span>
+                <span class="chapter__desc">
+                  Browse trending, popular, and top-rated anime, manga, and
+                  light novels powered by live AniList catalogs.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                class="chapter"
+                data-stage-btn="1"
+                aria-pressed="false"
+              >
+                <span class="chapter__bar" aria-hidden="true"></span>
+                <span class="chapter__head">
+                  <span class="chapter__title">Details</span>
+                  <span class="chapter__index">02</span>
+                </span>
+                <span class="chapter__desc">
+                  Inspect synopses, genres, and chapter or episode lists with
+                  one-tap library saving and progress tracking.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                class="chapter"
+                data-stage-btn="2"
+                aria-pressed="false"
+              >
+                <span class="chapter__bar" aria-hidden="true"></span>
+                <span class="chapter__head">
+                  <span class="chapter__title">Library</span>
+                  <span class="chapter__index">03</span>
+                </span>
+                <span class="chapter__desc">
+                  Keep your saved anime, manga, and novels organized on your
+                  device with custom categories and local backups.
+                </span>
+              </button>
+            </div>
+
+            <!-- Single Cohesive iPhone Visual Stage -->
+            <div class="product__stage">
+              <div class="product__glow" id="product-glow" aria-hidden="true"></div>
+              <div class="device" id="product-device">
+                <div class="device__screen">
+                  <picture>
+                    <source
+                      type="image/webp"
+                      srcset="
+                        https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/discover.png&amp;w=380&amp;output=webp&amp;q=82 380w,
+                        https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/discover.png&amp;w=700&amp;output=webp&amp;q=82 700w,
+                        https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/discover.png&amp;w=1050&amp;output=webp&amp;q=82 1050w
+                      "
+                      sizes="(max-width: 900px) 276px, 348px"
+                    />
+                    <img
+                      class="device__frame is-active"
+                      data-stage-img="0"
+                      src="https://raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/discover.png"
+                      alt="Ito Discover screen showing trending and popular manga series"
+                      width="1284"
+                      height="2778"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </picture>
+                  <picture>
+                    <source
+                      type="image/webp"
+                      srcset="
+                        https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/details.png&amp;w=380&amp;output=webp&amp;q=82 380w,
+                        https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/details.png&amp;w=700&amp;output=webp&amp;q=82 700w,
+                        https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/details.png&amp;w=1050&amp;output=webp&amp;q=82 1050w
+                      "
+                      sizes="(max-width: 900px) 276px, 348px"
+                    />
+                    <img
+                      class="device__frame"
+                      data-stage-img="1"
+                      src="https://raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/details.png"
+                      alt="Ito Details screen for Absolute Regression with Save, Track, and Start actions"
+                      width="1284"
+                      height="2778"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </picture>
+                  <picture>
+                    <source
+                      type="image/webp"
+                      srcset="
+                        https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/library.png&amp;w=380&amp;output=webp&amp;q=82 380w,
+                        https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/library.png&amp;w=700&amp;output=webp&amp;q=82 700w,
+                        https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/library.png&amp;w=1050&amp;output=webp&amp;q=82 1050w
+                      "
+                      sizes="(max-width: 900px) 276px, 348px"
+                    />
+                    <img
+                      class="device__frame"
+                      data-stage-img="2"
+                      src="https://raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/library.png"
+                      alt="Ito Library screen displaying saved series in a three-column cover grid"
+                      width="1284"
+                      height="2778"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </picture>
+                </div>
+              </div>
+
+              <!-- Compact stage indicator for tablet/mobile viewports -->
+              <div
+                class="product__mobile-tabs"
+                role="group"
+                aria-label="Select interface screen"
+              >
+                <button
+                  type="button"
+                  class="mobile-tab is-active"
+                  data-mobile-stage="0"
+                  aria-pressed="true"
+                >
+                  <span>Discover</span>
+                  <span class="mobile-tab__track" aria-hidden="true">
+                    <span class="mobile-tab__fill"></span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  class="mobile-tab"
+                  data-mobile-stage="1"
+                  aria-pressed="false"
+                >
+                  <span>Details</span>
+                  <span class="mobile-tab__track" aria-hidden="true">
+                    <span class="mobile-tab__fill"></span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  class="mobile-tab"
+                  data-mobile-stage="2"
+                  aria-pressed="false"
+                >
+                  <span>Library</span>
+                  <span class="mobile-tab__track" aria-hidden="true">
+                    <span class="mobile-tab__fill"></span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================
+           SECTION 03 — THE EXPERIENCE
+           ============================================================ -->
+      <section
+        id="experience"
+        class="section experience"
+        aria-labelledby="experience-title"
+      >
+        <div class="section__head reveal">
+          <h2 id="experience-title" class="display">
+            Made for the way
+            <br />
+            <span class="display__soft">you enjoy stories.</span>
+          </h2>
+          <p class="section__lede">
+            Every medium has its own rhythm. Ito adapts to each one—from
+            page-by-page manga spreads and continuous webtoons to light novels
+            and full-screen anime.
+          </p>
+        </div>
+
+        <!-- Asymmetric Editorial Spread: Real Manga & Webtoon Reader Screenshots -->
+        <div class="experience__spread">
+          <article class="reader-study reveal" style="--order: 0">
+            <div class="reader-study__stage">
+              <div class="reader-study__device">
+                <picture>
+                  <source
+                    type="image/webp"
+                    srcset="
+                      https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/manga.png&amp;w=380&amp;output=webp&amp;q=82 380w,
+                      https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/manga.png&amp;w=700&amp;output=webp&amp;q=82 700w,
+                      https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/manga.png&amp;w=1050&amp;output=webp&amp;q=82 1050w
+                    "
+                    sizes="(max-width: 760px) 272px, 304px"
+                  />
+                  <img
+                    src="https://raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/manga.png"
+                    alt="Ito Manga Reader displaying a page spread from Witch Hat Atelier"
+                    width="1284"
+                    height="2778"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </picture>
+              </div>
+            </div>
+            <div class="reader-study__copy">
+              <h3 class="reader-study__title">Read naturally.</h3>
+              <p class="reader-study__desc">
+                Crisp right-to-left or left-to-right spreads for manga, alongside
+                a dedicated light novel reader with customizable typography and
+                spacing.
+              </p>
+            </div>
+          </article>
+
+          <article
+            class="reader-study reader-study--offset reveal"
+            style="--order: 1"
+          >
+            <div class="reader-study__stage">
+              <div class="reader-study__device">
+                <picture>
+                  <source
+                    type="image/webp"
+                    srcset="
+                      https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/reader.png&amp;w=380&amp;output=webp&amp;q=82 380w,
+                      https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/reader.png&amp;w=700&amp;output=webp&amp;q=82 700w,
+                      https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/reader.png&amp;w=1050&amp;output=webp&amp;q=82 1050w
+                    "
+                    sizes="(max-width: 760px) 272px, 304px"
+                  />
+                  <img
+                    src="https://raw.githubusercontent.com/AtiinLabs/Ito/main/assets/screenshots/reader.png"
+                    alt="Ito Webtoon Reader showing continuous vertical panels of Absolute Regression"
+                    width="1284"
+                    height="2778"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </picture>
+              </div>
+            </div>
+            <div class="reader-study__copy">
+              <h3 class="reader-study__title">Uninterrupted flow.</h3>
+              <p class="reader-study__desc">
+                Continuous vertical scrolling for webtoons and manhwa, with
+                minimal floating controls that vanish the moment you immerse
+                yourself in the artwork.
+              </p>
+            </div>
+          </article>
+        </div>
+
+        <!-- Concise Editorial Ledger: Watch Natively, Track with AniList, Plugins -->
+        <div class="ledger">
+          <div class="ledger__row reveal">
+            <h3 class="ledger__title">Watch natively.</h3>
+            <p class="ledger__desc">
+              Stream anime episodes in a clean, native iOS video player. Choose
+              your stream quality, switch audio tracks, and customize subtitles
+              without leaving the story.
+            </p>
+          </div>
+
+          <div class="ledger__row reveal">
+            <h3 class="ledger__title">Track with AniList.</h3>
+            <p class="ledger__desc">
+              Sign in once and keep your reading and watching progress in sync
+              automatically—so your list stays current across every chapter and
+              episode.
+            </p>
+          </div>
+
+          <div class="ledger__row reveal">
+            <h3 class="ledger__title">Make it yours with plugins.</h3>
+            <p class="ledger__desc">
+              Ito is an open client. Install modular <code>.ito</code> plugins
+              from repositories you trust to bring your preferred anime, manga,
+              and novel sources together.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================
+           SECTION 04 — GET ITO
+           ============================================================ -->
+      <section
+        id="get-ito"
+        class="section closing"
+        aria-labelledby="closing-title"
+      >
+        <div class="closing__grid reveal">
+          <div class="closing__lead">
+            <picture>
+              <source
+                type="image/webp"
+                srcset="
+                  https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/Ito/Assets.xcassets/AppIcon.appiconset/app.png&amp;w=104&amp;output=webp&amp;q=85 1x,
+                  https://wsrv.nl/?url=raw.githubusercontent.com/AtiinLabs/Ito/main/Ito/Assets.xcassets/AppIcon.appiconset/app.png&amp;w=208&amp;output=webp&amp;q=85 2x
+                "
+              />
+              <img
+                class="closing__icon"
+                src="https://raw.githubusercontent.com/AtiinLabs/Ito/main/Ito/Assets.xcassets/AppIcon.appiconset/app.png"
+                alt="Ito app icon"
+                width="104"
+                height="104"
+                loading="lazy"
+                decoding="async"
+              />
+            </picture>
+            <h2 id="closing-title" class="display">
+              Your next story
+              <br />
+              <span class="display__soft">starts here.</span>
+            </h2>
+          </div>
+
+          <div class="closing__body">
+            <p class="section__lede">
+              Free, ad-free, and open-source for iPhone and iPad running iOS
+              15.4 or later. Install through AltStore, SideStore, Feather,
+              TrollStore, or Sideloadly, or build directly from source in Xcode.
+            </p>
+
+            <div class="closing__actions">
+              <a
+                class="button"
+                href="https://github.com/AtiinLabs/Ito/releases/latest"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Latest Release
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M7 17 17 7M9 7h8v8" />
+                </svg>
+              </a>
+
+              <a
+                class="button button--ghost"
+                href="https://github.com/AtiinLabs/Ito"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Explore on GitHub
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M7 17 17 7M9 7h8v8" />
+                </svg>
+              </a>
+            </div>
+
+            <dl class="closing__meta">
+              <div>
+                <dt>Compatibility</dt>
+                <dd>iOS &amp; iPadOS 15.4+</dd>
+              </div>
+              <div>
+                <dt>License</dt>
+                <dd>MPL-2.0</dd>
+              </div>
+              <div>
+                <dt>Community</dt>
+                <dd>
+                  <a
+                    class="link"
+                    href="https://discord.gg/Es5qTB9BcN"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Discord
+                  </a>
+                </dd>
+              </div>
+              <div>
+                <dt>Builds</dt>
+                <dd>
+                  <a class="link link--internal" href="install/">
+                    Stable &amp; Dev
+                  </a>
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ============================================================
+         FOOTER
+         ============================================================ -->
+    <footer class="footer">
+      <div class="footer__mark-wrap reveal" aria-hidden="true">
+        <svg
+          class="footer__mark"
+          viewBox="0 0 224 64"
+          fill="rgba(255,255,255,0.14)"
+        >
+          <!-- Large architectural Ito 4-Ribbon Knot + ITO Watermark -->
+          <g fill="rgba(157,227,198,0.22)">
+            <path d="M49.14 24.69 C48.88 25.03 48.36 25.81 47.59 26.71 C46.82 27.61 45.03 29.51 44.52 30.07 C42.67 28.19 36.35 21.65 33.44 18.77 C30.53 15.89 28.67 14.19 27.04 12.78 C25.41 11.37 24.44 10.81 23.68 10.31 C22.92 9.81 22.99 9.94 22.5 9.76 C22.01 9.58 21.47 9.36 20.73 9.26 C19.99 9.16 18.71 9.15 18.04 9.17 C17.37 9.19 17.23 9.24 16.7 9.37 C16.17 9.5 15.54 9.65 14.85 9.97 C14.16 10.29 13.29 10.73 12.58 11.31 C11.87 11.89 11.09 12.67 10.57 13.43 C10.05 14.19 9.71 14.99 9.44 15.87 C9.17 16.75 9 17.8 8.98 18.72 C8.96 19.64 9.08 20.47 9.34 21.41 C9.6 22.35 10.36 23.86 10.56 24.35 L6.28 29.57 C6.11 29.33 5.77 29.01 5.25 28.14 C4.73 27.27 3.65 25.42 3.18 24.35 C2.71 23.29 2.64 22.95 2.44 21.75 C2.24 20.55 2 18.35 2 17.13 C2 15.91 2.27 15.2 2.45 14.44 C2.63 13.68 2.8 13.26 3.09 12.59 C3.38 11.92 3.77 11.12 4.19 10.4 C4.61 9.69 5.14 8.92 5.6 8.3 C6.06 7.69 6.48 7.19 6.96 6.71 C7.44 6.23 7.94 5.82 8.46 5.42 C8.98 5.02 9.46 4.66 10.06 4.31 C10.66 3.96 11.37 3.59 12.08 3.3 C12.79 3.01 13.58 2.76 14.35 2.56 C15.12 2.36 15.83 2.2 16.7 2.11 C17.57 2.02 18.45 1.92 19.56 2.01 C20.67 2.1 22.22 2.35 23.34 2.64 C24.46 2.93 25.29 3.28 26.28 3.77 C27.28 4.26 28.17 4.77 29.31 5.59 C30.45 6.41 31.69 7.44 33.09 8.66 C34.49 9.88 35.95 11.24 37.71 12.93 C39.48 14.62 41.77 16.85 43.68 18.81 C45.59 20.77 48.23 23.71 49.14 24.69 Z" />
+            <path d="M37.54 50.33 C37.16 50.05 36.15 49.39 35.27 48.62 C34.39 47.85 32.75 46.19 32.25 45.7 L32.25 45.62 C34.2 43.68 41.21 36.8 43.98 33.99 C46.75 31.18 47.71 30.03 48.86 28.73 C50.01 27.43 50.3 26.95 50.85 26.19 C51.4 25.43 51.81 24.8 52.17 24.19 C52.53 23.58 52.77 23.07 52.99 22.51 C53.21 21.95 53.38 21.58 53.49 20.82 C53.6 20.06 53.75 18.91 53.66 17.97 C53.57 17.03 53.31 16.06 52.96 15.19 C52.61 14.32 52.13 13.49 51.54 12.76 C50.95 12.03 50.08 11.33 49.39 10.83 C48.7 10.33 48.18 10.04 47.38 9.76 C46.58 9.48 45.55 9.22 44.6 9.15 C43.65 9.08 42.37 9.26 41.66 9.35 C40.95 9.44 40.85 9.52 40.32 9.71 C39.79 9.9 38.78 10.36 38.47 10.49 L33 5.53 C33.38 5.29 34.6 4.46 35.27 4.09 C35.94 3.72 36.33 3.56 37.04 3.29 C37.75 3.02 38.75 2.68 39.56 2.48 C40.37 2.28 41.11 2.18 41.91 2.1 C42.71 2.02 43.58 1.98 44.35 2 C45.12 2.02 45.85 2.12 46.54 2.23 C47.23 2.34 47.73 2.44 48.47 2.67 C49.21 2.9 50.15 3.21 50.99 3.6 C51.83 3.99 52.82 4.59 53.51 5.03 C54.2 5.47 54.65 5.87 55.11 6.26 C55.57 6.65 55.83 6.88 56.26 7.38 C56.69 7.88 57.28 8.61 57.71 9.23 C58.14 9.85 58.54 10.48 58.86 11.08 C59.18 11.68 59.39 12.18 59.63 12.84 C59.87 13.5 60.14 14.24 60.32 15.03 C60.5 15.81 60.66 16.67 60.72 17.55 C60.78 18.43 60.85 19.2 60.71 20.32 C60.57 21.44 60.2 23.19 59.88 24.27 C59.56 25.35 59.33 25.81 58.81 26.79 C58.29 27.77 57.6 28.97 56.77 30.15 C55.94 31.33 54.94 32.55 53.82 33.85 C52.7 35.15 52 35.95 50.06 37.97 C48.12 39.99 44.26 43.89 42.17 45.95 C40.08 48.01 38.31 49.6 37.54 50.33 Z" />
+            <path d="M24.35 13.6 C24.77 13.94 25.97 14.82 26.87 15.63 C27.77 16.44 29.25 18 29.73 18.47 C29.14 19.03 27.72 20.27 26.19 21.81 C24.66 23.35 21.87 26.33 20.58 27.72 C19.29 29.11 19.07 29.37 18.45 30.15 C17.83 30.93 17.48 31.61 16.85 32.42 C16.22 33.23 15.35 34.15 14.65 35.03 C13.95 35.91 13.22 36.89 12.66 37.72 C12.1 38.55 11.66 39.3 11.3 39.99 C10.94 40.68 10.71 41.2 10.49 41.84 C10.27 42.48 10.1 43.3 10 43.85 C9.9 44.4 9.89 44.67 9.89 45.11 C9.89 45.55 9.87 45.77 10.03 46.46 C10.19 47.15 10.52 48.44 10.87 49.23 C11.21 50.02 11.55 50.54 12.1 51.17 C12.65 51.8 13.43 52.49 14.18 53.01 C14.93 53.53 15.82 53.98 16.62 54.27 C17.42 54.56 18.1 54.71 18.97 54.77 C19.84 54.83 20.88 54.81 21.83 54.63 C22.78 54.45 24.2 53.85 24.68 53.69 L30.15 58.56 C30.02 58.69 30.04 58.95 29.39 59.33 C28.75 59.71 27.14 60.48 26.28 60.84 C25.43 61.2 24.95 61.31 24.26 61.49 C23.57 61.67 23.25 61.84 22.16 61.91 C21.07 61.98 19.13 62.07 17.71 61.9 C16.3 61.73 14.65 61.2 13.67 60.9 C12.69 60.6 12.41 60.4 11.82 60.09 C11.23 59.79 10.73 59.48 10.14 59.07 C9.55 58.66 8.9 58.19 8.29 57.63 C7.68 57.07 7 56.34 6.47 55.7 C5.94 55.06 5.49 54.41 5.09 53.77 C4.69 53.13 4.33 52.43 4.05 51.84 C3.77 51.25 3.64 50.91 3.44 50.24 C3.24 49.57 2.98 48.82 2.85 47.8 C2.72 46.78 2.6 45.29 2.67 44.11 C2.73 42.93 2.93 41.86 3.24 40.74 C3.55 39.62 3.97 38.51 4.52 37.38 C5.07 36.25 5.83 35.01 6.52 33.94 C7.21 32.87 8.16 31.71 8.64 30.98 C9.12 30.25 8.88 30.27 9.38 29.57 C9.89 28.87 10.07 28.54 11.67 26.76 C13.27 24.98 16.86 21.08 18.97 18.89 C21.08 16.7 23.45 14.48 24.35 13.6 Z" />
+            <path d="M18.63 33.94 C19.9 35.26 24.9 40.3 26.26 41.84 C27.62 43.38 26.46 42.65 26.79 43.18 C27.12 43.71 27.37 44.18 28.23 45.02 C29.09 45.87 30.82 47.2 31.97 48.25 C33.12 49.3 34.24 50.54 35.14 51.33 C36.04 52.12 36.56 52.49 37.37 52.98 C38.18 53.46 39.19 53.94 39.98 54.24 C40.77 54.54 41.22 54.68 42.08 54.76 C42.94 54.84 44.06 54.89 45.11 54.74 C46.16 54.59 47.1 53.85 48.39 53.87 C49.68 53.89 52.1 54.7 52.84 54.86 C52.85 54.76 53.03 54.98 52.89 54.28 C52.75 53.58 51.93 51.72 51.99 50.66 C52.05 49.59 52.95 48.69 53.23 47.89 C53.5 47.09 53.57 46.45 53.64 45.87 C53.71 45.29 53.75 45.08 53.67 44.44 C53.59 43.8 53.45 42.84 53.16 42 C52.87 41.16 52.13 39.83 51.92 39.4 L56.87 33.94 C57.12 34.34 57.93 35.52 58.38 36.37 C58.83 37.22 59.26 38.23 59.58 39.06 C59.9 39.89 60.11 40.53 60.3 41.33 C60.49 42.13 60.65 42.95 60.72 43.85 C60.79 44.75 60.78 45.88 60.73 46.71 C60.68 47.54 60.6 48.03 60.41 48.81 C60.22 49.59 59.91 50.57 59.58 51.42 C59.25 52.27 58.31 52.47 58.43 53.94 C58.55 55.41 59.99 59.08 60.29 60.24 C60.59 61.4 60.31 60.71 60.25 60.92 C60.19 61.13 59.96 61.4 59.9 61.5 C59.75 61.52 60.21 61.87 58.98 61.59 C57.75 61.31 54.34 59.83 52.5 59.81 C50.66 59.79 49.35 61.09 47.96 61.46 C46.57 61.83 45.43 61.96 44.18 62 C42.93 62.04 41.39 61.81 40.48 61.69 C39.57 61.57 39.31 61.44 38.72 61.26 C38.13 61.08 37.85 61.06 36.95 60.6 C36.05 60.14 34.71 59.44 33.34 58.5 C31.97 57.56 30.08 56.15 28.72 54.94 C27.36 53.73 26.1 52.24 25.2 51.25 C24.3 50.26 25.14 50.95 23.3 49 C21.46 47.05 15.7 41.14 14.18 39.57 C14.61 38.97 16.02 36.89 16.76 35.95 C17.5 35.01 18.32 34.27 18.63 33.94 Z" />
+          </g>
+          <rect x="78" y="10" width="9.5" height="44" rx="1.5" />
+          <path d="M102 10 H142 V18.5 H126.75 V54 H117.25 V18.5 H102 Z" />
+          <path
+            fill-rule="evenodd"
+            clip-rule="evenodd"
+            d="M176 8.5 C190.4 8.5 200.5 18.2 200.5 32 C200.5 45.8 190.4 55.5 176 55.5 C161.6 55.5 151.5 45.8 151.5 32 C151.5 18.2 161.6 8.5 176 8.5 Z M176 17.2 C167.2 17.2 161.2 23.3 161.2 32 C161.2 40.7 167.2 46.8 176 46.8 C184.8 46.8 190.8 40.7 190.8 32 C190.8 23.3 184.8 17.2 176 17.2 Z"
+          />
+        </svg>
+      </div>
+
+      <div class="footer__row">
+        <span>&copy; 2026 Ito / AtiinLabs</span>
+        <span class="footer__note">
+          Ito is an open-source client application and does not bundle, host, or
+          provide media sources. Users are responsible for the plugins they
+          install and for complying with applicable laws.
+        </span>
+        <div class="footer__links">
+          <a
+            class="link"
+            href="https://github.com/AtiinLabs/Ito"
+            target="_blank"
+            rel="noreferrer"
+          >
+            GitHub
+          </a>
+          <a
+            class="link"
+            href="https://discord.gg/Es5qTB9BcN"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Discord
+          </a>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      (() => {
+        "use strict";
+
+        const mqlReduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+        let reducedMotion = mqlReduced.matches;
+
+        /* =====================================================================
+           1. ITO THREAD FIELD ENGINE (Hero Ambient Generative Canvas)
+           Inspired by Sideload's FieldEngine, reinterpreted around Ito's
+           interwoven 4-loop knot topology and silk threads (糸).
+           ===================================================================== */
+        const WEAVE_ANGLE = (24 * Math.PI) / 180;
+        const TAU = Math.PI * 2;
+        const NX = Math.cos(WEAVE_ANGLE + Math.PI / 2);
+        const NY = Math.sin(WEAVE_ANGLE + Math.PI / 2);
+        const DX = Math.cos(WEAVE_ANGLE);
+        const DY = Math.sin(WEAVE_ANGLE);
+
+        const SCENE_SECONDS = 7.4;
+        const SWEEP = 1.15;
+        const MORPH = 0.95;
+        const ALPHA_LEVELS = 10;
+        const TINT_MIX = [0, 0.48, 0.9];
+        const ACCENT_RGB = [157, 227, 198]; // #9DE3C6
+
+        function clamp(v, lo = 0, hi = 1) {
+          return v < lo ? lo : v > hi ? hi : v;
+        }
+
+        function lerp(a, b, t) {
+          return a + (b - a) * t;
+        }
+
+        function smoothstep(e0, e1, x) {
+          const t = clamp((x - e0) / (e1 - e0));
+          return t * t * (3 - 2 * t);
+        }
+
+        function easeInOutCubic(t) {
+          return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        }
+
+        function hash2(x, y) {
+          const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+          return n - Math.floor(n);
+        }
+
+        function mixLineAngle(a, b, t) {
+          let d = ((b - a) % Math.PI + Math.PI) % Math.PI;
+          if (d > Math.PI / 2) d -= Math.PI;
+          return a + d * t;
+        }
+
+        /* Four mathematical scenes celebrating Ito's identity:
+           0. Knot    — 4-fold interwoven torus knot echoing Ito's icon
+           1. Weave   — Crossing warp & weft silk threads (糸)
+           2. Folio   — Typeset novel & manga columns illuminating in order
+           3. Current — Calm laminar stream of story filaments */
+        const SCENES = [
+          {
+            id: "knot",
+            sample(i, L, t, _p, o) {
+              const r = L.r[i];
+              const phi = L.phi[i];
+              // 4-lobe interwoven harmonic geometry inspired by Ito's 4-loop knot
+              const phase = 2 * phi - t * 0.24;
+              const lobes = Math.cos(phase) * 0.28;
+              const ringA = Math.abs(r - (0.56 + lobes));
+              const ringB = Math.abs(r - (0.56 - lobes));
+              // Inner crossing lattice strands passing through the center
+              const innerLattice = Math.abs(r * Math.sin(phase) - 0.14);
+              const d = Math.min(ringA, ringB, r < 0.58 ? innerLattice : 9);
+              const band = Math.max(0, 1 - d / 0.28);
+              const sharp = band * band * (3 - 2 * band);
+              const env =
+                smoothstep(0.02, 0.14, r) * (1 - smoothstep(0.95, 1.55, r));
+              const tangent =
+                phi +
+                Math.PI / 2 +
+                (ringA < ringB ? 1 : -1) * Math.sin(phase) * 0.52;
+              o.a = tangent;
+              o.l = 0.16 + 0.84 * sharp * env;
+              o.o = 0.1 + 0.88 * sharp * env;
+            },
+          },
+          {
+            id: "weave",
+            sample(i, L, t, _p, o) {
+              const side = (L.gx[i] + L.gy[i]) & 1 ? 1 : -1;
+              const x = L.x[i] / L.s;
+              const y = L.y[i] / L.s;
+              const along = x * DX + y * DY;
+              const across = x * NX + y * NY;
+              const wave =
+                0.5 +
+                0.5 *
+                  Math.sin(
+                    across * 0.28 - t * 0.95 + Math.sin(along * 0.08 + t * 0.3)
+                  );
+              const env = 1 - smoothstep(0.9, 1.65, L.r[i]);
+              o.a = WEAVE_ANGLE + side * 0.42 * Math.cos(t * 0.4 + L.r[i] * 2);
+              o.l = 0.2 + 0.8 * wave * env;
+              o.o = (0.1 + 0.78 * wave * wave) * env;
+            },
+          },
+          {
+            id: "folio",
+            sample(i, L, _t, p, o) {
+              o.a = 0;
+              if (!L.page[i]) {
+                o.l = 0.06;
+                o.o = 0.04;
+                return;
+              }
+              if (!L.ink[i]) {
+                o.l = 0.06;
+                o.o = 0.08;
+                return;
+              }
+              const cursor = p * 1.28;
+              const d = cursor - L.order[i];
+              if (d < 0) {
+                o.l = 0.1;
+                o.o = 0.11;
+                return;
+              }
+              const fresh = 1 - smoothstep(0, 0.015, d);
+              o.l = 0.92;
+              o.o = 0.54 + 0.46 * fresh;
+            },
+          },
+          {
+            id: "current",
+            sample(i, L, t, _p, o) {
+              const x = L.x[i] / L.s;
+              const y = L.y[i] / L.s;
+              const flow =
+                Math.sin(x * 0.08 + t * 0.26) +
+                Math.sin(y * 0.1 - t * 0.2 + x * 0.04) +
+                Math.sin((x + y) * 0.05 + t * 0.15);
+              const k = 0.5 + 0.5 * Math.sin(flow * 1.6 + t * 0.55);
+              const env = 1 - smoothstep(1.0, 1.75, L.r[i]) * 0.65;
+              o.a = flow * 0.88;
+              o.l = (0.2 + 0.8 * k) * env;
+              o.o = (0.1 + 0.72 * k * k) * env;
+            },
+          },
+        ];
+
+        const VOID_SCENE = {
+          id: "void",
+          sample(_i, _L, _t, _p, o) {
+            o.a = WEAVE_ANGLE;
+            o.l = 0;
+            o.o = 0;
+          },
+        };
+
+        function createLayout(w, h) {
+          const compact = w < 760;
+          const s = compact ? 18 : Math.round(clamp(w / 62, 19, 26));
+          const cols = Math.ceil(w / s) + 1;
+          const rows = Math.ceil(h / s) + 1;
+          const n = cols * rows;
+
+          const cx = compact ? w * 0.52 : w * 0.68;
+          const cy = compact ? h * 0.28 : h * 0.5;
+          const R = compact
+            ? Math.max(w * 0.58, h * 0.24)
+            : Math.min(w * 0.36, h * 0.62);
+
+          const L = {
+            w,
+            h,
+            s,
+            n,
+            cx,
+            cy,
+            R,
+            compact,
+            x: new Float32Array(n),
+            y: new Float32Array(n),
+            gx: new Int16Array(n),
+            gy: new Int16Array(n),
+            r: new Float32Array(n),
+            phi: new Float32Array(n),
+            hash: new Float32Array(n),
+            wipe: new Float32Array(n),
+            fade: new Float32Array(n),
+            tint: new Float32Array(n),
+            ink: new Uint8Array(n),
+            page: new Uint8Array(n),
+            order: new Float32Array(n),
+          };
+
+          const ox = (w - (cols - 1) * s) / 2;
+          const oy = (h - (rows - 1) * s) / 2;
+          let wMin = Infinity;
+          let wMax = -Infinity;
+
+          for (let j = 0, i = 0; j < rows; j++) {
+            for (let k = 0; k < cols; k++, i++) {
+              const x = ox + k * s;
+              const y = oy + j * s;
+              const u = (x - cx) / R;
+              const v = (y - cy) / R;
+              const r = Math.hypot(u, v);
+              L.x[i] = x;
+              L.y[i] = y;
+              L.gx[i] = k;
+              L.gy[i] = j;
+              L.r[i] = r;
+              L.phi[i] = Math.atan2(v, u);
+              L.hash[i] = hash2(k, j);
+              const proj = -(x * NX + y * NY);
+              L.wipe[i] = proj;
+              if (proj < wMin) wMin = proj;
+              if (proj > wMax) wMax = proj;
+              L.fade[i] = 1 - smoothstep(h * 0.74, h * 1.02, y) * 0.92;
+              L.tint[i] = smoothstep(1.25, 0.12, r);
+            }
+          }
+
+          for (let i = 0; i < n; i++) {
+            L.wipe[i] = (L.wipe[i] - wMin) / (wMax - wMin || 1);
+          }
+
+          // Build Folio pages layout
+          const pageCount = compact ? 1 : 2;
+          const pw = Math.max(
+            6,
+            Math.round((compact ? R * 0.92 : R * 0.62) / s)
+          );
+          const gutter = 3;
+          const gcx = Math.round((cx - (L.x[0] || 0)) / s);
+          const top = Math.max(
+            1,
+            Math.round((cy - R * (compact ? 0.52 : 0.6) - L.y[0]) / s)
+          );
+          const bottom = Math.min(
+            rows - 2,
+            Math.round((cy + R * (compact ? 0.52 : 0.6) - L.y[0]) / s)
+          );
+          const rowsPerPage = Math.max(1, bottom - top + 1);
+          const total = pageCount * rowsPerPage;
+
+          for (let pg = 0; pg < pageCount; pg++) {
+            const c0 = compact
+              ? gcx - Math.floor(pw / 2)
+              : pg === 0
+                ? gcx - Math.ceil(gutter / 2) - pw
+                : gcx + Math.ceil(gutter / 2);
+            let paraLeft = 0;
+            let lastOfPara = false;
+            let seed = 19 + pg * 131;
+
+            for (let row = top, ri = 0; row <= bottom; row++, ri++) {
+              let blank = false;
+              if (ri === 0) paraLeft = 0;
+              if (ri === 1) blank = true;
+              else if (ri > 1 && paraLeft === 0) {
+                if (!lastOfPara) {
+                  paraLeft = 3 + Math.floor(hash2(seed++, row) * 4);
+                } else {
+                  blank = true;
+                  lastOfPara = false;
+                }
+              }
+              let lineCols = pw;
+              if (ri === 0) {
+                lineCols = Math.round(pw * (0.35 + hash2(pg, 99) * 0.2));
+              } else if (!blank) {
+                paraLeft--;
+                if (paraLeft === 0) {
+                  lastOfPara = true;
+                  lineCols = Math.round(pw * (0.3 + hash2(seed++, row) * 0.48));
+                }
+              }
+
+              let wordLeft = 0;
+              for (let ci = 0; ci < pw; ci++) {
+                const col = c0 + ci;
+                if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
+                const idx = row * cols + col;
+                L.page[idx] = 1;
+                L.order[idx] = (pg * rowsPerPage + ri + ci / pw) / total;
+                if (blank || ci >= lineCols) continue;
+                if (wordLeft === 0) {
+                  wordLeft = 2 + Math.floor(hash2(col * 7 + pg, row * 13) * 5);
+                  if (ci > 0) {
+                    wordLeft = -wordLeft;
+                    continue;
+                  }
+                }
+                if (wordLeft < 0) wordLeft = -wordLeft;
+                L.ink[idx] = 1;
+                wordLeft--;
+              }
+            }
+          }
+
+          return L;
+        }
+
+        const heroCanvas = document.getElementById("hero-field");
+        const heroSection = document.getElementById("hero");
+        const knotEcho = document.getElementById("knot-echo");
+
+        if (heroCanvas && heroSection) {
+          const ctx = heroCanvas.getContext("2d", { alpha: true });
+          if (ctx) {
+            let layout = null;
+            let dpr = 1;
+            const counts = new Int32Array(ALPHA_LEVELS * TINT_MIX.length);
+            let buckets = [];
+
+            const t0 = performance.now();
+            let t = 0;
+            let sceneIndex = 0;
+            let currentScene = SCENES[0];
+            let previousScene = reducedMotion ? null : VOID_SCENE;
+            let sceneStart = 0.2;
+            let previousStart = 0;
+
+            const pointer = { x: 0, y: 0, tx: 0, ty: 0, s: 0, ts: 0, last: -10 };
+            let pulses = [];
+            let rafId = 0;
+            let isVisible = true;
+            const sampleA = { a: 0, l: 0, o: 0 };
+            const sampleB = { a: 0, l: 0, o: 0 };
+
+            function triggerKnotEcho() {
+              if (!knotEcho || reducedMotion) return;
+              knotEcho.classList.remove("is-pulsing");
+              void knotEcho.offsetWidth;
+              knotEcho.classList.add("is-pulsing");
+            }
+
+            function drawField(time) {
+              const L = layout;
+              if (!L) return;
+              const cur = currentScene;
+              const prev = reducedMotion ? null : previousScene;
+              const pCur = reducedMotion
+                ? 0.75
+                : (time - sceneStart) / SCENE_SECONDS;
+              const pPrev = (time - previousStart) / SCENE_SECONDS;
+              const since = time - sceneStart;
+              const maxLen = L.s * 0.78;
+
+              const ptrOn = !reducedMotion && pointer.s > 0.01;
+              const ptrR = L.s * 7.5;
+              const activePulses = reducedMotion ? [] : pulses;
+
+              counts.fill(0);
+
+              for (let i = 0; i < L.n; i++) {
+                cur.sample(i, L, time, pCur, sampleA);
+                let ang = sampleA.a;
+                let len = sampleA.l;
+                let op = sampleA.o;
+
+                if (prev) {
+                  const k = clamp((since - L.wipe[i] * SWEEP) / MORPH);
+                  if (k < 1) {
+                    prev.sample(i, L, time, pPrev, sampleB);
+                    const e = easeInOutCubic(k);
+                    ang = mixLineAngle(sampleB.a, sampleA.a, e);
+                    len = lerp(sampleB.l, sampleA.l, e);
+                    op = lerp(sampleB.o, sampleA.o, e);
+                    const crest = 4 * k * (1 - k);
+                    const glow =
+                      crest * crest * (prev === VOID_SCENE ? 0.88 : 0.52);
+                    if (glow > op) op = glow;
+                    if (glow > len) len = glow;
+                  }
+                }
+
+                if (ptrOn) {
+                  const dx = L.x[i] - pointer.x;
+                  const dy = L.y[i] - pointer.y;
+                  const d2 = dx * dx + dy * dy;
+                  if (d2 < ptrR * ptrR) {
+                    const f = 1 - Math.sqrt(d2) / ptrR;
+                    const w = f * f * pointer.s;
+                    ang = mixLineAngle(
+                      ang,
+                      Math.atan2(dy, dx) + Math.PI / 2,
+                      w * 0.9
+                    );
+                    len += (1 - len) * w * 0.75;
+                    op += (1 - op) * w * 0.65;
+                  }
+                }
+
+                for (let q = 0; q < activePulses.length; q++) {
+                  const pulse = activePulses[q];
+                  const age = time - pulse.born;
+                  const ring = age * 500;
+                  const dx = L.x[i] - pulse.x;
+                  const dy = L.y[i] - pulse.y;
+                  const d = Math.sqrt(dx * dx + dy * dy);
+                  const band = 1 - Math.abs(d - ring) / 46;
+                  if (band > 0) {
+                    const w = band * band * (1 - age / 2.4);
+                    ang = mixLineAngle(ang, Math.atan2(dy, dx), w);
+                    len += (1 - len) * w;
+                    op += (1 - op) * w * 0.85;
+                  }
+                }
+
+                op *= L.fade[i];
+                if (op < 0.02) continue;
+
+                const half = Math.max(maxLen * len, 1.1) * 0.5;
+                const cx = Math.cos(ang) * half;
+                const cy = Math.sin(ang) * half;
+                const tw = L.tint[i];
+                const tb = tw > 0.62 ? 2 : tw > 0.28 ? 1 : 0;
+                const ab = Math.min(ALPHA_LEVELS - 1, (op * ALPHA_LEVELS) | 0);
+                const bi = tb * ALPHA_LEVELS + ab;
+                const arr = buckets[bi];
+                const c = counts[bi];
+                arr[c] = L.x[i] - cx;
+                arr[c + 1] = L.y[i] - cy;
+                arr[c + 2] = L.x[i] + cx;
+                arr[c + 3] = L.y[i] + cy;
+                counts[bi] = c + 4;
+              }
+
+              ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+              ctx.clearRect(0, 0, L.w, L.h);
+              ctx.lineCap = "round";
+              ctx.lineWidth = L.compact ? 1.1 : 1.25;
+
+              const [ar, ag, ac] = ACCENT_RGB;
+              for (let tb = 0; tb < TINT_MIX.length; tb++) {
+                const m = TINT_MIX[tb];
+                const r = Math.round(lerp(245, ar, m));
+                const g = Math.round(lerp(245, ag, m));
+                const b = Math.round(lerp(247, ac, m));
+                for (let ab = 0; ab < ALPHA_LEVELS; ab++) {
+                  const bi = tb * ALPHA_LEVELS + ab;
+                  const count = counts[bi];
+                  if (!count) continue;
+                  const arr = buckets[bi];
+                  ctx.beginPath();
+                  for (let c = 0; c < count; c += 4) {
+                    ctx.moveTo(arr[c], arr[c + 1]);
+                    ctx.lineTo(arr[c + 2], arr[c + 3]);
+                  }
+                  ctx.strokeStyle = `rgba(${r},${g},${b},${(
+                    (ab + 0.6) /
+                    ALPHA_LEVELS
+                  ).toFixed(3)})`;
+                  ctx.stroke();
+                }
+              }
+            }
+
+            function resizeField(w, h) {
+              if (!w || !h) return;
+              dpr = Math.min(window.devicePixelRatio || 1, 2);
+              heroCanvas.width = Math.round(w * dpr);
+              heroCanvas.height = Math.round(h * dpr);
+              layout = createLayout(w, h);
+              const size = layout.n * 4;
+              buckets = Array.from(
+                { length: counts.length },
+                () => new Float32Array(size)
+              );
+              drawField(reducedMotion ? 12 : t);
+            }
+
+            function goToScene(nextIdx) {
+              const next =
+                ((nextIdx % SCENES.length) + SCENES.length) % SCENES.length;
+              if (next === sceneIndex) return;
+              previousScene = currentScene;
+              previousStart = sceneStart;
+              currentScene = SCENES[next];
+              sceneIndex = next;
+              sceneStart = t;
+              triggerKnotEcho();
+            }
+
+            function tickField(now) {
+              rafId = 0;
+              if (reducedMotion || !isVisible || document.hidden) return;
+              t = (now - t0) / 1000;
+
+              if (t - sceneStart >= SCENE_SECONDS) {
+                goToScene(sceneIndex + 1);
+              }
+              if (previousScene && t - sceneStart > SWEEP + MORPH) {
+                previousScene = null;
+              }
+
+              if (t - pointer.last > 1.6) pointer.ts = 0;
+              pointer.x = lerp(pointer.x, pointer.tx, 0.16);
+              pointer.y = lerp(pointer.y, pointer.ty, 0.16);
+              pointer.s = lerp(pointer.s, pointer.ts, 0.05);
+
+              pulses = pulses.filter((p) => t - p.born < 2.4);
+
+              drawField(t);
+              rafId = requestAnimationFrame(tickField);
+            }
+
+            function startField() {
+              if (reducedMotion) {
+                previousScene = null;
+                drawField(12);
+                return;
+              }
+              if (!rafId && isVisible && !document.hidden) {
+                rafId = requestAnimationFrame(tickField);
+              }
+            }
+
+            const rect0 = heroCanvas.getBoundingClientRect();
+            resizeField(rect0.width || window.innerWidth, rect0.height || window.innerHeight);
+
+            if ("ResizeObserver" in window) {
+              const ro = new ResizeObserver(([entry]) => {
+                const { width, height } = entry.contentRect;
+                resizeField(width, height);
+              });
+              ro.observe(heroCanvas);
+            } else {
+              window.addEventListener("resize", () => {
+                resizeField(heroCanvas.clientWidth, heroCanvas.clientHeight);
+              });
+            }
+
+            if ("IntersectionObserver" in window) {
+              const io = new IntersectionObserver(([entry]) => {
+                isVisible = entry.isIntersecting;
+                if (isVisible) startField();
+              });
+              io.observe(heroCanvas);
+            }
+
+            document.addEventListener("visibilitychange", () => {
+              if (!document.hidden) startField();
+            });
+
+            mqlReduced.addEventListener("change", (e) => {
+              reducedMotion = e.matches;
+              if (reducedMotion) {
+                if (rafId) cancelAnimationFrame(rafId);
+                rafId = 0;
+                previousScene = null;
+                drawField(12);
+              } else {
+                startField();
+              }
+            });
+
+            heroSection.addEventListener("pointermove", (e) => {
+              if (e.pointerType === "touch" || reducedMotion) return;
+              const r = heroCanvas.getBoundingClientRect();
+              const x = e.clientX - r.left;
+              const y = e.clientY - r.top;
+              pointer.tx = x;
+              pointer.ty = y;
+              if (pointer.s < 0.01) {
+                pointer.x = x;
+                pointer.y = y;
+              }
+              pointer.ts = 1;
+              pointer.last = t;
+            });
+
+            heroSection.addEventListener("pointerleave", () => {
+              pointer.ts = 0;
+            });
+
+            heroSection.addEventListener("pointerdown", (e) => {
+              if (reducedMotion || e.target.closest("a, button")) return;
+              const r = heroCanvas.getBoundingClientRect();
+              pulses.push({
+                x: e.clientX - r.left,
+                y: e.clientY - r.top,
+                born: t,
+              });
+              if (pulses.length > 4) pulses.shift();
+            });
+
+            startField();
+          }
+        }
+
+        /* =====================================================================
+           2. SCROLL-TRIGGERED SECTION REVEALS
+           Adds `.is-in` once elements enter the viewport; CSS owns the motion.
+           ===================================================================== */
+        const revealEls = document.querySelectorAll(".reveal");
+        if (reducedMotion || !("IntersectionObserver" in window)) {
+          revealEls.forEach((el) => el.classList.add("is-in"));
+        } else {
+          const revealObserver = new IntersectionObserver(
+            (entries) => {
+              entries.forEach((entry) => {
+                if (entry.isIntersecting) {
+                  entry.target.classList.add("is-in");
+                  revealObserver.unobserve(entry.target);
+                }
+              });
+            },
+            { threshold: 0.16, rootMargin: "0px 0px -6% 0px" }
+          );
+          revealEls.forEach((el) => revealObserver.observe(el));
+        }
+
+        /* =====================================================================
+           3. SECTION 02 — SINGLE-DEVICE CHOREOGRAPHED STAGE
+           Smoothly transitions between Discover (0), Details (1), and Library (2)
+           as the visitor scrolls, with reversible progress and manual selection.
+           ===================================================================== */
+        const runway = document.getElementById("product-runway");
+        const device = document.getElementById("product-device");
+        const glow = document.getElementById("product-glow");
+        const stageBtns = Array.from(
+          document.querySelectorAll("[data-stage-btn]")
+        );
+        const mobileBtns = Array.from(
+          document.querySelectorAll("[data-mobile-stage]")
+        );
+        const stageImgs = Array.from(
+          document.querySelectorAll("[data-stage-img]")
+        );
+
+        let activeStage = 0;
+        let manualLockUntil = 0;
+
+        function setStage(index, segmentProgress = 1) {
+          const clamped = clamp(index, 0, 2);
+          activeStage = clamped;
+
+          stageImgs.forEach((img, i) => {
+            img.classList.toggle("is-active", i === clamped);
+            img.classList.toggle("is-past", i < clamped);
+          });
+
+          stageBtns.forEach((btn, i) => {
+            const isCurrent = i === clamped;
+            btn.classList.toggle("is-active", isCurrent);
+            btn.setAttribute("aria-pressed", isCurrent ? "true" : "false");
+            const p = i < clamped ? 1 : i === clamped ? segmentProgress : 0;
+            btn.style.setProperty("--progress", p.toFixed(3));
+          });
+
+          mobileBtns.forEach((btn, i) => {
+            const isCurrent = i === clamped;
+            btn.classList.toggle("is-active", isCurrent);
+            btn.setAttribute("aria-pressed", isCurrent ? "true" : "false");
+          });
+
+          if (glow) {
+            const scales = [1, 1.08, 0.96];
+            glow.style.transform = `scale(${scales[clamped] || 1})`;
+          }
+        }
+
+        function updateProductScroll() {
+          if (!runway || !device) return;
+          const rect = runway.getBoundingClientRect();
+          const vh = window.innerHeight || 1;
+          const isCompact = window.innerWidth <= 900;
+
+          // Subtle physical emergence of the single iPhone from the darkness
+          const enterRatio = clamp((vh - rect.top) / (vh * 0.65), 0, 1);
+          if (!reducedMotion) {
+            const yOffset = (1 - enterRatio) * 22;
+            const scaleVal = 0.95 + enterRatio * 0.05;
+            device.style.setProperty("--device-y", `${yOffset.toFixed(1)}px`);
+            device.style.setProperty("--device-scale", scaleVal.toFixed(3));
+          } else {
+            device.style.setProperty("--device-y", "0px");
+            device.style.setProperty("--device-scale", "1");
+          }
+
+          if (performance.now() < manualLockUntil) return;
+
+          if (!isCompact) {
+            const scrollable = Math.max(1, rect.height - vh);
+            const rawProgress = clamp(-rect.top / scrollable, 0, 0.9999);
+            const scaled = rawProgress * 3;
+            const stageIdx = Math.floor(scaled);
+            const segProg = scaled - stageIdx;
+            setStage(stageIdx, segProg);
+          } else {
+            // On mobile, progress smoothly through Discover -> Details -> Library
+            // as the device stage traverses the middle of the viewport
+            const span = Math.max(1, rect.height + vh * 0.25);
+            const rawProgress = clamp((vh * 0.55 - rect.top) / span, 0, 0.9999);
+            const scaled = rawProgress * 3;
+            const stageIdx = Math.floor(scaled);
+            const segProg = scaled - stageIdx;
+            setStage(stageIdx, segProg);
+          }
+        }
+
+        stageBtns.forEach((btn, idx) => {
+          btn.addEventListener("click", () => {
+            manualLockUntil = performance.now() + 1200;
+            setStage(idx, 1);
+            if (window.innerWidth > 900 && runway) {
+              const rect = runway.getBoundingClientRect();
+              const scrollable = Math.max(0, rect.height - window.innerHeight);
+              const targetY =
+                window.scrollY + rect.top + scrollable * (idx / 2.6);
+              window.scrollTo({
+                top: targetY,
+                behavior: reducedMotion ? "auto" : "smooth",
+              });
+            }
+          });
+        });
+
+        mobileBtns.forEach((btn, idx) => {
+          btn.addEventListener("click", () => {
+            manualLockUntil = performance.now() + 4000;
+            setStage(idx, 1);
+          });
+        });
+
+        window.addEventListener("scroll", updateProductScroll, {
+          passive: true,
+        });
+        window.addEventListener("resize", updateProductScroll, {
+          passive: true,
+        });
+        updateProductScroll();
+
+        /* =====================================================================
+           4. HERO CTA — INSTALLATION METHOD SELECTOR
+           Keeps the default method (AltStore) fixed until the visitor chooses
+           AltStore, SideStore, Feather, TrollStore, Sideloadly, or Source.
+           ===================================================================== */
+        const SOURCE_RAW = "https://atiinlabs.github.io/Ito/apps.json";
+        const SOURCE_FEED = encodeURIComponent(SOURCE_RAW);
+        const DEFAULT_TIPA_URL =
+          "https://github.com/AtiinLabs/Ito/releases/download/v1.1.0/Ito-1.1.0-unsigned.tipa";
+
+        const CTA_METHODS = [
+          {
+            id: "altstore",
+            label: "Get Ito with AltStore",
+            href: `altstore://source?url=${SOURCE_FEED}`,
+            external: false,
+            accent: "#9de3c6",
+          },
+          {
+            id: "sidestore",
+            label: "Get Ito with SideStore",
+            href: `sidestore://source?url=${SOURCE_FEED}`,
+            external: false,
+            accent: "#7fd8be",
+          },
+          {
+            id: "feather",
+            label: "Get Ito with Feather",
+            href: `feather://source/${SOURCE_RAW}`,
+            external: false,
+            accent: "#88dcd0",
+          },
+          {
+            id: "trollstore",
+            label: "Get Ito with TrollStore",
+            href: `apple-magnifier://install?url=${encodeURIComponent(
+              DEFAULT_TIPA_URL
+            )}`,
+            external: false,
+            accent: "#78d2c4",
+          },
+          {
+            id: "sideloadly",
+            label: "Get Ito with Sideloadly (Download IPA)",
+            href: "https://github.com/AtiinLabs/Ito/releases/latest",
+            external: true,
+            accent: "#8cd5e4",
+          },
+          {
+            id: "source",
+            label: "Build Ito manually from source on GitHub",
+            href: "https://github.com/AtiinLabs/Ito",
+            external: true,
+            accent: "#b2ebd2",
+          },
+        ];
+
+        const heroCta = document.getElementById("hero-cta");
+        const ctaNameSpans = Array.from(
+          document.querySelectorAll("[data-cta-name]")
+        );
+        const ctaTabBtns = Array.from(
+          document.querySelectorAll("[data-cta-tab]")
+        );
+
+        let ctaIndex = 0;
+
+        function setCtaMethod(nextIdx) {
+          const idx =
+            ((nextIdx % CTA_METHODS.length) + CTA_METHODS.length) %
+            CTA_METHODS.length;
+          ctaIndex = idx;
+          const method = CTA_METHODS[idx];
+
+          if (heroCta && method) {
+            heroCta.href = method.href;
+            heroCta.setAttribute("aria-label", method.label);
+            heroCta.style.setProperty("--accent", method.accent);
+            if (method.external) {
+              heroCta.setAttribute("target", "_blank");
+              heroCta.setAttribute("rel", "noreferrer");
+            } else {
+              heroCta.removeAttribute("target");
+              heroCta.removeAttribute("rel");
+            }
+          }
+
+          ctaNameSpans.forEach((span, i) => {
+            span.classList.toggle("is-on", i === idx);
+            span.classList.toggle("is-past", i < idx);
+          });
+
+          ctaTabBtns.forEach((btn, i) => {
+            const active = i === idx;
+            btn.classList.toggle("is-on", active);
+            btn.setAttribute("aria-checked", active ? "true" : "false");
+            btn.setAttribute("tabindex", active ? "0" : "-1");
+          });
+        }
+
+        // Keep TrollStore .tipa URL automatically synced with the latest published apps.json
+        fetch(SOURCE_RAW)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((feed) => {
+            const dl =
+              feed?.apps?.[0]?.versions?.[0]?.downloadURL ||
+              feed?.apps?.[0]?.downloadURL;
+            if (typeof dl === "string" && dl.endsWith(".ipa")) {
+              const tipaUrl = dl.replace(/\.ipa$/, ".tipa");
+              const trollMethod = CTA_METHODS.find(
+                (m) => m.id === "trollstore"
+              );
+              if (trollMethod) {
+                trollMethod.href = `apple-magnifier://install?url=${encodeURIComponent(
+                  tipaUrl
+                )}`;
+                if (CTA_METHODS[ctaIndex]?.id === "trollstore" && heroCta) {
+                  heroCta.href = trollMethod.href;
+                }
+              }
+            }
+          })
+          .catch(() => {});
+
+        ctaTabBtns.forEach((btn, idx) => {
+          btn.addEventListener("click", () => {
+            setCtaMethod(idx);
+          });
+
+          btn.addEventListener("keydown", (e) => {
+            let next = null;
+            if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+              next = (idx + 1) % CTA_METHODS.length;
+            } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+              next = (idx - 1 + CTA_METHODS.length) % CTA_METHODS.length;
+            } else if (e.key === "Home") {
+              next = 0;
+            } else if (e.key === "End") {
+              next = CTA_METHODS.length - 1;
+            }
+
+            if (next !== null) {
+              e.preventDefault();
+              setCtaMethod(next);
+              ctaTabBtns[next]?.focus();
+            }
+          });
+        });
+
+        // Graceful fallback to raw GitHub PNG if the WebP CDN is ever blocked
+        document.querySelectorAll("picture > img").forEach((img) => {
+          img.addEventListener(
+            "error",
+            () => {
+              const pic = img.parentElement;
+              if (pic && pic.tagName === "PICTURE") {
+                pic.querySelectorAll("source").forEach((s) => s.remove());
+              }
+            },
+            { once: true }
+          );
+        });
+      })();
+    </script>
+  </body>
+</html>

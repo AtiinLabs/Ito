@@ -1,0 +1,40 @@
+name: Publish site
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - site/**
+      - scripts/gh_pages.sh
+      - scripts/publish_site.sh
+      - scripts/render_install_page.py
+      - .github/workflows/site.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# A newer main supersedes an in-progress site publication. gh-pages writes are
+# serialized by scripts/gh_pages.sh, not by this group.
+concurrency:
+  group: ito-site
+  cancel-in-progress: true
+
+jobs:
+  site:
+    name: Publish site to gh-pages
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Publish site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/publish_site.sh

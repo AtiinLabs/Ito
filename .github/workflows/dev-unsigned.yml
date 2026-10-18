@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 # A newer main supersedes an in-progress dev build. gh-pages writes are
-# serialized by publish_altstore_source.sh, not by this group.
+# serialized by scripts/gh_pages.sh, not by this group.
 concurrency:
   group: ito-dev
   cancel-in-progress: true

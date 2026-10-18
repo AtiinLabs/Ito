@@ -14,7 +14,7 @@ on:
 permissions:
   contents: write
 
-# gh-pages writes are serialized by publish_altstore_source.sh, not by this group.
+# gh-pages writes are serialized by scripts/gh_pages.sh, not by this group.
 concurrency:
   group: ito-release
   cancel-in-progress: false
