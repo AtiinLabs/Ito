@@ -42,7 +42,7 @@ jobs:
       - name: Checkout ito-runner
         uses: actions/checkout@v7
         with:
-          repository: itoapp/ito-runner
+          repository: AtiinLabs/ito-runner
           ref: ${{ steps.runner.outputs.ref }}
           path: ito-runner
           persist-credentials: false
@@ -56,7 +56,7 @@ jobs:
       - name: Checkout WasmKit
         uses: actions/checkout@v7
         with:
-          repository: kunihir0/WasmKit
+          repository: AtiinLabs/WasmKit
           ref: ${{ steps.wasmkit_ref.outputs.ref }}
           path: WasmKit
           persist-credentials: false
