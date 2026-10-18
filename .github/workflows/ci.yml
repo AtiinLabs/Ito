@@ -97,7 +97,8 @@ jobs:
         run: echo "id=$(python3 scripts/select_simulator.py)" >> "$GITHUB_OUTPUT"
 
       # Build once for the simulator that runs the tests. A generic simulator
-      # destination also compiles x86_64, which no test ever executes.
+      # destination also compiles x86_64, which no test ever executes. Coverage
+      # instrumented every target, packages included, and nothing reads it.
       - name: Build for testing
         working-directory: Ito
         env:
@@ -109,6 +110,7 @@ jobs:
             -scheme "$SCHEME" \
             -configuration Debug \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -enableCodeCoverage NO \
             -clonedSourcePackagesDirPath "$GITHUB_WORKSPACE/SourcePackages" \
             -skipPackagePluginValidation \
             DEVELOPMENT_TEAM= \
@@ -131,6 +133,7 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -only-testing:ItoTests \
             -parallel-testing-enabled NO \
+            -enableCodeCoverage NO \
             -resultBundlePath TestResults.xcresult \
             -clonedSourcePackagesDirPath "$GITHUB_WORKSPACE/SourcePackages" \
             -skipPackagePluginValidation \
