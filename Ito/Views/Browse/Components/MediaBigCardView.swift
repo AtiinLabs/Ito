@@ -21,23 +21,23 @@ public struct MediaBigCardView<M: MediaDisplayable, Destination: View>: View {
                             image
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
-                                .frame(width: 240, height: 150)
+                                .frame(width: 240, height: 96)
                                 .cornerRadius(12)
                                 .clipped()
                         } else if state.error != nil {
                             Color.red.opacity(0.3)
-                                .frame(width: 240, height: 150)
+                                .frame(width: 240, height: 96)
                                 .cornerRadius(12)
                         } else {
                             Color.gray.opacity(0.3)
-                                .frame(width: 240, height: 150)
+                                .frame(width: 240, height: 96)
                                 .cornerRadius(12)
                         }
                     }
                     .processors([.resize(width: 480)])
                 } else {
                     Color.gray.opacity(0.3)
-                        .frame(width: 240, height: 150)
+                        .frame(width: 240, height: 96)
                         .cornerRadius(12)
                 }
 
