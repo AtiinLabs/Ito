@@ -79,41 +79,45 @@ jobs:
             -skipPackagePluginValidation \
             | tee resolve-packages.log
 
-      - name: Build for iOS Simulator
-        working-directory: Ito
-        run: |
-          set -o pipefail
-          xcodebuild build \
-            -project "$PROJECT" \
-            -scheme "$SCHEME" \
-            -configuration Debug \
-            -destination 'generic/platform=iOS Simulator' \
-            -skipPackagePluginValidation \
-            DEVELOPMENT_TEAM= \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            | tee build.log
-
       - name: Select an available iPhone simulator
         id: simulator
         working-directory: Ito
         shell: bash
         run: echo "id=$(python3 scripts/select_simulator.py)" >> "$GITHUB_OUTPUT"
 
-      - name: Run unit tests
+      # Build once for the simulator that runs the tests. A generic simulator
+      # destination also compiles x86_64, which no test ever executes.
+      - name: Build for testing
         working-directory: Ito
+        env:
+          SIMULATOR_ID: ${{ steps.simulator.outputs.id }}
         run: |
           set -o pipefail
-          rm -rf TestResults.xcresult
-          xcodebuild test \
+          xcodebuild build-for-testing \
             -project "$PROJECT" \
             -scheme "$SCHEME" \
             -configuration Debug \
-            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
-            -only-testing:ItoTests \
-            -resultBundlePath TestResults.xcresult \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -skipPackagePluginValidation \
             DEVELOPMENT_TEAM= \
             COMPILER_INDEX_STORE_ENABLE=NO \
+            | tee build.log
+
+      - name: Run unit tests
+        working-directory: Ito
+        env:
+          SIMULATOR_ID: ${{ steps.simulator.outputs.id }}
+        run: |
+          set -o pipefail
+          rm -rf TestResults.xcresult
+          xcodebuild test-without-building \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -only-testing:ItoTests \
+            -resultBundlePath TestResults.xcresult \
+            -skipPackagePluginValidation \
             | tee test.log
 
       - name: Upload diagnostics
