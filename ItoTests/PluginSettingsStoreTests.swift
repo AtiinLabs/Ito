@@ -341,6 +341,32 @@ struct PluginSettingsStoreTests {
         #expect(foreignSuite == "moe.ito.runners.foreign-plugin")
     }
 
+    @Test func snapshotRegistersEachDiscoveredIdentityOncePerPass() throws {
+        let fixture = try StoreFixture()
+        defer { fixture.cleanup() }
+        let pluginIds = (1...6).map { "repository-plugin-\($0)" }
+        let repo = RepoIndex(
+            repoName: "Test",
+            repoUrl: "https://example.com",
+            description: "",
+            packages: pluginIds.map { repoPackage(id: $0) }
+        )
+        try fixture.database.dbPool.write { db in
+            try db.execute(
+                sql: "INSERT INTO repository (url, indexPayload) VALUES (?, ?)",
+                arguments: ["https://example.com", try JSONEncoder().encode(repo)]
+            )
+        }
+        let aliasWrites = AliasWriteCounter()
+        fixture.database.dbPool.add(transactionObserver: aliasWrites)
+
+        try fixture.store().prepareForDurableSnapshot()
+
+        // Rediscovering for every prepared plugin rewrote every alias again
+        // (6 + 6 * 6 writes), growing quadratically with installed plugins.
+        #expect(aliasWrites.count == pluginIds.count)
+    }
+
     @Test func malformedRepositoryIndexFailsDiscoveryWithoutReadinessOrRegistryMutation() throws {
         let fixture = try StoreFixture()
         defer { fixture.cleanup() }
@@ -978,4 +1004,24 @@ private final class SourceTuplePluginFault: @unchecked Sendable {
         }
         if shouldThrow { throw InjectedPluginFailure() }
     }
+}
+
+/// Counts inserted, updated, and deleted `pluginIdentityAlias` rows.
+private final class AliasWriteCounter: TransactionObserver, @unchecked Sendable {
+    private let lock = NSLock()
+    private var writes = 0
+
+    var count: Int { lock.withLock { writes } }
+
+    func observes(eventsOfKind eventKind: DatabaseEventKind) -> Bool {
+        eventKind.tableName == "pluginIdentityAlias"
+    }
+
+    func databaseDidChange(with event: DatabaseEvent) {
+        lock.withLock { writes += 1 }
+    }
+
+    func databaseDidCommit(_ db: Database) {}
+
+    func databaseDidRollback(_ db: Database) {}
 }

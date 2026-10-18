@@ -16,6 +16,11 @@ public final class AppDatabase: Sendable {
     public let dbPool: DatabasePool
     public let databaseURL: URL
 
+    #if DEBUG
+    /// Launch argument that logs every SQL statement (DEBUG builds only).
+    nonisolated static let traceSQLArgument = "--trace-sql"
+    #endif
+
     private init() throws {
         let fileManager = FileManager.default
         let appSupportURL = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
@@ -53,8 +58,11 @@ public final class AppDatabase: Sendable {
 
         var configuration = Configuration()
         #if DEBUG
-        configuration.prepareDatabase { db in
-            db.trace { AppLogger.database.debug("\($0)") }
+        // Tracing every statement floods the log; launch with --trace-sql to enable it.
+        if ProcessInfo.processInfo.arguments.contains(Self.traceSQLArgument) {
+            configuration.prepareDatabase { db in
+                db.trace { AppLogger.database.debug("\($0)") }
+            }
         }
         #endif
 

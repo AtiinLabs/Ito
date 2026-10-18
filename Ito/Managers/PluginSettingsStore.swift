@@ -188,8 +188,10 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
             let pluginIds = try dbPool.read { db in
                 try String.fetchAll(db, sql: "SELECT pluginId FROM pluginIdentityRegistry ORDER BY pluginId")
             }
+            // discover(_:) just registered every database source under this lock;
+            // rediscovering per plugin repeated that work once per registered plugin.
             for pluginId in pluginIds {
-                _ = try prepareLocked(pluginId: pluginId)
+                _ = try prepareLocked(pluginId: pluginId, discoverSources: false)
             }
             let unresolved = try unresolvedRegisteredSuites()
             guard unresolved.isEmpty else {
@@ -208,8 +210,10 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
         }
     }
 
-    private func prepareLocked(pluginId: String) throws -> String {
-        try discoverDatabaseSources()
+    private func prepareLocked(pluginId: String, discoverSources: Bool = true) throws -> String {
+        if discoverSources {
+            try discoverDatabaseSources()
+        }
         let canonicalId = try canonicalPluginId(for: pluginId) ?? pluginId
         if try canonicalPluginId(for: pluginId) == nil {
             try register(
