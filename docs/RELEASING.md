@@ -20,6 +20,8 @@ It publishes:
 ```text
 Ito-X.Y.Z-dev.BUILD-unsigned.ipa
 Ito-X.Y.Z-dev.BUILD-unsigned.ipa.sha256
+Ito-X.Y.Z-dev.BUILD-unsigned.tipa
+Ito-X.Y.Z-dev.BUILD-unsigned.tipa.sha256
 ```
 
 For example `Ito-1.3.0-dev.124-unsigned.ipa`. It creates a GitHub prerelease tagged `dev-BUILD` and titled `X.Y.Z-dev.BUILD`, updates `apps-dev.json`, and keeps the newest 14 dev releases, deleting older dev releases and tags. Dev builds may be unstable.
@@ -48,7 +50,7 @@ git tag -a v1.3.0 -m "Ito 1.3.0"
 git push origin v1.3.0
 ```
 
-The tagged commit must be contained in `main`. The workflow tests it, builds an unsigned IPA, creates a full GitHub Release, and updates `apps.json`.
+The tagged commit must be contained in `main`. The workflow tests it, builds the unsigned IPA and `.tipa`, creates a full GitHub Release, and updates `apps.json`.
 
 4. Open a pull request that bumps `MARKETING_VERSION` on `main` to the patch version (for example `1.3.1`).
 
@@ -67,7 +69,7 @@ git tag -a v1.3.1 -m "Ito 1.3.1"
 git push origin v1.3.1
 ```
 
-## AltStore and SideStore sources
+## Installing: AltStore, SideStore, Feather, TrollStore
 
 After the first publication in each channel:
 
@@ -76,9 +78,13 @@ Stable: https://atiinlabs.github.io/Ito/apps.json
 Dev:    https://atiinlabs.github.io/Ito/apps-dev.json
 ```
 
-Both feeds describe the same bundle identifier. Installing one channel replaces the other.
+AltStore, SideStore, and Feather read these sources directly. Both feeds describe the same bundle identifier. Installing one channel replaces the other.
 
 Each source entry's `version` is the app's numeric version and `buildVersion` its build number, matching the IPA's Info.plist; AltStore and SideStore refuse an install when they differ. The channel display version (for example `1.3.0-dev.124`) goes in the entry's release notes. Every entry also carries the IPA's `sha256`, which both stores verify after downloading.
+
+Every release also carries a `.tipa`, byte-identical to the IPA, for TrollStore. TrollStore fake-signs the unsigned app with ldid on install; Ito needs no entitlements beyond TrollStore's defaults.
+
+`https://atiinlabs.github.io/Ito/` is regenerated on each publication from the sources present (`scripts/render_pages_index.py`). For each channel it links `feather://source/<source URL>` and `apple-magnifier://install?url=<.tipa URL>`, the TrollStore install scheme. GitHub release notes strip custom URL schemes, so these links live only on that page.
 
 GitHub Pages must deploy from the `gh-pages` branch (**Settings → Pages → Deploy from a branch**); otherwise the feeds are committed but never served.
 
@@ -90,10 +96,10 @@ GitHub Pages must deploy from the `gh-pages` branch (**Settings → Pages → De
 4. runs unit tests on an available iPhone simulator;
 5. archives a generic iOS device build with signing disabled;
 6. removes stale signatures and provisioning profiles;
-7. packages `Payload/Ito.app` as an IPA;
-8. creates a SHA-256 checksum;
+7. packages `Payload/Ito.app` as an IPA and a `.tipa` copy;
+8. creates SHA-256 checksums;
 9. publishes a GitHub release or prerelease;
-10. updates the channel-specific AltStore/SideStore source on `gh-pages`.
+10. updates the channel-specific source and the index page on `gh-pages`.
 
 ## Future App Store/TestFlight path
 

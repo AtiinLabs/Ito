@@ -14,6 +14,11 @@ STAGING_DIR="${OUTPUT_DIR}/staging"
 IPA_NAME="Ito-${ARTIFACT_VERSION}-unsigned.ipa"
 IPA_PATH="${OUTPUT_DIR}/${IPA_NAME}"
 CHECKSUM_PATH="${IPA_PATH}.sha256"
+# TrollStore registers the .tipa extension; the file is the same unsigned IPA,
+# which TrollStore fake-signs on install.
+TIPA_NAME="${IPA_NAME%.ipa}.tipa"
+TIPA_PATH="${OUTPUT_DIR}/${TIPA_NAME}"
+TIPA_CHECKSUM_PATH="${TIPA_PATH}.sha256"
 
 if [[ ! -f "$PROJECT/project.pbxproj" ]]; then
   echo "Run this script from the Ito repository root." >&2
@@ -99,12 +104,15 @@ if ! /usr/bin/unzip -Z1 "$IPA_PATH" | grep -q '^Payload/Ito.app/Info.plist$'; th
   exit 1
 fi
 
+cp "$IPA_PATH" "$TIPA_PATH"
+
 (
   cd "$OUTPUT_DIR"
   shasum -a 256 "$IPA_NAME" > "${IPA_NAME}.sha256"
+  shasum -a 256 "$TIPA_NAME" > "${TIPA_NAME}.sha256"
 )
 
-printf 'Created %s\n' "$IPA_PATH"
+printf 'Created %s and %s\n' "$IPA_PATH" "$TIPA_PATH"
 printf 'Channel: %s\n' "$CHANNEL"
 printf 'App version: %s (%s)\n' "$MARKETING_VERSION" "$BUILD_NUMBER"
 printf 'Artifact version: %s\n' "$ARTIFACT_VERSION"
@@ -115,6 +123,9 @@ if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
     echo "ipa_path=$IPA_PATH"
     echo "ipa_name=$IPA_NAME"
     echo "checksum_path=$CHECKSUM_PATH"
+    echo "tipa_path=$TIPA_PATH"
+    echo "tipa_name=$TIPA_NAME"
+    echo "tipa_checksum_path=$TIPA_CHECKSUM_PATH"
     echo "marketing_version=$MARKETING_VERSION"
     echo "artifact_version=$ARTIFACT_VERSION"
     echo "channel=$CHANNEL"

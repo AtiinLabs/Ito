@@ -60,18 +60,7 @@ publish_once() {
     --max-versions "$MAX_VERSIONS"
 
   cp Ito/Assets.xcassets/AppIcon.appiconset/app.png "$PAGES_DIR/icon.png"
-  cat > "$PAGES_DIR/index.html" <<EOF_HTML
-<!doctype html>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ito build channels</title>
-<h1>Ito AltStore / SideStore Sources</h1>
-<ul>
-  <li>Stable: <code>${SOURCE_URL}/apps.json</code></li>
-  <li>Dev: <code>${SOURCE_URL}/apps-dev.json</code></li>
-</ul>
-<p>Both channels use the same app bundle identifier, so installing one channel replaces the other.</p>
-EOF_HTML
+  python3 scripts/render_pages_index.py --dir "$PAGES_DIR" --source-url "$SOURCE_URL"
   touch "$PAGES_DIR/.nojekyll"
 
   git -C "$PAGES_DIR" config user.name "github-actions[bot]"

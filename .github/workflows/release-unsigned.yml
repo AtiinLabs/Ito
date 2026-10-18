@@ -169,6 +169,8 @@ jobs:
           path: |
             Ito/${{ steps.ipa.outputs.ipa_path }}
             Ito/${{ steps.ipa.outputs.checksum_path }}
+            Ito/${{ steps.ipa.outputs.tipa_path }}
+            Ito/${{ steps.ipa.outputs.tipa_checksum_path }}
           if-no-files-found: error
           retention-days: 90
           compression-level: 0
@@ -181,12 +183,15 @@ jobs:
           VERSION: ${{ steps.release.outputs.version }}
           IPA_PATH: ${{ steps.ipa.outputs.ipa_path }}
           CHECKSUM_PATH: ${{ steps.ipa.outputs.checksum_path }}
+          TIPA_PATH: ${{ steps.ipa.outputs.tipa_path }}
+          TIPA_CHECKSUM_PATH: ${{ steps.ipa.outputs.tipa_checksum_path }}
         run: |
           set -euo pipefail
+          assets=("$IPA_PATH" "$CHECKSUM_PATH" "$TIPA_PATH" "$TIPA_CHECKSUM_PATH")
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$IPA_PATH" "$CHECKSUM_PATH" --clobber
+            gh release upload "$TAG" "${assets[@]}" --clobber
           else
-            gh release create "$TAG" "$IPA_PATH" "$CHECKSUM_PATH" \
+            gh release create "$TAG" "${assets[@]}" \
               --verify-tag \
               --generate-notes \
               --title "Ito $VERSION"

@@ -34,6 +34,13 @@ Ito is a free, open-source client for iPhone and iPad. It combines dedicated rea
 * **On-device storage** — Library data and history are stored locally, with tracker credentials protected by Keychain.
 * **No advertisements** — Ito is free and ad-free.
 
+## Install
+
+Unsigned builds are published for sideloading. See [atiinlabs.github.io/Ito](https://atiinlabs.github.io/Ito/) for one-tap Feather and TrollStore links.
+
+* **AltStore, SideStore, Feather:** add the source `https://atiinlabs.github.io/Ito/apps.json` (Stable) or `https://atiinlabs.github.io/Ito/apps-dev.json` (Dev, built from every change to `main`).
+* **TrollStore:** install the `.tipa` from the [latest release](https://github.com/AtiinLabs/Ito/releases/latest).
+
 ## Showcase
 
 <p align="center">
