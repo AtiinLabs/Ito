@@ -639,7 +639,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.tracker.requests.count, 1)
     }
 
-    func testNilChapterNumberUsesLockedPunctuationFallback() async {
+    func testNilChapterNumberUsesLeadingTitleNumberWithoutJoiningDecimals() async {
         let chapter = makeChapter("a", number: nil, title: "Chapter 12.5 Extra")
         let subject = makeSubject(chapters: [chapter])
 
@@ -647,7 +647,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         await waitForReader { subject.tracker.requests.count == 1 }
 
         XCTAssertNil(subject.progress.requests[0].chapterNumber)
-        XCTAssertEqual(subject.tracker.requests[0].progress, 125)
+        XCTAssertEqual(subject.tracker.requests[0].progress, 12)
     }
 
     func testDiscordLifecycleUsesCanonicalMetadataAndTimerSemantics() {

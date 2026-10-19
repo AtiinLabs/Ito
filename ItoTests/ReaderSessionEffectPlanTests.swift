@@ -199,9 +199,10 @@ final class ReaderSessionEffectPlanTests: XCTestCase {
             alreadyMarked: false
         )
 
+        // "12.5" must not become 125: a tracker would record a chapter far beyond the reader.
         XCTAssertEqual(
             decimalTitle.asynchronousEffects,
-            [.markLocalProgress, .updateTracker(progress: 125)]
+            [.markLocalProgress, .updateTracker(progress: 12)]
         )
         XCTAssertEqual(noNumber.asynchronousEffects, [.markLocalProgress])
     }

@@ -5,7 +5,7 @@ import XCTest
 final class TrackingDependencyBoundaryTests: XCTestCase {
     func testAniListExternalURLAdapterPreservesFormatSpecificLegacyURLs() async throws {
         let applicationOpener = TrackerApplicationURLOpenerFake()
-        let opener = AniListTrackerExternalURLOpener(applicationOpener: applicationOpener)
+        let opener = TrackerExternalURLOpener(applicationOpener: applicationOpener)
 
         try await opener.open(
             providerID: "anilist",
@@ -22,9 +22,28 @@ final class TrackingDependencyBoundaryTests: XCTestCase {
         )
     }
 
+    func testMyAnimeListExternalURLUsesTheLinkedKindAndRejectsMalformedIDs() async throws {
+        let applicationOpener = TrackerApplicationURLOpenerFake()
+        let opener = TrackerExternalURLOpener(applicationOpener: applicationOpener)
+
+        try await opener.open(providerID: "myanimelist", media: trackerTestMedia(id: "manga:2", format: "TV"))
+        try await opener.open(providerID: "myanimelist", media: trackerTestMedia(id: "anime:52991", format: "MANGA"))
+        do {
+            try await opener.open(providerID: "myanimelist", media: trackerTestMedia(id: "52991"))
+            XCTFail("Expected a bare id to be rejected")
+        } catch {
+            XCTAssertEqual(error as? TrackingServiceError, .providerUnavailable)
+        }
+
+        XCTAssertEqual(
+            applicationOpener.urls.map(\.absoluteString),
+            ["https://myanimelist.net/manga/2", "https://myanimelist.net/anime/52991"]
+        )
+    }
+
     func testExternalURLAdapterRejectsUnknownProviderWithoutOpeningURL() async {
         let applicationOpener = TrackerApplicationURLOpenerFake()
-        let opener = AniListTrackerExternalURLOpener(applicationOpener: applicationOpener)
+        let opener = TrackerExternalURLOpener(applicationOpener: applicationOpener)
 
         do {
             try await opener.open(providerID: "unknown", media: trackerTestMedia())
@@ -125,6 +144,7 @@ final class TrackingDependencyBoundaryTests: XCTestCase {
         let manager = TrackerManager(
             dbPool: database.dbPool,
             credentialStore: FakeTrackerCredentialStore(),
+            malCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: defaults
         )

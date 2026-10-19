@@ -391,6 +391,7 @@ final class AppScopeIdentityTests: XCTestCase {
         let trackerManager = TrackerManager(
             dbPool: database.dbPool,
             credentialStore: FakeTrackerCredentialStore(),
+            malCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: fixtureDefaults
         )

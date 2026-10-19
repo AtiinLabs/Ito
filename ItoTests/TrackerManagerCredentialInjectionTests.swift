@@ -11,9 +11,8 @@ struct TrackerManagerCredentialInjectionTests {
         let subject = try makeSubject(secureStore: secureStore, legacyStore: legacyStore)
         defer { subject.cleanup() }
 
-        #expect(subject.manager.providers.count == 1)
-        #expect(subject.manager.providers.map(\.identifier) == ["anilist"])
-        #expect(subject.manager.providers.map(\.name) == ["AniList"])
+        #expect(subject.manager.providers.map(\.identifier) == ["anilist", "myanimelist"])
+        #expect(subject.manager.providers.map(\.name) == ["AniList", "MyAnimeList"])
         #expect(subject.manager.authenticatedProviders.isEmpty)
         #expect(!subject.manager.hasLinks(
             for: MediaIdentity(pluginId: "legacy", canonicalMediaId: "local-fixture")
@@ -99,6 +98,7 @@ struct TrackerManagerCredentialInjectionTests {
         let manager = TrackerManager(
             dbPool: database.dbPool,
             credentialStore: secureStore,
+            malCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: legacyStore,
             usernameDefaults: defaults
         )

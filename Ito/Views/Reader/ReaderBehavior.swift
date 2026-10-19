@@ -176,15 +176,6 @@ nonisolated struct ReaderSessionEffectPlan: Equatable, Sendable {
         if let chapterNumber {
             return Int(chapterNumber)
         }
-        let words = titleOrKey.components(separatedBy: .whitespacesAndNewlines)
-        guard let numberWord = words.first(where: {
-            $0.rangeOfCharacter(from: .decimalDigits) != nil
-        }) else {
-            return nil
-        }
-        let numbersOnly = numberWord.components(
-            separatedBy: CharacterSet.decimalDigits.inverted
-        ).joined()
-        return Int(numbersOnly)
+        return TrackerProgressParser.number(inTitle: titleOrKey)
     }
 }

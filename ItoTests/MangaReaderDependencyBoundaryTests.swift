@@ -127,6 +127,7 @@ final class MangaReaderDependencyBoundaryTests: XCTestCase {
         let tracker = TrackerManager(
             dbPool: database.dbPool,
             credentialStore: FakeTrackerCredentialStore(),
+            malCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: defaults
         )

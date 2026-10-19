@@ -11,6 +11,7 @@ struct TrackerLinkStoreTests {
         let manager = TrackerManager(
             dbPool: database.dbPool,
             credentialStore: FakeTrackerCredentialStore(),
+            malCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: UserDefaults(suiteName: UUID().uuidString)!
         )
@@ -40,6 +41,7 @@ struct TrackerLinkStoreTests {
         let manager = TrackerManager(
             dbPool: database.dbPool,
             credentialStore: FakeTrackerCredentialStore(),
+            malCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: UserDefaults(suiteName: UUID().uuidString)!
         )
@@ -78,6 +80,7 @@ struct TrackerLinkStoreTests {
         let manager = TrackerManager(
             dbPool: database.dbPool,
             credentialStore: FakeTrackerCredentialStore(),
+            malCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: UserDefaults(suiteName: UUID().uuidString)!
         )

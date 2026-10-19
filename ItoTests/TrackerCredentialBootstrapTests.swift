@@ -144,6 +144,7 @@ struct TrackerCredentialBootstrapTests {
         let manager = TrackerManager(
             dbPool: subjectDatabase.dbPool,
             credentialStore: secureStore,
+            malCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: legacyStore,
             usernameDefaults: defaults
         )

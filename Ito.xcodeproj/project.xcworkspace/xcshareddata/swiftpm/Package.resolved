@@ -1,5 +1,5 @@
 {
-  "originHash" : "35815e46891a3b8054a22fb0d476f7bedbf3a711404d79dd997955fda66333e6",
+  "originHash" : "e4a1b8bbc08885ae6c6c29321e11530f94e8b10662c295792ee5f131f357199f",
   "pins" : [
     {
       "identity" : "anilist-sdk",
@@ -23,6 +23,14 @@
       "location" : "https://github.com/AtiinLabs/ito-runner.git",
       "state" : {
         "revision" : "fb892037b97d156be95ef757bcccc7a48db57dab"
+      }
+    },
+    {
+      "identity" : "mal-sdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AtiinLabs/mal-sdk.git",
+      "state" : {
+        "revision" : "644b118154aa90c3435d51448350742047e6fd39"
       }
     },
     {

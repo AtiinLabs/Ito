@@ -518,7 +518,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.tracker.requests.map(\.progress), [4, 4])
     }
 
-    func testNilChapterNumberUsesLockedPunctuationFallback() async {
+    func testNilChapterNumberUsesLeadingTitleNumberWithoutJoiningDecimals() async {
         let chapter = makeChapter("ignored", number: nil, title: "Chapter 12.5 Extra")
         let subject = makeSubject(chapters: [chapter], initial: chapter)
 
@@ -526,7 +526,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         await subject.viewModel.waitForAllOperationsForTesting()
 
         XCTAssertNil(subject.progress.requests[0].chapterNumber)
-        XCTAssertEqual(subject.tracker.requests.map(\.progress), [125])
+        XCTAssertEqual(subject.tracker.requests.map(\.progress), [12])
     }
 
     func testSettingsInitializeAndAllWritesPublishCanonicalValuesWithoutReaderWork() async {

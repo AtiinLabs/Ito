@@ -466,7 +466,7 @@ final class VideoPlayerViewModelTests: XCTestCase {
         XCTAssertTrue(subject.tracker.requests.isEmpty)
     }
 
-    func testTrackerProgressPreservesNumericAndLegacyTitleKeyParsing() {
+    func testTrackerProgressParsesEpisodeNumbersWithoutJoiningDecimalDigits() {
         XCTAssertEqual(
             VideoPlayerViewModel.trackerProgress(
                 for: Anime.Episode(key: "key", title: "ignored", episode: 12.9)
@@ -477,7 +477,7 @@ final class VideoPlayerViewModelTests: XCTestCase {
             VideoPlayerViewModel.trackerProgress(
                 for: Anime.Episode(key: "key", title: "Episode 12.5 Finale")
             ),
-            125
+            12
         )
         XCTAssertEqual(
             VideoPlayerViewModel.trackerProgress(

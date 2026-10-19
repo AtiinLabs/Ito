@@ -36,7 +36,7 @@ struct TrackerSheetOrchestrator: View {
                 Text("No Trackers Authenticated")
                     .font(.title2)
                     .fontWeight(.bold)
-                Text("Please go to Settings > Trackers to log in to a service like AniList before tracking.")
+                Text("Please go to Settings > Trackers to log in to AniList or MyAnimeList before tracking.")
                     .multilineTextAlignment(.center)
                     .foregroundColor(.secondary)
                     .padding(.horizontal)

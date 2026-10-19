@@ -7,6 +7,7 @@ struct TrackerProviderPresentation: Identifiable, Equatable {
     let name: String
     let isAuthenticated: Bool
     let username: String?
+    var credentialState: TrackerSettingsCredentialState = .ready
 
     var id: String { identifier }
 }
@@ -245,7 +246,7 @@ final class TrackerProviderService:
     }
 
     func authenticatedProviders() -> [TrackerProviderPresentation] {
-        trackerManager.authenticatedProviders.map(Self.presentation(for:))
+        trackerManager.authenticatedProviders.map { Self.presentation(for: $0) }
     }
 
     func hasLocalLink(for media: MediaIdentity) -> Bool {
@@ -339,18 +340,24 @@ final class TrackerProviderService:
             credentialState: TrackerSettingsCredentialState(
                 trackerManager.credentialBootstrapState
             ),
-            providers: trackerManager.providers.map(presentation(for:))
+            providers: trackerManager.providers.map {
+                presentation(for: $0, credentialState: TrackerSettingsCredentialState(
+                    trackerManager.credentialBootstrapState(for: $0.identifier)
+                ))
+            }
         )
     }
 
     private static func presentation(
-        for provider: any TrackerProvider
+        for provider: any TrackerProvider,
+        credentialState: TrackerSettingsCredentialState = .ready
     ) -> TrackerProviderPresentation {
         TrackerProviderPresentation(
             identifier: provider.identifier,
             name: provider.name,
             isAuthenticated: provider.isAuthenticated,
-            username: provider.username
+            username: provider.username,
+            credentialState: credentialState
         )
     }
 }
@@ -376,7 +383,7 @@ final class SystemTrackerApplicationURLOpener: TrackerApplicationURLOpening {
 }
 
 @MainActor
-final class AniListTrackerExternalURLOpener: TrackerExternalURLOpening {
+final class TrackerExternalURLOpener: TrackerExternalURLOpening {
     private let applicationOpener: any TrackerApplicationURLOpening
 
     init(applicationOpener: any TrackerApplicationURLOpening) {
@@ -384,12 +391,23 @@ final class AniListTrackerExternalURLOpener: TrackerExternalURLOpening {
     }
 
     func open(providerID: String, media: TrackerMedia) async throws {
-        guard providerID == "anilist" else { throw TrackingServiceError.providerUnavailable }
-        let kind = media.isReadingFormat ? "manga" : "anime"
-        guard let url = URL(string: "https://anilist.co/\(kind)/\(media.id)") else {
-            throw TrackingServiceError.unavailable
+        guard let url = Self.url(providerID: providerID, media: media) else {
+            throw TrackingServiceError.providerUnavailable
         }
         try await applicationOpener.open(url)
+    }
+
+    static func url(providerID: String, media: TrackerMedia) -> URL? {
+        switch providerID {
+        case "anilist":
+            let kind = media.isReadingFormat ? "manga" : "anime"
+            return URL(string: "https://anilist.co/\(kind)/\(media.id)")
+        case MALCredentialRepository.providerID:
+            guard let id = MALMediaID(rawValue: media.id) else { return nil }
+            return URL(string: "https://myanimelist.net/\(id.kind.rawValue)/\(id.id)")
+        default:
+            return nil
+        }
     }
 }
 
@@ -552,7 +570,7 @@ struct PreparedTrackingDependencies {
             linkStore: providerService,
             settingsStore: settingsStore,
             localProgressReader: readProgressManager,
-            externalURLOpener: AniListTrackerExternalURLOpener(
+            externalURLOpener: TrackerExternalURLOpener(
                 applicationOpener: applicationURLOpener
             )
         )
@@ -575,6 +593,9 @@ struct PreparedTrackingDependencies {
 
 extension TrackerMedia {
     var isReadingFormat: Bool {
-        format == "MANGA" || format == "NOVEL" || format == "ONE_SHOT"
+        if let malID = MALMediaID(rawValue: id) {
+            return malID.kind == .manga
+        }
+        return format == "MANGA" || format == "NOVEL" || format == "ONE_SHOT"
     }
 }

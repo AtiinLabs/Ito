@@ -42,7 +42,7 @@ struct TrackerSettingsView: View {
 
     @ViewBuilder
     private func providerContent(_ provider: TrackerProviderPresentation) -> some View {
-        switch viewModel.credentialState {
+        switch provider.credentialState {
         case .loading:
             HStack {
                 ProgressView()

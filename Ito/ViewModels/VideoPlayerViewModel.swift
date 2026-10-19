@@ -545,15 +545,7 @@ final class VideoPlayerViewModel: ObservableObject {
         if let episodeNumber = episode.episode {
             return Int(episodeNumber)
         }
-        let titleOrFallback = episode.title ?? episode.key
-        let words = titleOrFallback.components(separatedBy: .whitespacesAndNewlines)
-        guard let numberWord = words.first(where: {
-            $0.rangeOfCharacter(from: .decimalDigits) != nil
-        }) else { return nil }
-        let numbersOnly = numberWord
-            .components(separatedBy: CharacterSet.decimalDigits.inverted)
-            .joined()
-        return Int(numbersOnly)
+        return TrackerProgressParser.number(inTitle: episode.title ?? episode.key)
     }
 
     // MARK: - Presence
