@@ -119,15 +119,31 @@ actor MangaBakaCredentialRepository {
         await flushPendingPersistence()
     }
 
-    /// Ends the session locally.
+    /// Whether a session is signed in, including one the Keychain has not taken yet.
+    var hasSession: Bool {
+        credential != nil
+    }
+
+    /// Ends the session locally. When the Keychain cannot remove it, the session is kept, so the
+    /// Keychain and memory agree and a retry can still revoke it.
     /// - Returns: The OAuth token that was signed in, so it can be revoked on MangaBaka.
     func logout() async throws -> MangaBakaToken? {
         let previous = credential
+        let previousPending = pendingPersistence
         sessionEpoch += 1
+        let epoch = sessionEpoch
         refreshTask = nil
         credential = nil
         pendingPersistence = nil
-        try await store.removeToken(for: Self.providerID)
+        do {
+            try await store.removeToken(for: Self.providerID)
+        } catch {
+            if epoch == sessionEpoch {
+                credential = previous
+                pendingPersistence = previousPending
+            }
+            throw error
+        }
         bootstrapState = .ready
         if case .oauth(let token)? = previous {
             return token

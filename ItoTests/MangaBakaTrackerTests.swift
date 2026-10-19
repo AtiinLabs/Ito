@@ -82,14 +82,17 @@ final class MangaBakaStubURLProtocol: URLProtocol, @unchecked Sendable {
     }
 }
 
-/// Answers refreshes with queued results and records the refresh tokens it was given.
+/// Answers refreshes with queued results and records the refresh tokens it was given. With a
+/// gate, each refresh waits for it to open before answering.
 final class FakeMangaBakaRefresher: MangaBakaTokenRefreshing, @unchecked Sendable {
     private let lock = NSLock()
+    private let gate: AsyncTestGate?
     private var results: [Result<MangaBakaToken, any Error>]
     private var recorded: [String] = []
 
-    init(results: [Result<MangaBakaToken, any Error>]) {
+    init(results: [Result<MangaBakaToken, any Error>], gate: AsyncTestGate? = nil) {
         self.results = results
+        self.gate = gate
     }
 
     var refreshedTokens: [String] {
@@ -101,6 +104,7 @@ final class FakeMangaBakaRefresher: MangaBakaTokenRefreshing, @unchecked Sendabl
             recorded.append(token.refreshToken ?? "")
             return results.isEmpty ? .failure(MangaBakaOAuthError.invalidTokenResponse) : results.removeFirst()
         }
+        await gate?.enter()
         return try result.get()
     }
 }
@@ -340,6 +344,30 @@ struct MangaBakaTrackerTests {
 
         #expect(subject.tracker.isAuthenticated)
         #expect(try await mangaBakaStoredCredential(in: subject.store) == .oauth(mangaBakaToken("old")))
+    }
+
+    @Test func aRefreshFromAnEndedSessionLeavesTheNewSessionSignedIn() async throws {
+        let gate = AsyncTestGate()
+        let refresher = FakeMangaBakaRefresher(results: [.success(mangaBakaToken("stale"))], gate: gate)
+        let subject = try await makeTracker(.oauth(mangaBakaToken("old", expiresAt: Date(timeIntervalSinceNow: -60))), refresher: refresher)
+        MangaBakaStubURLProtocol.handler = { _ in
+            .init(status: 200, body: #"{"status": 200, "data": {"id": "u1", "preferred_username": "reader", "role": "user", "auth_type": "pat", "scopes": []}}"#)
+        }
+        let tracker = subject.tracker
+        let staleRequest = Task { try await tracker.getMediaListEntry(mediaId: "42") }
+        await gate.waitForAdmissions()
+
+        // The user signs out and in again while the old session's refresh is in flight.
+        try await tracker.logout()
+        try await tracker.authenticate(token: "mb-new")
+        await gate.open()
+
+        await #expect(throws: MangaBakaCredentialRepository.CredentialError.notSignedIn) {
+            _ = try await staleRequest.value
+        }
+        #expect(tracker.isAuthenticated)
+        #expect(tracker.username == "reader")
+        #expect(try await mangaBakaStoredCredential(in: subject.store) == .personalAccessToken("mb-new"))
     }
 
     @Test func signingOutRemovesTheSessionAndRevokesIt() async throws {

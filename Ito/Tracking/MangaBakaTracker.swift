@@ -344,7 +344,8 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
 
     /// Runs a library request with the saved credential. After a 401 it retries once with a
     /// refreshed OAuth token, or with a credential saved since the request started; it signs out
-    /// when MangaBaka rejects the session.
+    /// when MangaBaka rejects the session. A failure from a session that has since been replaced
+    /// leaves the new session signed in.
     private func perform<T>(_ operation: (MangaBakaClient) async throws -> T) async throws -> T {
         do {
             let credential = try await credentialRepository.validCredential()
@@ -355,7 +356,9 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
                 return try await operation(Self.client(credential: replacement, session: session))
             }
         } catch let error as MangaBakaCredentialRepository.CredentialError {
-            markSignedOut()
+            if await !credentialRepository.hasSession {
+                markSignedOut()
+            }
             throw error
         }
     }

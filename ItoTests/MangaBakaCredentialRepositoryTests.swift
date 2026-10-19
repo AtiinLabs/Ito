@@ -48,4 +48,22 @@ struct MangaBakaCredentialRepositoryTests {
             _ = try await repository.validCredential()
         }
     }
+
+    @Test func aSessionTheKeychainCouldNotRemoveIsKeptForARetry() async throws {
+        let store = FakeTrackerCredentialStore(
+            initialToken: try mangaBakaStoredJSON(.oauth(mangaBakaToken("old"))),
+            removeResults: [.failure(.protectedDataUnavailable(errSecInteractionNotAllowed))]
+        )
+        let repository = MangaBakaCredentialRepository(store: store, refresher: FakeMangaBakaRefresher(results: []))
+        _ = await repository.bootstrap()
+
+        await #expect(throws: TrackerCredentialStoreError.self) {
+            _ = try await repository.logout()
+        }
+        #expect(try await repository.validCredential() == .oauthAccessToken("access-old"))
+
+        // The retry still returns the token, so it can be revoked.
+        #expect(try await repository.logout() == mangaBakaToken("old"))
+        #expect(try await store.token(for: "mangabaka") == nil)
+    }
 }
