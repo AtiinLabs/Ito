@@ -171,9 +171,14 @@ struct MALTrackerTests {
         async let second: Void = tracker.updateProgress(mediaId: "manga:2", progress: 11, status: nil)
         _ = try await (first, second)
 
+        // Either write may start first; serialization means a read is never followed by
+        // another read before its write, and progress only moves forward.
         let log = MALStubURLProtocol.log.snapshot
-        #expect(log.map(\.method) == ["GET", "PATCH", "GET", "PATCH"])
-        #expect(log.filter { $0.method == "PATCH" }.map(\.body) == ["num_chapters_read=10", "num_chapters_read=11"])
+        let methods = log.map(\.method)
+        let writes = log.filter { $0.method == "PATCH" }.map { Int($0.body.replacingOccurrences(of: "num_chapters_read=", with: "")) ?? -1 }
+        #expect(Array(methods.prefix(2)) == ["GET", "PATCH"])
+        #expect(methods == ["GET", "PATCH", "GET", "PATCH"] || methods == ["GET", "PATCH", "GET"])
+        #expect(writes == writes.sorted() && Set(writes).count == writes.count)
         #expect(server.progress == 11)
     }
 
