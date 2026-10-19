@@ -24,6 +24,16 @@
       "versions": [
         {
           "version": "1.1.1",
+          "buildVersion": "129",
+          "date": "2026-10-19T00:50:23Z",
+          "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/dev-129/Ito-1.1.1-dev.129-unsigned.ipa",
+          "size": 10538497,
+          "sha256": "a52568d3a809b16482211c924caefd3c1e8c2ef5bbb26efbf068c5f8e664819f",
+          "localizedDescription": "Ito 1.1.1-dev.129 (build 129). Automated unsigned dev build from main at f1d4911. This build may be unstable.",
+          "minOSVersion": "15.4"
+        },
+        {
+          "version": "1.1.1",
           "buildVersion": "128",
           "date": "2026-10-18T16:34:45Z",
           "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/dev-128/Ito-1.1.1-dev.128-unsigned.ipa",
@@ -64,12 +74,12 @@
         }
       ],
       "version": "1.1.1",
-      "buildVersion": "128",
-      "date": "2026-10-18T16:34:45Z",
-      "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/dev-128/Ito-1.1.1-dev.128-unsigned.ipa",
-      "size": 10532145,
+      "buildVersion": "129",
+      "date": "2026-10-19T00:50:23Z",
+      "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/dev-129/Ito-1.1.1-dev.129-unsigned.ipa",
+      "size": 10538497,
       "minOSVersion": "15.4",
-      "versionDescription": "Ito 1.1.1-dev.128 (build 128). Automated unsigned dev build from main at 9fa1a13. This build may be unstable."
+      "versionDescription": "Ito 1.1.1-dev.129 (build 129). Automated unsigned dev build from main at f1d4911. This build may be unstable."
     }
   ],
   "news": []
