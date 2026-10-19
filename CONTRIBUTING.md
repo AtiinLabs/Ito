@@ -15,6 +15,17 @@ open Ito/Ito.xcodeproj
 
 A paid Apple Developer Program membership is not required for simulator development or the unsigned CI builds.
 
+### Linting
+
+SwiftLint runs in the Xcode build, in a pre-commit hook, and in the `SwiftLint / lint` check on every pull request, all at the version pinned in `scripts/swiftlint.sh`. CI treats warnings as errors. Install the hook once per clone:
+
+```bash
+brew install lefthook
+lefthook install
+```
+
+The hook lints staged Swift files. To lint everything, run `scripts/swiftlint.sh lint --strict`; `scripts/swiftlint.sh --fix` corrects what it can.
+
 ## Branches
 
 Create short-lived branches from current `main`:

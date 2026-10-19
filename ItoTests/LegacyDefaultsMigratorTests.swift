@@ -28,7 +28,7 @@ struct LegacyDefaultsMigratorTests {
             CanonicalPropertyListCapture.make(value: NSNumber(value: 1)),
             CanonicalPropertyListCapture.make(value: NSNumber(value: 1.0)),
             CanonicalPropertyListCapture.make(value: "1"),
-            CanonicalPropertyListCapture.make(value: Date(timeIntervalSince1970: 1)),
+            CanonicalPropertyListCapture.make(value: Date(timeIntervalSince1970: 1))
         ]
         #expect(Set(scalarCaptures.map(\.valueType)).count == scalarCaptures.count)
         #expect(Set(scalarCaptures.map(\.fingerprint)).count == scalarCaptures.count)
@@ -135,7 +135,7 @@ struct LegacyDefaultsMigratorTests {
             fixture.item(id: "unique", pluginID: "one"),
             fixture.item(id: "alpha_same", pluginID: "alpha"),
             fixture.item(id: "beta_same", pluginID: "beta"),
-            fixture.item(id: "conflict", pluginID: "one"),
+            fixture.item(id: "conflict", pluginID: "one")
         ]
         try fixture.database.dbPool.write { db in
             for item in items { try item.insert(db) }
@@ -223,7 +223,7 @@ struct LegacyDefaultsMigratorTests {
         defer { fixture.cleanup() }
         let items = [
             fixture.item(id: "plugin_first", pluginID: "plugin", title: "First"),
-            fixture.item(id: "plugin_second", pluginID: "plugin", title: "Second"),
+            fixture.item(id: "plugin_second", pluginID: "plugin", title: "Second")
         ]
         fixture.defaults.set(try JSONEncoder().encode(items), forKey: "ito_library_items")
 
@@ -282,7 +282,7 @@ struct LegacyDefaultsMigratorTests {
         defer { fixture.cleanup() }
         let items = [
             fixture.item(id: "plugin_manga", pluginID: "plugin"),
-            fixture.item(id: "plugin_legacyOnly", pluginID: "plugin"),
+            fixture.item(id: "plugin_legacyOnly", pluginID: "plugin")
         ]
         try fixture.database.dbPool.write { db in
             for item in items { try item.insert(db) }
@@ -325,7 +325,7 @@ struct LegacyDefaultsMigratorTests {
             #expect(resume.lastReadChapterKey == "chapter-1.5")
             let links = try TrackerLinkRecord.order(Column("canonicalMediaId"), Column("providerId")).fetchAll(db)
             #expect(links.map { "\($0.canonicalMediaId):\($0.providerId):\($0.remoteMediaId)" } == [
-                "legacyOnly:anilist:444", "manga:anilist:111", "manga:mal:222",
+                "legacyOnly:anilist:444", "manga:anilist:111", "manga:mal:222"
             ])
             let badges = try UpdateBadgeRecord.order(Column("canonicalMediaId")).fetchAll(db)
             #expect(badges.map { "\($0.canonicalMediaId):\($0.count)" } == ["legacyOnly:3", "manga:7"])

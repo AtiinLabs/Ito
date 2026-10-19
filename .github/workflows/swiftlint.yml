@@ -1,0 +1,33 @@
+name: SwiftLint
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: swiftlint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Cache SwiftLint
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ito/swiftlint
+          key: swiftlint-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/swiftlint.sh') }}
+
+      - name: Lint
+        run: scripts/swiftlint.sh lint --strict --reporter github-actions-logging

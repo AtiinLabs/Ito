@@ -5,11 +5,11 @@ import Testing
 
 @MainActor
 struct TrackerCredentialBootstrapTests {
-    @Test func concurrentLaunchAndActiveBootstrapCoalesce() async {
+    @Test func concurrentLaunchAndActiveBootstrapCoalesce() async throws {
         let readGate = AsyncTestGate()
         let secureStore = FakeTrackerCredentialStore(readGates: [readGate])
         let legacyStore = FakeLegacyTokenStore()
-        let subject = makeSubject(secureStore: secureStore, legacyStore: legacyStore)
+        let subject = try makeSubject(secureStore: secureStore, legacyStore: legacyStore)
         defer { subject.cleanup() }
         let lifecycle = TrackerCredentialLifecycle(manager: subject.manager)
 
@@ -34,7 +34,7 @@ struct TrackerCredentialBootstrapTests {
             .success(nil)
         ])
         let legacyStore = FakeLegacyTokenStore(token: "legacy-fixture")
-        let subject = makeSubject(secureStore: secureStore, legacyStore: legacyStore)
+        let subject = try makeSubject(secureStore: secureStore, legacyStore: legacyStore)
         defer { subject.cleanup() }
         let lifecycle = TrackerCredentialLifecycle(manager: subject.manager)
 
@@ -67,7 +67,7 @@ struct TrackerCredentialBootstrapTests {
             .failure(.protectedDataUnavailable(errSecNotAvailable))
         ])
         let legacyStore = FakeLegacyTokenStore(token: "legacy-fixture")
-        let subject = makeSubject(secureStore: secureStore, legacyStore: legacyStore)
+        let subject = try makeSubject(secureStore: secureStore, legacyStore: legacyStore)
         defer { subject.cleanup() }
         let lifecycle = TrackerCredentialLifecycle(manager: subject.manager)
 
@@ -106,7 +106,7 @@ struct TrackerCredentialBootstrapTests {
             .success("mismatch-fixture")
         ])
         let legacyStore = FakeLegacyTokenStore(token: "legacy-fixture")
-        let subject = makeSubject(secureStore: secureStore, legacyStore: legacyStore)
+        let subject = try makeSubject(secureStore: secureStore, legacyStore: legacyStore)
         defer { subject.cleanup() }
         let lifecycle = TrackerCredentialLifecycle(manager: subject.manager)
 
@@ -137,10 +137,10 @@ struct TrackerCredentialBootstrapTests {
     private func makeSubject(
         secureStore: FakeTrackerCredentialStore,
         legacyStore: FakeLegacyTokenStore
-    ) -> TrackerCredentialBootstrapSubject {
+    ) throws -> TrackerCredentialBootstrapSubject {
         let suiteName = "TrackerCredentialBootstrapTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
-        let subjectDatabase = try! TestDatabase()
+        let subjectDatabase = try TestDatabase()
         let manager = TrackerManager(
             dbPool: subjectDatabase.dbPool,
             credentialStore: secureStore,

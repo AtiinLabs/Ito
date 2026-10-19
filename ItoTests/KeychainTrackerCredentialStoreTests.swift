@@ -28,9 +28,9 @@ struct KeychainTrackerCredentialStoreTests {
     @Test func realKeychainCRUDUsesOneExactGenericPasswordItem() async throws {
         let service = "moe.itoapp.ito.tests.\(UUID().uuidString)"
         let providerID = "anilist-\(UUID().uuidString)"
-        
+
         deleteItem(service: service, account: providerID)
-        
+
         let store = KeychainTrackerCredentialStore(service: service)
         defer { deleteItem(service: service, account: providerID) }
 

@@ -65,6 +65,7 @@ public struct DiscoverFilters: Equatable, Sendable {
     public var sort: DiscoverSort = .popularity
     public var year: Int?
     public var season: String?
+    // swiftlint:disable:next todo
     // TODO: Wire `onList: Boolean` filter when AniList tracker auth is integrated
 
     public var isEmpty: Bool {

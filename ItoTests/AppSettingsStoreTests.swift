@@ -157,7 +157,7 @@ struct AppSettingsStoreTests {
         #expect(Set(store.loadIssues.map(\.key)) == [
             AppPreferenceKeys.updateInterval,
             AppPreferenceKeys.novelLineSpacing,
-            AppPreferenceKeys.appTheme,
+            AppPreferenceKeys.appTheme
         ])
         let repaired = try await database.dbPool.read { db in
             try AppPreference.fetchAll(db)
@@ -250,7 +250,7 @@ struct AppSettingsStoreTests {
             "Ito/Views/Settings/LibrarySettingsView.swift",
             "Ito/Views/Settings/PrivacySettingsView.swift",
             "Ito/Views/Settings/StorageSettingsView.swift",
-            "Ito/Views/Settings/TrackerSettingsView.swift",
+            "Ito/Views/Settings/TrackerSettingsView.swift"
         ]
 
         for path in files {

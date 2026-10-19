@@ -37,12 +37,12 @@ struct TitleNormalizerTests {
     }
 
     @Test func emptyStrings() async {
-        #expect(TitleNormalizer.normalize("") == "")
+        #expect(TitleNormalizer.normalize("").isEmpty)
     }
 
     @Test func punctuationOnly() async {
-        #expect(TitleNormalizer.normalize("---") == "")
-        #expect(TitleNormalizer.normalize("!?") == "")
+        #expect(TitleNormalizer.normalize("---").isEmpty)
+        #expect(TitleNormalizer.normalize("!?").isEmpty)
     }
 
     @Test func tokenBoundaryPreservation() async {
