@@ -358,6 +358,71 @@ struct RepositoryAndAliasStoreTests {
         #expect(pluginManager.installedPlugins.isEmpty)
     }
 
+    @Test func removedPackageVersionInstallsTheVersionTheRefreshedIndexLists() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let pluginsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RepositoryInstallRemovedVersion-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
+        let currentData = Data("current package".utf8)
+        let stale = makePackage(
+            id: "plugin.moved",
+            version: "1.0",
+            sha256: String(repeating: "0", count: 64),
+            downloadUrl: "packages/plugin.moved-v1.0.ito"
+        )
+        let current = makePackage(
+            id: "plugin.moved",
+            version: "1.1",
+            sha256: sha256(currentData),
+            downloadUrl: "packages/plugin.moved-v1.1.ito"
+        )
+        let indexes = RepositoryIndexSequence(payloads: [
+            try JSONEncoder().encode(makeIndex(packages: [stale])),
+            try JSONEncoder().encode(makeIndex(packages: [current]))
+        ])
+        let manager = RepoManager(
+            dbPool: database.dbPool,
+            pluginsDirectory: pluginsDirectory,
+            packageFetcher: { request in
+                guard request.url?.lastPathComponent == "plugin.moved-v1.1.ito" else {
+                    throw RepositoryPackageInstallationError.packageUnavailable
+                }
+                return currentData
+            },
+            indexFetcher: { _ in await indexes.next() }
+        )
+        try await manager.addRepository(url: "https://example.com/repo")
+
+        try await manager.installPackage(stale, repositoryUrl: "https://example.com/repo")
+
+        let installed = try Data(contentsOf: pluginsDirectory.appendingPathComponent("plugin.moved.ito"))
+        #expect(installed == currentData)
+        #expect(manager.repositories.first?.index?.packages.map(\.version) == ["1.1"])
+    }
+
+    @Test func removedPackageWithoutReplacementReportsUnavailable() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let pluginsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RepositoryInstallUnavailable-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
+        let stale = makePackage(id: "plugin.gone", sha256: String(repeating: "0", count: 64))
+        let payload = try JSONEncoder().encode(makeIndex(packages: [stale]))
+        let manager = RepoManager(
+            dbPool: database.dbPool,
+            pluginsDirectory: pluginsDirectory,
+            packageFetcher: { _ in throw RepositoryPackageInstallationError.packageUnavailable },
+            indexFetcher: { _ in payload }
+        )
+        try await manager.addRepository(url: "https://example.com/repo")
+
+        await #expect(throws: RepositoryPackageInstallationError.packageUnavailable) {
+            try await manager.installPackage(stale, repositoryUrl: "https://example.com/repo")
+        }
+        #expect(!FileManager.default.fileExists(atPath: pluginsDirectory.appendingPathComponent("plugin.gone.ito").path))
+    }
+
     @Test func aliasFailureKeepsPriorCommittedAliasPublished() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
@@ -402,20 +467,30 @@ struct RepositoryAndAliasStoreTests {
     private func makePackage(
         id: String,
         version: String = "1.0",
-        sha256: String
+        sha256: String,
+        downloadUrl: String = "package.ito"
     ) -> RepoPackage {
         RepoPackage(
             id: id,
             name: id,
             version: version,
             minAppVersion: "1.0",
-            downloadUrl: "package.ito",
+            downloadUrl: downloadUrl,
             iconUrl: nil,
             sha256: sha256,
             pluginType: "manga",
             archived: nil,
             archivedReason: nil,
             archivedDate: nil
+        )
+    }
+
+    private func makeIndex(packages: [RepoPackage]) -> RepoIndex {
+        RepoIndex(
+            repoName: "Fixture",
+            repoUrl: "https://example.com/repo",
+            description: "",
+            packages: packages
         )
     }
 
@@ -515,6 +590,19 @@ private actor RepositoryIndexFetchGate {
     func resume() {
         continuation?.resume()
         continuation = nil
+    }
+}
+
+/// Serves each payload once in order, then repeats the last one.
+private actor RepositoryIndexSequence {
+    private var payloads: [Data]
+
+    init(payloads: [Data]) {
+        self.payloads = payloads
+    }
+
+    func next() -> Data {
+        payloads.count > 1 ? payloads.removeFirst() : payloads[0]
     }
 }
 

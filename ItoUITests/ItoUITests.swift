@@ -32,7 +32,7 @@ final class ItoUITests: XCTestCase {
     }
 
     @MainActor
-    func testRepositoryDeepLinkConsumedOnce() throws {
+    func testRepositoryDeepLinkConfirmsAdditionAndIsConsumedOnce() throws {
         let app = XCUIApplication()
         app.launchArguments = [
             "--ui-test-reset-storage",
@@ -44,10 +44,8 @@ final class ItoUITests: XCTestCase {
         XCTAssertTrue(browseTab.waitForExistence(timeout: 20))
         XCTAssertTrue(waitUntil(timeout: 20) { browseTab.isSelected })
 
-        let repositoriesButton = app.buttons["Repositories"]
-        XCTAssertTrue(repositoriesButton.waitForExistence(timeout: 20))
-        repositoriesButton.tap()
-
+        // The repository list opens on its own and a toast confirms the addition.
+        XCTAssertTrue(app.staticTexts["Repository added"].waitForExistence(timeout: 20))
         let repositoryName = app.staticTexts["UI Test Repository"]
         XCTAssertTrue(repositoryName.waitForExistence(timeout: 20))
         let repositoryNames = app.staticTexts.matching(
@@ -59,10 +57,35 @@ final class ItoUITests: XCTestCase {
         XCTAssertTrue(redeliver.waitForExistence(timeout: 10))
         redeliver.tap()
 
-        XCTAssertTrue(waitUntil(timeout: 10) {
-            repositoryNames.count == 1
-        })
+        XCTAssertTrue(app.staticTexts["Already added"].waitForExistence(timeout: 10))
+        XCTAssertEqual(repositoryNames.count, 1)
         XCTAssertFalse(app.staticTexts["Failed to add repository. Please try again."].exists)
+    }
+
+    @MainActor
+    func testRepositoryRemovedAfterConfirmation() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--ui-test-reset-storage",
+            "--ui-test-repository-deep-link"
+        ]
+        app.launch()
+
+        // The deep link opens the repository list.
+        let repositoryName = app.staticTexts["UI Test Repository"]
+        XCTAssertTrue(repositoryName.waitForExistence(timeout: 20))
+        repositoryName.swipeLeft()
+
+        let swipeRemove = app.buttons["Remove"]
+        XCTAssertTrue(swipeRemove.waitForExistence(timeout: 10))
+        swipeRemove.tap()
+
+        let confirmRemove = app.sheets.buttons["Remove"]
+        XCTAssertTrue(confirmRemove.waitForExistence(timeout: 10))
+        confirmRemove.tap()
+
+        XCTAssertTrue(app.staticTexts["No Repositories"].waitForExistence(timeout: 10))
+        XCTAssertFalse(repositoryName.exists)
     }
 
     @MainActor

@@ -100,10 +100,11 @@ final class RepositoriesViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.showingAddRepository)
     }
 
-    func testAlreadyPresentPreservesCharacterizedSuccessfulDismissalBehavior() async {
+    func testAlreadyPresentDismissesAndReportsAlreadyAdded() async {
         let manager = RepositoryManagerSpy()
         manager.addResults["https://example.com"] = .alreadyPresent
-        let viewModel = makeRepositoriesViewModel(manager: manager)
+        let messages = RepositoryMessagePresenterSpy()
+        let viewModel = makeRepositoriesViewModel(manager: manager, messages: messages)
         viewModel.presentAddRepository()
         viewModel.repositoryURLInput = "https://example.com"
 
@@ -112,6 +113,20 @@ final class RepositoriesViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.showingAddRepository)
         XCTAssertEqual(viewModel.repositoryURLInput, "")
         XCTAssertNil(viewModel.addFailureMessage)
+        XCTAssertEqual(messages.messages, [.alreadyAdded])
+    }
+
+    func testRemoveStillDeletesWhenDialogDismissalIsReportedBeforeTheAction() async {
+        let repository = makeRepository()
+        let manager = RepositoryManagerSpy(repositories: [repository])
+        let viewModel = makeRepositoriesViewModel(manager: manager)
+
+        viewModel.requestDelete(repositoryURL: repository.url)
+        viewModel.deleteConfirmationDismissed()
+        await viewModel.confirmDelete()?.value
+
+        XCTAssertEqual(manager.removeInvocations, [repository.url])
+        XCTAssertFalse(viewModel.showDeleteConfirmation)
     }
 
     func testDeleteUsesStableURLAfterAuthoritativeListReorders() async {

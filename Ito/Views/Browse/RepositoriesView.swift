@@ -175,7 +175,7 @@ struct RepositoriesView: View {
             get: { viewModel.showDeleteConfirmation },
             set: { isPresented in
                 if !isPresented {
-                    viewModel.cancelDelete()
+                    viewModel.deleteConfirmationDismissed()
                 }
             }
         )

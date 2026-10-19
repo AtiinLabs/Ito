@@ -39,6 +39,8 @@ enum BrowseMessage: Equatable {
     case unsupportedPluginFile
     case pluginDirectoryUnavailable
     case importFailed(source: BrowseImportSource, reason: String)
+    case repositoryAdded
+    case repositoryAlreadyAdded
     case repositoryAddFailed
 }
 
@@ -261,6 +263,10 @@ private extension BrowseMessage {
             return .browsePluginDirectoryUnavailable
         case .importFailed(let source, _):
             return .browseImportFailed(source)
+        case .repositoryAdded:
+            return .repositoryAdded
+        case .repositoryAlreadyAdded:
+            return .repositoryAlreadyAdded
         case .repositoryAddFailed:
             return .repositoryAddFailed
         }

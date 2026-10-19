@@ -60,6 +60,9 @@ private struct BrowseContentView: View {
         .onOpenURL { url in
             handleOpenURL(url)
         }
+        .task {
+            await viewModel.refreshStaleRepositories()
+        }
         .navigationTitle("Browse")
         .navigationBarItems(trailing: repositoriesButton)
         .confirmationDialog(

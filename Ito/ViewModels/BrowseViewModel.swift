@@ -134,6 +134,17 @@ public final class BrowseViewModel: ObservableObject {
         await repositoryManager.refreshAll()
     }
 
+    /// Refreshes indexes older than `maxAge` so new plugin versions show under
+    /// Updates without a manual pull to refresh. Leaves the list on screen.
+    public func refreshStaleRepositories(now: Date = Date(), maxAge: TimeInterval = 600) async {
+        let hasStaleRepository = repositories.contains { repository in
+            guard let lastFetched = repository.lastFetched else { return true }
+            return now.timeIntervalSince(lastFetched) >= maxAge
+        }
+        guard hasStaleRepository else { return }
+        await repositoryManager.refreshAll()
+    }
+
     public func installUpdate(_ updateItem: UpdateItem) async {
         guard isInstallingUpdate == nil else { return }
         isInstallingUpdate = updateItem.id
@@ -237,7 +248,8 @@ public final class BrowseViewModel: ObservableObject {
             await Self.drainRepositoryIntents(
                 repositoryManager: repositoryManager,
                 messagePresenter: messagePresenter,
-                repositoryIntentRouter: repositoryIntentRouter
+                repositoryIntentRouter: repositoryIntentRouter,
+                showRepositoryList: { self?.showRepositories = true }
             )
             self?.repositoryIntentDrainTask = nil
         }
@@ -248,15 +260,23 @@ public final class BrowseViewModel: ObservableObject {
     private static func drainRepositoryIntents(
         repositoryManager: any BrowseRepositoryManaging,
         messagePresenter: any BrowseMessagePresenting,
-        repositoryIntentRouter: any BrowseRepositoryIntentRouting
+        repositoryIntentRouter: any BrowseRepositoryIntentRouting,
+        showRepositoryList: @MainActor () -> Void
     ) async {
         while !Task.isCancelled,
               let intent = repositoryIntentRouter.claimPendingRepositoryIntent() {
             do {
-                _ = try await repositoryManager.addRepository(
+                let result = try await repositoryManager.addRepository(
                     url: intent.repositoryURL.absoluteString
                 )
                 guard !Task.isCancelled else { return }
+                switch result {
+                case .added:
+                    messagePresenter.present(.repositoryAdded)
+                case .alreadyPresent:
+                    messagePresenter.present(.repositoryAlreadyAdded)
+                }
+                showRepositoryList()
             } catch is CancellationError {
                 return
             } catch {

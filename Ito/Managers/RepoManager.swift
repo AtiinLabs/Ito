@@ -77,12 +77,15 @@ public struct RepositoryRefreshFailure: LocalizedError, Equatable, Sendable {
 
 public enum RepositoryPackageInstallationError: LocalizedError {
     case invalidPackageIdentifier
+    case packageUnavailable
     case rollbackFailed
 
     public var errorDescription: String? {
         switch self {
         case .invalidPackageIdentifier:
             return "The repository package identifier is invalid."
+        case .packageUnavailable:
+            return "The package is no longer available from the repository."
         case .rollbackFailed:
             return "The package installation failed and the previous plugin could not be restored."
         }
@@ -165,6 +168,9 @@ public class RepoManager: ObservableObject {
                 let (data, response) = try await URLSession.shared.data(for: request)
                 if let response = response as? HTTPURLResponse,
                    !(200...299).contains(response.statusCode) {
+                    if response.statusCode == 404 || response.statusCode == 410 {
+                        throw RepositoryPackageInstallationError.packageUnavailable
+                    }
                     throw URLError(.fileDoesNotExist)
                 }
                 return data
@@ -182,7 +188,10 @@ public class RepoManager: ObservableObject {
             }
             #endif
             self.indexFetcher = { url in
-                let (data, response) = try await URLSession.shared.data(from: url)
+                // Skip the local HTTP cache. GitHub Pages sends max-age=600, so a cached
+                // index hid newly published versions for up to ten minutes after refresh.
+                let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
+                let (data, response) = try await URLSession.shared.data(for: request)
                 if let response = response as? HTTPURLResponse,
                    !(200...299).contains(response.statusCode) {
                     throw URLError(URLError.Code(rawValue: response.statusCode))
@@ -305,19 +314,7 @@ public class RepoManager: ObservableObject {
 
         for repo in repositoriesToRefresh {
             do {
-                let newIndex = try await fetchIndex(for: repo.url)
-                let fetchedAt = Date()
-                let record = RepositoryRecord(
-                    url: repo.url,
-                    lastFetched: fetchedAt,
-                    indexPayload: try JSONEncoder().encode(newIndex)
-                )
-                try await dbPool.write { db in try record.save(db) }
-                if let index = repositories.firstIndex(where: { $0.url == repo.url }) {
-                    repositories[index].index = newIndex
-                    repositories[index].lastFetched = fetchedAt
-                }
-                AppLogger.database.debug("🌍 [DEBUG-REPO] Refreshed: \(newIndex.repoName)")
+                try await storeFreshIndex(for: repo.url)
             } catch {
                 AppLogger.database.error("\("🌍 [DEBUG-REPO] Failed to refresh \(repo.url)"): \(error)")
                 failures.append(
@@ -332,6 +329,25 @@ public class RepoManager: ObservableObject {
         if !failures.isEmpty {
             throw RepositoryRefreshFailure(items: failures)
         }
+    }
+
+    /// Fetches and persists the current index of a repository. Requires the mutation gate.
+    @discardableResult
+    private func storeFreshIndex(for repositoryURL: String) async throws -> RepoIndex {
+        let newIndex = try await fetchIndex(for: repositoryURL)
+        let fetchedAt = Date()
+        let record = RepositoryRecord(
+            url: repositoryURL,
+            lastFetched: fetchedAt,
+            indexPayload: try JSONEncoder().encode(newIndex)
+        )
+        try await dbPool.write { db in try record.save(db) }
+        if let index = repositories.firstIndex(where: { $0.url == repositoryURL }) {
+            repositories[index].index = newIndex
+            repositories[index].lastFetched = fetchedAt
+        }
+        AppLogger.database.debug("🌍 [DEBUG-REPO] Refreshed: \(newIndex.repoName)")
+        return newIndex
     }
 
     private func fetchIndex(for urlStr: String) async throws -> RepoIndex {
@@ -361,38 +377,6 @@ public class RepoManager: ObservableObject {
     // Checks if the plugin is compatible with this app
     public func isCompatible(minAppVersion: String) -> Bool {
         return currentAppVersion.compare(minAppVersion, options: .numeric) != .orderedAscending
-    }
-
-    public enum PluginStatus {
-        case notInstalled
-        case installed
-        case updateAvailable(installedVersion: String)
-    }
-
-    public func getPluginStatus(id: String, repoVersion: String) -> PluginStatus {
-        let fileManager = FileManager.default
-        guard let appSupportDir = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            return .notInstalled
-        }
-        let pluginsDir = appSupportDir.appendingPathComponent("Plugins")
-        let pluginURL = pluginsDir.appendingPathComponent("\(id).ito")
-
-        guard fileManager.fileExists(atPath: pluginURL.path) else {
-            return .notInstalled
-        }
-
-        // A full implementation would parse the manifest.json inside the .ito zip here.
-        // Since we are mocking the zip extraction for brevity in this method, 
-        // we'll assume it's installed. To check versions, we'd need ItoRunner to load the bundle.
-        // For a seamless UI without massive overhead per row, we can just return `.installed` 
-        // and rely on a cached dictionary of installed plugins updated by BrowseView, 
-        // OR we can read the version if we had a lightweight way.
-        // Let's assume installed for now, but mark the architectural need for a shared PluginManager.
-
-        // Mock version comparison:
-        // if installedVersion < repoVersion { return .updateAvailable(...) }
-
-        return .installed
     }
 
     public func installPackage(_ pkg: RepoPackage, repositoryUrl: String) async throws {
@@ -430,6 +414,28 @@ public class RepoManager: ObservableObject {
     }
 
     private func performInstallPackage(_ pkg: RepoPackage, repositoryUrl: String) async throws {
+        do {
+            try await downloadAndInstall(pkg, repositoryUrl: repositoryUrl)
+        } catch RepositoryPackageInstallationError.packageUnavailable {
+            // Publishing a new version removes the old package file, so a stored index
+            // can name a download that is gone. Install what the repository lists now.
+            guard let current = try await currentPackage(id: pkg.id, repositoryUrl: repositoryUrl),
+                  current.downloadUrl != pkg.downloadUrl || current.sha256 != pkg.sha256,
+                  isCompatible(minAppVersion: current.minAppVersion) else {
+                throw RepositoryPackageInstallationError.packageUnavailable
+            }
+            try await downloadAndInstall(current, repositoryUrl: repositoryUrl)
+        }
+    }
+
+    private func currentPackage(id: String, repositoryUrl: String) async throws -> RepoPackage? {
+        try await withRepositoryMutation {
+            guard repositories.contains(where: { $0.url == repositoryUrl }) else { return nil }
+            return try await storeFreshIndex(for: repositoryUrl).packages.first { $0.id == id }
+        }
+    }
+
+    private func downloadAndInstall(_ pkg: RepoPackage, repositoryUrl: String) async throws {
         let pluginsDirectory = try resolvedPluginsDirectory()
         let destUrl = try packageDestinationURL(
             packageID: pkg.id,

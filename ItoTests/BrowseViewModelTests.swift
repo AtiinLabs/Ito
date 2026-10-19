@@ -478,7 +478,7 @@ final class BrowseViewModelTests: XCTestCase {
         XCTAssertNil(router.repositoryIntentDelivery)
     }
 
-    func testAlreadyPresentRepositoryResultIsAcknowledgedWithoutError() async {
+    func testAlreadyPresentRepositoryIsAcknowledgedAndReportedAsAlreadyAdded() async {
         let repositories = BrowseRepositoryManagerSpy()
         repositories.addResult = .alreadyPresent
         let messages = BrowseMessagePresenterSpy()
@@ -493,8 +493,46 @@ final class BrowseViewModelTests: XCTestCase {
         await viewModel.consumePendingRepositoryIntents()
 
         XCTAssertEqual(repositories.addInvocations.count, 1)
-        XCTAssertTrue(messages.messages.isEmpty)
+        XCTAssertEqual(messages.messages, [.repositoryAlreadyAdded])
+        XCTAssertTrue(viewModel.showRepositories)
         XCTAssertNil(router.repositoryIntentDelivery)
+    }
+
+    func testAddedRepositoryIsConfirmedAndRepositoryListOpens() async {
+        let repositories = BrowseRepositoryManagerSpy()
+        let messages = BrowseMessagePresenterSpy()
+        let router = AppRouter()
+        router.handleRepositoryDeepLink(repositoryDeepLink("https://new.example"))
+        let viewModel = makeViewModel(
+            repositories: repositories,
+            messages: messages,
+            router: router
+        )
+
+        await viewModel.consumePendingRepositoryIntents()
+
+        XCTAssertEqual(messages.messages, [.repositoryAdded])
+        XCTAssertTrue(viewModel.showRepositories)
+    }
+
+    func testStaleRepositoryRefreshRunsOnlyWhenAnIndexIsOlderThanMaxAge() async {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        var fresh = makeRepository(url: "https://fresh.example", packages: [])
+        fresh.lastFetched = now.addingTimeInterval(-599)
+        let repositories = BrowseRepositoryManagerSpy(repositories: [fresh])
+        let viewModel = makeViewModel(repositories: repositories)
+
+        await viewModel.refreshStaleRepositories(now: now, maxAge: 600)
+        XCTAssertEqual(repositories.refreshCallCount, 0)
+
+        repositories.repositories[0].lastFetched = now.addingTimeInterval(-600)
+        await viewModel.refreshStaleRepositories(now: now, maxAge: 600)
+        XCTAssertEqual(repositories.refreshCallCount, 1)
+
+        repositories.repositories[0].lastFetched = nil
+        await viewModel.refreshStaleRepositories(now: now, maxAge: 600)
+        XCTAssertEqual(repositories.refreshCallCount, 2)
+        XCTAssertFalse(viewModel.isRefreshing)
     }
 
     func testRapidConsumeCallsDoNotOverlapRepositoryAdditions() async {

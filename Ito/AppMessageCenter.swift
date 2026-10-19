@@ -8,6 +8,8 @@ enum AppMessageKind: Equatable {
     case browseUnsupportedPluginFile
     case browsePluginDirectoryUnavailable
     case browseImportFailed(BrowseImportSource)
+    case repositoryAdded
+    case repositoryAlreadyAdded
     case repositoryAddFailed
     case repositoryRemoveFailed
     case repositoryRefreshFailed
@@ -109,6 +111,18 @@ extension AppMessageKind {
                 style: .error,
                 title: "Error",
                 detail: "\(prefix): The plugin could not be imported."
+            )
+        case .repositoryAdded:
+            return .init(
+                style: .success,
+                title: "Repository added",
+                detail: nil
+            )
+        case .repositoryAlreadyAdded:
+            return .init(
+                style: .info,
+                title: "Already added",
+                detail: "This repository is already in your list."
             )
         case .repositoryAddFailed:
             return .init(

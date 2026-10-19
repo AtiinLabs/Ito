@@ -64,9 +64,12 @@ final class RepositoriesViewModel: ObservableObject {
         defer { isAddingRepository = false }
 
         do {
-            _ = try await repositoryManager.addRepository(url: repositoryURL)
+            let result = try await repositoryManager.addRepository(url: repositoryURL)
             repositoryURLInput = ""
             showingAddRepository = false
+            if result == .alreadyPresent {
+                messagePresenter.present(.alreadyAdded)
+            }
         } catch {
             addFailureMessage = "Failed to add repository. Please check the URL and try again."
         }
@@ -81,6 +84,13 @@ final class RepositoriesViewModel: ObservableObject {
 
     func cancelDelete() {
         pendingDeleteRepositoryURL = nil
+        showDeleteConfirmation = false
+    }
+
+    /// Called when the confirmation dialog is dismissed by the system. SwiftUI may
+    /// report the dismissal before running the Remove action, so the pending target
+    /// must survive it; `requestDelete` replaces it on the next request.
+    func deleteConfirmationDismissed() {
         showDeleteConfirmation = false
     }
 

@@ -40,6 +40,7 @@ extension PluginManager: RepositoryPluginStatePublishing {
 }
 
 enum RepositoryManagementMessage: Equatable {
+    case alreadyAdded
     case removeFailed(reason: String)
     case refreshFailed(reason: String)
     case installFailed(packageName: String, reason: String)
@@ -66,6 +67,8 @@ final class AppMessageRepositoryManagementPresenter: RepositoryManagementMessage
 private extension RepositoryManagementMessage {
     var appMessageKind: AppMessageKind {
         switch self {
+        case .alreadyAdded:
+            return .repositoryAlreadyAdded
         case .removeFailed:
             return .repositoryRemoveFailed
         case .refreshFailed:
