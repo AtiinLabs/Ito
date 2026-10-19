@@ -4,3 +4,6 @@ pre-commit:
     swiftlint:
       glob: "*.swift"
       run: swiftlint lint --strict --quiet --force-exclude {staged_files}
+    development-team:
+      glob: "*.{pbxproj,xcconfig}"
+      run: scripts/check_development_team.sh --staged {staged_files}

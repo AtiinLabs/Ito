@@ -19,6 +19,18 @@ env:
   SCHEME: Ito
 
 jobs:
+  development-team:
+    name: No development team
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check project files for a development team ID
+        run: scripts/check_development_team.sh
+
   build-and-test:
     name: Build and unit test
     runs-on: macos-26

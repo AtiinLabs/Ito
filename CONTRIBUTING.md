@@ -55,6 +55,8 @@ Use a Conventional Commit-style pull-request title, such as:
 
 CI builds and tests with code signing disabled. Locally, select an iOS Simulator and run the `Ito` scheme. Do not commit signing identities, `.p12` files, provisioning profiles, Apple account details, or personal development-team identifiers.
 
+To run on a device, set your team in Xcode and leave that change uncommitted. The pre-commit hook and the `CI / No development team` check reject a `DEVELOPMENT_TEAM` value in `project.pbxproj` or an `.xcconfig` file. If you stage the project file for another change, stage only the hunks you mean to commit (`git add -p`).
+
 ## Build channels
 
 - **Stable:** tags such as `v1.3.0`, created only on a commit already contained in `main`.
