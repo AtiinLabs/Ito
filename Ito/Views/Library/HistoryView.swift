@@ -87,7 +87,7 @@ struct HistoryItemRow: View {
             if let coverUrl = entry.record.coverUrl, let url = URL(string: coverUrl) {
                 LazyImage(url: url) { state in
                     if let image = state.image {
-                        image.resizable().aspectRatio(contentMode: .fill)
+                        image.resizable().scaledToFill()
                     } else if state.error != nil {
                         Color.itoCardBackground
                             .overlay(Image(systemName: "photo.slash").foregroundStyle(.tertiary))

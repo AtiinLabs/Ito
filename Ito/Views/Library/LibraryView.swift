@@ -520,7 +520,7 @@ struct LibraryItemView: View {
                 if let image = state.image {
                     image
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
+                        .scaledToFill()
                         .frame(width: width)
                         .saturation(isPluginInstalled ? 1.0 : 0.35)
                 } else if state.error != nil {

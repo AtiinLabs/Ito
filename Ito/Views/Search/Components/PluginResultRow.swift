@@ -14,7 +14,7 @@ public struct PluginResultRow: View {
             if let coverURL = result.cover, let url = URL(string: coverURL) {
                 LazyImage(url: url) { state in
                     if let image = state.image {
-                        image.resizable().aspectRatio(contentMode: .fill)
+                        image.resizable().scaledToFill()
                     } else {
                         Color.itoCardBackground
                     }

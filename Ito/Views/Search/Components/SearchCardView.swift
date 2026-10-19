@@ -12,7 +12,7 @@ struct SearchCardView: View {
                     if let image = state.image {
                         image
                             .resizable()
-                            .aspectRatio(contentMode: .fill)
+                            .scaledToFill()
                             .frame(width: 110, height: 160)
                             .cornerRadius(10)
                             .clipped()

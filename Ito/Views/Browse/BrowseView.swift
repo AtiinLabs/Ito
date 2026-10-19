@@ -228,7 +228,7 @@ private struct UpdateRowView: View {
                let url = URL(string: "\(updateItem.repoURL)/\(icon)") {
                 LazyImage(url: url) { state in
                     if let image = state.image {
-                        image.resizable().aspectRatio(contentMode: .fill)
+                        image.resizable().scaledToFill()
                     } else {
                         Color.secondary.opacity(0.2)
                     }
@@ -276,7 +276,7 @@ struct PluginRowView: View {
             if let iconData = plugin.iconData, let uiImage = UIImage(data: iconData) {
                 Image(uiImage: uiImage)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .scaledToFill()
                     .frame(width: 40, height: 40)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {

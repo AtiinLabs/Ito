@@ -488,7 +488,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             } label: {
                 HStack(spacing: 12) {
                     AsyncImage(url: URL(string: result.cover ?? "")) { image in
-                        image.resizable().aspectRatio(contentMode: .fill)
+                        image.resizable().scaledToFill()
                     } placeholder: {
                         Rectangle().fill(.quaternary)
                     }

@@ -20,7 +20,7 @@ public struct MediaRowView<M: MediaDisplayable, Destination: View>: View {
                         if let image = state.image {
                             image
                                 .resizable()
-                                .aspectRatio(contentMode: .fill)
+                                .scaledToFill()
                                 .frame(width: 60, height: 90)
                                 .cornerRadius(6)
                                 .clipped()

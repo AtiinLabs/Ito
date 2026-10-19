@@ -305,7 +305,7 @@ struct PackageRowView: View {
         if let icon = pkg.iconUrl, let url = URL(string: "\(repositoryUrl)/\(icon)") {
             LazyImage(url: url) { state in
                 if let image = state.image {
-                    image.resizable().aspectRatio(contentMode: .fill)
+                    image.resizable().scaledToFill()
                 } else {
                     Color.secondary.opacity(0.15)
                 }

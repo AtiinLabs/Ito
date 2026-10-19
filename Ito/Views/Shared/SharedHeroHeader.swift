@@ -59,7 +59,7 @@ public struct SharedHeroHeader: View {
             LazyImage(url: url) { state in
                 if let image = state.image {
                     Color.clear
-                        .overlay(image.resizable().aspectRatio(contentMode: .fill))
+                        .overlay(image.resizable().scaledToFill())
                         .clipped()
                 } else {
                     Color(.secondarySystemBackground)
@@ -86,7 +86,7 @@ public struct SharedHeroHeader: View {
                 LazyImage(url: url) { state in
                     if let image = state.image {
                         Color.clear
-                            .overlay(image.resizable().aspectRatio(contentMode: .fill))
+                            .overlay(image.resizable().scaledToFill())
                             .clipped()
                             .onAppear {
                                 if let uiImage = state.imageContainer?.image {

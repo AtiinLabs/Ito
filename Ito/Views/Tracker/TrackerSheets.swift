@@ -260,7 +260,7 @@ private struct TrackerSearchResultRow: View {
             if let cover = media.coverImage, let url = URL(string: cover) {
                 LazyImage(url: url) { state in
                     if let image = state.image {
-                        image.resizable().aspectRatio(contentMode: .fill)
+                        image.resizable().scaledToFill()
                     } else {
                         Color.gray.opacity(0.3)
                     }
@@ -395,7 +395,7 @@ struct TrackerDetailsSheet: View {
                     if let cover = viewModel.media.coverImage, let url = URL(string: cover) {
                         LazyImage(url: url) { state in
                             if let image = state.image {
-                                image.resizable().aspectRatio(contentMode: .fill)
+                                image.resizable().scaledToFill()
                             } else {
                                 Color.gray
                             }

@@ -20,7 +20,7 @@ public struct MediaCardView<M: MediaDisplayable, Destination: View>: View {
                         if let image = state.image {
                             image
                                 .resizable()
-                                .aspectRatio(contentMode: .fill)
+                                .scaledToFill()
                                 .frame(width: 110, height: 160)
                                 .cornerRadius(8)
                                 .clipped()

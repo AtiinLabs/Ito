@@ -318,7 +318,7 @@ struct DiscoverCardView: View {
                 if let coverURL = media.coverImage, let url = URL(string: coverURL) {
                     LazyImage(url: url) { state in
                         if let image = state.image {
-                            image.resizable().aspectRatio(contentMode: .fill)
+                            image.resizable().scaledToFill()
                                 .frame(width: 120, height: 170)
                                 .clipped()
                         } else {
@@ -378,7 +378,7 @@ struct DiscoverSearchRow: View {
             if let coverURL = media.coverImage, let url = URL(string: coverURL) {
                 LazyImage(url: url) { state in
                     if let image = state.image {
-                        image.resizable().aspectRatio(contentMode: .fill)
+                        image.resizable().scaledToFill()
                             .frame(width: 60, height: 85)
                             .clipped()
                     } else {
