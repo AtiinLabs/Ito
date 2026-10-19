@@ -166,7 +166,7 @@ final class TrackerDetailsViewModelTests: XCTestCase {
         XCTAssertEqual(messages.messages, [.externalURLOpenFailed])
     }
 
-    func testExistingLinkedSaveLeavesScoreDatesPresentationOnlyAndDoesNotDuplicateLink() async {
+    func testExistingLinkedSaveSendsOnlyProgressAndStatusAndDoesNotDuplicateLink() async {
         let service = TrackerDetailsServiceFake()
         service.queuedLoadResults = [.success(nil)]
         let links = TrackerLinkStoreFake()
@@ -174,8 +174,6 @@ final class TrackerDetailsViewModelTests: XCTestCase {
         await load(viewModel, state: .new)
         viewModel.progress = "4"
         viewModel.status = "PAUSED"
-        viewModel.score = 9
-        viewModel.finishDate = Date(timeIntervalSince1970: 500)
 
         viewModel.save()
         await trackingWaitUntil { !viewModel.isSaving }
@@ -384,21 +382,98 @@ final class TrackerDetailsViewModelTests: XCTestCase {
         messages: TrackingMessageCaptureSpy = TrackingMessageCaptureSpy(),
         logger: PresentationEventCaptureSpy = PresentationEventCaptureSpy(),
         isLinked: Bool = false,
-        showCancel: Bool = false
+        showCancel: Bool = false,
+        providerID: String = "anilist",
+        providerName: String = "AniList"
     ) -> TrackerDetailsViewModel {
         TrackerDetailsViewModel(
             destination: trackerTestDestination(
                 media: media,
                 isLocallyLinked: isLinked,
-                showCancelButton: showCancel
+                showCancelButton: showCancel,
+                providerID: providerID,
+                providerName: providerName
             ),
             detailsService: service,
             linkStore: links,
             localProgressReader: progress,
             externalURLOpener: opener,
             messagePresenter: messages,
-            presentationLogger: logger,
-            now: { Date(timeIntervalSince1970: 42) }
+            presentationLogger: logger
         )
+    }
+
+    private func automaticSyncNote(providerID: String, status: String) async -> String? {
+        let service = TrackerDetailsServiceFake()
+        service.queuedLoadResults = [.success(TrackerMediaEntry(status: status, progress: 3, score: nil, startDate: nil, finishDate: nil))]
+        let viewModel = makeViewModel(
+            media: trackerTestMedia(id: providerID == "myanimelist" ? "anime:1" : "remote-1", format: "TV"),
+            service: service,
+            isLinked: true,
+            providerID: providerID,
+            providerName: providerID == "myanimelist" ? "MyAnimeList" : "AniList"
+        )
+        await load(viewModel, state: .existing)
+        return viewModel.automaticSyncNote
+    }
+
+    func testMyAnimeListRefusesToLowerProgressUnlessRepeating() async {
+        let service = TrackerDetailsServiceFake()
+        service.queuedLoadResults = [.success(TrackerMediaEntry(status: "CURRENT", progress: 10, score: nil, startDate: nil, finishDate: nil))]
+        let viewModel = makeViewModel(
+            media: trackerTestMedia(id: "anime:1", format: "TV"),
+            service: service,
+            isLinked: true,
+            providerID: "myanimelist",
+            providerName: "MyAnimeList"
+        )
+        await load(viewModel, state: .existing)
+        viewModel.progress = "4"
+
+        viewModel.save()
+
+        XCTAssertTrue(service.updateInvocations.isEmpty)
+        XCTAssertEqual(viewModel.failure, .progressWouldDecrease)
+        XCTAssertTrue(viewModel.isPresentingFailureAlert)
+        XCTAssertNil(viewModel.output)
+
+        viewModel.status = "REPEATING"
+        viewModel.save()
+        await trackingWaitUntil { !viewModel.isSaving }
+        XCTAssertEqual(
+            service.updateInvocations,
+            [.init(providerID: "myanimelist", mediaID: "anime:1", progress: 4, status: "REPEATING")]
+        )
+    }
+
+    func testAniListStillLetsProgressGoDown() async {
+        let service = TrackerDetailsServiceFake()
+        service.queuedLoadResults = [.success(TrackerMediaEntry(status: "CURRENT", progress: 10, score: nil, startDate: nil, finishDate: nil))]
+        let viewModel = makeViewModel(service: service, isLinked: true)
+        await load(viewModel, state: .existing)
+        viewModel.progress = "4"
+
+        viewModel.save()
+        await trackingWaitUntil { !viewModel.isSaving }
+
+        XCTAssertEqual(
+            service.updateInvocations,
+            [.init(providerID: "anilist", mediaID: "remote-1", progress: 4, status: "CURRENT")]
+        )
+        XCTAssertNil(viewModel.failure)
+    }
+
+    func testAutomaticSyncNoteExplainsMyAnimeListStatuses() async {
+        let completed = await automaticSyncNote(providerID: "myanimelist", status: "COMPLETED")
+        XCTAssertEqual(
+            completed,
+            "Automatic progress updates are off while this entry is Completed. Set it to Watching to resume them."
+        )
+        let planned = await automaticSyncNote(providerID: "myanimelist", status: "PLANNING")
+        XCTAssertEqual(planned, "Ito marks this entry Watching when you start episode 1.")
+        let watching = await automaticSyncNote(providerID: "myanimelist", status: "CURRENT")
+        XCTAssertNil(watching)
+        let anilist = await automaticSyncNote(providerID: "anilist", status: "COMPLETED")
+        XCTAssertNil(anilist)
     }
 }

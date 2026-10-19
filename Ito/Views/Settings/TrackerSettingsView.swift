@@ -12,7 +12,7 @@ struct TrackerSettingsView: View {
             ForEach(viewModel.providers) { provider in
                 Section(
                     header: Text(provider.name),
-                    footer: Text("Sync your progress automatically with \(provider.name).")
+                    footer: Text(viewModel.footer(for: provider))
                 ) {
                     providerContent(provider)
 

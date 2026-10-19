@@ -61,7 +61,7 @@ protocol TrackerOAuthAuthenticating: AnyObject {
 protocol TrackerSheetServicing: AnyObject {
     var sheetStatePublisher: AnyPublisher<Void, Never> { get }
     func authenticatedProviders() -> [TrackerProviderPresentation]
-    func hasLocalLink(for media: MediaIdentity) -> Bool
+    func hasAuthenticatedLink(for media: MediaIdentity) -> Bool
     func remoteMediaID(for media: MediaIdentity, providerID: String) -> String?
     func refreshState() async throws
 }
@@ -249,8 +249,8 @@ final class TrackerProviderService:
         trackerManager.authenticatedProviders.map { Self.presentation(for: $0) }
     }
 
-    func hasLocalLink(for media: MediaIdentity) -> Bool {
-        trackerManager.hasLinks(for: media)
+    func hasAuthenticatedLink(for media: MediaIdentity) -> Bool {
+        trackerManager.hasAuthenticatedLink(for: media)
     }
 
     func remoteMediaID(for media: MediaIdentity, providerID: String) -> String? {
@@ -446,7 +446,7 @@ final class UnavailableTrackingService:
 
     func authenticatedProviders() -> [TrackerProviderPresentation] { [] }
 
-    func hasLocalLink(for media: MediaIdentity) -> Bool {
+    func hasAuthenticatedLink(for media: MediaIdentity) -> Bool {
         _ = media
         return false
     }

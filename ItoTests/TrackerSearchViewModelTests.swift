@@ -239,16 +239,34 @@ final class TrackerSearchViewModelTests: XCTestCase {
         title: String = "Initial",
         isAnime: Bool = false,
         service: TrackerSearchServiceFake = TrackerSearchServiceFake(),
-        logger: PresentationEventCaptureSpy = PresentationEventCaptureSpy()
+        logger: PresentationEventCaptureSpy = PresentationEventCaptureSpy(),
+        providerID: String = "anilist",
+        providerName: String = "AniList"
     ) -> TrackerSearchViewModel {
         TrackerSearchViewModel(
-            providerID: "anilist",
-            providerName: "AniList",
+            providerID: providerID,
+            providerName: providerName,
             mediaIdentity: mediaIdentity,
             title: title,
             isAnime: isAnime,
             searchService: service,
             presentationLogger: logger
         )
+    }
+
+    func testMyAnimeListShortQueryShowsHintAndNeverSearches() async {
+        let service = TrackerSearchServiceFake()
+        let viewModel = makeViewModel(title: "86", service: service, providerID: "myanimelist", providerName: "MyAnimeList")
+
+        viewModel.start()
+        XCTAssertEqual(viewModel.queryHint, "Enter at least 3 characters to search MyAnimeList.")
+        XCTAssertEqual(viewModel.state, .idle)
+        XCTAssertTrue(service.invocations.isEmpty)
+
+        viewModel.searchQuery = "86 eighty"
+        XCTAssertNil(viewModel.queryHint)
+        viewModel.performSearch()
+        await trackingWaitUntil { service.invocations.count == 1 }
+        XCTAssertEqual(service.invocations, [.init(providerID: "myanimelist", title: "86 eighty", isAnime: false)])
     }
 }

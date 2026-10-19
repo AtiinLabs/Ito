@@ -68,6 +68,13 @@ final class TrackerSearchViewModel: ObservableObject {
         state == .failure ? "Search failed. Please try again." : nil
     }
 
+    /// Shown when a MyAnimeList search is too short for MyAnimeList to accept (it needs 3 characters).
+    var queryHint: String? {
+        guard providerID == MALCredentialRepository.providerID,
+              searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).count < 3 else { return nil }
+        return "Enter at least 3 characters to search MyAnimeList."
+    }
+
     func start() {
         guard !hasStarted else { return }
         hasStarted = true
@@ -79,6 +86,14 @@ final class TrackerSearchViewModel: ObservableObject {
 
         guard !searchQuery.isEmpty else {
             state = results.isEmpty ? .idle : .content
+            return
+        }
+
+        if queryHint != nil {
+            isPresentingDetails = false
+            results = []
+            selectedMedia = nil
+            state = .idle
             return
         }
 

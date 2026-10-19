@@ -21,8 +21,8 @@ final class MALStubURLProtocol: URLProtocol, @unchecked Sendable {
         let request = request
         let body = request.httpBody ?? request.httpBodyStream.map(Self.read) ?? Data()
         let bodyString = String(bytes: body, encoding: .utf8) ?? ""
+        Self.log.append(request, body: bodyString)
         DispatchQueue.global().async { [self] in
-            Self.log.append(request, body: bodyString)
             let response = Self.handler?(request, bodyString) ?? Response(status: 500, body: "")
             let http = HTTPURLResponse(url: request.url!, statusCode: response.status, httpVersion: nil, headerFields: nil)!
             client?.urlProtocol(self, didReceive: http, cacheStoragePolicy: .notAllowed)

@@ -70,7 +70,7 @@ final class TrackerSheetServiceFake: TrackerSheetServicing {
         return remoteIDs[media]?[providerID]
     }
 
-    func hasLocalLink(for media: MediaIdentity) -> Bool {
+    func hasAuthenticatedLink(for media: MediaIdentity) -> Bool {
         locallyLinkedMedia.contains(media)
     }
 

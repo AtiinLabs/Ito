@@ -164,8 +164,9 @@ public final class TrackerManager: ObservableObject {
         trackerMappings[media]?[providerId]
     }
 
-    public func hasLinks(for media: MediaIdentity) -> Bool {
-        trackerMappings[media]?.isEmpty == false
+    /// Whether the media is linked to a tracker the user is signed in to. Links to signed-out trackers do not count.
+    public func hasAuthenticatedLink(for media: MediaIdentity) -> Bool {
+        authenticatedProviders.contains { trackerMappings[media]?[$0.identifier] != nil }
     }
 
     public var authenticatedProviders: [any TrackerProvider] {

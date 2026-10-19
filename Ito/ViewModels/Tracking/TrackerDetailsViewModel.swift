@@ -17,6 +17,7 @@ enum TrackerDetailsFailure: Equatable {
     case remoteUpdate
     case linkPersistenceAfterRemoteUpdate
     case unlinkPersistence
+    case progressWouldDecrease
 
     var message: String {
         switch self {
@@ -26,6 +27,8 @@ enum TrackerDetailsFailure: Equatable {
             return "The tracker entry was updated remotely, but the local link was not saved. Please retry to finish linking."
         case .unlinkPersistence:
             return "Tracking could not be stopped locally. Please try again."
+        case .progressWouldDecrease:
+            return "MyAnimeList progress only moves forward from Ito. Choose Repeating to start over, or change it on MyAnimeList."
         }
     }
 }
@@ -62,9 +65,11 @@ final class TrackerDetailsViewModel: ObservableObject {
             }
         }
     }
-    @Published var score: Double = 0
-    @Published var startDate: Date
-    @Published var finishDate: Date?
+    @Published private(set) var score: Double?
+    @Published private(set) var startDate: Date?
+    @Published private(set) var finishDate: Date?
+    /// The tracker status of the entry as last loaded from the remote, or `nil` when there is none.
+    @Published private(set) var loadedStatus: String?
     @Published private(set) var isSaving = false
     @Published private(set) var isUnlinking = false
     @Published private(set) var isOpeningExternalURL = false
@@ -103,6 +108,8 @@ final class TrackerDetailsViewModel: ObservableObject {
     private var unlinkOperationID: UUID?
     private var externalURLOperationID: UUID?
     private var hasStarted = false
+    /// The progress of the entry as last loaded from the remote; `nil` when there is none.
+    private var loadedProgress: Int?
 
     init(
         destination: TrackerDetailsDestination,
@@ -111,8 +118,7 @@ final class TrackerDetailsViewModel: ObservableObject {
         localProgressReader: any TrackerLocalProgressReading,
         externalURLOpener: any TrackerExternalURLOpening,
         messagePresenter: any TrackingMessagePresenting,
-        presentationLogger: any PresentationEventLogging,
-        now: () -> Date = Date.init
+        presentationLogger: any PresentationEventLogging
     ) {
         providerID = destination.providerID
         providerName = destination.providerName
@@ -126,7 +132,6 @@ final class TrackerDetailsViewModel: ObservableObject {
         self.externalURLOpener = externalURLOpener
         self.messagePresenter = messagePresenter
         self.presentationLogger = presentationLogger
-        startDate = now()
     }
 
     var isLoadingEntry: Bool { remoteEntryState == .loading }
@@ -145,6 +150,25 @@ final class TrackerDetailsViewModel: ObservableObject {
         media.episodes ?? media.chapters
     }
 
+    var scoreText: String {
+        score.map { String(format: "%.1f", $0) } ?? "Not set"
+    }
+
+    var startDateText: String {
+        startDate.map { Self.dateFormatter.string(from: $0) } ?? "Not set"
+    }
+
+    var finishDateText: String {
+        finishDate.map { Self.dateFormatter.string(from: $0) } ?? "Not set"
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+
     var canStopTracking: Bool {
         isLocallyLinked && remoteEntryState != .loading
     }
@@ -153,8 +177,25 @@ final class TrackerDetailsViewModel: ObservableObject {
         isSaving || isUnlinking
     }
 
+    static func statusLabel(for status: String, isReadingFormat: Bool) -> String {
+        status == "CURRENT" ? (isReadingFormat ? "Reading" : "Watching") : status.capitalized
+    }
+
     func displayLabel(for statusOption: String) -> String {
-        statusOption == "CURRENT" ? currentStatusLabel : statusOption.capitalized
+        Self.statusLabel(for: statusOption, isReadingFormat: media.isReadingFormat)
+    }
+
+    /// Explains when Ito's automatic MyAnimeList updates are off for the loaded entry. `nil` when they are on.
+    var automaticSyncNote: String? {
+        guard providerID == MALCredentialRepository.providerID, let loadedStatus else { return nil }
+        switch loadedStatus {
+        case "COMPLETED", "PAUSED", "DROPPED":
+            return "Automatic progress updates are off while this entry is \(displayLabel(for: loadedStatus)). Set it to \(currentStatusLabel) to resume them."
+        case "PLANNING":
+            return "Ito marks this entry \(currentStatusLabel) when you start \(media.isReadingFormat ? "chapter 1" : "episode 1")."
+        default:
+            return nil
+        }
     }
 
     func start() {
@@ -234,6 +275,14 @@ final class TrackerDetailsViewModel: ObservableObject {
         guard saveOperationID == nil,
               unlinkOperationID == nil,
               remoteEntryState == .existing || remoteEntryState == .new else { return }
+        if providerID == MALCredentialRepository.providerID,
+           remoteEntryState == .existing,
+           status != "REPEATING",
+           let loadedProgress, let newProgress = Int(progress), newProgress < loadedProgress {
+            failure = .progressWouldDecrease
+            isPresentingFailureAlert = true
+            return
+        }
 
         let operationID = UUID()
         saveOperationID = operationID
@@ -476,6 +525,8 @@ final class TrackerDetailsViewModel: ObservableObject {
                     remoteEntryState = .existing
                 } else {
                     remoteEntryState = .new
+                    loadedStatus = nil
+                    loadedProgress = nil
                 }
                 finishLoad(operationID, outcome: .succeeded)
             } catch is CancellationError {
@@ -500,13 +551,11 @@ final class TrackerDetailsViewModel: ObservableObject {
         if let entryProgress = entry.progress {
             progress = String(entryProgress)
         }
-        if let entryScore = entry.score {
-            score = entryScore
-        }
-        if let entryStartDate = entry.startDate {
-            startDate = entryStartDate
-        }
+        score = entry.score.flatMap { $0 > 0 ? $0 : nil }
+        startDate = entry.startDate
         finishDate = entry.finishDate
+        loadedStatus = entry.status
+        loadedProgress = entry.progress
     }
 
     private func finishLoad(_ operationID: UUID, outcome: PresentationEventOutcome) {

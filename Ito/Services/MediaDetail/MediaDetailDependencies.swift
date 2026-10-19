@@ -144,7 +144,7 @@ final class TrackingMediaDetailAdapter: MediaDetailTrackerServing {
     func state(for media: MediaIdentity) -> MediaDetailTrackerState {
         MediaDetailTrackerState(
             isAvailable: !sheetService.authenticatedProviders().isEmpty,
-            isTracked: sheetService.hasLocalLink(for: media),
+            isTracked: sheetService.hasAuthenticatedLink(for: media),
             anilistID: sheetService.remoteMediaID(for: media, providerID: "anilist")
         )
     }

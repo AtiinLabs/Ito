@@ -61,6 +61,15 @@ struct TrackingViewFactory {
         )
     }
 
+    func makeProviderSelectionViewModel(
+        configuration: TrackerSheetConfiguration
+    ) -> TrackerProviderSelectionViewModel {
+        TrackerProviderSelectionViewModel(
+            configuration: configuration,
+            detailsService: dependencies.detailsService
+        )
+    }
+
     func makeSearchViewModel(
         configuration: TrackerSheetConfiguration,
         provider: TrackerSheetProviderPresentation

@@ -14,7 +14,7 @@ struct TrackerManagerCredentialInjectionTests {
         #expect(subject.manager.providers.map(\.identifier) == ["anilist", "myanimelist"])
         #expect(subject.manager.providers.map(\.name) == ["AniList", "MyAnimeList"])
         #expect(subject.manager.authenticatedProviders.isEmpty)
-        #expect(!subject.manager.hasLinks(
+        #expect(!subject.manager.hasAuthenticatedLink(
             for: MediaIdentity(pluginId: "legacy", canonicalMediaId: "local-fixture")
         ))
 

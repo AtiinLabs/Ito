@@ -8,6 +8,20 @@ struct TrackerSheetOrchestrator: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedProviderID: String?
+    @StateObject private var selectionViewModel: TrackerProviderSelectionViewModel
+
+    init(
+        configuration: TrackerSheetConfiguration,
+        factory: TrackingViewFactory,
+        onTracked: ((TrackerMedia, Int?, String?) -> Void)?
+    ) {
+        self.configuration = configuration
+        self.factory = factory
+        self.onTracked = onTracked
+        _selectionViewModel = StateObject(
+            wrappedValue: factory.makeProviderSelectionViewModel(configuration: configuration)
+        )
+    }
 
     var body: some View {
         if configuration.providers.isEmpty {
@@ -57,17 +71,17 @@ struct TrackerSheetOrchestrator: View {
                         Text(provider.provider.name)
                             .foregroundColor(.primary)
                         Spacer()
-                        if provider.isTracked {
-                            Text("Tracked")
-                                .font(.caption)
-                                .foregroundColor(.green)
-                                .padding(.trailing, 4)
-                        }
+                        Text(selectionViewModel.label(for: provider.id))
+                            .font(.caption)
+                            .foregroundColor(provider.isTracked ? .green : .secondary)
+                            .padding(.trailing, 4)
                         Image(systemName: "chevron.right")
                             .foregroundColor(.gray)
                     }
                 }
             }
+            .task { selectionViewModel.start() }
+            .onDisappear(perform: selectionViewModel.cancelOwnedWork)
             .navigationTitle("Select Tracker")
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarItems(trailing: Button("Cancel") { dismiss() })
@@ -163,6 +177,13 @@ struct TrackerSearchSheet: View {
                     }
                 }
                 .padding()
+
+                if let hint = viewModel.queryHint {
+                    Text(hint)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+                }
 
                 if let errorMessage = viewModel.errorMessage {
                     HStack {
@@ -408,7 +429,10 @@ struct TrackerDetailsSheet: View {
                 }
             }
 
-            Section(header: Text("Progress")) {
+            Section(
+                header: Text("Progress"),
+                footer: Text(viewModel.automaticSyncNote ?? "")
+            ) {
                 Picker("Status", selection: $viewModel.status) {
                     ForEach(TrackerDetailsViewModel.statuses, id: \.self) { statusOption in
                         Text(viewModel.displayLabel(for: statusOption))
@@ -443,35 +467,34 @@ struct TrackerDetailsSheet: View {
                 HStack {
                     Text("Score")
                     Spacer()
-                    Slider(value: $viewModel.score, in: 0...10, step: 0.5)
-                    Text(String(format: "%.1f", viewModel.score))
+                    Text(viewModel.scoreText)
+                        .foregroundColor(.secondary)
                 }
             }
 
-            Section(header: Text("Dates")) {
-                DatePicker("Started", selection: $viewModel.startDate, displayedComponents: .date)
-
-                if viewModel.finishDate != nil {
-                    DatePicker(
-                        "Finished",
-                        selection: Binding(
-                            get: { viewModel.finishDate ?? Date() },
-                            set: { viewModel.finishDate = $0 }
-                        ),
-                        displayedComponents: .date
-                    )
-                    Button("Remove Finish Date") {
-                        viewModel.finishDate = nil
-                    }
-                    .foregroundColor(.red)
-                } else {
-                    Button("Add Finish Date") {
-                        viewModel.finishDate = Date()
-                    }
+            Section(
+                header: Text("Dates"),
+                footer: Text("Score and dates come from \(viewModel.providerName). Change them on \(viewModel.providerName).")
+            ) {
+                HStack {
+                    Text("Started")
+                    Spacer()
+                    Text(viewModel.startDateText)
+                        .foregroundColor(.secondary)
+                }
+                HStack {
+                    Text("Finished")
+                    Spacer()
+                    Text(viewModel.finishDateText)
+                        .foregroundColor(.secondary)
                 }
             }
 
-            Section {
+            Section(
+                footer: Text(viewModel.canStopTracking
+                    ? "Stop Tracking removes the link in Ito. Your \(viewModel.providerName) list entry is kept."
+                    : "")
+            ) {
                 Button(action: viewModel.prepareLocalProgressSync) {
                     Label("Sync Local History", systemImage: "arrow.triangle.2.circlepath")
                 }
@@ -493,7 +516,7 @@ struct TrackerDetailsSheet: View {
                                 ProgressView()
                                     .accessibilityLabel("Stopping tracking")
                             }
-                            Label("Stop Tracking", systemImage: "trash")
+                            Label("Stop Tracking", systemImage: "link")
                                 .foregroundColor(.red)
                         }
                     }

@@ -79,6 +79,12 @@ final class TrackerSettingsViewModel: ObservableObject {
         authenticationOperation != nil
     }
 
+    func footer(for provider: TrackerProviderPresentation) -> String {
+        provider.identifier == MALCredentialRepository.providerID
+            ? "Ito updates progress for series you are watching or reading on MyAnimeList. It never deletes entries, lowers progress, or changes scores, dates, tags or comments."
+            : "Sync your progress automatically with \(provider.name)."
+    }
+
     func failure(for providerID: String) -> TrackerSettingsProviderFailure? {
         providerFailures[providerID]
     }
