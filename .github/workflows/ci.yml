@@ -43,49 +43,19 @@ jobs:
           path: Ito
           persist-credentials: false
 
-      # Ito.xcodeproj currently references ../ito-runner as a local Swift package.
-      # Keep the repositories side by side until the Xcode project is changed to a
-      # pinned remote package dependency.
-      - name: Read pinned ito-runner revision
-        id: runner
-        shell: bash
-        run: echo "ref=$(tr -d '[:space:]' < Ito/.github/ito-runner.ref)" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout ito-runner
-        uses: actions/checkout@v7
-        with:
-          repository: AtiinLabs/ito-runner
-          ref: ${{ steps.runner.outputs.ref }}
-          path: ito-runner
-          persist-credentials: false
-
-      
-      - name: Read pinned WasmKit revision
-        id: wasmkit_ref
-        shell: bash
-        run: echo "ref=$(tr -d '[:space:]' < Ito/.github/wasmkit.ref)" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout WasmKit
-        uses: actions/checkout@v7
-        with:
-          repository: AtiinLabs/WasmKit
-          ref: ${{ steps.wasmkit_ref.outputs.ref }}
-          path: WasmKit
-          persist-credentials: false
-
       - name: Show build environment
         run: |
           set -euxo pipefail
           xcodebuild -version
           xcrun simctl list runtimes
 
-      # Keep package checkouts outside DerivedData so they can be cached. The key
-      # covers every input to the package graph, including the pinned local packages.
+      # Keep package checkouts outside DerivedData so they can be cached.
+      # Package.resolved pins every package, including ito-runner and WasmKit.
       - name: Cache Swift packages
         uses: actions/cache@v6
         with:
           path: SourcePackages
-          key: spm-${{ runner.os }}-${{ hashFiles('Ito/Ito.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Ito/.github/ito-runner.ref', 'Ito/.github/wasmkit.ref') }}
+          key: spm-${{ runner.os }}-${{ hashFiles('Ito/Ito.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
             spm-${{ runner.os }}-
 

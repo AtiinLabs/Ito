@@ -253,7 +253,7 @@
 				3AC8256E2F5FD9300054AD29 /* XCRemoteSwiftPackageReference "Nuke" */,
 				3AC825732F5FF84D0054AD29 /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */,
 				391483242FE4B140002F5EA7 /* XCRemoteSwiftPackageReference "GRDB" */,
-				397BF7222FE6F4E600EFFFC4 /* XCLocalSwiftPackageReference "../ito-runner" */,
+				397BF7222FE6F4E600EFFFC4 /* XCRemoteSwiftPackageReference "ito-runner" */,
 				3C0A71F02FF1000000000003 /* XCLocalSwiftPackageReference "Packages/ItoAVIF" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -643,10 +643,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		397BF7222FE6F4E600EFFFC4 /* XCLocalSwiftPackageReference "../ito-runner" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = "../ito-runner";
-		};
 		3C0A71F02FF1000000000003 /* XCLocalSwiftPackageReference "Packages/ItoAVIF" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/ItoAVIF;
@@ -670,6 +666,14 @@
 				minimumVersion = 12.9.0;
 			};
 		};
+		397BF7222FE6F4E600EFFFC4 /* XCRemoteSwiftPackageReference "ito-runner" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AtiinLabs/ito-runner.git";
+			requirement = {
+				kind = revision;
+				revision = fb892037b97d156be95ef757bcccc7a48db57dab;
+			};
+		};
 		3AC825732F5FF84D0054AD29 /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/SimplyDanny/SwiftLintPlugins";
@@ -688,6 +692,7 @@
 		};
 		397BF7232FE6F4E600EFFFC4 /* ito-runner */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = 397BF7222FE6F4E600EFFFC4 /* XCRemoteSwiftPackageReference "ito-runner" */;
 			productName = "ito-runner";
 		};
 		3A64EED72F7969F700B76A90 /* GRDB */ = {
@@ -696,6 +701,7 @@
 		};
 		3A7509542F57FFE40057955D /* ito-runner */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = 397BF7222FE6F4E600EFFFC4 /* XCRemoteSwiftPackageReference "ito-runner" */;
 			productName = "ito-runner";
 		};
 		3AC8256F2F5FD9300054AD29 /* Nuke */ = {
@@ -715,6 +721,7 @@
 		};
 		3ADF8E0E2F6CE2E6007A5EA0 /* ito-runner */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = 397BF7222FE6F4E600EFFFC4 /* XCRemoteSwiftPackageReference "ito-runner" */;
 			productName = "ito-runner";
 		};
 		3C0A71F02FF1000000000002 /* ItoAVIF */ = {

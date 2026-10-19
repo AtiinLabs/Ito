@@ -25,15 +25,6 @@ if [[ ! -f "$PROJECT/project.pbxproj" ]]; then
   exit 1
 fi
 
-# The project references both companion packages by relative path.
-for package in ito-runner WasmKit; do
-  if [[ ! -f "../${package}/Package.swift" ]]; then
-    echo "Missing ../${package}/Package.swift." >&2
-    echo "Clone https://github.com/AtiinLabs/${package} beside the Ito repository." >&2
-    exit 1
-  fi
-done
-
 # CFBundleShortVersionString must remain numeric. Channel labels belong in the
 # artifact/source version, not in MARKETING_VERSION.
 if [[ ! "$MARKETING_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then

@@ -72,27 +72,14 @@ Backups can replace the existing library or be merged with it. Imported sources 
 * iOS or iPadOS 15.4 deployment target
 * Swift Package Manager
 
-Ito uses `ito-runner` as a local Swift package. Both repositories must be placed in the same parent directory:
-
-```text
-ito-dev/
-├── Ito/
-└── ito-runner/
-```
-
-Clone and open the project:
+Xcode fetches every dependency, including [`ito-runner`](https://github.com/AtiinLabs/ito-runner) and its [`WasmKit`](https://github.com/AtiinLabs/WasmKit) fork, at the revisions pinned in `Package.resolved`. Only Ito needs to be cloned:
 
 ```sh
-mkdir ito-dev
-cd ito-dev
-
-git clone https://github.com/itoapp/ito-runner.git
-git clone https://github.com/itoapp/Ito.git
-
+git clone https://github.com/AtiinLabs/Ito.git
 open Ito/Ito.xcodeproj
 ```
 
-Allow Swift Package Manager to resolve the remaining dependencies, select a signing team and target device, then build with `⌘R`.
+Wait for Swift Package Manager to resolve the packages, select a signing team and target device, then build with `⌘R`.
 
 ## Contributing
 

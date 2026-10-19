@@ -85,33 +85,6 @@ jobs:
           fi
           echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Read pinned ito-runner revision
-        id: runner
-        shell: bash
-        run: echo "ref=$(tr -d '[:space:]' < Ito/.github/ito-runner.ref)" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout ito-runner
-        uses: actions/checkout@v7
-        with:
-          repository: AtiinLabs/ito-runner
-          ref: ${{ steps.runner.outputs.ref }}
-          path: ito-runner
-          persist-credentials: false
-
-      
-      - name: Read pinned WasmKit revision
-        id: wasmkit_ref
-        shell: bash
-        run: echo "ref=$(tr -d '[:space:]' < Ito/.github/wasmkit.ref)" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout WasmKit
-        uses: actions/checkout@v7
-        with:
-          repository: AtiinLabs/WasmKit
-          ref: ${{ steps.wasmkit_ref.outputs.ref }}
-          path: WasmKit
-          persist-credentials: false
-
       - name: Show build environment
         run: |
           set -euxo pipefail

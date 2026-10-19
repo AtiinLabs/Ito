@@ -1,5 +1,5 @@
 {
-  "originHash" : "2e18dca93c643e9db58431fc7ecaa56d618b850c9d8ec989f9a4a34e49eea9be",
+  "originHash" : "37137041129b78e63582f493e5721e1d57e1b7e00569c596e223c91a0cd65561",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -7,6 +7,14 @@
       "location" : "https://github.com/groue/GRDB.swift",
       "state" : {
         "revision" : "b83108d10f42680d78f23fe4d4d80fc88dab3212"
+      }
+    },
+    {
+      "identity" : "ito-runner",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AtiinLabs/ito-runner.git",
+      "state" : {
+        "revision" : "fb892037b97d156be95ef757bcccc7a48db57dab"
       }
     },
     {
@@ -88,6 +96,14 @@
       "state" : {
         "revision" : "8d6ad267714cac3ae747cefdd21f7a6665006e1f",
         "version" : "2.13.7"
+      }
+    },
+    {
+      "identity" : "wasmkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AtiinLabs/WasmKit.git",
+      "state" : {
+        "revision" : "1afefceb8535c56c9e011532ba31c433233f4348"
       }
     },
     {

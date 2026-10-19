@@ -8,7 +8,7 @@ Ito currently distributes unsigned device IPAs. AltStore and SideStore can re-si
 2. In **Settings → Pages**, publish from the `gh-pages` branch and `/ (root)`.
 3. Protect `main`, require pull requests, and require the `Build and unit test` check.
 4. Add a tag ruleset for `v*` that blocks tag updates and deletion.
-5. Keep `.github/ito-runner.ref` pinned to a reviewed companion-repository commit.
+5. Pin `ito-runner` in the Xcode project to a reviewed commit; `Package.resolved` pins it and WasmKit for every build.
 6. Ensure the repository's Actions token has `contents: write` for release workflows.
 
 ## Dev channel
@@ -94,7 +94,7 @@ Feed and site publications push to `gh-pages` independently through `.github/scr
 ## What each publication does
 
 1. validates the tag or dev build metadata;
-2. checks out Ito and the pinned `ito-runner` sibling;
+2. checks out Ito;
 3. resolves Swift packages;
 4. runs unit tests on an available iPhone simulator;
 5. archives a generic iOS device build with signing disabled;
