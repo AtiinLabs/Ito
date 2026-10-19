@@ -234,7 +234,7 @@ final class MediaDetailTrackerFake: MediaDetailTrackerServing {
         subject.eraseToAnyPublisher()
     }
 
-    func state(for media: MediaIdentity) -> MediaDetailTrackerState {
+    func state(for media: MediaIdentity, isAnime: Bool) -> MediaDetailTrackerState {
         states[media] ?? MediaDetailTrackerState(
             isAvailable: false,
             isTracked: false,

@@ -191,7 +191,7 @@ struct DurableStateAPIScanTests {
             ],
             "Ito/ViewModels/MediaDetailViewModel.swift": [
                 "dependencies.progress.isRead(",
-                "dependencies.tracker.state(for:mediaIdentity)"
+                "dependencies.tracker.state(for:mediaIdentity,isAnime:mediaisAnime)"
             ],
             "Ito/ViewModels/Tracking/TrackerDetailsViewModel.swift": [
                 "linkStore.link(media:",

@@ -187,7 +187,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         let libraryState = dependencies.library.state
         isSaved = libraryState.isSaved(media: identity, sourceItemID: media.key)
         hasCustomCategories = libraryState.hasCustomCategories
-        let trackerState = dependencies.tracker.state(for: identity)
+        let trackerState = dependencies.tracker.state(for: identity, isAnime: media is Anime)
         isTrackingAvailable = trackerState.isAvailable
         isTracked = trackerState.isTracked
         selectedGroup = Self.preferredAnimeGroup(for: media)
@@ -775,13 +775,13 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     private func refreshTrackerState() {
-        let state = dependencies.tracker.state(for: mediaIdentity)
+        let state = dependencies.tracker.state(for: mediaIdentity, isAnime: media is Anime)
         isTrackingAvailable = state.isAvailable
         isTracked = state.isTracked
     }
 
     private func publishDiscordActivity() {
-        let trackerState = dependencies.tracker.state(for: mediaIdentity)
+        let trackerState = dependencies.tracker.state(for: mediaIdentity, isAnime: media is Anime)
         let detailsURL = trackerState.anilistID.map {
             "https://anilist.co/\(media is Anime ? "anime" : "manga")/\($0)"
         }

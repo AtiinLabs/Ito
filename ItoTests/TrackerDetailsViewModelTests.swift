@@ -421,6 +421,47 @@ final class TrackerDetailsViewModelTests: XCTestCase {
         return viewModel.automaticSyncNote
     }
 
+    func testLoadingAPlannedEntryWithProgressKeepsItPlanned() async {
+        let service = TrackerDetailsServiceFake()
+        service.queuedLoadResults = [.success(TrackerMediaEntry(status: "PLANNING", progress: 3, score: nil, startDate: nil, finishDate: nil))]
+        let viewModel = makeViewModel(
+            media: trackerTestMedia(id: "42", format: "MANGA"),
+            service: service,
+            isLinked: true,
+            providerID: "mangabaka",
+            providerName: "MangaBaka"
+        )
+        await load(viewModel, state: .existing)
+
+        XCTAssertEqual(viewModel.status, "PLANNING")
+        XCTAssertEqual(viewModel.progress, "3")
+
+        viewModel.save()
+        await trackingWaitUntil { !viewModel.isSaving }
+        XCTAssertEqual(
+            service.updateInvocations,
+            [.init(providerID: "mangabaka", mediaID: "42", progress: 3, status: "PLANNING")]
+        )
+    }
+
+    func testTrackerExplanationReplacesTheGenericLoadFailure() async {
+        let service = TrackerDetailsServiceFake()
+        service.queuedLoadResults = [.failure(MangaBakaTrackerError.seriesMerged(into: 1995))]
+        let viewModel = makeViewModel(
+            media: trackerTestMedia(id: "42", format: "MANGA"),
+            service: service,
+            isLinked: true,
+            providerID: "mangabaka",
+            providerName: "MangaBaka"
+        )
+        await load(viewModel, state: .failure)
+
+        XCTAssertEqual(
+            viewModel.remoteLoadErrorMessage,
+            "MangaBaka merged this series into series 1995. Stop tracking it and link it again."
+        )
+    }
+
     func testForwardOnlyTrackersRefuseToLowerProgressUnlessRepeating() async {
         let trackers = [
             (id: "myanimelist", name: "MyAnimeList", mediaID: "anime:1", format: "TV"),

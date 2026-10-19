@@ -110,6 +110,8 @@ final class TrackerDetailsViewModel: ObservableObject {
     private var hasStarted = false
     /// The progress of the entry as last loaded from the remote; `nil` when there is none.
     private var loadedProgress: Int?
+    /// The tracker's own explanation of the last load failure, when it has one.
+    private var remoteLoadFailureMessage: String?
 
     init(
         destination: TrackerDetailsDestination,
@@ -137,9 +139,9 @@ final class TrackerDetailsViewModel: ObservableObject {
     var isLoadingEntry: Bool { remoteEntryState == .loading }
 
     var remoteLoadErrorMessage: String? {
-        remoteEntryState == .failure
-            ? "Existing tracker progress could not be checked. Please retry before saving."
-            : nil
+        guard remoteEntryState == .failure else { return nil }
+        return remoteLoadFailureMessage
+            ?? "Existing tracker progress could not be checked. Please retry before saving."
     }
 
     var currentStatusLabel: String {
@@ -501,6 +503,7 @@ final class TrackerDetailsViewModel: ObservableObject {
         cancelOperation(id: loadOperationID, task: loadTask, kind: .remoteLoad)
         let operationID = UUID()
         loadOperationID = operationID
+        remoteLoadFailureMessage = nil
         remoteEntryState = .loading
         presentationLogger.log(
             .started(
@@ -541,6 +544,7 @@ final class TrackerDetailsViewModel: ObservableObject {
                     logIgnoredStale(kind: .remoteLoad, operationID: operationID)
                     return
                 }
+                remoteLoadFailureMessage = (error as? any TrackerUserFacingError)?.userMessage
                 remoteEntryState = .failure
                 finishLoad(operationID, outcome: .failed(.network))
             }
@@ -548,10 +552,12 @@ final class TrackerDetailsViewModel: ObservableObject {
     }
 
     private func apply(_ entry: TrackerMediaEntry) {
-        status = entry.status ?? "PLANNING"
+        // Progress first: setting it while the status is still Planning would promote the loaded
+        // entry to Reading or Watching through `progress`'s didSet.
         if let entryProgress = entry.progress {
             progress = String(entryProgress)
         }
+        status = entry.status ?? "PLANNING"
         score = entry.score.flatMap { $0 > 0 ? $0 : nil }
         startDate = entry.startDate
         finishDate = entry.finishDate

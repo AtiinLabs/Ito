@@ -13,7 +13,7 @@ actor MangaBakaCredentialRepository {
         case retryableProtectedDataFailure
     }
 
-    nonisolated enum CredentialError: Error, Equatable, Sendable, LocalizedError {
+    nonisolated enum CredentialError: Error, Equatable, Sendable, LocalizedError, TrackerUserFacingError {
         /// No MangaBaka session.
         case notSignedIn
         /// MangaBaka rejected the stored token; the session was removed.
@@ -26,6 +26,10 @@ actor MangaBakaCredentialRepository {
             case .tokenRejected:
                 "MangaBaka no longer accepts the saved token. Sign in again."
             }
+        }
+
+        var userMessage: String {
+            errorDescription ?? "Sign in to MangaBaka again."
         }
     }
 
@@ -82,10 +86,13 @@ actor MangaBakaCredentialRepository {
 
     /// Removes a token MangaBaka answered with HTTP 401. A token stored since the request started
     /// is kept.
-    func invalidate(_ rejectedToken: String) async {
-        guard token == rejectedToken else { return }
+    /// - Returns: Whether the rejected token was the current one and was removed.
+    @discardableResult
+    func invalidate(_ rejectedToken: String) async -> Bool {
+        guard token == rejectedToken else { return false }
         AppLogger.auth.error("MangaBaka rejected the saved token; signing out.")
         token = nil
         try? await store.removeToken(for: Self.providerID)
+        return true
     }
 }

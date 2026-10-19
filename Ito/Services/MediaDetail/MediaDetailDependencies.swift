@@ -125,7 +125,8 @@ struct MediaDetailTrackerState: Equatable {
 @MainActor
 protocol MediaDetailTrackerServing: AnyObject {
     var statePublisher: AnyPublisher<Void, Never> { get }
-    func state(for media: MediaIdentity) -> MediaDetailTrackerState
+    /// - Parameter isAnime: Anime can be tracked only on trackers that list anime.
+    func state(for media: MediaIdentity, isAnime: Bool) -> MediaDetailTrackerState
     func refresh() async throws
 }
 
@@ -141,9 +142,9 @@ final class TrackingMediaDetailAdapter: MediaDetailTrackerServing {
         sheetService.sheetStatePublisher
     }
 
-    func state(for media: MediaIdentity) -> MediaDetailTrackerState {
+    func state(for media: MediaIdentity, isAnime: Bool) -> MediaDetailTrackerState {
         MediaDetailTrackerState(
-            isAvailable: !sheetService.authenticatedProviders().isEmpty,
+            isAvailable: sheetService.authenticatedProviders().contains { !isAnime || $0.tracksAnime },
             isTracked: sheetService.hasAuthenticatedLink(for: media),
             anilistID: sheetService.remoteMediaID(for: media, providerID: "anilist")
         )

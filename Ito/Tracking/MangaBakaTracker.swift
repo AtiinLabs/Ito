@@ -3,7 +3,7 @@ import Foundation
 import MangaBakaSDK
 import OSLog
 
-nonisolated enum MangaBakaTrackerError: Error, Equatable, Sendable, LocalizedError {
+nonisolated enum MangaBakaTrackerError: Error, Equatable, Sendable, LocalizedError, TrackerUserFacingError {
     case invalidMediaID
     case invalidStatus(String)
     case unsupportedRemoteStatus(String)
@@ -29,6 +29,10 @@ nonisolated enum MangaBakaTrackerError: Error, Equatable, Sendable, LocalizedErr
         case .tokenRequired:
             "Sign in to MangaBaka with a Personal Access Token."
         }
+    }
+
+    var userMessage: String {
+        errorDescription ?? "MangaBaka could not be reached."
     }
 }
 
@@ -107,7 +111,8 @@ nonisolated enum MangaBakaWritePolicy {
         switch state {
         case .reading, .rereading:
             return Double(target) > snapshot.progress ? MangaBakaEntryPatch(progress: target) : nil
-        case .planToRead where snapshot.progress == 0 && target == 1:
+        case .planToRead where snapshot.progress == 0 && target == 1,
+             .considering where snapshot.progress == 0 && target == 1:
             // Starting chapter 1 of a planned series; opening a later chapter is a peek.
             return MangaBakaEntryPatch(state: .reading, progress: 1)
         default:
@@ -139,8 +144,9 @@ nonisolated enum MangaBakaWritePolicy {
             if snapshot.state == nil {
                 patch.progress = target > 0 ? target : nil
             } else if rereading {
-                // Starting a reread may reset progress; everything else only moves forward.
-                patch.progress = Double(target) != snapshot.progress ? target : nil
+                // Starting a reread may reset progress. The sheet shows MangaBaka's progress rounded
+                // down, so saving that value unchanged leaves a fractional chapter alone.
+                patch.progress = progress != Int(snapshot.progress.rounded(.down)) ? target : nil
             } else {
                 patch.progress = Double(target) > snapshot.progress ? target : nil
             }
@@ -335,8 +341,9 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
         do {
             return try await operation(Self.client(token: token, session: session))
         } catch MangaBakaError.unauthorized {
-            await credentialRepository.invalidate(token)
-            markSignedOut()
+            if await credentialRepository.invalidate(token) {
+                markSignedOut()
+            }
             throw MangaBakaCredentialRepository.CredentialError.tokenRejected
         }
     }

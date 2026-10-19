@@ -56,6 +56,8 @@ struct MangaBakaWritePolicyTests {
         #expect(try MangaBakaWritePolicy.patch(for: snapshot(.planToRead), progress: 1, status: nil) == MangaBakaEntryPatch(state: .reading, progress: 1))
         #expect(try MangaBakaWritePolicy.patch(for: snapshot(.planToRead), progress: 7, status: nil) == nil)
         #expect(try MangaBakaWritePolicy.patch(for: snapshot(.planToRead, progress: 2), progress: 1, status: nil) == nil)
+        // Considering is shown as Planning, so it follows the same rule.
+        #expect(try MangaBakaWritePolicy.patch(for: snapshot(.considering), progress: 1, status: nil) == MangaBakaEntryPatch(state: .reading, progress: 1))
     }
 
     // MARK: Explicit saves from the tracker sheet
@@ -69,6 +71,14 @@ struct MangaBakaWritePolicyTests {
         #expect(try MangaBakaWritePolicy.patch(for: snapshot(.reading, progress: 10), progress: 4, status: "CURRENT") == nil)
         #expect(try MangaBakaWritePolicy.patch(for: snapshot(.reading, progress: 10), progress: 4, status: "PAUSED") == MangaBakaEntryPatch(state: .paused))
         #expect(try MangaBakaWritePolicy.patch(for: snapshot(.completed, progress: 10), progress: 0, status: "REPEATING") == MangaBakaEntryPatch(state: .rereading, progress: 0))
+    }
+
+    @Test func savingARereadUnchangedLeavesFractionalOrCappedProgressAlone() throws {
+        // The sheet shows 12.5 as 12; saving it unchanged must not write 12.
+        #expect(try MangaBakaWritePolicy.patch(for: snapshot(.rereading, progress: 12.5), progress: 12, status: "REPEATING") == nil)
+        // Progress above a finished series' chapter count is not capped down when unchanged.
+        #expect(try MangaBakaWritePolicy.patch(for: snapshot(.rereading, progress: 130, total: 120), progress: 130, status: "REPEATING") == nil)
+        #expect(try MangaBakaWritePolicy.patch(for: snapshot(.rereading, progress: 12.5), progress: 3, status: "REPEATING") == MangaBakaEntryPatch(progress: 3))
     }
 
     @Test func keepingPlanningLeavesConsideringAsItIs() throws {

@@ -123,7 +123,7 @@ final class MediaDetailDependencyBoundaryTests: XCTestCase {
         defer { cancellable.cancel() }
 
         XCTAssertEqual(
-            adapter.state(for: identity),
+            adapter.state(for: identity, isAnime: false),
             MediaDetailTrackerState(
                 isAvailable: true,
                 isTracked: true,
@@ -134,6 +134,16 @@ final class MediaDetailDependencyBoundaryTests: XCTestCase {
         XCTAssertEqual(publications, 1)
         try await adapter.refresh()
         XCTAssertEqual(sheet.refreshCount, 1)
+    }
+
+    func testAnimeIsNotTrackableWhenOnlyAMangaTrackerIsSignedIn() {
+        let identity = MediaIdentity(pluginId: "plugin", itemId: "media")
+        var mangaBaka = TrackerProviderPresentation(identifier: "mangabaka", name: "MangaBaka", isAuthenticated: true, username: nil)
+        mangaBaka.tracksAnime = false
+        let adapter = TrackingMediaDetailAdapter(sheetService: TrackerSheetServiceFake(providers: [mangaBaka]))
+
+        XCTAssertFalse(adapter.state(for: identity, isAnime: true).isAvailable)
+        XCTAssertTrue(adapter.state(for: identity, isAnime: false).isAvailable)
     }
 
     func testTypedMessagesRedactSourceIdentityWhilePreservingMoveAction() throws {

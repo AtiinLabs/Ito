@@ -73,6 +73,12 @@ nonisolated enum TrackerTokenError: Error, Equatable, Sendable, LocalizedError {
     }
 }
 
+/// A tracker error with a message written for the user, shown on tracker screens instead of a
+/// generic failure. Messages must not contain tokens or server responses.
+protocol TrackerUserFacingError: Error {
+    var userMessage: String { get }
+}
+
 nonisolated enum TrackerWriteRules {
     /// Trackers whose entries Ito moves only forward: explicit saves cannot lower progress except
     /// when starting a reread or rewatch, and automatic sync only advances entries the user is
