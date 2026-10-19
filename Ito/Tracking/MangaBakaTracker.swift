@@ -11,8 +11,6 @@ nonisolated enum MangaBakaTrackerError: Error, Equatable, Sendable, LocalizedErr
     case seriesMerged(into: Int)
     /// The linked series was removed from MangaBaka.
     case seriesUnavailable
-    /// MangaBaka sign-in uses a Personal Access Token, not OAuth.
-    case tokenRequired
 
     var errorDescription: String? {
         switch self {
@@ -26,8 +24,6 @@ nonisolated enum MangaBakaTrackerError: Error, Equatable, Sendable, LocalizedErr
             "MangaBaka merged this series into series \(id). Stop tracking it and link it again."
         case .seriesUnavailable:
             "This series is no longer available on MangaBaka. Stop tracking it and link it again."
-        case .tokenRequired:
-            "Sign in to MangaBaka with a Personal Access Token."
         }
     }
 
@@ -162,6 +158,10 @@ nonisolated enum MangaBakaWritePolicy {
 /// MangaBaka tracking for manga and novels. See `MangaBakaWritePolicy` for what it writes.
 @MainActor
 public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating {
+    /// Ito's MangaBaka OAuth client ID (a public application; public clients have no secret).
+    static let clientID = "mIujtlrWyyjQyUEYToReIpJwsWeBJkaH"
+    static let redirectURI = "ito://mangabaka-callback"
+
     public let identifier = MangaBakaCredentialRepository.providerID
     public let name = "MangaBaka"
     public let tracksAnime = false
@@ -180,6 +180,7 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
 
     private let usernameKey = "mangabaka_username"
     private let credentialRepository: MangaBakaCredentialRepository
+    private let oauth: MangaBakaOAuth
     private let usernameDefaults: UserDefaults
     private let session: URLSession
     private let catalog: MangaBakaClient
@@ -187,13 +188,15 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
 
     init(
         credentialRepository: MangaBakaCredentialRepository,
+        oauth: MangaBakaOAuth,
         usernameDefaults: UserDefaults,
         session: URLSession = .shared
     ) {
         self.credentialRepository = credentialRepository
+        self.oauth = oauth
         self.usernameDefaults = usernameDefaults
         self.session = session
-        catalog = Self.client(token: nil, session: session)
+        catalog = Self.client(credential: nil, session: session)
         username = usernameDefaults.string(forKey: usernameKey)
     }
 
@@ -206,34 +209,44 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
         return result.state
     }
 
+    /// Signs in through MangaBaka's OAuth page with PKCE.
     public func authenticate(using oauthManager: OAuthManager) async throws {
-        _ = oauthManager
-        throw MangaBakaTrackerError.tokenRequired
+        let request = oauth.authorizationRequest()
+        let callbackURL = try await oauthManager.authenticate(url: request.url, callbackScheme: "ito")
+        let code = try oauth.authorizationCode(from: callbackURL, matching: request)
+        let token = try await oauth.exchangeCode(code, for: request)
+        await credentialRepository.persist(.oauth(token))
+        isSignedIn = true
+        do {
+            storeUsername(of: try await Self.client(credential: .oauthAccessToken(token.accessToken), session: session).profile())
+        } catch {
+            AppLogger.auth.error("Failed to fetch the MangaBaka profile: \(error.localizedDescription)")
+        }
     }
 
+    /// Signs in with a Personal Access Token the user created on mangabaka.org.
     func authenticate(token: String) async throws {
         let token = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty else { throw TrackerTokenError.rejected }
         let profile: MangaBakaProfile
         do {
-            profile = try await Self.client(token: token, session: session).profile()
+            profile = try await Self.client(credential: .personalAccessToken(token), session: session).profile()
         } catch MangaBakaError.unauthorized, MangaBakaError.forbidden {
             throw TrackerTokenError.rejected
         }
-        try await credentialRepository.persist(token)
+        await credentialRepository.persist(.personalAccessToken(token))
         isSignedIn = true
-        if let name = profile.preferredUsername ?? profile.nickname {
-            username = name
-            usernameDefaults.set(name, forKey: usernameKey)
-        } else {
-            clearUsername()
-        }
+        storeUsername(of: profile)
     }
 
     public func logout() async throws {
-        try await credentialRepository.logout()
+        let token = try await credentialRepository.logout()
         isSignedIn = false
         clearUsername()
+        if let token {
+            // Ending the session on MangaBaka is best effort; the local session is already gone.
+            try? await oauth.revoke(token)
+        }
     }
 
     public func searchMedia(title: String, isAnime: Bool) async throws -> [TrackerMedia] {
@@ -329,22 +342,30 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
         )
     }
 
-    /// Runs a library request with the saved token, signing out when MangaBaka rejects it.
+    /// Runs a library request with the saved credential. After a 401 it retries once with a
+    /// refreshed OAuth token, or with a credential saved since the request started; it signs out
+    /// when MangaBaka rejects the session.
     private func perform<T>(_ operation: (MangaBakaClient) async throws -> T) async throws -> T {
-        let token: String
         do {
-            token = try await credentialRepository.currentToken()
-        } catch {
+            let credential = try await credentialRepository.validCredential()
+            do {
+                return try await operation(Self.client(credential: credential, session: session))
+            } catch MangaBakaError.unauthorized {
+                let replacement = try await credentialRepository.credential(replacing: credential)
+                return try await operation(Self.client(credential: replacement, session: session))
+            }
+        } catch let error as MangaBakaCredentialRepository.CredentialError {
             markSignedOut()
             throw error
         }
-        do {
-            return try await operation(Self.client(token: token, session: session))
-        } catch MangaBakaError.unauthorized {
-            if await credentialRepository.invalidate(token) {
-                markSignedOut()
-            }
-            throw MangaBakaCredentialRepository.CredentialError.tokenRejected
+    }
+
+    private func storeUsername(of profile: MangaBakaProfile) {
+        if let name = profile.preferredUsername ?? profile.nickname {
+            username = name
+            usernameDefaults.set(name, forKey: usernameKey)
+        } else {
+            clearUsername()
         }
     }
 
@@ -358,11 +379,11 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
         usernameDefaults.removeObject(forKey: usernameKey)
     }
 
-    private static func client(token: String?, session: URLSession) -> MangaBakaClient {
+    private static func client(credential: MangaBakaCredential?, session: URLSession) -> MangaBakaClient {
         MangaBakaClient(
             configuration: MangaBakaConfiguration(
                 userAgent: userAgent,
-                credentialProvider: token.map(MangaBakaCredential.personalAccessToken),
+                credentialProvider: credential,
                 retryPolicy: retryPolicy
             ),
             session: session

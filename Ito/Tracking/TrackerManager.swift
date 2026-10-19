@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import GRDB
 import mal
+import MangaBakaSDK
 import OSLog
 
 @MainActor
@@ -39,7 +40,7 @@ public final class TrackerManager: ObservableObject {
         mangaBakaCredentialStore: any TrackerCredentialStoring,
         legacyTokenStore: any LegacyTokenStoring,
         usernameDefaults: UserDefaults,
-        malBackgroundExecution: BackgroundExecution = .none,
+        backgroundExecution: BackgroundExecution = .none,
         malSession: URLSession = .shared,
         mangaBakaSession: URLSession = .shared
     ) {
@@ -57,7 +58,7 @@ public final class TrackerManager: ObservableObject {
             credentialRepository: MALCredentialRepository(
                 store: malCredentialStore,
                 refresher: malOAuth,
-                backgroundExecution: malBackgroundExecution
+                backgroundExecution: backgroundExecution
             ),
             oauth: malOAuth,
             usernameDefaults: usernameDefaults,
@@ -65,8 +66,18 @@ public final class TrackerManager: ObservableObject {
         )
         anilistTracker = tracker
         self.malTracker = malTracker
+        let mangaBakaOAuth = MangaBakaOAuth(
+            clientID: MangaBakaTracker.clientID,
+            redirectURI: MangaBakaTracker.redirectURI,
+            session: mangaBakaSession
+        )
         mangaBakaTracker = MangaBakaTracker(
-            credentialRepository: MangaBakaCredentialRepository(store: mangaBakaCredentialStore),
+            credentialRepository: MangaBakaCredentialRepository(
+                store: mangaBakaCredentialStore,
+                refresher: mangaBakaOAuth,
+                backgroundExecution: backgroundExecution
+            ),
+            oauth: mangaBakaOAuth,
             usernameDefaults: usernameDefaults,
             session: mangaBakaSession
         )

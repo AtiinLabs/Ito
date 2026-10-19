@@ -307,7 +307,7 @@ public final class DurableStateBootstrap: ObservableObject {
             mangaBakaCredentialStore: trackerCredentialStore,
             legacyTokenStore: legacyTokenStore,
             usernameDefaults: usernameDefaults,
-            malBackgroundExecution: .application
+            backgroundExecution: .application
         )
         let repositories = RepoManager(
             dbPool: dbPool,

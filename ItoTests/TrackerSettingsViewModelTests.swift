@@ -212,14 +212,16 @@ final class TrackerSettingsViewModelTests: XCTestCase {
         )
     }
 
-    func testTokenTrackerOpensTokenSheetInsteadOfOAuthAndSignsInWithTheToken() async {
+    func testTokenTrackerKeepsOAuthAndOffersATokenSheet() async {
         var mangaBaka = provider(id: "mangabaka")
         mangaBaka.tokenCreationURL = URL(string: "https://mangabaka.org/my/settings/api-and-apps")
-        let service = TrackerSettingsServiceFake(state: state(providers: [mangaBaka]))
+        let service = TrackerSettingsServiceFake(state: state(providers: [mangaBaka, provider(id: "anilist")]))
         let viewModel = makeViewModel(service: service)
 
-        viewModel.authenticate(providerID: "mangabaka")
+        viewModel.presentTokenSignIn(providerID: "anilist")
+        XCTAssertNil(viewModel.signInSheetProvider)
 
+        viewModel.presentTokenSignIn(providerID: "mangabaka")
         XCTAssertEqual(viewModel.signInSheetProvider, mangaBaka)
         XCTAssertTrue(service.authenticationInvocations.isEmpty)
         XCTAssertFalse(viewModel.isAuthenticationOperationActive)
@@ -230,8 +232,11 @@ final class TrackerSettingsViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.signInSheetProvider)
         XCTAssertEqual(service.tokenAuthenticationInvocations.map(\.providerID), ["mangabaka"])
         XCTAssertEqual(service.tokenAuthenticationInvocations.map(\.token), ["mb-token"])
-        XCTAssertTrue(service.authenticationInvocations.isEmpty)
         XCTAssertNil(viewModel.failure(for: "mangabaka"))
+
+        viewModel.authenticate(providerID: "mangabaka")
+        await trackingWaitUntil { !viewModel.isAuthenticationOperationActive }
+        XCTAssertEqual(service.authenticationInvocations, ["mangabaka"])
     }
 
     func testRejectedTokenIsReportedAsSuch() async {

@@ -107,14 +107,17 @@ final class TrackerSettingsViewModel: ObservableObject {
         }
     }
 
-    /// Starts sign-in: the OAuth flow, or the token sheet for trackers that use tokens.
+    /// Starts the tracker's OAuth sign-in.
     func authenticate(providerID: String) {
-        if let provider = providers.first(where: { $0.identifier == providerID }), provider.tokenCreationURL != nil {
-            guard authenticationOperation == nil else { return }
-            signInSheetProvider = provider
-            return
-        }
         startAuthenticationOperation(providerID: providerID, kind: .authentication)
+    }
+
+    /// Shows the sheet for signing in with a token, for trackers that accept tokens.
+    func presentTokenSignIn(providerID: String) {
+        guard authenticationOperation == nil,
+              let provider = providers.first(where: { $0.identifier == providerID }),
+              provider.tokenCreationURL != nil else { return }
+        signInSheetProvider = provider
     }
 
     /// Signs in to a token-based tracker with the token from the sign-in sheet.

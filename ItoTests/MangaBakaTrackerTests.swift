@@ -1,4 +1,5 @@
 import Foundation
+import MangaBakaSDK
 import Testing
 @testable import Ito
 
@@ -13,6 +14,7 @@ final class MangaBakaStubURLProtocol: URLProtocol, @unchecked Sendable {
         let method: String
         let path: String
         let apiKey: String?
+        let authorization: String?
         let body: String
     }
 
@@ -38,6 +40,7 @@ final class MangaBakaStubURLProtocol: URLProtocol, @unchecked Sendable {
                 method: request.httpMethod ?? "",
                 path: request.url?.path ?? "",
                 apiKey: request.value(forHTTPHeaderField: "x-api-key"),
+                authorization: request.value(forHTTPHeaderField: "Authorization"),
                 body: String(bytes: body, encoding: .utf8) ?? ""
             ))
         }
@@ -79,6 +82,44 @@ final class MangaBakaStubURLProtocol: URLProtocol, @unchecked Sendable {
     }
 }
 
+/// Answers refreshes with queued results and records the refresh tokens it was given.
+final class FakeMangaBakaRefresher: MangaBakaTokenRefreshing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var results: [Result<MangaBakaToken, any Error>]
+    private var recorded: [String] = []
+
+    init(results: [Result<MangaBakaToken, any Error>]) {
+        self.results = results
+    }
+
+    var refreshedTokens: [String] {
+        lock.withLock { recorded }
+    }
+
+    func refresh(_ token: MangaBakaToken) async throws -> MangaBakaToken {
+        let result: Result<MangaBakaToken, any Error> = lock.withLock {
+            recorded.append(token.refreshToken ?? "")
+            return results.isEmpty ? .failure(MangaBakaOAuthError.invalidTokenResponse) : results.removeFirst()
+        }
+        return try result.get()
+    }
+}
+
+func mangaBakaToken(_ name: String, expiresAt: Date? = nil) -> MangaBakaToken {
+    MangaBakaToken(accessToken: "access-\(name)", refreshToken: "refresh-\(name)", expiresAt: expiresAt, scope: nil)
+}
+
+func mangaBakaStoredJSON(_ credential: MangaBakaCredentialRepository.StoredCredential) throws -> String {
+    String(bytes: try JSONEncoder().encode(credential), encoding: .utf8) ?? ""
+}
+
+/// The stored credential, decoded: the JSON key order is not stable, so tests compare values, not strings.
+func mangaBakaStoredCredential(in store: FakeTrackerCredentialStore) async throws -> MangaBakaCredentialRepository.StoredCredential? {
+    try await store.token(for: "mangabaka").map {
+        try JSONDecoder().decode(MangaBakaCredentialRepository.StoredCredential.self, from: Data($0.utf8))
+    }
+}
+
 @MainActor
 @Suite(.serialized)
 struct MangaBakaTrackerTests {
@@ -90,15 +131,27 @@ struct MangaBakaTrackerTests {
         MangaBakaStubURLProtocol.reset()
     }
 
-    private func makeTracker(token: String? = "mb-saved") async -> (MangaBakaTracker, FakeTrackerCredentialStore) {
-        let store = FakeTrackerCredentialStore(initialToken: token)
+    private struct Subject {
+        let tracker: MangaBakaTracker
+        let store: FakeTrackerCredentialStore
+        let repository: MangaBakaCredentialRepository
+    }
+
+    private func makeTracker(
+        _ credential: MangaBakaCredentialRepository.StoredCredential? = .personalAccessToken("mb-saved"),
+        refresher: FakeMangaBakaRefresher = FakeMangaBakaRefresher(results: [])
+    ) async throws -> Subject {
+        let store = FakeTrackerCredentialStore(initialToken: try credential.map(mangaBakaStoredJSON))
+        let session = MangaBakaStubURLProtocol.session()
+        let repository = MangaBakaCredentialRepository(store: store, refresher: refresher)
         let tracker = MangaBakaTracker(
-            credentialRepository: MangaBakaCredentialRepository(store: store),
+            credentialRepository: repository,
+            oauth: MangaBakaOAuth(clientID: "test-client", redirectURI: "ito://mangabaka-callback", session: session),
             usernameDefaults: defaults,
-            session: MangaBakaStubURLProtocol.session()
+            session: session
         )
         #expect(await tracker.bootstrapCredentials() == .ready)
-        return (tracker, store)
+        return Subject(tracker: tracker, store: store, repository: repository)
     }
 
     private nonisolated static func seriesJSON(id: Int = 42, state: String = "active", mergedWith: String = "null", status: String = "releasing") -> String {
@@ -123,15 +176,23 @@ struct MangaBakaTrackerTests {
         """
     }
 
-    /// A MangaBaka server with one series and the user's entry for it.
+    private nonisolated static let unauthorized = MangaBakaStubURLProtocol.Response(
+        status: 401,
+        body: #"{"status": 401, "message": "Invalid API key"}"#
+    )
+
+    /// A MangaBaka server with one series and the user's entry for it. `accepts` decides which
+    /// library requests are authorized.
     private nonisolated static func server(
         entry: (status: Int, body: String),
         series: String = seriesJSON(),
-        write: Int = 200
+        write: Int = 200,
+        accepts: @escaping @Sendable (URLRequest) -> Bool = { _ in true }
     ) -> @Sendable (URLRequest) -> MangaBakaStubURLProtocol.Response {
         { request in
             switch (request.httpMethod, request.url?.path) {
             case ("GET", "/v2/series/42"?): .init(status: 200, body: series)
+            case (_, "/v1/my/library/42"?) where !accepts(request): unauthorized
             case ("GET", "/v1/my/library/42"?): .init(status: entry.status, body: entry.body)
             case (_, "/v1/my/library/42"?): .init(status: write, body: #"{"status": 200, "data": true}"#)
             default: .init(status: 404, body: #"{"status": 404, "message": "NOT_FOUND"}"#)
@@ -143,42 +204,174 @@ struct MangaBakaTrackerTests {
         MangaBakaStubURLProtocol.log.filter { $0.method != "GET" }
     }
 
+    private func libraryReads() -> [MangaBakaStubURLProtocol.Entry] {
+        MangaBakaStubURLProtocol.log.filter { $0.method == "GET" && $0.path == "/v1/my/library/42" }
+    }
+
     private func json(_ body: String) throws -> [String: Any] {
         try #require(try JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any])
     }
 
-    @Test func signingInChecksTheTokenAndStoresIt() async throws {
-        let (tracker, store) = await makeTracker(token: nil)
+    // MARK: Personal Access Tokens
+
+    @Test func signingInWithATokenChecksItAndStoresIt() async throws {
+        let subject = try await makeTracker(nil)
         MangaBakaStubURLProtocol.handler = { _ in
             .init(status: 200, body: #"{"status": 200, "data": {"id": "u1", "preferred_username": "reader", "role": "user", "auth_type": "pat", "scopes": []}}"#)
         }
 
-        try await tracker.authenticate(token: "  mb-new \n")
+        try await subject.tracker.authenticate(token: "  mb-new \n")
 
-        #expect(tracker.isAuthenticated)
-        #expect(tracker.username == "reader")
-        #expect(try await store.token(for: "mangabaka") == "mb-new")
+        #expect(subject.tracker.isAuthenticated)
+        #expect(subject.tracker.username == "reader")
+        #expect(try await mangaBakaStoredCredential(in: subject.store) == .personalAccessToken("mb-new"))
         #expect(MangaBakaStubURLProtocol.log.map(\.path) == ["/v1/my/profile"])
         #expect(MangaBakaStubURLProtocol.log.first?.apiKey == "mb-new")
     }
 
     @Test func aRejectedTokenIsNotStored() async throws {
-        let (tracker, store) = await makeTracker(token: nil)
-        MangaBakaStubURLProtocol.handler = { _ in .init(status: 401, body: #"{"status": 401, "message": "Invalid API key"}"#) }
+        let subject = try await makeTracker(nil)
+        MangaBakaStubURLProtocol.handler = { _ in Self.unauthorized }
 
         await #expect(throws: TrackerTokenError.rejected) {
-            try await tracker.authenticate(token: "mb-wrong")
+            try await subject.tracker.authenticate(token: "mb-wrong")
         }
 
-        #expect(!tracker.isAuthenticated)
-        #expect(try await store.token(for: "mangabaka") == nil)
+        #expect(!subject.tracker.isAuthenticated)
+        #expect(try await subject.store.token(for: "mangabaka") == nil)
     }
 
-    @Test func automaticSyncSendsOnlyTheNewChapterProgress() async throws {
-        let (tracker, _) = await makeTracker()
+    @Test func aRejectedSavedTokenSignsOut() async throws {
+        let subject = try await makeTracker()
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (200, ""), accepts: { _ in false })
+
+        await #expect(throws: MangaBakaCredentialRepository.CredentialError.tokenRejected) {
+            _ = try await subject.tracker.getMediaListEntry(mediaId: "42")
+        }
+
+        #expect(!subject.tracker.isAuthenticated)
+        #expect(try await subject.store.token(for: "mangabaka") == nil)
+    }
+
+    @Test func a401ForAReplacedTokenRetriesWithTheNewOne() async throws {
+        let subject = try await makeTracker(.personalAccessToken("mb-old"))
+        let repository = subject.repository
+        MangaBakaStubURLProtocol.handler = { request in
+            guard request.url?.path == "/v1/my/library/42" else {
+                return .init(status: 200, body: Self.seriesJSON())
+            }
+            guard request.value(forHTTPHeaderField: "x-api-key") == "mb-new" else {
+                // The user signs in with a new token while the old token's request is in flight.
+                let saved = DispatchSemaphore(value: 0)
+                Task {
+                    await repository.persist(.personalAccessToken("mb-new"))
+                    saved.signal()
+                }
+                saved.wait()
+                return Self.unauthorized
+            }
+            return .init(status: 200, body: Self.entryJSON(state: "reading", chapter: "3"))
+        }
+
+        let entry = try await subject.tracker.getMediaListEntry(mediaId: "42")
+
+        #expect(entry?.progress == 3)
+        #expect(libraryReads().map(\.apiKey) == ["mb-old", "mb-new"])
+        #expect(subject.tracker.isAuthenticated)
+        #expect(try await mangaBakaStoredCredential(in: subject.store) == .personalAccessToken("mb-new"))
+    }
+
+    // MARK: OAuth
+
+    @Test func oauthRequestsUseTheBearerTokenAndA401RefreshesOnce() async throws {
+        let refresher = FakeMangaBakaRefresher(results: [.success(mangaBakaToken("new"))])
+        let subject = try await makeTracker(.oauth(mangaBakaToken("old")), refresher: refresher)
+        MangaBakaStubURLProtocol.handler = Self.server(
+            entry: (200, Self.entryJSON(state: "reading", chapter: "3")),
+            accepts: { $0.value(forHTTPHeaderField: "Authorization") == "Bearer access-new" }
+        )
+
+        let entry = try await subject.tracker.getMediaListEntry(mediaId: "42")
+
+        #expect(entry?.status == "CURRENT")
+        #expect(libraryReads().map(\.authorization) == ["Bearer access-old", "Bearer access-new"])
+        #expect(libraryReads().allSatisfy { $0.apiKey == nil })
+        #expect(refresher.refreshedTokens == ["refresh-old"])
+        #expect(try await mangaBakaStoredCredential(in: subject.store) == .oauth(mangaBakaToken("new")))
+        #expect(subject.tracker.isAuthenticated)
+    }
+
+    @Test func anExpiredOAuthTokenIsRefreshedBeforeTheRequest() async throws {
+        let refresher = FakeMangaBakaRefresher(results: [.success(mangaBakaToken("new"))])
+        let subject = try await makeTracker(.oauth(mangaBakaToken("old", expiresAt: Date(timeIntervalSinceNow: -60))), refresher: refresher)
         MangaBakaStubURLProtocol.handler = Self.server(entry: (200, Self.entryJSON(state: "reading", chapter: "3")))
 
-        try await tracker.updateProgress(mediaId: "42", progress: 5, status: nil)
+        _ = try await subject.tracker.getMediaListEntry(mediaId: "42")
+
+        #expect(libraryReads().map(\.authorization) == ["Bearer access-new"])
+        #expect(refresher.refreshedTokens == ["refresh-old"])
+    }
+
+    @Test func aRejectedRefreshSignsOut() async throws {
+        let refresher = FakeMangaBakaRefresher(results: [
+            .failure(MangaBakaOAuthError.tokenRequestFailed(statusCode: 400, error: "invalid_grant", description: nil))
+        ])
+        let subject = try await makeTracker(.oauth(mangaBakaToken("old")), refresher: refresher)
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (200, ""), accepts: { _ in false })
+
+        await #expect(throws: MangaBakaCredentialRepository.CredentialError.sessionExpired) {
+            _ = try await subject.tracker.getMediaListEntry(mediaId: "42")
+        }
+
+        #expect(!subject.tracker.isAuthenticated)
+        #expect(try await subject.store.token(for: "mangabaka") == nil)
+    }
+
+    @Test func aFailedRefreshKeepsTheSession() async throws {
+        let refresher = FakeMangaBakaRefresher(results: [
+            .failure(MangaBakaOAuthError.tokenRequestFailed(statusCode: 503, error: nil, description: nil))
+        ])
+        let subject = try await makeTracker(.oauth(mangaBakaToken("old")), refresher: refresher)
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (200, ""), accepts: { _ in false })
+
+        await #expect(throws: MangaBakaOAuthError.self) {
+            _ = try await subject.tracker.getMediaListEntry(mediaId: "42")
+        }
+
+        #expect(subject.tracker.isAuthenticated)
+        #expect(try await mangaBakaStoredCredential(in: subject.store) == .oauth(mangaBakaToken("old")))
+    }
+
+    @Test func signingOutRemovesTheSessionAndRevokesIt() async throws {
+        let subject = try await makeTracker(.oauth(mangaBakaToken("old")))
+        MangaBakaStubURLProtocol.handler = { _ in .init(status: 200, body: "") }
+
+        try await subject.tracker.logout()
+
+        #expect(!subject.tracker.isAuthenticated)
+        #expect(try await subject.store.token(for: "mangabaka") == nil)
+        let revoke = try #require(MangaBakaStubURLProtocol.log.first)
+        #expect(revoke.path == "/auth/oauth2/revoke")
+        #expect(revoke.body.contains("token=refresh-old"))
+    }
+
+    @Test func aFailedRevokeStillSignsOut() async throws {
+        let subject = try await makeTracker(.oauth(mangaBakaToken("old")))
+        MangaBakaStubURLProtocol.handler = { _ in .init(status: 503, body: "") }
+
+        try await subject.tracker.logout()
+
+        #expect(!subject.tracker.isAuthenticated)
+        #expect(try await subject.store.token(for: "mangabaka") == nil)
+    }
+
+    // MARK: Library writes
+
+    @Test func automaticSyncSendsOnlyTheNewChapterProgress() async throws {
+        let subject = try await makeTracker()
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (200, Self.entryJSON(state: "reading", chapter: "3")))
+
+        try await subject.tracker.updateProgress(mediaId: "42", progress: 5, status: nil)
 
         let write = try #require(writes().first)
         #expect(writes().count == 1)
@@ -186,35 +379,36 @@ struct MangaBakaTrackerTests {
         #expect(write.path == "/v1/my/library/42")
         #expect(try json(write.body) as NSDictionary == ["progress_chapter": 5] as NSDictionary)
         #expect(write.apiKey == "mb-saved")
-        // The catalog request never carries the token.
-        #expect(MangaBakaStubURLProtocol.log.first { $0.path == "/v2/series/42" }?.apiKey == nil)
+        // The catalog request never carries the credential.
+        let catalog = MangaBakaStubURLProtocol.log.first { $0.path == "/v2/series/42" }
+        #expect(catalog?.apiKey == nil && catalog?.authorization == nil)
     }
 
     @Test func automaticSyncLeavesCompletedEntriesAlone() async throws {
-        let (tracker, _) = await makeTracker()
+        let subject = try await makeTracker()
         MangaBakaStubURLProtocol.handler = Self.server(entry: (200, Self.entryJSON(state: "completed", chapter: "120")))
 
-        try await tracker.updateProgress(mediaId: "42", progress: 121, status: nil)
+        try await subject.tracker.updateProgress(mediaId: "42", progress: 121, status: nil)
 
         #expect(writes().isEmpty)
     }
 
     @Test func aFailedPreReadNeverWrites() async throws {
-        let (tracker, _) = await makeTracker()
+        let subject = try await makeTracker()
         MangaBakaStubURLProtocol.handler = Self.server(entry: (500, #"{"status": 500}"#))
 
         await #expect(throws: (any Error).self) {
-            try await tracker.updateProgress(mediaId: "42", progress: 5, status: "CURRENT")
+            try await subject.tracker.updateProgress(mediaId: "42", progress: 5, status: "CURRENT")
         }
 
         #expect(writes().isEmpty)
     }
 
     @Test func explicitSaveCreatesAMissingEntry() async throws {
-        let (tracker, _) = await makeTracker()
+        let subject = try await makeTracker()
         MangaBakaStubURLProtocol.handler = Self.server(entry: (404, #"{"status": 404, "message": "NOT_FOUND"}"#), write: 201)
 
-        try await tracker.updateProgress(mediaId: "42", progress: 3, status: "CURRENT")
+        try await subject.tracker.updateProgress(mediaId: "42", progress: 3, status: "CURRENT")
 
         let write = try #require(writes().first)
         #expect(write.method == "POST")
@@ -222,66 +416,25 @@ struct MangaBakaTrackerTests {
     }
 
     @Test func aMergedSeriesIsRefused() async throws {
-        let (tracker, _) = await makeTracker()
+        let subject = try await makeTracker()
         MangaBakaStubURLProtocol.handler = Self.server(
             entry: (200, Self.entryJSON(state: "reading", chapter: "3")),
             series: Self.seriesJSON(state: "merged", mergedWith: "1995")
         )
 
         await #expect(throws: MangaBakaTrackerError.seriesMerged(into: 1995)) {
-            try await tracker.updateProgress(mediaId: "42", progress: 5, status: nil)
+            try await subject.tracker.updateProgress(mediaId: "42", progress: 5, status: nil)
         }
         #expect(writes().isEmpty)
     }
 
-    @Test func aRejectedSavedTokenSignsOut() async throws {
-        let (tracker, store) = await makeTracker()
-        MangaBakaStubURLProtocol.handler = Self.server(entry: (401, #"{"status": 401, "message": "Invalid API key"}"#))
-
-        await #expect(throws: MangaBakaCredentialRepository.CredentialError.tokenRejected) {
-            _ = try await tracker.getMediaListEntry(mediaId: "42")
-        }
-
-        #expect(!tracker.isAuthenticated)
-        #expect(try await store.token(for: "mangabaka") == nil)
-    }
-
-    @Test func aLate401ForAReplacedTokenKeepsTheNewSession() async throws {
-        let store = FakeTrackerCredentialStore(initialToken: "mb-old")
-        let repository = MangaBakaCredentialRepository(store: store)
-        let tracker = MangaBakaTracker(
-            credentialRepository: repository,
-            usernameDefaults: defaults,
-            session: MangaBakaStubURLProtocol.session()
-        )
-        #expect(await tracker.bootstrapCredentials() == .ready)
-        MangaBakaStubURLProtocol.handler = { request in
-            guard request.url?.path == "/v1/my/library/42" else {
-                return .init(status: 200, body: Self.seriesJSON())
-            }
-            // The user signs in with a new token while the old token's request is in flight.
-            let saved = DispatchSemaphore(value: 0)
-            Task {
-                try? await repository.persist("mb-new")
-                saved.signal()
-            }
-            saved.wait()
-            return .init(status: 401, body: #"{"status": 401, "message": "Invalid API key"}"#)
-        }
-
-        await #expect(throws: MangaBakaCredentialRepository.CredentialError.tokenRejected) {
-            _ = try await tracker.getMediaListEntry(mediaId: "42")
-        }
-
-        #expect(tracker.isAuthenticated)
-        #expect(try await store.token(for: "mangabaka") == "mb-new")
-    }
+    // MARK: Reads and search
 
     @Test func entriesMapStatusProgressScoreAndDates() async throws {
-        let (tracker, _) = await makeTracker()
+        let subject = try await makeTracker()
         MangaBakaStubURLProtocol.handler = Self.server(entry: (200, Self.entryJSON(state: "rereading", chapter: "12.5")))
 
-        let entry = try #require(try await tracker.getMediaListEntry(mediaId: "42"))
+        let entry = try #require(try await subject.tracker.getMediaListEntry(mediaId: "42"))
 
         #expect(entry.status == "REPEATING")
         #expect(entry.progress == 12)
@@ -290,17 +443,17 @@ struct MangaBakaTrackerTests {
     }
 
     @Test func searchFindsSeriesAndAnimeSearchesSendNothing() async throws {
-        let (tracker, _) = await makeTracker()
+        let subject = try await makeTracker()
         let series = Self.seriesJSON()
         MangaBakaStubURLProtocol.handler = { _ in
             let item = series.replacingOccurrences(of: #"{"status": 200, "data": "#, with: "").dropLast()
             return .init(status: 200, body: #"{"status": 200, "pagination": {"count": 1, "page": 1, "limit": 10, "next": null, "previous": null}, "data": ["# + item + "]}")
         }
 
-        #expect(try await tracker.searchMedia(title: "solo", isAnime: true).isEmpty)
+        #expect(try await subject.tracker.searchMedia(title: "solo", isAnime: true).isEmpty)
         #expect(MangaBakaStubURLProtocol.log.isEmpty)
 
-        let results = try await tracker.searchMedia(title: "solo", isAnime: false)
+        let results = try await subject.tracker.searchMedia(title: "solo", isAnime: false)
 
         #expect(results.map(\.id) == ["42"])
         #expect(results.first?.title == "Solo Leveling")
@@ -311,10 +464,10 @@ struct MangaBakaTrackerTests {
     }
 
     @Test func malformedIDsSendNothing() async throws {
-        let (tracker, _) = await makeTracker()
+        let subject = try await makeTracker()
 
         await #expect(throws: MangaBakaTrackerError.invalidMediaID) {
-            try await tracker.updateProgress(mediaId: "manga:42", progress: 3, status: "CURRENT")
+            try await subject.tracker.updateProgress(mediaId: "manga:42", progress: 3, status: "CURRENT")
         }
         #expect(MangaBakaStubURLProtocol.log.isEmpty)
     }

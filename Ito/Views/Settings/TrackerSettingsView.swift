@@ -102,11 +102,18 @@ struct TrackerSettingsView: View {
                         ProgressView()
                             .padding(.trailing, 8)
                     }
-                    Text(provider.tokenCreationURL == nil ? "Login with \(provider.name)" : "Sign In with Token")
+                    Text("Login with \(provider.name)")
                         .foregroundColor(.blue)
                 }
             }
             .disabled(viewModel.isAuthenticationOperationActive)
+
+            if provider.tokenCreationURL != nil {
+                Button("Use a Personal Access Token") {
+                    viewModel.presentTokenSignIn(providerID: provider.identifier)
+                }
+                .disabled(viewModel.isAuthenticationOperationActive)
+            }
         }
     }
 }

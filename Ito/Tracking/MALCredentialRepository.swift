@@ -1,7 +1,6 @@
 import Foundation
 import mal
 import OSLog
-import UIKit
 
 /// Refreshes MyAnimeList tokens. `MALOAuth` in production; fakes in tests.
 nonisolated protocol MALTokenRefreshing: Sendable {
@@ -9,29 +8,6 @@ nonisolated protocol MALTokenRefreshing: Sendable {
 }
 
 nonisolated extension MALOAuth: MALTokenRefreshing {}
-
-/// Keeps work alive while the app moves to the background, so a token rotation that MyAnimeList
-/// has already accepted is not abandoned before the new token reaches the Keychain.
-nonisolated struct BackgroundExecution: Sendable {
-    let run: @Sendable (_ work: @escaping @Sendable () async throws -> MALToken) async throws -> MALToken
-
-    static let none = BackgroundExecution { work in try await work() }
-
-    /// Runs the work inside a UIKit background task.
-    static let application = BackgroundExecution { work in
-        let identifier = await MainActor.run {
-            UIApplication.shared.beginBackgroundTask(withName: "MyAnimeList token refresh", expirationHandler: nil)
-        }
-        do {
-            let result = try await work()
-            await MainActor.run { UIApplication.shared.endBackgroundTask(identifier) }
-            return result
-        } catch {
-            await MainActor.run { UIApplication.shared.endBackgroundTask(identifier) }
-            throw error
-        }
-    }
-}
 
 /// The signed-in MyAnimeList session: the token in the Keychain and its refresh.
 ///
@@ -171,7 +147,7 @@ actor MALCredentialRepository {
         }
         let newToken: MALToken
         do {
-            newToken = try await backgroundExecution.run { [refresher] in
+            newToken = try await backgroundExecution.run("MyAnimeList token refresh") { [refresher] in
                 try await refresher.refresh(oldToken)
             }
         } catch let error as MALError where error.statusCode == 400 || error.statusCode == 401 {
