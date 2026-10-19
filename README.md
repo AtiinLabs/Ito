@@ -28,7 +28,7 @@ Ito is a free, open-source client for iPhone and iPad. It combines dedicated rea
 * **Native reading** — Dedicated manga and novel readers designed for iOS.
 * **Native video playback** — Select available video quality, audio tracks, and subtitles.
 * **AniList discovery** — Browse, search, and filter titles using AniList.
-* **Progress tracking** — Connect AniList and MyAnimeList to track what you read and watch. Ito never deletes list entries or lowers your progress on MyAnimeList.
+* **Progress tracking** — Connect AniList and MyAnimeList to track what you read and watch.
 * **WASM plugins** — Install `.ito` plugins from user-added repositories. Downloaded packages are SHA-256 verified before installation.
 * **Backup and migration** — Export native `.itobackup` files or import libraries from Aidoku and Paperback.
 * **On-device storage** — Library data and history are stored locally, with tracker credentials protected by Keychain.
