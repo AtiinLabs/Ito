@@ -72,7 +72,7 @@ Backups can replace the existing library or be merged with it. Imported sources 
 * iOS or iPadOS 15.4 deployment target
 * Swift Package Manager
 
-Xcode fetches every dependency, including [`ito-runner`](https://github.com/AtiinLabs/ito-runner) and its [`WasmKit`](https://github.com/AtiinLabs/WasmKit) fork, at the revisions pinned in `Package.resolved`. Only Ito needs to be cloned:
+Xcode fetches every dependency, including [`ito-runner`](https://github.com/AtiinLabs/ito-runner), its [`WasmKit`](https://github.com/AtiinLabs/WasmKit) fork and [`anilist-sdk`](https://github.com/AtiinLabs/anilist-sdk), at the revisions pinned in `Package.resolved`. Only Ito needs to be cloned:
 
 ```sh
 git clone https://github.com/AtiinLabs/Ito.git

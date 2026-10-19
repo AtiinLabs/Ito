@@ -1,93 +1,36 @@
 import Foundation
-import Combine
+import anilist
 
 public actor DiscoverService {
     public static let shared = DiscoverService()
 
-    private let apiURL = URL(string: "https://graphql.anilist.co")!
+    /// Attempts per request when AniList rate-limits (HTTP 429).
+    private static let maxAttempts = 3
+    /// Upper bound on a single rate-limit wait, whatever `Retry-After` says.
+    private static let maxRetryDelaySeconds = 10
+
+    private let client = AniListClient()
 
     private init() {}
 
     // MARK: - Genres & Tags
 
     public func fetchGenres() async throws -> [String] {
-        let body: [String: Any] = ["query": "query { GenreCollection }"]
-        let data = try await performRequest(body: body)
-        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let dataDict = json["data"] as? [String: Any],
-           let genres = dataDict["GenreCollection"] as? [String] {
-            return genres.filter { $0 != "Hentai" }
-        }
-        return []
+        let genres = try await execute(AniListQueries.GenreCollectionQuery()).genreCollection ?? []
+        return genres.filter { $0 != "Hentai" }
     }
 
     public func fetchTags() async throws -> [DiscoverTag] {
-        let query = "query { MediaTagCollection { id name description category isAdult } }"
-        let body: [String: Any] = ["query": query]
-        let data = try await performRequest(body: body)
-        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let dataDict = json["data"] as? [String: Any],
-           let tagList = dataDict["MediaTagCollection"] as? [[String: Any]] {
-            return tagList.compactMap { dict -> DiscoverTag? in
-                guard let id = dict["id"] as? Int,
-                      let name = dict["name"] as? String else { return nil }
-                return DiscoverTag(
-                    id: id, name: name,
-                    description: dict["description"] as? String,
-                    category: dict["category"] as? String,
-                    isAdult: dict["isAdult"] as? Bool
-                )
-            }
+        let tags = try await execute(AniListQueries.MediaTagCollectionQuery()).mediaTagCollection ?? []
+        return tags.map {
+            DiscoverTag(id: $0.id, name: $0.name, description: $0.description, category: $0.category, isAdult: $0.isAdult)
         }
-        return []
     }
 
     // MARK: - Single Media Detail
 
     public func fetchMediaDetails(id: Int) async throws -> DiscoverMedia? {
-        let graphqlQuery = """
-        query ($id: Int) {
-          Media(id: $id) {
-            id
-            title { english romaji native }
-            synonyms
-            coverImage { large extraLarge }
-            bannerImage
-            format status
-            description(asHtml: false)
-            genres
-            averageScore
-            episodes chapters
-            season seasonYear
-            type
-            recommendations(sort: [RATING_DESC, ID], perPage: 15) {
-              nodes {
-                mediaRecommendation {
-                  id
-                  title { english romaji native }
-                  synonyms
-                  coverImage { large extraLarge }
-                  bannerImage
-                  format status
-                  averageScore
-                  type
-                }
-              }
-            }
-          }
-        }
-        """
-
-        let body: [String: Any] = ["query": graphqlQuery, "variables": ["id": id]]
-        let data = try await performRequest(body: body)
-
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let dataDict = json["data"] as? [String: Any],
-              let mediaDict = dataDict["Media"] as? [String: Any] else {
-            return nil
-        }
-
-        return parseMedia(mediaDict)
+        try await execute(AniListQueries.MediaQuery(id: id)).media.map(DiscoverMedia.init(aniList:))
     }
 
     // MARK: - Core Query
@@ -98,152 +41,100 @@ public actor DiscoverService {
     }
 
     public func queryMediaPaginated(type: DiscoverMediaType, sort: DiscoverSort, season: String? = nil, seasonYear: Int? = nil, search: String? = nil, genres: [String]? = nil, excludedGenres: [String]? = nil, tags: [String]? = nil, excludedTags: [String]? = nil, format: String? = nil, status: String? = nil, countryOfOrigin: String? = nil, page: Int = 1, perPage: Int = 20) async throws -> (media: [DiscoverMedia], hasNextPage: Bool) {
-        let graphqlQuery = """
-        query ($page: Int, $perPage: Int, $type: MediaType, $sort: [MediaSort],
-               $season: MediaSeason, $seasonYear: Int, $search: String,
-               $genres: [String], $excludedGenres: [String],
-               $tags: [String], $excludedTags: [String],
-               $format: [MediaFormat],
-               $status: MediaStatus, $countryOfOrigin: CountryCode,
-               $isAdult: Boolean = false) {
-          Page(page: $page, perPage: $perPage) {
-            pageInfo { hasNextPage }
-            media(type: $type, sort: $sort, season: $season, seasonYear: $seasonYear,
-                  search: $search,
-                  genre_in: $genres, genre_not_in: $excludedGenres,
-                  tag_in: $tags, tag_not_in: $excludedTags,
-                  format_in: $format, status: $status, countryOfOrigin: $countryOfOrigin,
-                  isAdult: $isAdult) {
-              id
-              title { english romaji native }
-              synonyms
-              coverImage { large extraLarge }
-              bannerImage
-              format status
-              description(asHtml: false)
-              genres
-              averageScore
-              episodes chapters
-              season seasonYear
-              type
-            }
-          }
-        }
-        """
-
-        var variables: [String: Any] = [
-            "page": page,
-            "perPage": perPage,
-            "type": type.rawValue,
-            "sort": [sort.rawValue]
-        ]
-
-        if let season = season { variables["season"] = season }
-        if let seasonYear = seasonYear { variables["seasonYear"] = seasonYear }
-        if let search = search { variables["search"] = search }
-        if let genres = genres, !genres.isEmpty { variables["genres"] = genres }
-        if let excludedGenres = excludedGenres, !excludedGenres.isEmpty { variables["excludedGenres"] = excludedGenres }
-        if let tags = tags, !tags.isEmpty { variables["tags"] = tags }
-        if let excludedTags = excludedTags, !excludedTags.isEmpty { variables["excludedTags"] = excludedTags }
-        if let format = format { variables["format"] = [format] }
-        if let status = status { variables["status"] = status }
-        if let country = countryOfOrigin { variables["countryOfOrigin"] = country }
-
-        let body: [String: Any] = ["query": graphqlQuery, "variables": variables]
-        let data = try await performRequest(body: body)
-
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let dataDict = json["data"] as? [String: Any],
-              let page = dataDict["Page"] as? [String: Any],
-              let pageInfo = page["pageInfo"] as? [String: Any],
-              let mediaList = page["media"] as? [[String: Any]] else {
-            return ([], false)
-        }
-
-        let hasNextPage = pageInfo["hasNextPage"] as? Bool ?? false
-        let media = mediaList.compactMap { parseMedia($0) }
-        return (media, hasNextPage)
-    }
-
-    // MARK: - Parsing
-
-    public func parseMedia(_ dict: [String: Any]) -> DiscoverMedia? {
-        guard let id = dict["id"] as? Int else { return nil }
-
-        let titleObj = dict["title"] as? [String: String?]
-        let english = titleObj?["english"] as? String
-        let romaji = titleObj?["romaji"] as? String
-        let native = titleObj?["native"] as? String
-        let title = english ?? romaji ?? native ?? "Unknown"
-        let synonyms = dict["synonyms"] as? [String] ?? []
-
-        let coverObj = dict["coverImage"] as? [String: String]
-        let cover = coverObj?["extraLarge"] ?? coverObj?["large"]
-
-        let description = dict["description"] as? String
-
-        var parsedRecommendations: [DiscoverMedia]?
-        if let recDict = dict["recommendations"] as? [String: Any],
-           let nodes = recDict["nodes"] as? [[String: Any]] {
-            let recMediaDicts = nodes.compactMap { $0["mediaRecommendation"] as? [String: Any] }
-            parsedRecommendations = recMediaDicts.compactMap { recDict in
-                self.parseMedia(recDict)
-            }
-        }
-
-        let cleanDescription = (description ?? "").strippingHTML()
-
-        return DiscoverMedia(
-            id: id,
-            title: title,
-            titleEnglish: english,
-            titleRomaji: romaji,
-            titleNative: native,
-            synonyms: synonyms,
-            coverImage: cover,
-            bannerImage: dict["bannerImage"] as? String,
-            format: dict["format"] as? String,
-            status: dict["status"] as? String,
-            description: description,
-            cleanDescription: cleanDescription,
-            genres: dict["genres"] as? [String],
-            averageScore: dict["averageScore"] as? Int,
-            episodes: dict["episodes"] as? Int,
-            chapters: dict["chapters"] as? Int,
-            season: dict["season"] as? String,
-            seasonYear: dict["seasonYear"] as? Int,
-            type: dict["type"] as? String ?? "ANIME",
-            recommendations: parsedRecommendations
+        let query = AniListQueries.SearchQuery(
+            page: page,
+            perPage: perPage,
+            search: search,
+            type: MediaType(rawValue: type.rawValue),
+            sort: MediaSort(rawValue: sort.rawValue).map { [$0] },
+            season: season.flatMap(MediaSeason.init(rawValue:)),
+            seasonYear: seasonYear,
+            genreIn: genres,
+            genreNotIn: excludedGenres,
+            tagIn: tags,
+            tagNotIn: excludedTags,
+            formatIn: format.flatMap(MediaFormat.init(rawValue:)).map { [$0] },
+            status: status.flatMap(MediaStatus.init(rawValue:)),
+            countryOfOrigin: countryOfOrigin
         )
+
+        let page = try await execute(query).page
+        let media = (page?.media ?? []).map(DiscoverMedia.init(aniList:))
+        return (media, page?.pageInfo?.hasNextPage ?? false)
     }
 
     // MARK: - Networking
 
-    private func performRequest(body: [String: Any]) async throws -> Data {
-        let jsonData = try JSONSerialization.data(withJSONObject: body)
+    private func execute<R: GraphQLRequest>(_ request: R) async throws -> R.Response {
+        var attempt = 1
+        while true {
+            do {
+                return try await client.execute(request)
+            } catch AniListError.rateLimitExceeded(let retryAfter) where attempt < Self.maxAttempts {
+                attempt += 1
+                let delay = min(max(retryAfter ?? 2, 1), Self.maxRetryDelaySeconds)
+                try await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
+            } catch let error as AniListError {
+                throw Self.presentableError(error)
+            }
+        }
+    }
 
-        var request = URLRequest(url: apiURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = jsonData
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
+    /// Keeps the "AniList Error <status>: <message>" text Discover shows and
+    /// `DiscoverPresentationFailure.isAniListOutage` matches on.
+    private static func presentableError(_ error: AniListError) -> Error {
+        let status: Int?
+        switch error {
+        case .graphqlErrors(let errors):
+            status = errors.lazy.compactMap(\.status).first
+        case .httpError(let statusCode):
+            status = statusCode
+        case .rateLimitExceeded:
+            status = 429
+        case .networkError(let urlError):
+            return urlError
+        case .decodingError:
+            status = nil
         }
 
-        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 429 {
-            try await Task.sleep(nanoseconds: 2_000_000_000)
-            return try await performRequest(body: body)
+        let message = error.localizedDescription
+        guard let status else {
+            return NSError(domain: "DiscoverService", code: 0, userInfo: [NSLocalizedDescriptionKey: "AniList Error: \(message)"])
         }
+        return NSError(domain: "DiscoverService", code: status, userInfo: [NSLocalizedDescriptionKey: "AniList Error \(status): \(message)"])
+    }
+}
 
-        if !(200...299).contains(httpResponse.statusCode) {
-            let errorMsg = String(data: data, encoding: .utf8) ?? "Unknown Error"
-            throw NSError(domain: "DiscoverService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "AniList Error \(httpResponse.statusCode): \(errorMsg)"])
-        }
+extension DiscoverMedia {
+    nonisolated init(aniList media: Media) {
+        let english = media.title?.english
+        let romaji = media.title?.romaji
+        let native = media.title?.native
+        let description = media.description
 
-        return data
+        self.init(
+            id: media.id,
+            title: english ?? romaji ?? native ?? "Unknown",
+            titleEnglish: english,
+            titleRomaji: romaji,
+            titleNative: native,
+            synonyms: media.synonyms ?? [],
+            coverImage: media.coverImage?.extraLarge ?? media.coverImage?.large,
+            bannerImage: media.bannerImage,
+            format: media.format?.rawValue,
+            status: media.status?.rawValue,
+            description: description,
+            cleanDescription: (description ?? "").strippingHTML(),
+            genres: media.genres,
+            averageScore: media.averageScore,
+            episodes: media.episodes,
+            chapters: media.chapters,
+            season: media.season?.rawValue,
+            seasonYear: media.seasonYear,
+            type: media.type?.rawValue ?? "ANIME",
+            recommendations: media.recommendations.map { connection in
+                (connection.nodes ?? []).compactMap(\.mediaRecommendation).map(DiscoverMedia.init(aniList:))
+            }
+        )
     }
 }

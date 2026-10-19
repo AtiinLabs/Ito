@@ -15,6 +15,7 @@
 		3AC825722F5FD9300054AD29 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = 3AC825712F5FD9300054AD29 /* NukeUI */; };
 		3ADF8E0F2F6CE2E6007A5EA0 /* ito-runner in Frameworks */ = {isa = PBXBuildFile; productRef = 3ADF8E0E2F6CE2E6007A5EA0 /* ito-runner */; };
 		3B8E1A012FF0000000000001 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 391483252FE4B140002F5EA7 /* GRDB */; };
+		3D0A11E02FF2000000000001 /* anilist in Frameworks */ = {isa = PBXBuildFile; productRef = 3D0A11E02FF2000000000002 /* anilist */; };
 		3C0A71F02FF1000000000001 /* ItoAVIF in Frameworks */ = {isa = PBXBuildFile; productRef = 3C0A71F02FF1000000000002 /* ItoAVIF */; };
 /* End PBXBuildFile section */
 
@@ -86,6 +87,7 @@
 				3A7509552F57FFE40057955D /* ito-runner in Frameworks */,
 				3AC825702F5FD9300054AD29 /* Nuke in Frameworks */,
 				3C0A71F02FF1000000000001 /* ItoAVIF in Frameworks */,
+				3D0A11E02FF2000000000001 /* anilist in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -165,6 +167,7 @@
 				391483252FE4B140002F5EA7 /* GRDB */,
 				397BF7232FE6F4E600EFFFC4 /* ito-runner */,
 				3C0A71F02FF1000000000002 /* ItoAVIF */,
+				3D0A11E02FF2000000000002 /* anilist */,
 			);
 			productName = Ito;
 			productReference = 3A43D87F2F57E4BD008E061E /* Ito.app */;
@@ -254,6 +257,7 @@
 				3AC825732F5FF84D0054AD29 /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */,
 				391483242FE4B140002F5EA7 /* XCRemoteSwiftPackageReference "GRDB" */,
 				397BF7222FE6F4E600EFFFC4 /* XCRemoteSwiftPackageReference "ito-runner" */,
+				3D0A11E02FF2000000000003 /* XCRemoteSwiftPackageReference "anilist-sdk" */,
 				3C0A71F02FF1000000000003 /* XCLocalSwiftPackageReference "Packages/ItoAVIF" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -674,6 +678,14 @@
 				revision = fb892037b97d156be95ef757bcccc7a48db57dab;
 			};
 		};
+		3D0A11E02FF2000000000003 /* XCRemoteSwiftPackageReference "anilist-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AtiinLabs/anilist-sdk.git";
+			requirement = {
+				kind = revision;
+				revision = 12a08d42b8e3e5b87ab7090114ca5d1d585c0df2;
+			};
+		};
 		3AC825732F5FF84D0054AD29 /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/SimplyDanny/SwiftLintPlugins";
@@ -728,6 +740,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 3C0A71F02FF1000000000003 /* XCLocalSwiftPackageReference "Packages/ItoAVIF" */;
 			productName = ItoAVIF;
+		};
+		3D0A11E02FF2000000000002 /* anilist */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3D0A11E02FF2000000000003 /* XCRemoteSwiftPackageReference "anilist-sdk" */;
+			productName = anilist;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

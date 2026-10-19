@@ -1,6 +1,14 @@
 {
-  "originHash" : "37137041129b78e63582f493e5721e1d57e1b7e00569c596e223c91a0cd65561",
+  "originHash" : "35815e46891a3b8054a22fb0d476f7bedbf3a711404d79dd997955fda66333e6",
   "pins" : [
+    {
+      "identity" : "anilist-sdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AtiinLabs/anilist-sdk.git",
+      "state" : {
+        "revision" : "12a08d42b8e3e5b87ab7090114ca5d1d585c0df2"
+      }
+    },
     {
       "identity" : "grdb.swift",
       "kind" : "remoteSourceControl",

@@ -1,6 +1,7 @@
 import OSLog
 import Foundation
 import Combine
+import anilist
 
 @MainActor
 public class AnilistTracker: TrackerProvider {
@@ -88,86 +89,39 @@ public class AnilistTracker: TrackerProvider {
     }
 
     public func searchMedia(title: String, isAnime: Bool) async throws -> [TrackerMedia] {
-        guard let token = anilistToken else { throw URLError(.userAuthenticationRequired) }
+        let query = AniListQueries.SearchQuery(
+            page: 1,
+            perPage: 5,
+            search: title,
+            type: isAnime ? .anime : .manga,
+            sort: [.searchMatch]
+        )
+        let media = try await client().execute(query).page?.media ?? []
 
-        let type = isAnime ? "ANIME" : "MANGA"
-        let query = """
-        query ($search: String, $type: MediaType) {
-            Page(page: 1, perPage: 5) {
-                media(search: $search, type: $type, sort: SEARCH_MATCH) {
-                    id
-                    title {
-                        romaji
-                        english
-                        native
-                    }
-                    coverImage {
-                        large
-                    }
-                    format
-                    episodes
-                    chapters
-                }
-            }
+        return media.map { media in
+            let romaji = media.title?.romaji
+            let title = media.title?.english ?? romaji ?? media.title?.native ?? "Unknown Title"
+            return TrackerMedia(
+                id: String(media.id),
+                title: title,
+                titleRomaji: romaji,
+                coverImage: media.coverImage?.large,
+                format: media.format?.rawValue,
+                episodes: media.episodes,
+                chapters: media.chapters
+            )
         }
-        """
-
-        let variables: [String: Any] = [
-            "search": title,
-            "type": type
-        ]
-
-        let body: [String: Any] = ["query": query, "variables": variables]
-        let jsonData = try JSONSerialization.data(withJSONObject: body)
-
-        var request = URLRequest(url: URL(string: "https://graphql.anilist.co")!)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = jsonData
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
-            if httpResponse.statusCode == 429 {
-                throw URLError(.backgroundSessionInUseByAnotherProcess)
-            }
-            throw URLError(.badServerResponse)
-        }
-
-        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let dataDict = json["data"] as? [String: Any],
-           let page = dataDict["Page"] as? [String: Any],
-           let mediaList = page["media"] as? [[String: Any]] {
-
-            return mediaList.compactMap { dict -> TrackerMedia? in
-                guard let idInt = dict["id"] as? Int,
-                      let titleObj = dict["title"] as? [String: String?] else { return nil }
-
-                let id = String(idInt)
-                let romaji = titleObj["romaji"] ?? ""
-                let english = titleObj["english"] ?? ""
-                let native = titleObj["native"] ?? ""
-
-                let title = english ?? romaji ?? native ?? "Unknown Title"
-                let coverObj = dict["coverImage"] as? [String: String]
-                let cover = coverObj?["large"]
-
-                let format = dict["format"] as? String
-                let episodes = dict["episodes"] as? Int
-                let chapters = dict["chapters"] as? Int
-
-                return TrackerMedia(id: id, title: title, titleRomaji: romaji, coverImage: cover, format: format, episodes: episodes, chapters: chapters)
-            }
-        }
-
-        return []
     }
 
     public func updateProgress(mediaId: String, progress: Int?, status: String?) async throws {
-        guard let token = anilistToken else { throw URLError(.userAuthenticationRequired) }
+        let client = try client()
         guard let idInt = Int(mediaId) else { throw URLError(.badURL) }
+        let listStatus = try status.map { rawValue in
+            guard let listStatus = MediaListStatus(rawValue: rawValue) else {
+                throw URLError(.cannotParseResponse)
+            }
+            return listStatus
+        }
 
         if let progress = progress {
             do {
@@ -182,160 +136,51 @@ public class AnilistTracker: TrackerProvider {
             }
         }
 
-        let mutation = """
-        mutation ($mediaId: Int, $progress: Int, $status: MediaListStatus) {
-            SaveMediaListEntry(mediaId: $mediaId, progress: $progress, status: $status) {
-                id
-                progress
-                status
-            }
-        }
-        """
-
-        var variables: [String: Any] = [
-            "mediaId": idInt
-        ]
-
-        if let progress = progress {
-            variables["progress"] = progress
-        }
-
-        if let status = status {
-            variables["status"] = status
-        }
-
-        let body: [String: Any] = ["query": mutation, "variables": variables]
-        let jsonData = try JSONSerialization.data(withJSONObject: body)
-
-        var request = URLRequest(url: URL(string: "https://graphql.anilist.co")!)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = jsonData
-
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        if let httpResponse = response as? HTTPURLResponse {
-            if httpResponse.statusCode == 429 {
-                throw URLError(.backgroundSessionInUseByAnotherProcess)
-            } else if httpResponse.statusCode != 200 {
-                throw URLError(.badServerResponse)
-            }
-        }
+        _ = try await client.execute(SaveMediaListEntryMutation(mediaId: idInt, status: listStatus, progress: progress))
     }
 
     public func getMediaListEntry(mediaId: String) async throws -> TrackerMediaEntry? {
-        guard let token = anilistToken else { throw URLError(.userAuthenticationRequired) }
+        let client = try client()
         guard let username = username else { return nil }
         guard let idInt = Int(mediaId) else { throw URLError(.badURL) }
 
-        let query = """
-        query ($mediaId: Int, $userName: String) {
-            MediaList(mediaId: $mediaId, userName: $userName) {
-                status
-                progress
-                score
-                startedAt {
-                    year
-                    month
-                    day
-                }
-                completedAt {
-                    year
-                    month
-                    day
-                }
-            }
+        let entry: MediaList?
+        do {
+            entry = try await client.execute(AniListQueries.MediaListEntryQuery(userName: username, mediaId: idInt)).mediaList
+        } catch let error as AniListError where error.isNotFound {
+            return nil
         }
-        """
+        guard let entry else { return nil }
 
-        let variables: [String: Any] = [
-            "mediaId": idInt,
-            "userName": username
-        ]
-
-        let body: [String: Any] = ["query": query, "variables": variables]
-        let jsonData = try JSONSerialization.data(withJSONObject: body)
-
-        var request = URLRequest(url: URL(string: "https://graphql.anilist.co")!)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = jsonData
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 429 {
-            throw URLError(.backgroundSessionInUseByAnotherProcess)
-        }
-
-        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let dataDict = json["data"] as? [String: Any],
-           let entry = dataDict["MediaList"] as? [String: Any] {
-
-            let status = entry["status"] as? String
-            let progress = entry["progress"] as? Int
-            let score = entry["score"] as? Double
-
-            var startDate: Date?
-            if let start = entry["startedAt"] as? [String: Any?],
-               let year = start["year"] as? Int, let month = start["month"] as? Int, let day = start["day"] as? Int {
-                var components = DateComponents()
-                components.year = year
-                components.month = month
-                components.day = day
-                startDate = Calendar.current.date(from: components)
-            }
-
-            var finishDate: Date?
-            if let end = entry["completedAt"] as? [String: Any?],
-               let year = end["year"] as? Int, let month = end["month"] as? Int, let day = end["day"] as? Int {
-                var components = DateComponents()
-                components.year = year
-                components.month = month
-                components.day = day
-                finishDate = Calendar.current.date(from: components)
-            }
-
-            return TrackerMediaEntry(status: status, progress: progress, score: score, startDate: startDate, finishDate: finishDate)
-        }
-
-        return nil
+        return TrackerMediaEntry(
+            status: entry.status?.rawValue,
+            progress: entry.progress,
+            score: entry.score,
+            startDate: Self.date(from: entry.startedAt),
+            finishDate: Self.date(from: entry.completedAt)
+        )
     }
 
     private func fetchAnilistViewer(token: String) async throws {
-        let query = """
-        query {
-            Viewer {
-                name
-            }
-        }
-        """
-
-        let body: [String: Any] = ["query": query]
-        let jsonData = try JSONSerialization.data(withJSONObject: body)
-
-        var request = URLRequest(url: URL(string: "https://graphql.anilist.co")!)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = jsonData
-
-        let (data, _) = try await URLSession.shared.data(for: request)
-
-        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let dataDict = json["data"] as? [String: Any],
-           let viewer = dataDict["Viewer"] as? [String: Any],
-           let name = viewer["name"] as? String {
-
-            guard anilistToken == token else { return }
-            username = name
-            usernameDefaults.set(name, forKey: usernameKey)
-        } else {
+        let viewer = try await AniListClient { token }.execute(AniListQueries.ViewerQuery()).viewer
+        guard let name = viewer?.name else {
             throw URLError(.cannotParseResponse)
         }
+
+        guard anilistToken == token else { return }
+        username = name
+        usernameDefaults.set(name, forKey: usernameKey)
+    }
+
+    private func client() throws -> AniListClient {
+        guard let token = anilistToken else { throw URLError(.userAuthenticationRequired) }
+        return AniListClient { token }
+    }
+
+    private static func date(from fuzzyDate: FuzzyDate?) -> Date? {
+        guard let year = fuzzyDate?.year, let month = fuzzyDate?.month, let day = fuzzyDate?.day else {
+            return nil
+        }
+        return Calendar.current.date(from: DateComponents(year: year, month: month, day: day))
     }
 }

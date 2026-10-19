@@ -4,14 +4,14 @@ Ito uses a trunk flow: all work merges to protected `main` through reviewed pull
 
 ## Local setup
 
-Clone Ito and open the project; Xcode fetches `ito-runner` and `WasmKit` from GitHub at the revisions pinned in `Package.resolved`:
+Clone Ito and open the project; Xcode fetches `ito-runner`, `WasmKit` and `anilist-sdk` from GitHub at the revisions pinned in `Package.resolved`:
 
 ```bash
 git clone https://github.com/AtiinLabs/Ito.git
 open Ito/Ito.xcodeproj
 ```
 
-To work on `ito-runner` alongside Ito, clone it anywhere and drag its folder into the Xcode project navigator; a local package overrides the remote one with the same name until you remove it. To ship the change, merge it in `ito-runner`, then update the revision in **Package Dependencies** (or the `ito-runner` requirement in the project) and commit the new `Package.resolved`.
+To work on `ito-runner` or `anilist-sdk` alongside Ito, clone it anywhere and drag its folder into the Xcode project navigator; a local package overrides the remote one with the same name until you remove it. To ship the change, merge it in that repository, then update the revision in **Package Dependencies** (or the package requirement in the project) and commit the new `Package.resolved`.
 
 A paid Apple Developer Program membership is not required for simulator development or the unsigned CI builds.
 
