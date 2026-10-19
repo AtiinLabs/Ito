@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 # A newer main supersedes an in-progress dev build. gh-pages writes are
-# serialized by scripts/gh_pages.sh, not by this group.
+# serialized by .github/scripts/gh_pages.sh, not by this group.
 concurrency:
   group: ito-dev
   cancel-in-progress: true
@@ -114,7 +114,7 @@ jobs:
         id: simulator
         working-directory: Ito
         shell: bash
-        run: echo "id=$(python3 scripts/select_simulator.py)" >> "$GITHUB_OUTPUT"
+        run: echo "id=$(python3 .github/scripts/select_simulator.py)" >> "$GITHUB_OUTPUT"
 
       - name: Run unit tests before dev publication
         working-directory: Ito
@@ -142,7 +142,7 @@ jobs:
           ARTIFACT_VERSION: ${{ steps.dev.outputs.display_version }}
           BUILD_NUMBER: ${{ steps.dev.outputs.build }}
           CHANNEL: dev
-        run: scripts/build_unsigned_ipa.sh build/dev
+        run: .github/scripts/build_unsigned_ipa.sh build/dev
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
@@ -195,7 +195,7 @@ jobs:
           BUNDLE_ID: ${{ env.BUNDLE_ID }}
           MAX_VERSIONS: ${{ env.DEV_RELEASES_TO_KEEP }}
           RELEASE_NOTES: Automated unsigned dev build from main at ${{ steps.dev.outputs.sha_short }}. This build may be unstable.
-        run: scripts/publish_altstore_source.sh
+        run: .github/scripts/publish_altstore_source.sh
 
       - name: Prune old dev releases and tags
         working-directory: Ito

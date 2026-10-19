@@ -87,9 +87,9 @@ Every release also carries a `.tipa`, byte-identical to the IPA, for TrollStore.
 GitHub release notes strip custom URL schemes, so the one-tap links live on GitHub Pages:
 
 - `https://atiinlabs.github.io/Ito/` is the site, `site/index.html` on `main`. `.github/workflows/site.yml` copies it to the root of `gh-pages` whenever `site/` changes on `main`, or when started manually. Its install selector targets Stable: AltStore, SideStore, and Feather add `apps.json`; TrollStore installs the `.tipa` named by the latest `apps.json` entry, fetched when the page loads.
-- `https://atiinlabs.github.io/Ito/install/` is regenerated on every feed and site publication from the sources present (`scripts/render_install_page.py`). For each channel it links `altstore://source?url=`, `sidestore://source?url=`, `feather://source/<source URL>`, `apple-magnifier://install?url=<.tipa URL>` (TrollStore), and the direct downloads.
+- `https://atiinlabs.github.io/Ito/install/` is regenerated on every feed and site publication from the sources present (`.github/scripts/render_install_page.py`). For each channel it links `altstore://source?url=`, `sidestore://source?url=`, `feather://source/<source URL>`, `apple-magnifier://install?url=<.tipa URL>` (TrollStore), and the direct downloads.
 
-Feed and site publications push to `gh-pages` independently through `scripts/gh_pages.sh`, which redoes an update when another publisher landed first. GitHub Pages must deploy from the `gh-pages` branch (**Settings → Pages → Deploy from a branch**); otherwise the feeds are committed but never served.
+Feed and site publications push to `gh-pages` independently through `.github/scripts/gh_pages.sh`, which redoes an update when another publisher landed first. GitHub Pages must deploy from the `gh-pages` branch (**Settings → Pages → Deploy from a branch**); otherwise the feeds are committed but never served.
 
 ## What each publication does
 

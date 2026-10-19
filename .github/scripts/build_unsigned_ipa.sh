@@ -25,11 +25,14 @@ if [[ ! -f "$PROJECT/project.pbxproj" ]]; then
   exit 1
 fi
 
-if [[ ! -f ../ito-runner/Package.swift ]]; then
-  echo "Missing ../ito-runner/Package.swift." >&2
-  echo "Clone https://github.com/AtiinLabs/ito-runner beside the Ito repository." >&2
-  exit 1
-fi
+# The project references both companion packages by relative path.
+for package in ito-runner WasmKit; do
+  if [[ ! -f "../${package}/Package.swift" ]]; then
+    echo "Missing ../${package}/Package.swift." >&2
+    echo "Clone https://github.com/AtiinLabs/${package} beside the Ito repository." >&2
+    exit 1
+  fi
+done
 
 # CFBundleShortVersionString must remain numeric. Channel labels belong in the
 # artifact/source version, not in MARKETING_VERSION.
@@ -53,10 +56,9 @@ if [[ ! "$CHANNEL" =~ ^(stable|dev)$ ]]; then
   exit 1
 fi
 
-rm -rf "$ARCHIVE_PATH" "$STAGING_DIR" "$IPA_PATH" "$CHECKSUM_PATH"
+rm -rf "$ARCHIVE_PATH" "$STAGING_DIR" "$IPA_PATH" "$CHECKSUM_PATH" "$TIPA_PATH" "$TIPA_CHECKSUM_PATH"
 mkdir -p "$OUTPUT_DIR" "$STAGING_DIR/Payload"
 
-set -o pipefail
 xcodebuild archive \
   -project "$PROJECT" \
   -scheme "$SCHEME" \

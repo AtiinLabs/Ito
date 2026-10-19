@@ -6,9 +6,9 @@ on:
       - main
     paths:
       - site/**
-      - scripts/gh_pages.sh
-      - scripts/publish_site.sh
-      - scripts/render_install_page.py
+      - .github/scripts/gh_pages.sh
+      - .github/scripts/publish_site.sh
+      - .github/scripts/render_install_page.py
       - .github/workflows/site.yml
   workflow_dispatch:
 
@@ -16,7 +16,7 @@ permissions:
   contents: write
 
 # A newer main supersedes an in-progress site publication. gh-pages writes are
-# serialized by scripts/gh_pages.sh, not by this group.
+# serialized by .github/scripts/gh_pages.sh, not by this group.
 concurrency:
   group: ito-site
   cancel-in-progress: true
@@ -37,4 +37,4 @@ jobs:
       - name: Publish site
         env:
           GH_TOKEN: ${{ github.token }}
-        run: scripts/publish_site.sh
+        run: .github/scripts/publish_site.sh

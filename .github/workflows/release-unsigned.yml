@@ -14,7 +14,7 @@ on:
 permissions:
   contents: write
 
-# gh-pages writes are serialized by scripts/gh_pages.sh, not by this group.
+# gh-pages writes are serialized by .github/scripts/gh_pages.sh, not by this group.
 concurrency:
   group: ito-release
   cancel-in-progress: false
@@ -132,7 +132,7 @@ jobs:
         id: simulator
         working-directory: Ito
         shell: bash
-        run: echo "id=$(python3 scripts/select_simulator.py)" >> "$GITHUB_OUTPUT"
+        run: echo "id=$(python3 .github/scripts/select_simulator.py)" >> "$GITHUB_OUTPUT"
 
       - name: Run unit tests before release
         working-directory: Ito
@@ -160,7 +160,7 @@ jobs:
           ARTIFACT_VERSION: ${{ steps.release.outputs.version }}
           BUILD_NUMBER: ${{ steps.version.outputs.build }}
           CHANNEL: stable
-        run: scripts/build_unsigned_ipa.sh build/release
+        run: .github/scripts/build_unsigned_ipa.sh build/release
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
@@ -210,4 +210,4 @@ jobs:
           IPA_NAME: ${{ steps.ipa.outputs.ipa_name }}
           BUNDLE_ID: ${{ env.BUNDLE_ID }}
           RELEASE_NOTES: Unsigned Ito ${{ steps.release.outputs.version }} build. AltStore and SideStore re-sign it with the user's Apple account.
-        run: scripts/publish_altstore_source.sh
+        run: .github/scripts/publish_altstore_source.sh

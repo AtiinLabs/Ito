@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# shellcheck source=scripts/gh_pages.sh
-source "$(dirname "$0")/gh_pages.sh"
+SCRIPTS="$(dirname "$0")"
+# shellcheck source=.github/scripts/gh_pages.sh
+source "${SCRIPTS}/gh_pages.sh"
 
 : "${TAG:?TAG is required}"
 : "${CHANNEL:?CHANNEL is required}"
@@ -32,7 +33,7 @@ IPA_SIZE="$(stat -f '%z' "$IPA_PATH")"
 IPA_SHA256="$(shasum -a 256 "$IPA_PATH" | cut -d ' ' -f 1)"
 
 update_source() {
-  python3 scripts/update_altstore_source.py \
+  python3 "${SCRIPTS}/update_altstore_source.py" \
     --file "$PAGES_DIR/$SOURCE_FILE" \
     --source-url "$SOURCE_URL" \
     --channel "$CHANNEL" \
@@ -48,7 +49,7 @@ update_source() {
     --max-versions "$MAX_VERSIONS"
 
   cp Ito/Assets.xcassets/AppIcon.appiconset/app.png "$PAGES_DIR/icon.png"
-  python3 scripts/render_install_page.py --dir "$PAGES_DIR" --source-url "$SOURCE_URL"
+  python3 "${SCRIPTS}/render_install_page.py" --dir "$PAGES_DIR" --source-url "$SOURCE_URL"
   git -C "$PAGES_DIR" add "$SOURCE_FILE" icon.png install/index.html
 }
 
