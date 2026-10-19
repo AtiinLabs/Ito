@@ -1,6 +1,6 @@
-# Git hooks. Install once per clone: `brew install lefthook && lefthook install`.
+# Git hooks. Install once per clone: `brew install lefthook swiftlint && lefthook install`.
 pre-commit:
   commands:
     swiftlint:
       glob: "*.swift"
-      run: scripts/swiftlint.sh lint --strict --quiet --force-exclude {staged_files}
+      run: swiftlint lint --strict --quiet --force-exclude {staged_files}
