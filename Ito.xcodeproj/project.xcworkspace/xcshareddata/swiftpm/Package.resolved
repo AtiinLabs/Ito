@@ -1,5 +1,5 @@
 {
-  "originHash" : "e4a1b8bbc08885ae6c6c29321e11530f94e8b10662c295792ee5f131f357199f",
+  "originHash" : "514a252612f225e8dd5f3f6973e90085b82b4ac156dfe672a207e42808d6c157",
   "pins" : [
     {
       "identity" : "anilist-sdk",
@@ -31,6 +31,14 @@
       "location" : "https://github.com/AtiinLabs/mal-sdk.git",
       "state" : {
         "revision" : "644b118154aa90c3435d51448350742047e6fd39"
+      }
+    },
+    {
+      "identity" : "mangabaka-sdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AtiinLabs/mangabaka-sdk.git",
+      "state" : {
+        "revision" : "3536b1b388786c3a376801712cdff7bde3645fa6"
       }
     },
     {
@@ -70,6 +78,15 @@
       }
     },
     {
+      "identity" : "swift-http-types",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-http-types",
+      "state" : {
+        "revision" : "bff4b6903cdc99dda49649dd52f46c11cfd3ed50",
+        "version" : "1.8.0"
+      }
+    },
+    {
       "identity" : "swift-log",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-log",
@@ -85,6 +102,24 @@
       "state" : {
         "revision" : "0b18836bd8b0162e7e17a995a3fbee20ed8f3b2b",
         "version" : "2.101.3"
+      }
+    },
+    {
+      "identity" : "swift-openapi-runtime",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-openapi-runtime",
+      "state" : {
+        "revision" : "478bf6ce34f71734bc88b79b37b842118312d133",
+        "version" : "1.13.2"
+      }
+    },
+    {
+      "identity" : "swift-openapi-urlsession",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-openapi-urlsession",
+      "state" : {
+        "revision" : "77effea09e780f6f3f119ffb8150ff25e31c78b1",
+        "version" : "1.3.2"
       }
     },
     {

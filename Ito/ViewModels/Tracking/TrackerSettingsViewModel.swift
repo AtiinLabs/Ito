@@ -8,12 +8,15 @@ enum TrackerSettingsOperationKind: Equatable {
 
 enum TrackerSettingsProviderFailure: Equatable {
     case authentication
+    case tokenRejected
     case logout
 
     var message: String {
         switch self {
         case .authentication:
             return "Authentication failed. Please try again."
+        case .tokenRejected:
+            return "The token was not accepted. Check that it was copied completely and has not been revoked."
         case .logout:
             return "Logout failed. Please try again."
         }
@@ -27,6 +30,8 @@ final class TrackerSettingsViewModel: ObservableObject {
     @Published private(set) var operatingProviderID: String?
     @Published private(set) var operationKind: TrackerSettingsOperationKind?
     @Published private(set) var providerFailures: [String: TrackerSettingsProviderFailure] = [:]
+    /// The token-based tracker whose sign-in sheet is shown.
+    @Published var signInSheetProvider: TrackerProviderPresentation?
     @Published var syncTrackersToLocal: Bool {
         didSet {
             guard !isPublishingAuthoritativePreference else { return }
@@ -80,9 +85,14 @@ final class TrackerSettingsViewModel: ObservableObject {
     }
 
     func footer(for provider: TrackerProviderPresentation) -> String {
-        provider.identifier == MALCredentialRepository.providerID
-            ? "Ito updates progress for series you are watching or reading on MyAnimeList. It never deletes entries, lowers progress, or changes scores, dates, tags or comments."
-            : "Sync your progress automatically with \(provider.name)."
+        switch provider.identifier {
+        case MALCredentialRepository.providerID:
+            return "Ito updates progress for series you are watching or reading on MyAnimeList. It never deletes entries, lowers progress, or changes scores, dates, tags or comments."
+        case MangaBakaCredentialRepository.providerID:
+            return "Ito updates chapter progress for manga and novels you are reading on MangaBaka. Ratings, dates and notes are left as they are. Series data from MangaBaka is licensed CC BY-NC-SA 4.0."
+        default:
+            return "Sync your progress automatically with \(provider.name)."
+        }
     }
 
     func failure(for providerID: String) -> TrackerSettingsProviderFailure? {
@@ -97,8 +107,20 @@ final class TrackerSettingsViewModel: ObservableObject {
         }
     }
 
+    /// Starts sign-in: the OAuth flow, or the token sheet for trackers that use tokens.
     func authenticate(providerID: String) {
+        if let provider = providers.first(where: { $0.identifier == providerID }), provider.tokenCreationURL != nil {
+            guard authenticationOperation == nil else { return }
+            signInSheetProvider = provider
+            return
+        }
         startAuthenticationOperation(providerID: providerID, kind: .authentication)
+    }
+
+    /// Signs in to a token-based tracker with the token from the sign-in sheet.
+    func signIn(providerID: String, token: String) {
+        signInSheetProvider = nil
+        startAuthenticationOperation(providerID: providerID, kind: .authentication, token: token)
     }
 
     func logout(providerID: String) {
@@ -188,7 +210,8 @@ final class TrackerSettingsViewModel: ObservableObject {
 
     private func startAuthenticationOperation(
         providerID: String,
-        kind: TrackerSettingsOperationKind
+        kind: TrackerSettingsOperationKind,
+        token: String? = nil
     ) {
         guard authenticationOperation == nil,
               providers.contains(where: { $0.identifier == providerID }) else { return }
@@ -211,7 +234,11 @@ final class TrackerSettingsViewModel: ObservableObject {
             do {
                 switch kind {
                 case .authentication:
-                    try await service.authenticate(providerID: providerID)
+                    if let token {
+                        try await service.authenticate(providerID: providerID, token: token)
+                    } else {
+                        try await service.authenticate(providerID: providerID)
+                    }
                 case .logout:
                     try await service.logout(providerID: providerID)
                 }
@@ -236,7 +263,11 @@ final class TrackerSettingsViewModel: ObservableObject {
                 }
                 service.refreshSettingsState()
                 apply(service.settingsState)
-                providerFailures[providerID] = kind == .authentication ? .authentication : .logout
+                providerFailures[providerID] = switch (kind, error) {
+                case (.authentication, TrackerTokenError.rejected): .tokenRejected
+                case (.authentication, _): .authentication
+                case (.logout, _): .logout
+                }
                 let category: PresentationErrorCategory = kind == .authentication
                     ? .authentication
                     : .logout

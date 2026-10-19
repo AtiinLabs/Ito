@@ -127,15 +127,18 @@ struct TrackingViewFactory {
         title: String,
         isAnime: Bool
     ) -> TrackerSheetConfiguration {
-        let providers = dependencies.sheetService.authenticatedProviders().map { provider in
-            TrackerSheetProviderPresentation(
-                provider: provider,
-                linkedRemoteMediaID: dependencies.sheetService.remoteMediaID(
-                    for: mediaIdentity,
-                    providerID: provider.identifier
+        // Trackers without anime (MangaBaka) are offered for manga and novels only.
+        let providers = dependencies.sheetService.authenticatedProviders()
+            .filter { !isAnime || $0.tracksAnime }
+            .map { provider in
+                TrackerSheetProviderPresentation(
+                    provider: provider,
+                    linkedRemoteMediaID: dependencies.sheetService.remoteMediaID(
+                        for: mediaIdentity,
+                        providerID: provider.identifier
+                    )
                 )
-            )
-        }
+            }
         return TrackerSheetConfiguration(
             mediaIdentity: mediaIdentity,
             title: title,

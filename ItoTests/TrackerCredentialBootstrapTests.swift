@@ -145,6 +145,7 @@ struct TrackerCredentialBootstrapTests {
             dbPool: subjectDatabase.dbPool,
             credentialStore: secureStore,
             malCredentialStore: FakeTrackerCredentialStore(),
+            mangaBakaCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: legacyStore,
             usernameDefaults: defaults
         )

@@ -89,6 +89,28 @@ final class TrackingDependencyBoundaryTests: XCTestCase {
         XCTAssertEqual(sheetService.lookupRequests.count, 3)
     }
 
+    func testTrackersWithoutAnimeAreOfferedForMangaOnly() {
+        let identity = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+        var mangaBaka = provider(id: "mangabaka", name: "MangaBaka")
+        mangaBaka.tracksAnime = false
+        let sheetService = TrackerSheetServiceFake(providers: [provider(id: "anilist", name: "AniList"), mangaBaka])
+        let factory = makeFactory(sheetService: sheetService)
+
+        let anime = factory.makeTrackerSheet(mediaIdentity: identity, title: "Title", isAnime: true)
+        let manga = factory.makeTrackerSheet(mediaIdentity: identity, title: "Title", isAnime: false)
+
+        XCTAssertEqual(anime.configuration.providers.map(\.id), ["anilist"])
+        XCTAssertEqual(manga.configuration.providers.map(\.id), ["anilist", "mangabaka"])
+    }
+
+    func testMangaBakaLinksOpenTheSeriesPage() {
+        let media = TrackerMedia(id: "1995", title: "Frieren", titleRomaji: nil, coverImage: nil, format: "MANGA", episodes: nil, chapters: nil)
+        XCTAssertEqual(
+            TrackerExternalURLOpener.url(providerID: "mangabaka", media: media)?.absoluteString,
+            "https://mangabaka.org/manga/1995"
+        )
+    }
+
     func testExistingLinkDestinationUsesStableIdentityMediaKindAndNoService() throws {
         let identity = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
         let sheetService = TrackerSheetServiceFake(
@@ -145,6 +167,7 @@ final class TrackingDependencyBoundaryTests: XCTestCase {
             dbPool: database.dbPool,
             credentialStore: FakeTrackerCredentialStore(),
             malCredentialStore: FakeTrackerCredentialStore(),
+            mangaBakaCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: defaults
         )

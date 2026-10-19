@@ -304,6 +304,7 @@ public final class DurableStateBootstrap: ObservableObject {
             dbPool: dbPool,
             credentialStore: trackerCredentialStore,
             malCredentialStore: trackerCredentialStore,
+            mangaBakaCredentialStore: trackerCredentialStore,
             legacyTokenStore: legacyTokenStore,
             usernameDefaults: usernameDefaults,
             malBackgroundExecution: .application

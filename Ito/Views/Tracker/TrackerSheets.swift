@@ -50,7 +50,9 @@ struct TrackerSheetOrchestrator: View {
                 Text("No Trackers Authenticated")
                     .font(.title2)
                     .fontWeight(.bold)
-                Text("Please go to Settings > Trackers to log in to AniList or MyAnimeList before tracking.")
+                Text(configuration.isAnime
+                    ? "Go to Settings > Trackers and sign in to AniList or MyAnimeList to track anime."
+                    : "Go to Settings > Trackers and sign in to AniList, MyAnimeList or MangaBaka before tracking.")
                     .multilineTextAlignment(.center)
                     .foregroundColor(.secondary)
                     .padding(.horizontal)
@@ -207,6 +209,13 @@ struct TrackerSearchSheet: View {
                     .onTapGesture {
                         viewModel.select(mediaID: media.id)
                     }
+                }
+
+                if let attribution = viewModel.attribution {
+                    Text(attribution)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
                 }
 
                 ZStack {

@@ -133,6 +133,7 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
             dbPool: database.dbPool,
             credentialStore: FakeTrackerCredentialStore(),
             malCredentialStore: FakeTrackerCredentialStore(),
+            mangaBakaCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: defaults
         )

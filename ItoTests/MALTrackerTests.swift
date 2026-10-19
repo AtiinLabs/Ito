@@ -233,6 +233,7 @@ struct MALTrackerTests {
             dbPool: database.dbPool,
             credentialStore: FakeTrackerCredentialStore(initialToken: "anilist-token"),
             malCredentialStore: FakeTrackerCredentialStore(readResults: [.failure(.protectedDataUnavailable(errSecInteractionNotAllowed))]),
+            mangaBakaCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: defaults
         )

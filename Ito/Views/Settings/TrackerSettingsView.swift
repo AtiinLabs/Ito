@@ -38,6 +38,11 @@ struct TrackerSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: viewModel.refreshAuthoritativeState)
         .onDisappear(perform: viewModel.cancelOwnedWork)
+        .sheet(item: $viewModel.signInSheetProvider) { provider in
+            TrackerTokenSignInSheet(provider: provider) { token in
+                viewModel.signIn(providerID: provider.identifier, token: token)
+            }
+        }
     }
 
     @ViewBuilder
@@ -97,7 +102,7 @@ struct TrackerSettingsView: View {
                         ProgressView()
                             .padding(.trailing, 8)
                     }
-                    Text("Login with \(provider.name)")
+                    Text(provider.tokenCreationURL == nil ? "Login with \(provider.name)" : "Sign In with Token")
                         .foregroundColor(.blue)
                 }
             }

@@ -20,7 +20,7 @@
 
 ---
 
-Ito is a free, open-source client for iPhone and iPad. It combines dedicated readers, native video playback, AniList and MyAnimeList tracking, and an extensible WebAssembly plugin system in a single app.
+Ito is a free, open-source client for iPhone and iPad. It combines dedicated readers, native video playback, AniList, MyAnimeList and MangaBaka tracking, and an extensible WebAssembly plugin system in a single app.
 
 ## Features
 
@@ -28,7 +28,7 @@ Ito is a free, open-source client for iPhone and iPad. It combines dedicated rea
 * **Native reading** — Dedicated manga and novel readers designed for iOS.
 * **Native video playback** — Select available video quality, audio tracks, and subtitles.
 * **AniList discovery** — Browse, search, and filter titles using AniList.
-* **Progress tracking** — Connect AniList and MyAnimeList to track what you read and watch.
+* **Progress tracking** — Connect AniList, MyAnimeList or MangaBaka to track what you read and watch. MangaBaka covers manga and novels.
 * **WASM plugins** — Install `.ito` plugins from user-added repositories. Downloaded packages are SHA-256 verified before installation.
 * **Backup and migration** — Export native `.itobackup` files or import libraries from Aidoku and Paperback.
 * **On-device storage** — Library data and history are stored locally, with tracker credentials protected by Keychain.
@@ -93,3 +93,5 @@ Ito is licensed under the [Mozilla Public License 2.0](LICENSE).
 
 > [!WARNING]
 > Ito is a client and does not include or host media sources. Users are responsible for the repositories and plugins they install and for complying with applicable laws, licenses, and service terms. The maintainers do not endorse copyright infringement or other unlawful use.
+
+Series data from [MangaBaka](https://mangabaka.org) is licensed [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). Ito is not affiliated with AniList, MyAnimeList or MangaBaka.

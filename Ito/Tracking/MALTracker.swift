@@ -190,6 +190,7 @@ public final class MALTracker: TrackerProvider {
 
     public let identifier = MALCredentialRepository.providerID
     public let name = "MyAnimeList"
+    public let tracksAnime = true
 
     @Published private(set) var isSignedIn = false
     @Published public private(set) var username: String?

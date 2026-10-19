@@ -17,7 +17,7 @@ enum TrackerDetailsFailure: Equatable {
     case remoteUpdate
     case linkPersistenceAfterRemoteUpdate
     case unlinkPersistence
-    case progressWouldDecrease
+    case progressWouldDecrease(providerName: String)
 
     var message: String {
         switch self {
@@ -27,8 +27,8 @@ enum TrackerDetailsFailure: Equatable {
             return "The tracker entry was updated remotely, but the local link was not saved. Please retry to finish linking."
         case .unlinkPersistence:
             return "Tracking could not be stopped locally. Please try again."
-        case .progressWouldDecrease:
-            return "MyAnimeList progress only moves forward from Ito. Choose Repeating to start over, or change it on MyAnimeList."
+        case .progressWouldDecrease(let providerName):
+            return "\(providerName) progress only moves forward from Ito. Choose Repeating to start over, or change it on \(providerName)."
         }
     }
 }
@@ -185,9 +185,10 @@ final class TrackerDetailsViewModel: ObservableObject {
         Self.statusLabel(for: statusOption, isReadingFormat: media.isReadingFormat)
     }
 
-    /// Explains when Ito's automatic MyAnimeList updates are off for the loaded entry. `nil` when they are on.
+    /// Explains when Ito's automatic updates are off for the loaded entry on trackers that only
+    /// move entries the user is reading or watching. `nil` when they are on.
     var automaticSyncNote: String? {
-        guard providerID == MALCredentialRepository.providerID, let loadedStatus else { return nil }
+        guard TrackerWriteRules.movesProgressForwardOnly(providerID), let loadedStatus else { return nil }
         switch loadedStatus {
         case "COMPLETED", "PAUSED", "DROPPED":
             return "Automatic progress updates are off while this entry is \(displayLabel(for: loadedStatus)). Set it to \(currentStatusLabel) to resume them."
@@ -275,11 +276,11 @@ final class TrackerDetailsViewModel: ObservableObject {
         guard saveOperationID == nil,
               unlinkOperationID == nil,
               remoteEntryState == .existing || remoteEntryState == .new else { return }
-        if providerID == MALCredentialRepository.providerID,
+        if TrackerWriteRules.movesProgressForwardOnly(providerID),
            remoteEntryState == .existing,
            status != "REPEATING",
            let loadedProgress, let newProgress = Int(progress), newProgress < loadedProgress {
-            failure = .progressWouldDecrease
+            failure = .progressWouldDecrease(providerName: providerName)
             isPresentingFailureAlert = true
             return
         }

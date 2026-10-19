@@ -75,6 +75,13 @@ final class TrackerSearchViewModel: ObservableObject {
         return "Enter at least 3 characters to search MyAnimeList."
     }
 
+    /// Credit required by the tracker's data license, shown under the results.
+    var attribution: String? {
+        providerID == MangaBakaCredentialRepository.providerID
+            ? "Series data from MangaBaka, licensed CC BY-NC-SA 4.0."
+            : nil
+    }
+
     func start() {
         guard !hasStarted else { return }
         hasStarted = true

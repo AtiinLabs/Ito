@@ -42,6 +42,8 @@ public protocol TrackerProvider: ObservableObject {
     var name: String { get } // e.g., "AniList"
     var isAuthenticated: Bool { get }
     var username: String? { get }
+    /// Whether the tracker lists anime. Trackers that do not are offered for manga and novels only.
+    var tracksAnime: Bool { get }
 
     func authenticate(using oauthManager: OAuthManager) async throws
     func logout() async throws
@@ -49,4 +51,33 @@ public protocol TrackerProvider: ObservableObject {
     func searchMedia(title: String, isAnime: Bool) async throws -> [TrackerMedia]
     func updateProgress(mediaId: String, progress: Int?, status: String?) async throws
     func getMediaListEntry(mediaId: String) async throws -> TrackerMediaEntry?
+}
+
+/// A tracker the user signs in to by pasting a token created on the tracker's website, for
+/// services that offer no OAuth flow an app can use.
+@MainActor
+protocol TrackerTokenAuthenticating: TrackerProvider {
+    /// The page where the user creates a token.
+    var tokenCreationURL: URL { get }
+
+    /// Verifies the token with the tracker and stores it.
+    func authenticate(token: String) async throws
+}
+
+nonisolated enum TrackerTokenError: Error, Equatable, Sendable, LocalizedError {
+    /// The tracker did not accept the token.
+    case rejected
+
+    var errorDescription: String? {
+        "The token was not accepted."
+    }
+}
+
+nonisolated enum TrackerWriteRules {
+    /// Trackers whose entries Ito moves only forward: explicit saves cannot lower progress except
+    /// when starting a reread or rewatch, and automatic sync only advances entries the user is
+    /// reading or watching.
+    static func movesProgressForwardOnly(_ providerID: String) -> Bool {
+        providerID == MALCredentialRepository.providerID || providerID == MangaBakaCredentialRepository.providerID
+    }
 }

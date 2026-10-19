@@ -392,6 +392,7 @@ final class AppScopeIdentityTests: XCTestCase {
             dbPool: database.dbPool,
             credentialStore: FakeTrackerCredentialStore(),
             malCredentialStore: FakeTrackerCredentialStore(),
+            mangaBakaCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: fixtureDefaults
         )

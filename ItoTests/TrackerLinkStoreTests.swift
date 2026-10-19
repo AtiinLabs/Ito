@@ -12,6 +12,7 @@ struct TrackerLinkStoreTests {
             dbPool: database.dbPool,
             credentialStore: FakeTrackerCredentialStore(),
             malCredentialStore: FakeTrackerCredentialStore(),
+            mangaBakaCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: UserDefaults(suiteName: UUID().uuidString)!
         )
@@ -42,6 +43,7 @@ struct TrackerLinkStoreTests {
             dbPool: database.dbPool,
             credentialStore: FakeTrackerCredentialStore(),
             malCredentialStore: FakeTrackerCredentialStore(),
+            mangaBakaCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: UserDefaults(suiteName: UUID().uuidString)!
         )
@@ -81,6 +83,7 @@ struct TrackerLinkStoreTests {
             dbPool: database.dbPool,
             credentialStore: FakeTrackerCredentialStore(),
             malCredentialStore: FakeTrackerCredentialStore(),
+            mangaBakaCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: UserDefaults(suiteName: UUID().uuidString)!
         )
@@ -115,6 +118,7 @@ struct TrackerLinkStoreTests {
             dbPool: database.dbPool,
             credentialStore: FakeTrackerCredentialStore(),
             malCredentialStore: FakeTrackerCredentialStore(),
+            mangaBakaCredentialStore: FakeTrackerCredentialStore(),
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: UserDefaults(suiteName: UUID().uuidString)!
         )

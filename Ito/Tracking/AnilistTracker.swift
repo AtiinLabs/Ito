@@ -7,6 +7,7 @@ import anilist
 public class AnilistTracker: TrackerProvider {
     public let identifier = "anilist"
     public let name = "AniList"
+    public let tracksAnime = true
 
     @Published public private(set) var anilistToken: String?
     @Published public private(set) var username: String?

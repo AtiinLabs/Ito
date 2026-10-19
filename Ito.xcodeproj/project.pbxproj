@@ -17,6 +17,7 @@
 		3B8E1A012FF0000000000001 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 391483252FE4B140002F5EA7 /* GRDB */; };
 		3D0A11E02FF2000000000001 /* anilist in Frameworks */ = {isa = PBXBuildFile; productRef = 3D0A11E02FF2000000000002 /* anilist */; };
 		3D0A11E02FF2000000000004 /* mal in Frameworks */ = {isa = PBXBuildFile; productRef = 3D0A11E02FF2000000000005 /* mal */; };
+		3D0A11E02FF2000000000007 /* MangaBakaSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 3D0A11E02FF2000000000008 /* MangaBakaSDK */; };
 		3C0A71F02FF1000000000001 /* ItoAVIF in Frameworks */ = {isa = PBXBuildFile; productRef = 3C0A71F02FF1000000000002 /* ItoAVIF */; };
 /* End PBXBuildFile section */
 
@@ -90,6 +91,7 @@
 				3C0A71F02FF1000000000001 /* ItoAVIF in Frameworks */,
 				3D0A11E02FF2000000000001 /* anilist in Frameworks */,
 				3D0A11E02FF2000000000004 /* mal in Frameworks */,
+				3D0A11E02FF2000000000007 /* MangaBakaSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -171,6 +173,7 @@
 				3C0A71F02FF1000000000002 /* ItoAVIF */,
 				3D0A11E02FF2000000000002 /* anilist */,
 				3D0A11E02FF2000000000005 /* mal */,
+				3D0A11E02FF2000000000008 /* MangaBakaSDK */,
 			);
 			productName = Ito;
 			productReference = 3A43D87F2F57E4BD008E061E /* Ito.app */;
@@ -262,6 +265,7 @@
 				397BF7222FE6F4E600EFFFC4 /* XCRemoteSwiftPackageReference "ito-runner" */,
 				3D0A11E02FF2000000000003 /* XCRemoteSwiftPackageReference "anilist-sdk" */,
 				3D0A11E02FF2000000000006 /* XCRemoteSwiftPackageReference "mal-sdk" */,
+				3D0A11E02FF2000000000009 /* XCRemoteSwiftPackageReference "mangabaka-sdk" */,
 				3C0A71F02FF1000000000003 /* XCLocalSwiftPackageReference "Packages/ItoAVIF" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -698,6 +702,14 @@
 				revision = 644b118154aa90c3435d51448350742047e6fd39;
 			};
 		};
+		3D0A11E02FF2000000000009 /* XCRemoteSwiftPackageReference "mangabaka-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AtiinLabs/mangabaka-sdk.git";
+			requirement = {
+				kind = revision;
+				revision = 3536b1b388786c3a376801712cdff7bde3645fa6;
+			};
+		};
 		3AC825732F5FF84D0054AD29 /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/SimplyDanny/SwiftLintPlugins";
@@ -762,6 +774,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 3D0A11E02FF2000000000006 /* XCRemoteSwiftPackageReference "mal-sdk" */;
 			productName = mal;
+		};
+		3D0A11E02FF2000000000008 /* MangaBakaSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3D0A11E02FF2000000000009 /* XCRemoteSwiftPackageReference "mangabaka-sdk" */;
+			productName = MangaBakaSDK;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

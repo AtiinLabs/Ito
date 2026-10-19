@@ -212,6 +212,41 @@ final class TrackerSettingsViewModelTests: XCTestCase {
         )
     }
 
+    func testTokenTrackerOpensTokenSheetInsteadOfOAuthAndSignsInWithTheToken() async {
+        var mangaBaka = provider(id: "mangabaka")
+        mangaBaka.tokenCreationURL = URL(string: "https://mangabaka.org/my/settings/api-and-apps")
+        let service = TrackerSettingsServiceFake(state: state(providers: [mangaBaka]))
+        let viewModel = makeViewModel(service: service)
+
+        viewModel.authenticate(providerID: "mangabaka")
+
+        XCTAssertEqual(viewModel.signInSheetProvider, mangaBaka)
+        XCTAssertTrue(service.authenticationInvocations.isEmpty)
+        XCTAssertFalse(viewModel.isAuthenticationOperationActive)
+
+        viewModel.signIn(providerID: "mangabaka", token: "mb-token")
+        await trackingWaitUntil { !viewModel.isAuthenticationOperationActive }
+
+        XCTAssertNil(viewModel.signInSheetProvider)
+        XCTAssertEqual(service.tokenAuthenticationInvocations.map(\.providerID), ["mangabaka"])
+        XCTAssertEqual(service.tokenAuthenticationInvocations.map(\.token), ["mb-token"])
+        XCTAssertTrue(service.authenticationInvocations.isEmpty)
+        XCTAssertNil(viewModel.failure(for: "mangabaka"))
+    }
+
+    func testRejectedTokenIsReportedAsSuch() async {
+        var mangaBaka = provider(id: "mangabaka")
+        mangaBaka.tokenCreationURL = URL(string: "https://mangabaka.org/my/settings/api-and-apps")
+        let service = TrackerSettingsServiceFake(state: state(providers: [mangaBaka]))
+        service.authenticationError = TrackerTokenError.rejected
+        let viewModel = makeViewModel(service: service)
+
+        viewModel.signIn(providerID: "mangabaka", token: "mb-wrong")
+        await trackingWaitUntil { !viewModel.isAuthenticationOperationActive }
+
+        XCTAssertEqual(viewModel.failure(for: "mangabaka"), .tokenRejected)
+    }
+
     private func state(
         credential: TrackerSettingsCredentialState = .ready,
         providers: [TrackerProviderPresentation]

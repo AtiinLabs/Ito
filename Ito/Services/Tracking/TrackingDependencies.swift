@@ -8,6 +8,10 @@ struct TrackerProviderPresentation: Identifiable, Equatable {
     let isAuthenticated: Bool
     let username: String?
     var credentialState: TrackerSettingsCredentialState = .ready
+    /// Whether the tracker lists anime; others are offered for manga and novels only.
+    var tracksAnime = true
+    /// Where the user creates a sign-in token, for trackers without OAuth sign-in; `nil` otherwise.
+    var tokenCreationURL: URL?
 
     var id: String { identifier }
 }
@@ -48,6 +52,9 @@ protocol TrackerSettingsServicing: AnyObject {
     var settingsStatePublisher: AnyPublisher<TrackerSettingsAuthoritativeState, Never> { get }
 
     func authenticate(providerID: String) async throws
+    /// Signs in to a tracker that uses tokens. Throws `TrackerTokenError.rejected` when the tracker
+    /// does not accept the token.
+    func authenticate(providerID: String, token: String) async throws
     func logout(providerID: String) async throws
     func refreshSettingsState()
 }
@@ -235,6 +242,14 @@ final class TrackerProviderService:
         publishSettingsState()
     }
 
+    func authenticate(providerID: String, token: String) async throws {
+        guard let provider = try provider(for: providerID) as? any TrackerTokenAuthenticating else {
+            throw TrackingServiceError.providerUnavailable
+        }
+        try await provider.authenticate(token: token)
+        publishSettingsState()
+    }
+
     func logout(providerID: String) async throws {
         let provider = try provider(for: providerID)
         try await provider.logout()
@@ -357,7 +372,9 @@ final class TrackerProviderService:
             name: provider.name,
             isAuthenticated: provider.isAuthenticated,
             username: provider.username,
-            credentialState: credentialState
+            credentialState: credentialState,
+            tracksAnime: provider.tracksAnime,
+            tokenCreationURL: (provider as? any TrackerTokenAuthenticating)?.tokenCreationURL
         )
     }
 }
@@ -405,6 +422,9 @@ final class TrackerExternalURLOpener: TrackerExternalURLOpening {
         case MALCredentialRepository.providerID:
             guard let id = MALMediaID(rawValue: media.id) else { return nil }
             return URL(string: "https://myanimelist.net/\(id.kind.rawValue)/\(id.id)")
+        case MangaBakaCredentialRepository.providerID:
+            guard let id = Int(media.id), id > 0 else { return nil }
+            return URL(string: "https://mangabaka.org/manga/\(id)")
         default:
             return nil
         }
@@ -434,6 +454,12 @@ final class UnavailableTrackingService:
 
     func authenticate(providerID: String) async throws {
         _ = providerID
+        throw TrackingServiceError.unavailable
+    }
+
+    func authenticate(providerID: String, token: String) async throws {
+        _ = providerID
+        _ = token
         throw TrackingServiceError.unavailable
     }
 
@@ -596,6 +622,7 @@ extension TrackerMedia {
         if let malID = MALMediaID(rawValue: id) {
             return malID.kind == .manga
         }
-        return format == "MANGA" || format == "NOVEL" || format == "ONE_SHOT"
+        // AniList and MangaBaka formats; MyAnimeList ids carry their kind above.
+        return ["MANGA", "NOVEL", "ONE_SHOT", "MANHWA", "MANHUA", "OEL"].contains(format)
     }
 }

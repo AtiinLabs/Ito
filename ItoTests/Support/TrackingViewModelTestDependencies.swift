@@ -101,6 +101,7 @@ final class TrackerSettingsServiceFake: TrackerSettingsServicing {
     var logoutError: (any Error)?
     private(set) var authenticationInvocations: [String] = []
     private(set) var logoutInvocations: [String] = []
+    private(set) var tokenAuthenticationInvocations: [(providerID: String, token: String)] = []
     private(set) var refreshCount = 0
 
     init(state: TrackerSettingsAuthoritativeState) {
@@ -126,6 +127,11 @@ final class TrackerSettingsServiceFake: TrackerSettingsServicing {
             }
             return
         }
+        if let authenticationError { throw authenticationError }
+    }
+
+    func authenticate(providerID: String, token: String) async throws {
+        tokenAuthenticationInvocations.append((providerID, token))
         if let authenticationError { throw authenticationError }
     }
 
