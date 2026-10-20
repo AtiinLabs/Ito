@@ -167,7 +167,6 @@ final class MangaReaderDependencyBoundaryTests: XCTestCase {
 
         XCTAssertTrue(viewModel.contains("ReaderChapterOrdering.mangaChapter("))
         XCTAssertTrue(viewModel.contains("ReaderPageOrdering.ascending("))
-        XCTAssertTrue(viewModel.contains("ReaderSessionEffectPlan.chapterRead("))
         XCTAssertFalse(viewModel.contains("chapterNumberEpsilon"))
         XCTAssertFalse(viewModel.contains("missingChapterNumber"))
         XCTAssertTrue(behavior.contains("static let chapterNumberEpsilon: Float32 = 0.0001"))

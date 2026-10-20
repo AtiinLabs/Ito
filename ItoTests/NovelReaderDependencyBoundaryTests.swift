@@ -169,7 +169,6 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
 
         XCTAssertTrue(viewModel.contains("ReaderChapterOrdering.novelChapter("))
         XCTAssertTrue(viewModel.contains("ReaderPageOrdering.ascending("))
-        XCTAssertTrue(viewModel.contains("ReaderSessionEffectPlan.chapterRead("))
         XCTAssertTrue(viewModel.contains("alreadyMarked: false"))
         XCTAssertFalse(viewModel.contains("markedChapterKeys"))
         XCTAssertFalse(viewModel.contains("chapterNumberEpsilon"))

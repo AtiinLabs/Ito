@@ -134,39 +134,33 @@ nonisolated enum ReaderPageOrdering {
     }
 }
 
+/// What finishing a chapter does: mark it read locally, then update trackers. Opening a
+/// chapter only records history; the reader does that itself.
 nonisolated struct ReaderSessionEffectPlan: Equatable, Sendable {
     enum Effect: Equatable, Sendable {
-        case recordHistory
         case markLocalProgress
         case updateTracker(progress: Int)
     }
 
-    let synchronousEffects: [Effect]
-    let asynchronousEffects: [Effect]
+    let effects: [Effect]
 
-    static func chapterRead(
+    static func chapterFinished(
         chapterNumber: Float32?,
         titleOrKey: String,
         alreadyMarked: Bool
     ) -> ReaderSessionEffectPlan {
         guard !alreadyMarked else {
-            return ReaderSessionEffectPlan(
-                synchronousEffects: [.recordHistory],
-                asynchronousEffects: []
-            )
+            return ReaderSessionEffectPlan(effects: [])
         }
 
-        var asynchronousEffects: [Effect] = [.markLocalProgress]
+        var effects: [Effect] = [.markLocalProgress]
         if let progress = trackerProgress(
             chapterNumber: chapterNumber,
             titleOrKey: titleOrKey
         ) {
-            asynchronousEffects.append(.updateTracker(progress: progress))
+            effects.append(.updateTracker(progress: progress))
         }
-        return ReaderSessionEffectPlan(
-            synchronousEffects: [.recordHistory],
-            asynchronousEffects: asynchronousEffects
-        )
+        return ReaderSessionEffectPlan(effects: effects)
     }
 
     private static func trackerProgress(

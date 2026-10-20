@@ -490,24 +490,19 @@ final class NovelReaderViewModel: ObservableObject {
     func markChapterRead(_ chapter: Novel.Chapter) {
         guard isActive else { return }
         let chapterTitle = chapter.title ?? chapter.key
-        let plan = ReaderSessionEffectPlan.chapterRead(
+        dependencies.history.recordNovel(
+            novel,
+            chapterKey: chapter.key,
+            chapterTitle: chapterTitle,
+            pluginID: pluginID
+        )
+        let plan = ReaderSessionEffectPlan.chapterFinished(
             chapterNumber: chapter.chapter,
             titleOrKey: chapterTitle,
             alreadyMarked: false
         )
 
-        for effect in plan.synchronousEffects {
-            if case .recordHistory = effect {
-                dependencies.history.recordNovel(
-                    novel,
-                    chapterKey: chapter.key,
-                    chapterTitle: chapterTitle,
-                    pluginID: pluginID
-                )
-            }
-        }
-
-        guard !plan.asynchronousEffects.isEmpty else { return }
+        guard !plan.effects.isEmpty else { return }
         let operationID = UUID()
         let session = sessionID
         let progress = dependencies.progress
@@ -518,14 +513,12 @@ final class NovelReaderViewModel: ObservableObject {
         let task = Task { @MainActor [weak self, progress, tracker] in
             defer { self?.finishTestingOperation(operationID) }
             do {
-                for effect in plan.asynchronousEffects {
+                for effect in plan.effects {
                     guard let self,
                           self.isCurrentEffect(operationID: operationID, session: session) else {
                         return
                     }
                     switch effect {
-                    case .recordHistory:
-                        break
                     case .markLocalProgress:
                         try await progress.markNovelChapterRead(
                             media: identity,

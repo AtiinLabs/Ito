@@ -27,6 +27,9 @@ protocol MangaReaderProgressTracking: AnyObject {
         chapterID: String,
         chapterNumber: Float?
     ) async throws
+    /// The page the reader last stopped on in `chapterID`, if that is the last chapter read.
+    func savedPage(media: MediaIdentity, chapterID: String) -> Int?
+    func savePage(_ page: Int, media: MediaIdentity, chapterID: String) async throws
 }
 
 extension ReadProgressManager: MangaReaderProgressTracking {
@@ -40,6 +43,14 @@ extension ReadProgressManager: MangaReaderProgressTracking {
             chapterId: chapterID,
             chapterNum: chapterNumber
         )
+    }
+
+    func savedPage(media: MediaIdentity, chapterID: String) -> Int? {
+        savedPosition(media: media, chapterKey: chapterID).map { Int($0) }
+    }
+
+    func savePage(_ page: Int, media: MediaIdentity, chapterID: String) async throws {
+        try await savePosition(media: media, chapterKey: chapterID, position: Double(page))
     }
 }
 
@@ -260,6 +271,18 @@ private final class UnavailableMangaReaderDependencies:
         _ = media
         _ = chapterID
         _ = chapterNumber
+    }
+
+    func savedPage(media: MediaIdentity, chapterID: String) -> Int? {
+        _ = media
+        _ = chapterID
+        return nil
+    }
+
+    func savePage(_ page: Int, media: MediaIdentity, chapterID: String) async throws {
+        _ = page
+        _ = media
+        _ = chapterID
     }
 
     func recordManga(

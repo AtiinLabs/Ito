@@ -202,6 +202,13 @@ struct ReaderView: View {
                 withAnimation { proxy.scrollTo(target, anchor: .top) }
                 viewModel.consumeScrollTarget(target)
             }
+            // A target set before this view existed (a restored page, a mode switch) never
+            // changes while it is on screen, so scroll to it once here.
+            .onAppear {
+                guard let target = viewModel.scrollTarget else { return }
+                proxy.scrollTo(target, anchor: .top)
+                viewModel.consumeScrollTarget(target)
+            }
         }
     }
 

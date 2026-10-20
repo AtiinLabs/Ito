@@ -88,6 +88,9 @@ final class MangaReaderProgressFake: MangaReaderProgressTracking {
     let events: MangaReaderEventRecorder
     var error: (any Error)?
     private(set) var requests: [Request] = []
+    /// Pages the reader starts at, keyed by chapter.
+    var savedPages: [String: Int] = [:]
+    private(set) var savedPageWrites: [(chapterID: String, page: Int)] = []
 
     init(events: MangaReaderEventRecorder) {
         self.events = events
@@ -107,6 +110,17 @@ final class MangaReaderProgressFake: MangaReaderProgressTracking {
             )
         )
         if let error { throw error }
+    }
+
+    func savedPage(media: MediaIdentity, chapterID: String) -> Int? {
+        _ = media
+        return savedPages[chapterID]
+    }
+
+    func savePage(_ page: Int, media: MediaIdentity, chapterID: String) async throws {
+        _ = media
+        savedPageWrites.append((chapterID, page))
+        savedPages[chapterID] = page
     }
 }
 

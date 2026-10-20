@@ -2,105 +2,6 @@ import XCTest
 @testable import Ito
 
 final class ReaderSessionEffectPlanTests: XCTestCase {
-    func testMangaReadInvocationOrderAndRepeatedChapterSuppressionBoundary() throws {
-        let source = try sourceFile("Ito/ViewModels/MangaReaderViewModel.swift")
-        let function = try XCTUnwrap(
-            source.slice(from: "func markChapterRead", to: "// MARK: - Image prefetch")
-        )
-
-        assertOrdered(
-            [
-                "dependencies.history.recordManga(",
-                "guard !plan.asynchronousEffects.isEmpty else { return }",
-                "markedChapterKeys.insert(chapter.key)",
-                "let task = Task {",
-                "progress.markChapterRead(",
-                "tracker.updateMangaProgress("
-            ],
-            in: function
-        )
-    }
-
-    func testMangaInitialLoadMarksAfterPublishingPagesAndBeforeAdjacentPrefetch() throws {
-        let source = try sourceFile("Ito/ViewModels/MangaReaderViewModel.swift")
-        let function = try XCTUnwrap(
-            source.slice(from: "private func completeMainLoad", to: "private func failMainLoad")
-        )
-
-        assertOrdered(
-            ["pagedPages = sorted", "loadPhase = .content", "markChapterRead(chapter)", "beginAdjacentChapterPrefetch()"],
-            in: function
-        )
-    }
-
-    func testMangaContinuousAndCachedPagedTransitionsPreserveMutationEffectOrder() throws {
-        let source = try sourceFile("Ito/ViewModels/MangaReaderViewModel.swift")
-        let continuous = try XCTUnwrap(
-            source.slice(from: "func continuousPageAppeared", to: "private func pagedGoToChapter")
-        )
-        assertOrdered(
-            ["changeCurrentChapter(to: flatPage.chapter)", "markChapterRead(flatPage.chapter)"],
-            in: continuous
-        )
-
-        let paged = try XCTUnwrap(
-            source.slice(from: "private func pagedGoToChapter", to: "private func continuousGoToChapter")
-        )
-        assertOrdered(
-            ["changeCurrentChapter(to: chapter)", "pagedPages = cached", "pagedIndex = 0", "markChapterRead(chapter)", "beginAdjacentChapterPrefetch()"],
-            in: paged
-        )
-
-        let direct = try XCTUnwrap(
-            source.slice(from: "private func continuousGoToChapter", to: "private func changeCurrentChapter")
-        )
-        assertOrdered(
-            ["changeCurrentChapter(to: chapter)", "segments = []", "loadPhase = .loading", "beginMainLoad(for: chapter)"],
-            in: direct
-        )
-    }
-
-    func testNovelReadAndTransitionInvocationOrderIsPreserved() throws {
-        let source = try sourceFile("Ito/ViewModels/NovelReaderViewModel.swift")
-        let tracking = try XCTUnwrap(
-            source.slice(from: "func markChapterRead", to: "private func isCurrentEffect")
-        )
-        assertOrdered(
-            [
-                "dependencies.history.recordNovel(",
-                "let task = Task {",
-                "progress.markNovelChapterRead(",
-                "tracker.updateNovelProgress("
-            ],
-            in: tracking
-        )
-
-        let scrolling = try XCTUnwrap(
-            source.slice(from: "func continuousChapterTitleAppeared", to: "func pagedChapterChanged")
-        )
-        assertOrdered(
-            [
-                "changeCurrentChapter(to: loadedChapter.chapter)",
-                "markChapterRead(loadedChapter.chapter)"
-            ],
-            in: scrolling
-        )
-
-        let navigation = try XCTUnwrap(
-            source.slice(from: "func goToChapter", to: "func retry()")
-        )
-        assertOrdered(
-            [
-                "changeCurrentChapter(to: chapter)",
-                "loadedChapters = []",
-                "loadPhase = .loading",
-                "invalidateContentOperations()",
-                "beginMainLoad(for: chapter)"
-            ],
-            in: navigation
-        )
-    }
-
     func testDiscordInitialChangeAndDisappearTimerSemanticsAreLocked() throws {
         let manga = try sourceFile("Ito/ViewModels/MangaReaderViewModel.swift")
         let appear = try XCTUnwrap(
@@ -173,49 +74,41 @@ final class ReaderSessionEffectPlanTests: XCTestCase {
         )
     }
 
-    func testPureChapterReadPlanLocksHistoryProgressAndTrackerOrder() {
-        let plan = ReaderSessionEffectPlan.chapterRead(
+    func testFinishedChapterPlanMarksProgressThenUpdatesTracker() {
+        let plan = ReaderSessionEffectPlan.chapterFinished(
             chapterNumber: 12.75,
             titleOrKey: "ignored",
             alreadyMarked: false
         )
 
-        XCTAssertEqual(plan.synchronousEffects, [.recordHistory])
-        XCTAssertEqual(
-            plan.asynchronousEffects,
-            [.markLocalProgress, .updateTracker(progress: 12)]
-        )
+        XCTAssertEqual(plan.effects, [.markLocalProgress, .updateTracker(progress: 12)])
     }
 
-    func testPureChapterReadPlanLocksFallbackNumberExtraction() {
-        let decimalTitle = ReaderSessionEffectPlan.chapterRead(
+    func testFinishedChapterPlanLocksFallbackNumberExtraction() {
+        let decimalTitle = ReaderSessionEffectPlan.chapterFinished(
             chapterNumber: nil,
             titleOrKey: "Chapter 12.5 Extra",
             alreadyMarked: false
         )
-        let noNumber = ReaderSessionEffectPlan.chapterRead(
+        let noNumber = ReaderSessionEffectPlan.chapterFinished(
             chapterNumber: nil,
             titleOrKey: "Epilogue",
             alreadyMarked: false
         )
 
         // "12.5" must not become 125: a tracker would record a chapter far beyond the reader.
-        XCTAssertEqual(
-            decimalTitle.asynchronousEffects,
-            [.markLocalProgress, .updateTracker(progress: 12)]
-        )
-        XCTAssertEqual(noNumber.asynchronousEffects, [.markLocalProgress])
+        XCTAssertEqual(decimalTitle.effects, [.markLocalProgress, .updateTracker(progress: 12)])
+        XCTAssertEqual(noNumber.effects, [.markLocalProgress])
     }
 
-    func testPureChapterReadPlanKeepsRepeatedMangaHistoryButSuppressesAsyncEffects() {
-        let plan = ReaderSessionEffectPlan.chapterRead(
+    func testFinishedChapterPlanDoesNothingForAChapterAlreadyMarked() {
+        let plan = ReaderSessionEffectPlan.chapterFinished(
             chapterNumber: 3,
             titleOrKey: "Chapter 3",
             alreadyMarked: true
         )
 
-        XCTAssertEqual(plan.synchronousEffects, [.recordHistory])
-        XCTAssertEqual(plan.asynchronousEffects, [])
+        XCTAssertEqual(plan.effects, [])
     }
 
     private func assertOrdered(

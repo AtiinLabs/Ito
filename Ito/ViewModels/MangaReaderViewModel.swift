@@ -75,6 +75,9 @@ final class MangaReaderViewModel: ObservableObject {
     private var prependTask: Task<Void, Never>?
     private var prependOperationID: UUID?
     private var effectTasks: [UUID: Task<Void, Never>] = [:]
+    /// Page writes run one after another so an older write cannot land after a newer one.
+    private var pageWriteTask: Task<Void, Never>?
+    private var lastSavedPage: (chapterKey: String, page: Int)?
     private var settingsWriteTask: Task<Void, Never>?
 
     nonisolated deinit {}
@@ -254,6 +257,8 @@ final class MangaReaderViewModel: ObservableObject {
         } else if newIndex == -1,
            let previous = chapterBefore(currentChapter) {
             pagedGoToChapter(previous)
+        } else if pagedPages.indices.contains(newIndex) {
+            pageShown(in: currentChapter, at: newIndex, pageCount: pagedPages.count)
         }
         prefetchPagedImages(around: newIndex)
     }
@@ -315,7 +320,14 @@ final class MangaReaderViewModel: ObservableObject {
         continuousPageIndex = flatPage.globalIndex
         if flatPage.chapter.key != currentChapter.key {
             changeCurrentChapter(to: flatPage.chapter)
-            markChapterRead(flatPage.chapter)
+            chapterOpened(flatPage.chapter)
+        }
+        if segments.indices.contains(flatPage.segmentIndex) {
+            pageShown(
+                in: flatPage.chapter,
+                at: flatPage.chapterPosition,
+                pageCount: segments[flatPage.segmentIndex].pages.count
+            )
         }
         prefetchContinuousImages(around: flatPage.globalIndex, allPages: flatPages)
     }
@@ -325,9 +337,12 @@ final class MangaReaderViewModel: ObservableObject {
         changeCurrentChapter(to: chapter)
         if let cached = prefetchedChapters[chapter.key] {
             pagedPages = cached
-            pagedIndex = 0
+            pagedIndex = startPage(for: chapter, pageCount: cached.count)
             loadPhase = .content
-            markChapterRead(chapter)
+            chapterOpened(chapter)
+            if !cached.isEmpty {
+                pageShown(in: chapter, at: pagedIndex, pageCount: cached.count)
+            }
             beginAdjacentChapterPrefetch()
         } else {
             pagedPages = []
@@ -423,18 +438,23 @@ final class MangaReaderViewModel: ObservableObject {
         }
 
         let sorted = ReaderPageOrdering.ascending(pages)
+        let start = startPage(for: chapter, pageCount: sorted.count)
         if expectedPaged {
             pagedPages = sorted
-            pagedIndex = 0
+            pagedIndex = start
         } else {
             segments = [ChapterSegment(chapter: chapter, pages: sorted)]
-            continuousPageIndex = 0
+            continuousPageIndex = start
+            scrollTarget = start > 0 ? start : nil
         }
         loadPhase = .content
         mainLoadTask = nil
         mainLoadOperationID = nil
         logFinished(kind: .remoteLoad, operationID: operationID, outcome: .succeeded)
-        markChapterRead(chapter)
+        chapterOpened(chapter)
+        if !sorted.isEmpty {
+            pageShown(in: chapter, at: start, pageCount: sorted.count)
+        }
         if expectedPaged {
             beginAdjacentChapterPrefetch()
         }
@@ -835,26 +855,55 @@ final class MangaReaderViewModel: ObservableObject {
 
     // MARK: - Chapter effects
 
-    func markChapterRead(_ chapter: Manga.Chapter) {
-        let chapterTitle = chapter.title ?? chapter.key
-        let plan = ReaderSessionEffectPlan.chapterRead(
+    /// The page to open `chapter` at: where the reader stopped last time, unless that was the
+    /// last page, which means the chapter was finished and starts over.
+    private func startPage(for chapter: Manga.Chapter, pageCount: Int) -> Int {
+        guard let saved = dependencies.progress.savedPage(
+            media: mediaIdentity,
+            chapterID: chapter.key
+        ), saved > 0, saved < pageCount - 1 else { return 0 }
+        return saved
+    }
+
+    private func chapterOpened(_ chapter: Manga.Chapter) {
+        dependencies.history.recordManga(
+            manga,
+            chapterKey: chapter.key,
+            chapterTitle: chapter.title ?? chapter.key,
+            pluginID: pluginID
+        )
+    }
+
+    /// Saves where the reader is, and marks the chapter read once its last page is shown.
+    private func pageShown(in chapter: Manga.Chapter, at page: Int, pageCount: Int) {
+        savePage(page, in: chapter)
+        if page == pageCount - 1 {
+            markChapterFinished(chapter)
+        }
+    }
+
+    private func savePage(_ page: Int, in chapter: Manga.Chapter) {
+        if let lastSavedPage, lastSavedPage.chapterKey == chapter.key, lastSavedPage.page == page {
+            return
+        }
+        lastSavedPage = (chapter.key, page)
+        let progress = dependencies.progress
+        let identity = mediaIdentity
+        let preceding = pageWriteTask
+        pageWriteTask = Task { @MainActor [progress] in
+            await preceding?.value
+            // Saving the position is best effort; reading carries on if it fails.
+            try? await progress.savePage(page, media: identity, chapterID: chapter.key)
+        }
+    }
+
+    func markChapterFinished(_ chapter: Manga.Chapter) {
+        let plan = ReaderSessionEffectPlan.chapterFinished(
             chapterNumber: chapter.chapter,
-            titleOrKey: chapterTitle,
+            titleOrKey: chapter.title ?? chapter.key,
             alreadyMarked: markedChapterKeys.contains(chapter.key)
         )
-
-        for effect in plan.synchronousEffects {
-            if case .recordHistory = effect {
-                dependencies.history.recordManga(
-                    manga,
-                    chapterKey: chapter.key,
-                    chapterTitle: chapterTitle,
-                    pluginID: pluginID
-                )
-            }
-        }
-
-        guard !plan.asynchronousEffects.isEmpty else { return }
+        guard !plan.effects.isEmpty else { return }
         markedChapterKeys.insert(chapter.key)
         let operationID = UUID()
         let session = sessionID
@@ -865,14 +914,12 @@ final class MangaReaderViewModel: ObservableObject {
 
         let task = Task { @MainActor [weak self, progress, tracker] in
             do {
-                for effect in plan.asynchronousEffects {
+                for effect in plan.effects {
                     guard let self,
                           self.isActive,
                           self.sessionID == session,
                           !Task.isCancelled else { return }
                     switch effect {
-                    case .recordHistory:
-                        break
                     case .markLocalProgress:
                         try await progress.markChapterRead(
                             media: identity,
