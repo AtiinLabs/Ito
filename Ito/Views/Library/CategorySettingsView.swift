@@ -66,7 +66,7 @@ struct CategorySettingsView: View {
                 viewModel.cancelDelete()
             }
         } message: {
-            Text("Items in this list will be safely moved to Uncategorized.")
+            Text(deleteMessage)
         }
         .sheet(isPresented: addCategoryBinding) {
             addCategorySheet
@@ -81,6 +81,12 @@ struct CategorySettingsView: View {
         } message: {
             Text(viewModel.failure?.alertMessage ?? "Please try again.")
         }
+    }
+
+    private var deleteMessage: String {
+        let fallbackName = viewModel.systemCategory?.name ?? "Uncategorized"
+        return "Items only in this list move to \(fallbackName). "
+            + "Nothing is removed from your library."
     }
 
     private var deleteConfirmationBinding: Binding<Bool> {
