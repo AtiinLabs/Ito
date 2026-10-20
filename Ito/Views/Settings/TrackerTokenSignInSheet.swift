@@ -21,7 +21,6 @@ struct TrackerTokenSignInSheet: View {
                     SecureField("Personal Access Token", text: $token)
                         .textInputAutocapitalization(.never)
                         .disableAutocorrection(true)
-                        .textContentType(.password)
                         .onSubmit(submit)
                 }
 
