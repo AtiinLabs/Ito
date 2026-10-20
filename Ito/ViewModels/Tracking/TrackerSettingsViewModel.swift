@@ -87,7 +87,7 @@ final class TrackerSettingsViewModel: ObservableObject {
     func footer(for provider: TrackerProviderPresentation) -> String {
         switch provider.identifier {
         case MALCredentialRepository.providerID:
-            return "Ito updates progress for series you are watching or reading on MyAnimeList. It never deletes entries, lowers progress, or changes scores, dates, tags or comments."
+            return "Ito syncs progress for series you are watching or reading on MyAnimeList. Automatic sync only moves progress forward. Ito never deletes entries or changes scores, dates, tags or comments."
         case MangaBakaCredentialRepository.providerID:
             return "Ito updates chapter progress for manga and novels you are reading on MangaBaka. Ratings, dates and notes are left as they are. Series data from MangaBaka is licensed CC BY-NC-SA 4.0."
         default:
