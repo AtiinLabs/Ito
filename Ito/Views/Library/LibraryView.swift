@@ -139,6 +139,25 @@ struct LibraryView: View {
         .sheet(item: categoryAssignmentBinding) { intent in
             viewFactory.makeCategoryAssignmentSheet(itemID: intent.id)
         }
+        .confirmationDialog(
+            "Remove from Library?",
+            isPresented: removalConfirmationBinding,
+            titleVisibility: .visible,
+            presenting: viewModel.pendingRemoval
+        ) { _ in
+            Button("Remove", role: .destructive) { viewModel.confirmRemoval() }
+        } message: { item in
+            Text("\(item.title) is also removed from your lists. Reading history and progress are kept.")
+        }
+    }
+
+    private var removalConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.pendingRemoval != nil },
+            set: { isPresented in
+                if !isPresented { viewModel.cancelRemoval() }
+            }
+        )
     }
 
     private var categoryAssignmentBinding: Binding<LibraryCategoryAssignmentIntent?> {
@@ -171,7 +190,7 @@ struct LibraryView: View {
                     onAssignCategories: {
                         viewModel.presentCategoryAssignment(for: item.id)
                     },
-                    onRemove: { viewModel.remove(item) }
+                    onRemove: { viewModel.requestRemoval(item) }
                 )
             }
         }
@@ -432,11 +451,7 @@ struct LibraryItemView: View {
                 }
             }
             if isEditing {
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        onRemove()
-                    }
-                } label: {
+                Button(action: onRemove) {
                     Image(systemName: "minus.circle.fill")
                         .font(.system(size: 22))
                         .foregroundStyle(.white, .red)

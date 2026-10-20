@@ -49,6 +49,7 @@ final class LibraryViewModel: ObservableObject {
     @Published private(set) var selectedCategoryID: String?
     @Published private(set) var isEditing = false
     @Published private(set) var categoryAssignmentItemID: String?
+    @Published private(set) var pendingRemoval: LibraryItem?
     @Published private(set) var removingItemIDs: Set<String> = []
     @Published private(set) var updateSnapshot: LibraryUpdateSnapshot
     @Published private(set) var installedPluginIDs: Set<String>
@@ -248,11 +249,28 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
-    func remove(_ item: LibraryItem) {
-        guard removalOperationIDs[item.id] == nil else { return }
-        guard snapshot.items.contains(where: {
-            $0.id == item.id && $0.pluginId == item.pluginId
-        }) else { return }
+    /// Asks the user to confirm removing a series.
+    func requestRemoval(_ item: LibraryItem) {
+        guard removalOperationIDs[item.id] == nil, contains(item) else { return }
+        pendingRemoval = item
+    }
+
+    func cancelRemoval() {
+        pendingRemoval = nil
+    }
+
+    func confirmRemoval() {
+        guard let item = pendingRemoval else { return }
+        pendingRemoval = nil
+        remove(item)
+    }
+
+    private func contains(_ item: LibraryItem) -> Bool {
+        snapshot.items.contains { $0.id == item.id && $0.pluginId == item.pluginId }
+    }
+
+    private func remove(_ item: LibraryItem) {
+        guard removalOperationIDs[item.id] == nil, contains(item) else { return }
 
         let operationID = UUID()
         removalOperationIDs[item.id] = operationID
@@ -414,6 +432,9 @@ final class LibraryViewModel: ObservableObject {
             !newSnapshot.items.contains(where: { $0.id == itemID })
         }) == true {
             categoryAssignmentItemID = nil
+        }
+        if let pendingRemoval, !contains(pendingRemoval) {
+            self.pendingRemoval = nil
         }
         if oldCategoryName != selectedCategoryName || selectedCategoryID == nil {
             presentDiscordIfNeeded()

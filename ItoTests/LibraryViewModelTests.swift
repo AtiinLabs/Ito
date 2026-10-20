@@ -202,13 +202,32 @@ final class LibraryViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.filteredItems.map(\.id), ["one", "two"])
     }
 
+    func testRemovalNeedsConfirmationAndCancelRemovesNothing() {
+        let first = item("one", "One", pluginID: "plugin.one")
+        let subject = makeSubject(snapshot: snapshot(items: [first]))
+
+        subject.viewModel.requestRemoval(first)
+        XCTAssertEqual(subject.viewModel.pendingRemoval?.id, "one")
+        subject.viewModel.cancelRemoval()
+        XCTAssertNil(subject.viewModel.pendingRemoval)
+        subject.viewModel.confirmRemoval()
+        XCTAssertTrue(subject.library.removeRequests.isEmpty)
+
+        subject.viewModel.requestRemoval(first)
+        subject.library.publish(snapshot(items: []))
+        XCTAssertNil(subject.viewModel.pendingRemoval)
+    }
+
     func testDurableRemoveSuppressesDuplicateAndFollowsAuthoritativePublication() async {
         let first = item("one", "One", pluginID: "plugin.one")
         let second = item("two", "Two", pluginID: "plugin.two")
         let subject = makeSubject(snapshot: snapshot(items: [first, second]))
 
-        subject.viewModel.remove(first)
-        subject.viewModel.remove(first)
+        subject.viewModel.requestRemoval(first)
+        subject.viewModel.confirmRemoval()
+        subject.viewModel.requestRemoval(first)
+        subject.viewModel.confirmRemoval()
+        XCTAssertNil(subject.viewModel.pendingRemoval)
         await waitUntil { subject.library.removeRequests.count == 1 }
         XCTAssertEqual(subject.library.removeRequests[0], .init(itemID: "one", pluginID: "plugin.one"))
         XCTAssertEqual(subject.viewModel.filteredItems.map(\.id), ["one", "two"])
@@ -218,7 +237,8 @@ final class LibraryViewModelTests: XCTestCase {
         subject.library.publish(snapshot(items: [second]))
         XCTAssertEqual(subject.viewModel.filteredItems.map(\.id), ["two"])
 
-        subject.viewModel.remove(second)
+        subject.viewModel.requestRemoval(second)
+        subject.viewModel.confirmRemoval()
         await waitUntil { subject.library.removeRequests.count == 2 }
         subject.library.resolveRemove(at: 0, result: .failure(TestFailure.expected))
         await waitUntil { subject.messages.messages == [.itemRemovalFailed] }
