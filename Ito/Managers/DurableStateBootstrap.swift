@@ -330,6 +330,7 @@ public final class DurableStateBootstrap: ObservableObject {
         notifications.configure(settingsStore: settings)
         notifications.configure(updateManager: updates)
         progress.configure(updateManager: updates)
+        library.configure(updateManager: updates)
 
         let refresher = BackupRestoreRefresher(
             dbPool: dbPool,

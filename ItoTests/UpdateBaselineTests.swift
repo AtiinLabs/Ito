@@ -134,24 +134,27 @@ struct UpdateBaselineTests {
         #expect(badgeRowCount == 0)
     }
 
-    @Test func reloadPublishesPersistedScopedBadges() async throws {
+    @Test func reloadPublishesBadgesOfLibrarySeriesOnly() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
         try await database.dbPool.write { db in
-            try UpdateBadgeRecord(
-                pluginId: "one",
-                canonicalMediaId: "same",
-                count: 3,
-                updatedAt: nil,
-                provenance: .runtime
-            ).insert(db)
-            try UpdateBadgeRecord(
-                pluginId: "two",
-                canonicalMediaId: "same",
-                count: 5,
-                updatedAt: nil,
-                provenance: .runtime
-            ).insert(db)
+            // The legacy "plugin_id" form maps to the same series identity as "id".
+            for (plugin, id) in [("one", "same"), ("two", "two_same")] {
+                try LibraryItem(
+                    id: id, title: id, coverUrl: nil, pluginId: plugin, isAnime: false, pluginType: .manga,
+                    rawPayload: Data(), anilistId: nil, status: nil, lastCheckedAt: nil, lastUpdatedAt: nil,
+                    knownChapterCount: 1
+                ).insert(db)
+            }
+            for (plugin, mediaID, count) in [("one", "same", 3), ("two", "same", 5), ("one", "removed", 7)] {
+                try UpdateBadgeRecord(
+                    pluginId: plugin,
+                    canonicalMediaId: mediaID,
+                    count: count,
+                    updatedAt: nil,
+                    provenance: .runtime
+                ).insert(db)
+            }
         }
         let manager = UpdateManager(dbPool: database.dbPool)
 
@@ -163,7 +166,22 @@ struct UpdateBaselineTests {
         #expect(manager.badgeCount(
             for: MediaIdentity(pluginId: "two", canonicalMediaId: "same")
         ) == 5)
+        // A badge left by a series no longer in the library is not counted.
         #expect(manager.totalBadgeCount == 8)
+    }
+
+    @Test func removingASeriesRemovesItsBadge() async throws {
+        let (database, manager, item) = try await makeSubject(knownCount: 10)
+        defer { database.cleanup() }
+        let library = LibraryManager(dbPool: database.dbPool)
+        library.configure(updateManager: manager)
+        #expect(await successfulUpdate(manager, item: item, freshCount: 12) == 2)
+
+        try await library.removeItemDurably(id: item.id, pluginId: item.pluginId)
+
+        #expect(manager.totalBadgeCount == 0)
+        let badgeRows = try await database.dbPool.read { db in try UpdateBadgeRecord.fetchCount(db) }
+        #expect(badgeRows == 0)
     }
 
     @Test func clearCommitsBeforePublishing() async throws {

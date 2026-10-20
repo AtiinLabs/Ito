@@ -458,15 +458,27 @@ public class UpdateManager: ObservableObject {
         newChapterCounts.removeValue(forKey: media)
     }
 
-    public func reload() async throws {
-        let records = try await dbPool.read { db in
-            try UpdateBadgeRecord.fetchAll(db)
+    /// Drops the badges of series removed from the library; their rows were deleted with them.
+    func forgetBadges(for media: [MediaIdentity]) {
+        for identity in media {
+            newChapterCounts.removeValue(forKey: identity)
         }
-        newChapterCounts = Dictionary(uniqueKeysWithValues: records.map {
+    }
+
+    /// Publishes the stored badges of series in the library. Rows left by series removed before
+    /// removal deleted their badge, or restored without their series, are not counted.
+    public func reload() async throws {
+        let (records, libraryItems) = try await dbPool.read { db in
             (
-                MediaIdentity(pluginId: $0.pluginId, canonicalMediaId: $0.canonicalMediaId),
-                max(0, $0.count)
+                try UpdateBadgeRecord.fetchAll(db),
+                try Row.fetchAll(db, sql: "SELECT pluginId, id FROM libraryItem")
+                    .map { (pluginId: $0["pluginId"] as String, itemId: $0["id"] as String) }
             )
+        }
+        let library = Set(libraryItems.map { MediaIdentity(pluginId: $0.pluginId, itemId: $0.itemId) })
+        newChapterCounts = Dictionary(uniqueKeysWithValues: records.compactMap { record in
+            let media = MediaIdentity(pluginId: record.pluginId, canonicalMediaId: record.canonicalMediaId)
+            return library.contains(media) ? (media, max(0, record.count)) : nil
         })
     }
 }
