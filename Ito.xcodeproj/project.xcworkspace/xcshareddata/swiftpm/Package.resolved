@@ -38,7 +38,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AtiinLabs/mangabaka-sdk.git",
       "state" : {
-        "revision" : "bd791be091d12f9ffac7a0ff1cffe7f3581b7c91"
+        "revision" : "29e364dcaa03dea721d5df0a649ddbb9cd72c076"
       }
     },
     {

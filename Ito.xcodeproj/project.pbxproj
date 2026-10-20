@@ -707,7 +707,7 @@
 			repositoryURL = "https://github.com/AtiinLabs/mangabaka-sdk.git";
 			requirement = {
 				kind = revision;
-				revision = bd791be091d12f9ffac7a0ff1cffe7f3581b7c91;
+				revision = 29e364dcaa03dea721d5df0a649ddbb9cd72c076;
 			};
 		};
 		3AC825732F5FF84D0054AD29 /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */ = {
