@@ -1,13 +1,13 @@
 import UIKit
 import ito_runner
 
-struct NovelPaginationChapter {
+nonisolated struct NovelPaginationChapter: Sendable {
     let id: UUID
     let chapter: Novel.Chapter
     let pages: [Page]
 }
 
-struct NovelPaginationConfiguration {
+nonisolated struct NovelPaginationConfiguration: Sendable {
     let containerSize: CGSize
     let fontSize: Double
     let fontFamily: NovelFont
@@ -15,17 +15,31 @@ struct NovelPaginationConfiguration {
     let textColor: UIColor
 }
 
-struct NovelPaginationPage {
+/// One laid-out page. Sendable because `string` is built once and never mutated afterwards.
+nonisolated struct NovelPaginationPage: @unchecked Sendable {
     let chapterID: UUID
     let chapter: Novel.Chapter
     let string: NSAttributedString
     /// Offset of the page's first body character; see `NovelTextOffsets`.
     let startOffset: Int
     let isLastInChapter: Bool
+
+    /// The same page in another text colour; colour does not change where pages break.
+    func recolored(_ color: UIColor) -> NovelPaginationPage {
+        let copy = NSMutableAttributedString(attributedString: string)
+        copy.addAttribute(.foregroundColor, value: color, range: NSRange(location: 0, length: copy.length))
+        return NovelPaginationPage(
+            chapterID: chapterID,
+            chapter: chapter,
+            string: copy,
+            startOffset: startOffset,
+            isLastInChapter: isLastInChapter
+        )
+    }
 }
 
-@MainActor
-enum NovelPaginationEngine {
+/// Pure TextKit layout with no shared state, so it can run off the main thread.
+nonisolated enum NovelPaginationEngine {
     static func paginate(
         chapters: [NovelPaginationChapter],
         configuration: NovelPaginationConfiguration

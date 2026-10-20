@@ -443,7 +443,7 @@ enum NovelFont: String, CaseIterable, Identifiable {
         }
     }
 
-    func uiFont(size: CGFloat, isBold: Bool = false) -> UIFont {
+    nonisolated func uiFont(size: CGFloat, isBold: Bool = false) -> UIFont {
         let fallback = isBold ? UIFont.boldSystemFont(ofSize: size) : UIFont.systemFont(ofSize: size)
         switch self {
         case .system, .rounded: return fallback

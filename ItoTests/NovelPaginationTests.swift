@@ -5,41 +5,32 @@ import ito_runner
 
 @MainActor
 final class NovelPaginationTests: XCTestCase {
-    func testExtractionKeepsEngineContractAndViewOwnedCacheClampAndRendering() throws {
-        let engine = try sourceFile("Ito/Views/Reader/NovelPaginationEngine.swift")
-        let view = try sourceFile("Ito/Views/Reader/NovelPagingReaderView.swift")
-
-        for required in [
-            "configuration.containerSize.width - 32",
-            "configuration.containerSize.height - 80",
-            "formattedTitle(for: chapter.chapter) + \"\\n\\n\"",
-            "string: text + \"\\n\\n\"",
-            "if case .text(let text) = page.content",
-            "container.lineFragmentPadding = 0",
-            "manager.characterRange(",
-            "if containers.count > 1000 || glyphRange.length == 0"
-        ] {
-            XCTAssertTrue(engine.contains(required), "Missing engine behavior: \(required)")
-        }
-
-        for required in [
-            "@State private var paginatedCache",
-            "@State private var flattenedPages",
-            "@State private var currentPageIndex",
-            "PageViewController(",
-            "NovelPaginationEngine.paginate(",
-            "min(currentPageIndex, max(0, newFlattened.count - 1))"
-        ] {
-            XCTAssertTrue(view.contains(required), "Missing View ownership: \(required)")
-        }
-    }
-
     func testInvalidContainerSizeReturnsNoPaginationResult() {
         let chapter = loadedChapter(key: "one", number: 1, body: "Body")
 
         XCTAssertNil(enginePaginate([chapter], size: .zero))
         XCTAssertNil(enginePaginate([chapter], size: CGSize(width: 320, height: 0)))
         XCTAssertNil(enginePaginate([chapter], size: CGSize(width: 0, height: 480)))
+    }
+
+    func testSamePlaceIsFoundAfterTheTextIsLaidOutAgainLarger() throws {
+        let words = (1...1200).map { "word\($0)" }.joined(separator: " ")
+        let chapter = loadedChapter(key: "long", number: 1, body: words)
+        let size = CGSize(width: 320, height: 520)
+        let small = try XCTUnwrap(enginePaginate([chapter], size: size, fontSize: 14))
+        let large = try XCTUnwrap(enginePaginate([chapter], size: size, fontSize: 24))
+        XCTAssertGreaterThan(large.count, small.count)
+
+        // Reading the middle of the chapter at the small size, then making the text larger.
+        let reading = small[small.count / 2]
+        let anchor = NovelReadingAnchor(chapterID: chapter.id, offset: reading.startOffset)
+        let index = try XCTUnwrap(NovelPagingReaderView.pageIndex(for: anchor, in: large))
+
+        // The page shown is the one whose text contains that place.
+        XCTAssertLessThanOrEqual(large[index].startOffset, reading.startOffset)
+        if large.indices.contains(index + 1) {
+            XCTAssertGreaterThan(large[index + 1].startOffset, reading.startOffset)
+        }
     }
 
     func testShortChapterFormatsTitleAndBodyAndIgnoresURLPages() throws {
@@ -504,14 +495,5 @@ final class NovelPaginationTests: XCTestCase {
             }.joined()
             return formattedTitle(loadedChapter.chapter) + "\n\n" + body
         }.joined()
-    }
-
-    private func sourceFile(_ relativePath: String) throws -> String {
-        let testsFile = URL(fileURLWithPath: #filePath)
-        let root = testsFile.deletingLastPathComponent().deletingLastPathComponent()
-        return try String(
-            contentsOf: root.appendingPathComponent(relativePath),
-            encoding: .utf8
-        )
     }
 }
