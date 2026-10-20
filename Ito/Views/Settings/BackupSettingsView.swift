@@ -48,7 +48,9 @@ struct BackupSettingsView: View {
                     HStack {
                         Label("Restore from Backup", systemImage: "square.and.arrow.down")
                         Spacer()
-                        if viewModel.managerSnapshot.isRestoring {
+                        if viewModel.managerSnapshot.isRestoring
+                            || viewModel.operationKind == .mergeAnalysis
+                            || viewModel.operationKind == .restore {
                             ProgressView()
                         }
                     }
