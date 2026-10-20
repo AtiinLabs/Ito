@@ -60,6 +60,22 @@ struct VideoPlayerView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+        .alert(
+            "Continue Watching?",
+            isPresented: Binding(
+                get: { viewModel.resumeOffer != nil },
+                set: { _ in }
+            )
+        ) {
+            Button("Continue from \(Self.formattedTime(viewModel.resumeOffer ?? 0))") {
+                viewModel.resolveResumeOffer(continueWatching: true)
+            }
+            Button("Start Over") {
+                viewModel.resolveResumeOffer(continueWatching: false)
+            }
+        } message: {
+            Text("You stopped this episode at \(Self.formattedTime(viewModel.resumeOffer ?? 0)).")
+        }
         .task {
             viewModel.start()
         }
@@ -72,6 +88,17 @@ struct VideoPlayerView: View {
         .onDisappear {
             viewModel.disappear()
         }
+    }
+
+    /// "12:34", or "1:02:03" past an hour.
+    static func formattedTime(_ seconds: Double) -> String {
+        let total = Int(seconds.rounded(.down))
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let secs = total % 60
+        return hours > 0
+            ? String(format: "%d:%02d:%02d", hours, minutes, secs)
+            : String(format: "%d:%02d", minutes, secs)
     }
 
     private var loadingView: some View {

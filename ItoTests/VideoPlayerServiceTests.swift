@@ -30,7 +30,7 @@ final class VideoPlayerServiceTests: XCTestCase {
         let first = await coordinator.prepare(video: video("first"))
         XCTAssertNotNil(first)
         XCTAssertTrue(
-            coordinator.activate(try XCTUnwrap(first)) { time, duration in
+            coordinator.activate(try XCTUnwrap(first), startTime: nil) { time, duration in
                 updates.append((time, duration))
             }
         )
@@ -38,7 +38,7 @@ final class VideoPlayerServiceTests: XCTestCase {
 
         let second = await coordinator.prepare(video: video("second"))
         XCTAssertTrue(
-            coordinator.activate(try XCTUnwrap(second)) { time, duration in
+            coordinator.activate(try XCTUnwrap(second), startTime: nil) { time, duration in
                 updates.append((time, duration))
             }
         )

@@ -214,6 +214,7 @@ final class VideoPlaybackCoordinatorFake: VideoPlaybackCoordinating {
     var responses: [String: [Response]] = [:]
     private(set) var requests: [Request] = []
     private(set) var activatedPreparationIDs: [String] = []
+    private(set) var activatedStartTimes: [Double?] = []
     private(set) var observerInstallCount = 0
     private(set) var observerRemovalCount = 0
     private(set) var replacementCount = 0
@@ -250,6 +251,7 @@ final class VideoPlaybackCoordinatorFake: VideoPlaybackCoordinating {
 
     func activate(
         _ preparation: any VideoPlaybackPreparation,
+        startTime: Double?,
         onTimeUpdate: @escaping @MainActor (Double, Double) -> Void
     ) -> Bool {
         guard let preparation = preparation as? VideoPlaybackPreparationFake else {
@@ -266,6 +268,7 @@ final class VideoPlaybackCoordinatorFake: VideoPlaybackCoordinating {
         }
         timeUpdate = onTimeUpdate
         activatedPreparationIDs.append(preparation.id)
+        activatedStartTimes.append(startTime)
         playCount += 1
         resumeActivationWaiters()
         return true
@@ -392,6 +395,9 @@ final class VideoPlayerProgressFake: VideoPlayerProgressTracking {
     let events: VideoPlayerEventRecorder
     var responses: [Response] = []
     private(set) var requests: [Request] = []
+    /// Seconds an episode starts at, keyed by episode.
+    var savedTimes: [String: Double] = [:]
+    private(set) var savedTimeWrites: [Double] = []
     private var pending: [CheckedContinuation<Void, any Error>] = []
     private var pendingWaiters: [CheckedContinuation<Void, Never>] = []
 
@@ -427,6 +433,17 @@ final class VideoPlayerProgressFake: VideoPlayerProgressTracking {
     func waitUntilPending() async {
         guard pending.isEmpty else { return }
         await withCheckedContinuation { pendingWaiters.append($0) }
+    }
+
+    func savedPlaybackTime(media: MediaIdentity, episodeID: String) -> Double? {
+        _ = media
+        return savedTimes[episodeID]
+    }
+
+    func savePlaybackTime(_ seconds: Double, media: MediaIdentity, episodeID: String) async throws {
+        _ = media
+        savedTimeWrites.append(seconds)
+        savedTimes[episodeID] = seconds
     }
 
     func resolveFirst(with result: Result<Void, any Error>) {

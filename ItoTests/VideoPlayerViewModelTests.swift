@@ -38,6 +38,77 @@ final class VideoPlayerViewModelTests: XCTestCase {
         XCTAssertEqual(subject.playback.activatedPreparationIDs, ["first"])
     }
 
+    func testSavedTimeAsksBeforePlayingAndContinueStartsThere() async {
+        let episode = Anime.Episode(key: "ep", title: nil, episode: 3)
+        let subject = makeVideoPlayerSubject(episode: episode)
+        subject.streamLoader.responses = [.success([video("first")])]
+        subject.progress.savedTimes["ep"] = 754
+
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        XCTAssertEqual(subject.viewModel.loadPhase, .content)
+        XCTAssertEqual(subject.viewModel.resumeOffer, 754)
+        XCTAssertTrue(subject.playback.activatedPreparationIDs.isEmpty)
+
+        subject.viewModel.resolveResumeOffer(continueWatching: true)
+
+        XCTAssertNil(subject.viewModel.resumeOffer)
+        XCTAssertEqual(subject.playback.activatedPreparationIDs, ["first"])
+        XCTAssertEqual(subject.playback.activatedStartTimes, [754])
+    }
+
+    func testStartOverPlaysFromTheBeginning() async {
+        let episode = Anime.Episode(key: "ep", title: nil, episode: 3)
+        let subject = makeVideoPlayerSubject(episode: episode)
+        subject.streamLoader.responses = [.success([video("first")])]
+        subject.progress.savedTimes["ep"] = 754
+
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+        subject.viewModel.resolveResumeOffer(continueWatching: false)
+
+        XCTAssertEqual(subject.playback.activatedStartTimes, [nil])
+    }
+
+    func testShortSavedTimePlaysWithoutAsking() async {
+        let episode = Anime.Episode(key: "ep", title: nil, episode: 3)
+        let subject = makeVideoPlayerSubject(episode: episode)
+        subject.streamLoader.responses = [.success([video("first")])]
+        subject.progress.savedTimes["ep"] = 3
+
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        XCTAssertNil(subject.viewModel.resumeOffer)
+        XCTAssertEqual(subject.playback.activatedStartTimes, [nil])
+    }
+
+    func testPlaybackTimeIsSavedPeriodicallyAndResetOnceWatched() async {
+        let subject = makeVideoPlayerSubject()
+
+        subject.viewModel.playbackTimeDidChange(currentTime: 2, duration: 100)
+        subject.viewModel.playbackTimeDidChange(currentTime: 6, duration: 100)
+        subject.viewModel.playbackTimeDidChange(currentTime: 8, duration: 100)
+        subject.viewModel.playbackTimeDidChange(currentTime: 12, duration: 100)
+        subject.viewModel.playbackTimeDidChange(currentTime: 85, duration: 100)
+        subject.viewModel.playbackTimeDidChange(currentTime: 95, duration: 100)
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        XCTAssertEqual(subject.progress.savedTimeWrites, [6, 12, 0])
+    }
+
+    func testLeavingSavesWhereWatchingStopped() async {
+        let subject = makeVideoPlayerSubject()
+        subject.viewModel.playbackTimeDidChange(currentTime: 6, duration: 100)
+        subject.viewModel.playbackTimeDidChange(currentTime: 9, duration: 100)
+
+        subject.viewModel.disappear()
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        XCTAssertEqual(subject.progress.savedTimeWrites, [6, 9])
+    }
+
     func testInitialLoadFailureKeepsHistoryAndPublishesExistingErrorText() async {
         let subject = makeVideoPlayerSubject()
         subject.streamLoader.responses = [.failure(VideoPlayerTestError.expected)]

@@ -20,6 +20,9 @@ final class VideoPlayerViewModel: ObservableObject {
     @Published private(set) var currentSubtitleText: String?
     @Published private(set) var playbackSurface: (any VideoPlaybackSurface)?
     @Published private(set) var hasTrackedProgress = false
+    /// A saved time in seconds to offer when the episode opens; the view asks whether to
+    /// continue from it or start over, and nothing plays until it is answered.
+    @Published private(set) var resumeOffer: Double?
 
     let streamLoader: any VideoStreamLoading
     let pluginID: String
@@ -47,6 +50,20 @@ final class VideoPlayerViewModel: ObservableObject {
     private var progressOperationID: UUID?
     private var activeSubtitleToken: VideoSubtitleToken?
     private var finalizedLogOperations = Set<UUID>()
+    private var deferredActivation: (
+        preparation: any VideoPlaybackPreparation,
+        session: UUID,
+        generation: UInt64
+    )?
+    private var lastKnownTime: Double?
+    private var lastSavedTime: Double?
+    /// Time writes run one after another so an older write cannot land after a newer one.
+    private var timeWriteTask: Task<Void, Never>?
+
+    /// Saved times shorter than this start from the beginning without asking.
+    static let minimumResumeTime: Double = 5
+    /// How much playback passes between saves of the current time.
+    static let timeSaveInterval: Double = 5
 
 #if DEBUG
     private var testingOperationTasks: [UUID: Task<Void, Never>] = [:]
@@ -107,15 +124,38 @@ final class VideoPlayerViewModel: ObservableObject {
 
     func disappear() {
         guard isActive else { return }
+        // Keep where watching stopped, unless the episode was already counted as watched.
+        if !hasTrackedProgress, let lastKnownTime {
+            saveTime(lastKnownTime)
+        }
         isActive = false
         hasPresentedPresence = false
         sessionID = UUID()
+        resumeOffer = nil
+        deferredActivation = nil
         cancelStreamLoad(outcome: .cancelled)
         cancelPreparation(outcome: .cancelled)
         cancelSubtitleLoad(outcome: .cancelled)
         cancelProgress(outcome: .cancelled)
         playbackCoordinator.shutdown()
         dependencies.presence.clearVideoPlayerPresence()
+    }
+
+    /// Answers `resumeOffer`: continue from the saved time, or start from the beginning.
+    func resolveResumeOffer(continueWatching: Bool) {
+        guard isActive,
+              let offer = resumeOffer,
+              let deferred = deferredActivation,
+              deferred.session == sessionID,
+              deferred.generation == preparationGeneration else { return }
+        resumeOffer = nil
+        deferredActivation = nil
+        _ = activate(
+            deferred.preparation,
+            startTime: continueWatching ? offer : nil,
+            session: deferred.session,
+            generation: deferred.generation
+        )
     }
 
     // MARK: - Selection intents
@@ -252,6 +292,8 @@ final class VideoPlayerViewModel: ObservableObject {
     ) {
         guard isActive else { return }
         cancelPreparation(outcome: .cancelled)
+        resumeOffer = nil
+        deferredActivation = nil
         preparationGeneration &+= 1
         let generation = preparationGeneration
         let operationID = UUID()
@@ -299,20 +341,18 @@ final class VideoPlayerViewModel: ObservableObject {
         preparationOperationID = nil
         let activated: Bool
         if let preparation {
-            activated = playbackCoordinator.activate(preparation) { [weak self] time, duration in
-                self?.playbackTimeDidChange(
-                    currentTime: time,
-                    duration: duration,
+            if completesInitialLoad, let saved = savedResumeTime() {
+                // Ask first; `resolveResumeOffer` activates with the answer.
+                deferredActivation = (preparation, session, generation)
+                resumeOffer = saved
+                activated = true
+            } else {
+                activated = activate(
+                    preparation,
+                    startTime: nil,
                     session: session,
-                    preparationGeneration: generation
+                    generation: generation
                 )
-            }
-            if activated {
-                activePlaybackGeneration = generation
-                playbackSurface = playbackCoordinator.surface
-                if let selectedSubtitle {
-                    beginSubtitleLoad(selectedSubtitle)
-                }
             }
         } else {
             activated = false
@@ -326,6 +366,59 @@ final class VideoPlayerViewModel: ObservableObject {
             operationID: operationID,
             outcome: activated ? .succeeded : .failed(.unknown)
         )
+    }
+
+    private func activate(
+        _ preparation: any VideoPlaybackPreparation,
+        startTime: Double?,
+        session: UUID,
+        generation: UInt64
+    ) -> Bool {
+        let activated = playbackCoordinator.activate(
+            preparation,
+            startTime: startTime
+        ) { [weak self] time, duration in
+            self?.playbackTimeDidChange(
+                currentTime: time,
+                duration: duration,
+                session: session,
+                preparationGeneration: generation
+            )
+        }
+        if activated {
+            activePlaybackGeneration = generation
+            playbackSurface = playbackCoordinator.surface
+            if let selectedSubtitle {
+                beginSubtitleLoad(selectedSubtitle)
+            }
+        }
+        return activated
+    }
+
+    private func savedResumeTime() -> Double? {
+        guard let saved = dependencies.progress.savedPlaybackTime(
+            media: mediaIdentity,
+            episodeID: episode.key
+        ), saved.isFinite, saved >= Self.minimumResumeTime else { return nil }
+        return saved
+    }
+
+    private func saveTime(_ seconds: Double) {
+        guard seconds.isFinite, seconds >= 0, seconds != lastSavedTime else { return }
+        lastSavedTime = seconds
+        let operationID = UUID()
+        let progress = dependencies.progress
+        let identity = mediaIdentity
+        let episodeKey = episode.key
+        let preceding = timeWriteTask
+        let task = Task { @MainActor [weak self, progress] in
+            defer { self?.finishTestingOperation(operationID) }
+            await preceding?.value
+            // Saving the time is best effort; playback carries on if it fails.
+            try? await progress.savePlaybackTime(seconds, media: identity, episodeID: episodeKey)
+        }
+        timeWriteTask = task
+        retainTestingOperation(task, operationID: operationID)
     }
 
     private func isCurrentPreparation(
@@ -469,6 +562,13 @@ final class VideoPlayerViewModel: ObservableObject {
            currentTime / duration >= 0.8 {
             hasTrackedProgress = true
             beginProgressEffects()
+            // Watched: reopening the episode starts over, and Resume moves to the next one.
+            saveTime(0)
+        } else if !hasTrackedProgress, currentTime.isFinite, currentTime >= 0 {
+            lastKnownTime = currentTime
+            if abs(currentTime - (lastSavedTime ?? 0)) >= Self.timeSaveInterval {
+                saveTime(currentTime)
+            }
         }
 
         let activeCue = parsedSubtitles.first {
