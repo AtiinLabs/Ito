@@ -43,7 +43,11 @@ final class LibraryViewModel: ObservableObject {
         case content
     }
 
-    @Published private(set) var snapshot: LibraryRootSnapshot
+    @Published private(set) var snapshot: LibraryRootSnapshot {
+        didSet { categoryMembers = Self.members(of: snapshot) }
+    }
+    /// Series IDs per list ID, rebuilt with each snapshot.
+    private var categoryMembers: [String: Set<String>]
     @Published var searchText = ""
     @Published private(set) var layoutStyle: LibraryLayoutStyle
     @Published private(set) var selectedCategoryID: String?
@@ -90,6 +94,7 @@ final class LibraryViewModel: ObservableObject {
         self.messagePresenter = messagePresenter
         self.presentationLogger = presentationLogger
         snapshot = dependencies.library.rootSnapshot
+        categoryMembers = Self.members(of: dependencies.library.rootSnapshot)
         let initialLayout = Self.layoutStyle(from: dependencies.layout.storedLibraryLayoutStyle)
         authoritativeLayoutStyle = initialLayout
         layoutStyle = initialLayout
@@ -145,21 +150,17 @@ final class LibraryViewModel: ObservableObject {
     }
 
     var groups: [LibraryPresentationGroup] {
-        snapshot.categories.compactMap { category in
-            let memberIDs = Set(
-                snapshot.links.lazy
-                    .filter { $0.categoryId == category.id }
-                    .map(\.itemId)
-            )
-            let items = filteredItems.filter { memberIDs.contains($0.id) }
-
+        let items = filteredItems
+        return snapshot.categories.compactMap { category in
             if layoutStyle == .tabbed,
                let selectedCategoryID,
                selectedCategoryID != category.id {
                 return nil
             }
+            let memberIDs = categoryMembers[category.id] ?? []
+            let categoryItems = items.filter { memberIDs.contains($0.id) }
             if layoutStyle == .sectioned,
-               items.isEmpty,
+               categoryItems.isEmpty,
                snapshot.categories.count > 1 {
                 return nil
             }
@@ -167,8 +168,14 @@ final class LibraryViewModel: ObservableObject {
                 id: category.id,
                 name: category.name,
                 isSystem: category.isSystemCategory,
-                items: items
+                items: categoryItems
             )
+        }
+    }
+
+    private static func members(of snapshot: LibraryRootSnapshot) -> [String: Set<String>] {
+        snapshot.links.reduce(into: [:]) { members, link in
+            members[link.categoryId, default: []].insert(link.itemId)
         }
     }
 
