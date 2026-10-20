@@ -131,16 +131,12 @@ struct BackupSettingsView: View {
                 .interactiveDismissDisabled()
             }
         }
+        // While the restore report sheet is up, its content shows alerts instead: a
+        // presenting view cannot present a second modal on iOS 15.
         .alert(item: Binding(
-            get: { viewModel.alert },
+            get: { viewModel.showsRestoreReport ? nil : viewModel.alert },
             set: { if $0 == nil { viewModel.dismissAlert() } }
-        )) { alert in
-            Alert(
-                title: Text(alert.title),
-                message: Text(alert.message),
-                dismissButton: .default(Text("OK"), action: viewModel.dismissAlert)
-            )
-        }
+        ), content: makeAlert)
         .sheet(
             isPresented: Binding(
                 get: { viewModel.showsRestoreReport },
@@ -154,6 +150,10 @@ struct BackupSettingsView: View {
                     onAcknowledge: { _ = viewModel.acknowledgeRestoreReport() }
                 )
                 .interactiveDismissDisabled()
+                .alert(item: Binding(
+                    get: { viewModel.showsRestoreReport ? viewModel.alert : nil },
+                    set: { if $0 == nil { viewModel.dismissAlert() } }
+                ), content: makeAlert)
             }
         }
         .sheet(
@@ -195,6 +195,14 @@ struct BackupSettingsView: View {
             Task { await uiTestFixtures.refreshBackupFixtureState() }
         }
         #endif
+    }
+
+    private func makeAlert(_ alert: BackupSettingsAlert) -> Alert {
+        Alert(
+            title: Text(alert.title),
+            message: Text(alert.message),
+            dismissButton: .default(Text("OK"), action: viewModel.dismissAlert)
+        )
     }
 
     private func requestImport() {
