@@ -54,6 +54,10 @@ final class MangaReaderViewModel: ObservableObject {
     @Published private(set) var scrollTarget: Int?
     @Published private(set) var loadingNextChapter = false
     @Published private(set) var loadingPrevChapter = false
+    /// The last automatic append failed; it waits for `retryAppendNextChapter` instead of
+    /// running again each time the end of the list comes into view.
+    @Published private(set) var appendFailed = false
+    @Published private(set) var prependFailed = false
 
     private(set) var markedChapterKeys: Set<String> = []
 
@@ -611,9 +615,17 @@ final class MangaReaderViewModel: ObservableObject {
 
     // MARK: - Continuous chapter loading
 
+    /// Retries the next-chapter append after `appendFailed`.
+    func retryAppendNextChapter() {
+        guard appendFailed else { return }
+        appendFailed = false
+        appendNextChapter()
+    }
+
     func appendNextChapter() {
         guard isActive,
               !loadingNextChapter,
+              !appendFailed,
               appendOperationID == nil,
               !isPaged,
               let last = segments.last,
@@ -685,6 +697,7 @@ final class MangaReaderViewModel: ObservableObject {
             logFinished(kind: .chapterAppend, operationID: operationID, outcome: .ignoredStale)
             return
         }
+        appendFailed = true
         finishAppend(operationID: operationID, outcome: .failed(.pluginExecution))
     }
 
@@ -720,6 +733,7 @@ final class MangaReaderViewModel: ObservableObject {
               let chapter = chapterBefore(first.chapter) else { return }
 
         loadingPrevChapter = true
+        prependFailed = false
         let boundary = ChapterToken(first.chapter)
         let operationID = UUID()
         let session = sessionID
@@ -786,6 +800,7 @@ final class MangaReaderViewModel: ObservableObject {
             logFinished(kind: .chapterPrepend, operationID: operationID, outcome: .ignoredStale)
             return
         }
+        prependFailed = true
         finishPrepend(operationID: operationID, outcome: .failed(.pluginExecution))
     }
 
@@ -1043,6 +1058,8 @@ final class MangaReaderViewModel: ObservableObject {
         prependOperationID = nil
         loadingNextChapter = false
         loadingPrevChapter = false
+        appendFailed = false
+        prependFailed = false
     }
 
     private func logStarted(kind: PresentationEventKind, operationID: UUID) {

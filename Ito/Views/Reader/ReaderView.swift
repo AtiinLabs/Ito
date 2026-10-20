@@ -142,7 +142,7 @@ struct ReaderView: View {
             )
         ) {
             if let previous = viewModel.chapterBefore(viewModel.currentChapter) {
-                loadingChapterView(chapter: previous, isNext: false, isButton: true)
+                loadingChapterView(chapter: previous, isNext: false, prompt: .loading)
                     .tag(-1)
             }
 
@@ -152,7 +152,7 @@ struct ReaderView: View {
             }
 
             if let next = viewModel.chapterAfter(viewModel.currentChapter) {
-                loadingChapterView(chapter: next, isNext: true, isButton: true)
+                loadingChapterView(chapter: next, isNext: true, prompt: .loading)
                     .tag(viewModel.pagedPages.count)
             }
         }
@@ -179,7 +179,9 @@ struct ReaderView: View {
                             loadingChapterView(
                                 chapter: previous,
                                 isNext: false,
-                                isButton: !viewModel.loadingPrevChapter
+                                prompt: viewModel.loadingPrevChapter
+                                    ? .loading
+                                    : (viewModel.prependFailed ? .failed : .tap)
                             )
                         }
                         .disabled(viewModel.loadingPrevChapter)
@@ -203,10 +205,16 @@ struct ReaderView: View {
                         ProgressView()
                             .tint(.white)
                             .frame(maxWidth: .infinity, minHeight: 200)
-                    } else if viewModel.nextChapterForLastSegment != nil {
-                        Color.clear
-                            .frame(height: 1)
-                            .onAppear { viewModel.appendNextChapter() }
+                    } else if let next = viewModel.nextChapterForLastSegment {
+                        if viewModel.appendFailed {
+                            Button(action: { viewModel.retryAppendNextChapter() }) {
+                                loadingChapterView(chapter: next, isNext: true, prompt: .failed)
+                            }
+                        } else {
+                            Color.clear
+                                .frame(height: 1)
+                                .onAppear { viewModel.appendNextChapter() }
+                        }
                     }
                 }
             }
@@ -254,33 +262,52 @@ struct ReaderView: View {
         .padding(.vertical, 40)
     }
 
+    private enum ChapterLoadPrompt {
+        case tap
+        case loading
+        case failed
+    }
+
     @ViewBuilder
     private func loadingChapterView(
         chapter: Manga.Chapter,
         isNext: Bool,
-        isButton: Bool
+        prompt: ChapterLoadPrompt
     ) -> some View {
         VStack(spacing: 16) {
-            if !isButton {
+            switch prompt {
+            case .loading:
                 ProgressView().tint(.white)
-            } else {
+            case .tap:
                 Image(systemName: isNext ? "arrow.down.circle" : "arrow.up.circle")
                     .font(.system(size: 40))
                     .foregroundColor(.white)
+            case .failed:
+                Image(systemName: "arrow.clockwise.circle")
+                    .font(.system(size: 40))
+                    .foregroundColor(.white)
             }
-            Text(
-                isNext
-                    ? (isButton ? "Tap to Load Next Chapter" : "Loading Next Chapter...")
-                    : (isButton ? "Tap to Load Previous Chapter" : "Loading Previous Chapter...")
-            )
-            .foregroundColor(.white)
-            .font(.headline)
+            Text(Self.promptText(prompt, isNext: isNext))
+                .foregroundColor(.white)
+                .font(.headline)
+                .multilineTextAlignment(.center)
             Text(chapter.title ?? "Chapter \(chapter.chapter ?? 0)")
                 .foregroundColor(.gray)
                 .font(.subheadline)
         }
         .frame(maxWidth: .infinity, minHeight: 400, maxHeight: .infinity, alignment: .center)
         .padding(40)
+    }
+
+    private static func promptText(_ prompt: ChapterLoadPrompt, isNext: Bool) -> String {
+        switch (prompt, isNext) {
+        case (.tap, true): return "Tap to Load Next Chapter"
+        case (.tap, false): return "Tap to Load Previous Chapter"
+        case (.loading, true): return "Loading Next Chapter..."
+        case (.loading, false): return "Loading Previous Chapter..."
+        case (.failed, true): return "Couldn't load the next chapter. Tap to try again."
+        case (.failed, false): return "Couldn't load the previous chapter. Tap to try again."
+        }
     }
 
     @ViewBuilder

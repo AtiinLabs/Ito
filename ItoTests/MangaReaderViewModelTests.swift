@@ -419,7 +419,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.history.requests.map(\.chapterKey), ["a"])
     }
 
-    func testContinuousAppendFailureCleansOnlyItsOperationAndAllowsRetry() async {
+    func testContinuousAppendFailureWaitsForAnExplicitRetry() async {
         let a = makeChapter("a", number: 1)
         let b = makeChapter("b", number: 2)
         let subject = makeSubject(chapters: [a, b], initial: a, viewer: .Vertical)
@@ -432,8 +432,16 @@ final class MangaReaderViewModelTests: XCTestCase {
         subject.viewModel.appendNextChapter()
         await waitForReader { !subject.viewModel.loadingNextChapter }
         XCTAssertEqual(subject.viewModel.segments.count, 1)
+        XCTAssertTrue(subject.viewModel.appendFailed)
+
+        // The end of the list coming back into view does not retry by itself.
         subject.viewModel.appendNextChapter()
+        XCTAssertFalse(subject.viewModel.loadingNextChapter)
+        XCTAssertEqual(subject.loader.callCount(for: "b"), 1)
+
+        subject.viewModel.retryAppendNextChapter()
         await waitForReader { subject.viewModel.segments.count == 2 }
+        XCTAssertFalse(subject.viewModel.appendFailed)
         XCTAssertEqual(subject.loader.callCount(for: "b"), 2)
     }
 
