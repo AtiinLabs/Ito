@@ -250,6 +250,7 @@ struct LibraryView: View {
             HStack(spacing: 16) {
                 NavigationLink(destination: viewFactory.makeHistoryView()) {
                     Image(systemName: "clock.arrow.circlepath")
+                        .accessibilityLabel("History")
                 }
                 if viewModel.hasItems {
                     Button {
@@ -454,8 +455,12 @@ struct LibraryItemView: View {
                         .font(.system(size: 22))
                         .foregroundStyle(.white, .red)
                         .background(Color.white.clipShape(Circle()).padding(3))
+                        // A 44 pt target around the 22 pt symbol.
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
-                .offset(x: -6, y: -6)
+                .accessibilityLabel("Remove \(item.title)")
+                .offset(x: -17, y: -17)
                 .transition(.scale.combined(with: .opacity))
                 .zIndex(1)
             }
