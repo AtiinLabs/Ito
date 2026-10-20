@@ -174,7 +174,7 @@ public class LibraryManager: ObservableObject {
                 pluginType: .manga,
                 rawPayload: payload,
                 anilistId: nil,
-                knownChapterCount: manga.chapters?.count ?? 0
+                knownChapterCount: manga.chapters?.distinctChapterCount ?? 0
             )
         )
     }
@@ -192,7 +192,7 @@ public class LibraryManager: ObservableObject {
                 pluginType: .anime,
                 rawPayload: payload,
                 anilistId: nil,
-                knownChapterCount: anime.episodes?.count ?? 0
+                knownChapterCount: anime.episodes?.distinctChapterCount ?? 0
             )
         )
     }
@@ -210,7 +210,7 @@ public class LibraryManager: ObservableObject {
                 pluginType: .novel,
                 rawPayload: payload,
                 anilistId: nil,
-                knownChapterCount: novel.chapters?.count ?? 0
+                knownChapterCount: novel.chapters?.distinctChapterCount ?? 0
             )
         )
     }

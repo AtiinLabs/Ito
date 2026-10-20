@@ -225,6 +225,19 @@ struct UpdateBaselineTests {
         }
     }
 
+    @Test func scanlationsOfOneChapterCountOnceAndUnnumberedChaptersCountByKey() {
+        let chapters = [
+            Manga.Chapter(key: "a", chapter: 1, scanlator: "Team A"),
+            Manga.Chapter(key: "b", chapter: 1, scanlator: "Team B"),
+            Manga.Chapter(key: "c", chapter: 1.5),
+            Manga.Chapter(key: "extra-1"),
+            Manga.Chapter(key: "extra-2"),
+            Manga.Chapter(key: "extra-2")
+        ]
+
+        #expect(chapters.distinctChapterCount == 4)
+    }
+
     private func makeSubject(
         knownCount: Int?,
         status: String? = nil,

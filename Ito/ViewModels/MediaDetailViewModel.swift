@@ -688,7 +688,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     private func beginBaselineAdvanceIfNeeded() {
         guard isSaved else { return }
         let identity = mediaIdentity
-        let count = media.chapterList?.count ?? 0
+        let count = media.chapterList?.distinctChapterCount ?? 0
         let signature = "\(identity.pluginId)|\(identity.canonicalMediaId)|\(count)"
         guard !completedBaselineSignatures.contains(signature) else { return }
         baselineTask?.cancel()

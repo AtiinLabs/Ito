@@ -194,7 +194,7 @@ public class UpdateManager: ObservableObject {
                     let baseManga = try JSONDecoder().decode(Manga.self, from: item.rawPayload)
                     let fullManga = try await runner.getMangaUpdate(manga: baseManga)
                     return SuccessfulUpdate(
-                        freshCount: fullManga.chapters?.count ?? 0,
+                        freshCount: fullManga.chapters?.distinctChapterCount ?? 0,
                         status: String(describing: fullManga.status)
                     )
                 case .anime:
@@ -205,14 +205,14 @@ public class UpdateManager: ObservableObject {
                         needsEpisodes: true
                     )
                     return SuccessfulUpdate(
-                        freshCount: fullAnime.episodes?.count ?? 0,
+                        freshCount: fullAnime.episodes?.distinctChapterCount ?? 0,
                         status: String(describing: fullAnime.status)
                     )
                 case .novel:
                     let baseNovel = try JSONDecoder().decode(Novel.self, from: item.rawPayload)
                     let fullNovel = try await runner.getNovelUpdate(novel: baseNovel)
                     return SuccessfulUpdate(
-                        freshCount: fullNovel.chapters?.count ?? 0,
+                        freshCount: fullNovel.chapters?.distinctChapterCount ?? 0,
                         status: String(describing: fullNovel.status)
                     )
                 }
