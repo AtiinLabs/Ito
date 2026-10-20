@@ -253,8 +253,9 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
                 }
-                .tint(viewModel.theme.map { Color(hex: $0.secondaryHex) } ?? .blue)
+                .tint(viewModel.theme.map { Color(hex: $0.secondaryHex) } ?? .accentColor)
                 .buttonStyle(.borderedProminent)
+                .foregroundStyle(viewModel.theme == nil ? Color.itoOnAccent : .white)
                 .controlSize(.large)
                 .padding(.horizontal, 16)
             }
@@ -365,7 +366,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                     Text("Filtered").font(.caption).fontWeight(.medium)
                 }
             }
-            .foregroundStyle(isFiltered ? Color.blue : Color.secondary)
+            .foregroundStyle(isFiltered ? Color.accentColor : Color.secondary)
             .animation(.easeInOut(duration: 0.15), value: isFiltered)
         }
     }
@@ -514,7 +515,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                     }
                     Spacer()
                     Image(systemName: "arrow.right.circle")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Color.accentColor)
                 }
                 .padding(.vertical, 4)
             }
@@ -536,8 +537,8 @@ private struct ActiveFilterPill: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(Color.blue.opacity(0.12))
-            .foregroundStyle(Color.blue)
+            .background(Color.accentColor.opacity(0.12))
+            .foregroundStyle(Color.accentColor)
             .cornerRadius(12)
         }
         .buttonStyle(.plain)

@@ -43,7 +43,8 @@ public struct SharedDetailContent: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(themeSecondary ?? .blue)
+                .tint(themeSecondary ?? .accentColor)
+                .foregroundStyle(themeSecondary == nil ? Color.itoOnAccent : .white)
                 .controlSize(.regular)
             } else {
                 Button(action: onSaveToggle) {
@@ -103,7 +104,7 @@ public struct SharedDetailContent: View {
                 withAnimation(.easeInOut(duration: 0.2)) { isDescriptionExpanded.toggle() }
             } label: {
                 Text(isDescriptionExpanded ? "Show less" : "Show more")
-                    .font(.caption).fontWeight(.semibold).foregroundStyle(.blue)
+                    .font(.caption).fontWeight(.semibold).foregroundStyle(Color.accentColor)
             }
         }
         .padding(.horizontal, 16)

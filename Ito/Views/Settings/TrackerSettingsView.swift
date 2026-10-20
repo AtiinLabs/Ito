@@ -69,7 +69,7 @@ struct TrackerSettingsView: View {
         case .ready where provider.isAuthenticated:
             HStack {
                 Image(systemName: "person.crop.circle.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(.accentColor)
                 if let username = provider.username {
                     Text("Logged in as \(username)")
                 } else {
@@ -103,7 +103,7 @@ struct TrackerSettingsView: View {
                             .padding(.trailing, 8)
                     }
                     Text("Login with \(provider.name)")
-                        .foregroundColor(.blue)
+                        .foregroundColor(.accentColor)
                 }
             }
             .disabled(viewModel.isAuthenticationOperationActive)

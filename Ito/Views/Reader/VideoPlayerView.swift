@@ -180,7 +180,7 @@ struct VideoPlayerView: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(Color.black.opacity(0.6))
-                        .foregroundColor(viewModel.selectedSubtitle != nil ? .blue : .white)
+                        .foregroundColor(viewModel.selectedSubtitle != nil ? .accentColor : .white)
                         .cornerRadius(6)
                     }
                 }

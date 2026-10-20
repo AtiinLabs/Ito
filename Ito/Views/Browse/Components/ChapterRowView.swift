@@ -93,7 +93,7 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
         } else if chapter is Anime.Episode {
              Image(systemName: "play.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(Color.blue)
+                        .foregroundStyle(Color.accentColor)
         }
     }
 }

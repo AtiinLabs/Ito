@@ -230,8 +230,8 @@ struct TrackerSearchSheet: View {
                             .fontWeight(.bold)
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(viewModel.selectedMedia == nil ? Color.gray : Color.blue)
-                            .foregroundColor(.white)
+                            .background(viewModel.selectedMedia == nil ? Color.gray : Color.accentColor)
+                            .foregroundColor(viewModel.selectedMedia == nil ? .white : .itoOnAccent)
                             .cornerRadius(10)
                     }
                     .disabled(viewModel.selectedMedia == nil)
@@ -312,7 +312,7 @@ private struct TrackerSearchResultRow: View {
                 Text(media.format ?? (isAnime ? "Anime" : "Manga"))
                     .font(.caption2)
                     .padding(4)
-                    .background(Color.blue.opacity(0.1))
+                    .background(Color.accentColor.opacity(0.1))
                     .cornerRadius(4)
             }
 

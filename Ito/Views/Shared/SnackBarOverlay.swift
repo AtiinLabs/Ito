@@ -164,7 +164,7 @@ struct SnackBarOverlay: View {
                 .foregroundColor(.red)
         case .info:
             Image(systemName: "info.circle.fill")
-                .foregroundColor(.blue)
+                .foregroundColor(.accentColor)
         }
     }
 }

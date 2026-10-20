@@ -633,7 +633,7 @@ struct DeferredPluginView: View {
         VStack(spacing: 20) {
             Image(systemName: "puzzlepiece.extension")
                 .font(.system(size: 52, weight: .thin))
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.accentColor)
             VStack(spacing: 6) {
                 Text("Extension Required")
                     .font(.title3)
@@ -648,10 +648,10 @@ struct DeferredPluginView: View {
             Button(action: viewModel.installMissingPlugin) {
                 Text("Search Repositories & Install")
                     .font(.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(.itoOnAccent)
                     .padding(.horizontal, 24)
                     .padding(.vertical, 12)
-                    .background(Color.blue)
+                    .background(Color.accentColor)
                     .clipShape(Capsule())
             }
             .padding(.top, 10)

@@ -237,7 +237,7 @@ private struct UpdateRowView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {
                 Image(systemName: "puzzlepiece.extension.fill")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.accentColor)
                     .imageScale(.large)
                     .frame(width: 40, height: 40)
             }
@@ -281,7 +281,7 @@ struct PluginRowView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {
                 Image(systemName: "puzzlepiece.extension.fill")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(Color.accentColor)
                     .imageScale(.large)
                     .frame(width: 40, height: 40)
             }

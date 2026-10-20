@@ -180,8 +180,8 @@ struct MigrationReportView: View {
                             .font(.subheadline)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
-                            .background(.blue.opacity(0.12))
-                            .foregroundStyle(.blue)
+                            .background(Color.accentColor.opacity(0.12))
+                            .foregroundStyle(Color.accentColor)
                             .clipShape(Capsule())
                         }
                         .disabled(viewModel.isBusy)

@@ -314,7 +314,7 @@ struct PackageRowView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
         } else {
             Image(systemName: "puzzlepiece.extension.fill")
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.accentColor)
                 .imageScale(.large)
                 .frame(width: 40, height: 40)
         }
