@@ -15,6 +15,7 @@ final class HistoryViewModel: ObservableObject {
     @Published private(set) var failure: CategoryHistoryMessage?
 
     private let historyService: any HistoryServing
+    private let sourceNames: any HistorySourceNaming
     private let messagePresenter: any CategoryHistoryMessagePresenting
     private let presentationLogger: any PresentationEventLogging
     private var deleteOperationIDs: [String: UUID] = [:]
@@ -23,10 +24,12 @@ final class HistoryViewModel: ObservableObject {
 
     init(
         historyService: any HistoryServing,
+        sourceNames: any HistorySourceNaming,
         messagePresenter: any CategoryHistoryMessagePresenting,
         presentationLogger: any PresentationEventLogging
     ) {
         self.historyService = historyService
+        self.sourceNames = sourceNames
         self.messagePresenter = messagePresenter
         self.presentationLogger = presentationLogger
         history = historyService.historySnapshot
@@ -47,6 +50,11 @@ final class HistoryViewModel: ObservableObject {
 
     var isShowingFetchLimit: Bool {
         history.count >= HistoryEntry.fetchLimit
+    }
+
+    /// The installed source's name, or its ID once the source is uninstalled.
+    func sourceName(for entry: HistoryEntry) -> String {
+        sourceNames.displayName(for: entry.record.pluginId) ?? entry.record.pluginId
     }
 
     func requestClear() {

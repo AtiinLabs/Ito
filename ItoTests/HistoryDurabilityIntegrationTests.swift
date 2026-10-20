@@ -42,6 +42,7 @@ final class HistoryDurabilityIntegrationTests: XCTestCase {
         let messages = CategoryHistoryMessageSpy()
         let viewModel = HistoryViewModel(
             historyService: managers.history,
+            sourceNames: HistorySourceNamesFake(),
             messagePresenter: messages,
             presentationLogger: CategoryHistoryPresentationLogSpy()
         )
@@ -187,6 +188,7 @@ final class HistoryDurabilityIntegrationTests: XCTestCase {
         let messages = CategoryHistoryMessageSpy()
         let viewModel = HistoryViewModel(
             historyService: managers.history,
+            sourceNames: HistorySourceNamesFake(),
             messagePresenter: messages,
             presentationLogger: CategoryHistoryPresentationLogSpy()
         )

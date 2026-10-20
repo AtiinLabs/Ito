@@ -246,6 +246,19 @@ final class LibraryOrganizationFake: LibraryOrganizationServing {
 }
 
 @MainActor
+final class HistorySourceNamesFake: HistorySourceNaming {
+    var names: [String: String]
+
+    init(names: [String: String] = [:]) {
+        self.names = names
+    }
+
+    func displayName(for pluginID: String) -> String? {
+        names[pluginID]
+    }
+}
+
+@MainActor
 final class HistoryServiceFake: HistoryServing {
     enum Response {
         case immediate(Result<Void, any Error>)

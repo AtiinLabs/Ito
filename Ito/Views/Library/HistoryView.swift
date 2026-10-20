@@ -32,7 +32,7 @@ struct HistoryView: View {
                 List {
                     Section {
                         ForEach(viewModel.history) { entry in
-                            HistoryItemRow(entry: entry)
+                            HistoryItemRow(entry: entry, sourceName: viewModel.sourceName(for: entry))
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button(role: .destructive) {
                                         Task { await viewModel.deleteEntry(id: entry.id) }
@@ -108,6 +108,7 @@ struct HistoryView: View {
 
 struct HistoryItemRow: View {
     let entry: HistoryEntry
+    let sourceName: String
 
     var body: some View {
         HStack(spacing: 12) {
@@ -150,7 +151,7 @@ struct HistoryItemRow: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
-                Text(entry.record.pluginId.capitalized)
+                Text(sourceName)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

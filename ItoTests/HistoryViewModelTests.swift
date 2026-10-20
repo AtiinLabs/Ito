@@ -204,7 +204,19 @@ final class HistoryViewModelTests: XCTestCase {
         XCTAssertEqual(harness.service.clearRequestCount, 0)
     }
 
-    private func makeViewModel(history: [HistoryEntry] = []) -> (
+    func testSourceNameIsThePluginNameOrItsIDWhenUninstalled() {
+        let entry = pr11bHistoryEntry(id: "one", readAt: 1)
+        let installed = makeViewModel(sourceNames: ["plugin": "Atsumaru"]).viewModel
+        XCTAssertEqual(installed.sourceName(for: entry), "Atsumaru")
+
+        let uninstalled = makeViewModel().viewModel
+        XCTAssertEqual(uninstalled.sourceName(for: entry), "plugin")
+    }
+
+    private func makeViewModel(
+        history: [HistoryEntry] = [],
+        sourceNames: [String: String] = [:]
+    ) -> (
         viewModel: HistoryViewModel,
         service: HistoryServiceFake,
         messages: CategoryHistoryMessageSpy,
@@ -216,6 +228,7 @@ final class HistoryViewModelTests: XCTestCase {
         return (
             HistoryViewModel(
                 historyService: service,
+                sourceNames: HistorySourceNamesFake(names: sourceNames),
                 messagePresenter: messages,
                 presentationLogger: logger
             ),

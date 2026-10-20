@@ -158,21 +158,31 @@ final class AppMessageCategoryHistoryPresenter: CategoryHistoryMessagePresenting
     }
 }
 
+/// Names the source a history entry was read on.
+@MainActor
+protocol HistorySourceNaming: AnyObject {
+    func displayName(for pluginID: String) -> String?
+}
+
+extension PluginManager: HistorySourceNaming {}
+
 @MainActor
 struct PreparedCategoryHistoryDependencies {
     let organization: any LibraryOrganizationServing
     let history: any HistoryServing
+    let sourceNames: any HistorySourceNaming
 
     static func production(
         libraryManager: LibraryManager,
-        historyManager: HistoryManager
+        historyManager: HistoryManager,
+        pluginManager: PluginManager
     ) -> Self {
-        Self(organization: libraryManager, history: historyManager)
+        Self(organization: libraryManager, history: historyManager, sourceNames: pluginManager)
     }
 
     static func unavailable() -> Self {
         let dependency = UnavailableCategoryHistoryDependency()
-        return Self(organization: dependency, history: dependency)
+        return Self(organization: dependency, history: dependency, sourceNames: dependency)
     }
 }
 
@@ -182,7 +192,7 @@ private enum UnavailableCategoryHistoryDependencyError: Error {
 
 @MainActor
 private final class UnavailableCategoryHistoryDependency: LibraryOrganizationServing,
-    HistoryServing {
+    HistoryServing, HistorySourceNaming {
     let organizationSnapshot = LibraryOrganizationSnapshot(categories: [], links: [])
     let historySnapshot: [HistoryEntry] = []
 
@@ -192,6 +202,11 @@ private final class UnavailableCategoryHistoryDependency: LibraryOrganizationSer
 
     var historySnapshotPublisher: AnyPublisher<[HistoryEntry], Never> {
         Just(historySnapshot).eraseToAnyPublisher()
+    }
+
+    func displayName(for pluginID: String) -> String? {
+        _ = pluginID
+        return nil
     }
 
     func createCategory(name: String) async throws -> String {
