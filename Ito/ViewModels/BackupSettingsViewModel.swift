@@ -250,7 +250,7 @@ final class BackupSettingsViewModel: ObservableObject {
             } catch {
                 self?.publishOperationFailure(
                     error,
-                    alert: .exportFailed(error.localizedDescription),
+                    alert: .exportFailed(Self.message(for: error)),
                     operation: operation
                 )
             }
@@ -289,7 +289,7 @@ final class BackupSettingsViewModel: ObservableObject {
         case .success:
             logFinishedOnce(operation, outcome: .succeeded)
         case .failure(let error):
-            alert = .exportFailed(error.localizedDescription)
+            alert = .exportFailed(Self.message(for: error))
             logFinishedOnce(operation, outcome: .failed(.persistence))
         }
     }
@@ -331,7 +331,7 @@ final class BackupSettingsViewModel: ObservableObject {
             }
         case .failure(let error):
             importPresentation = .idle
-            alert = .importFailed(error.localizedDescription)
+            alert = .importFailed(Self.message(for: error))
         }
     }
 
@@ -411,7 +411,7 @@ final class BackupSettingsViewModel: ObservableObject {
             } catch {
                 self?.publishOperationFailure(
                     error,
-                    alert: .mergeCheckFailed(error.localizedDescription),
+                    alert: .mergeCheckFailed(Self.message(for: error)),
                     operation: operation
                 )
             }
@@ -503,7 +503,7 @@ final class BackupSettingsViewModel: ObservableObject {
             } catch {
                 self?.publishOperationFailure(
                     error,
-                    alert: .acknowledgmentFailed(error.localizedDescription),
+                    alert: .acknowledgmentFailed(Self.message(for: error)),
                     operation: operation
                 )
             }
@@ -703,7 +703,7 @@ final class BackupSettingsViewModel: ObservableObject {
                 return
             }
             if canPublishTransient(operation) {
-                alert = .restoreFailed(error.localizedDescription)
+                alert = .restoreFailed(Self.message(for: error))
             }
             conflictPresentation = nil
             pendingImportURL = nil
@@ -839,6 +839,22 @@ final class BackupSettingsViewModel: ObservableObject {
                 outcome: outcome
             )
         )
+    }
+
+    /// Readable alert text for the errors backup code throws; system text for anything else.
+    static func message(for error: Error) -> String {
+        switch error {
+        case BackupPreflightError.rejected(let reason):
+            return reason.userMessage
+        case BackupExportError.incompleteMigration:
+            return "Ito is still preparing your library. Try again in a moment."
+        case BackupMergeError.ambiguousLocalIdentity:
+            return "A series in the backup matches more than one series in your library, so nothing was merged."
+        case BackupMergeError.invalidReplacementCategoryReference:
+            return "A series in the backup belongs to a list that could not be found, so nothing was merged."
+        default:
+            return error.localizedDescription
+        }
     }
 
     private func presentationEventKind(

@@ -57,6 +57,24 @@ final class BackupSettingsViewModelTests: XCTestCase {
         XCTAssertFalse(subject.viewModel.isFileExporterPresented)
     }
 
+    func testBackupErrorsUseReadableMessagesInsteadOfTypeNames() async {
+        let subject = makeSubject()
+        subject.service.exportResponses = [.failure(BackupExportError.incompleteMigration)]
+
+        await subject.viewModel.beginExport()?.value
+
+        XCTAssertEqual(
+            subject.viewModel.alert,
+            .exportFailed("Ito is still preparing your library. Try again in a moment.")
+        )
+        XCTAssertEqual(
+            BackupSettingsViewModel.message(
+                for: BackupPreflightError.rejected(.missingPluginIdentity(pluginId: "secret-plugin"))
+            ),
+            "A series in the backup has no source."
+        )
+    }
+
     func testExporterFailurePresentsExistingAlert() async {
         let subject = makeSubject()
         await subject.viewModel.beginExport()?.value
