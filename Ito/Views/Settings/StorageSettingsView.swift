@@ -24,7 +24,7 @@ struct StorageSettingsView: View {
                         Text("\(Int(value)) GB").tag(value)
                     }
                 }
-                .pickerStyle(.wheel)
+                .pickerStyle(.menu)
 
                 HStack {
                     Text("Current Usage")
