@@ -58,6 +58,7 @@ final class LibraryViewModel: ObservableObject {
     @Published private(set) var alert: LibraryAlert?
 
     private let dependencies: PreparedLibraryDependencies
+    private let tabRouter: any LibraryTabRouting
     private let messagePresenter: any LibraryMessagePresenting
     private let presentationLogger: any PresentationEventLogging
 
@@ -80,10 +81,12 @@ final class LibraryViewModel: ObservableObject {
 
     init(
         dependencies: PreparedLibraryDependencies,
+        tabRouter: any LibraryTabRouting,
         messagePresenter: any LibraryMessagePresenting,
         presentationLogger: any PresentationEventLogging
     ) {
         self.dependencies = dependencies
+        self.tabRouter = tabRouter
         self.messagePresenter = messagePresenter
         self.presentationLogger = presentationLogger
         snapshot = dependencies.library.rootSnapshot
@@ -216,6 +219,10 @@ final class LibraryViewModel: ObservableObject {
 
     func dismissCategoryAssignment() {
         categoryAssignmentItemID = nil
+    }
+
+    func browseDiscover() {
+        tabRouter.showDiscover()
     }
 
     func toggleLayout() {

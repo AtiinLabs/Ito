@@ -440,6 +440,7 @@ final class LibraryViewModelTests: XCTestCase {
         return LibrarySubject(
             viewModel: LibraryViewModel(
                 dependencies: dependencies,
+                tabRouter: AppRouter(),
                 messagePresenter: messages,
                 presentationLogger: logger
             ),

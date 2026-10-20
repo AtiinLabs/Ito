@@ -234,6 +234,7 @@ final class RootModelStore {
     init(
         preparedDependencies: PreparedApplicationDependencies,
         repositoryIntentRouter: any BrowseRepositoryIntentRouting,
+        libraryTabRouter: any LibraryTabRouting,
         browseMessagePresenter: any BrowseMessagePresenting,
         debugLogMessagePresenter: any DebugLogMessagePresenting,
         libraryMessagePresenter: any LibraryMessagePresenting
@@ -241,6 +242,7 @@ final class RootModelStore {
         makeLibraryViewModel = {
             LibraryViewModel(
                 dependencies: preparedDependencies.library,
+                tabRouter: libraryTabRouter,
                 messagePresenter: libraryMessagePresenter,
                 presentationLogger: preparedDependencies.presentationLogger
             )
@@ -473,6 +475,7 @@ final class AppScope {
         let rootModels = RootModelStore(
             preparedDependencies: preparedDependencies,
             repositoryIntentRouter: router,
+            libraryTabRouter: router,
             browseMessagePresenter: AppMessageBrowseMessagePresenter(messageCenter: messageCenter),
             debugLogMessagePresenter: debugLogMessagePresenter,
             libraryMessagePresenter: libraryMessagePresenter

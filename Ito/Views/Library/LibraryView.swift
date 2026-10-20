@@ -359,9 +359,7 @@ struct LibraryView: View {
             Text("No items in \(categoryName).")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Button("Browse Discover") {
-                // Future routing to Discover tab.
-            }
+            Button("Browse Discover", action: viewModel.browseDiscover)
             .font(.subheadline.weight(.semibold))
         }
         .frame(maxWidth: .infinity)

@@ -37,7 +37,12 @@ protocol BrowseRepositoryIntentRouting: AnyObject {
 }
 
 @MainActor
-final class AppRouter: ObservableObject, BrowseRepositoryIntentRouting {
+protocol LibraryTabRouting: AnyObject {
+    func showDiscover()
+}
+
+@MainActor
+final class AppRouter: ObservableObject, BrowseRepositoryIntentRouting, LibraryTabRouting {
     @Published var selectedTab: AppRootTab = .library
     @Published private(set) var repositoryIntentDelivery: RepositoryIntentDelivery?
     @Published private var repositoryIntentRevision = 0
@@ -49,6 +54,10 @@ final class AppRouter: ObservableObject, BrowseRepositoryIntentRouting {
         $repositoryIntentRevision
             .map { _ in () }
             .eraseToAnyPublisher()
+    }
+
+    func showDiscover() {
+        selectedTab = .discover
     }
 
     @discardableResult
