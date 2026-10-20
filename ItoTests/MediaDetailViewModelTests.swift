@@ -179,6 +179,9 @@ final class MediaDetailViewModelTests: XCTestCase {
         subject.progress.readChapterIDs[identity] = ["one"]
 
         XCTAssertEqual(subject.viewModel.resumeChapter?.key, "two")
+        // An unfinished chapter opened last wins over the first unread one.
+        subject.progress.lastRead[identity] = "three"
+        XCTAssertEqual(subject.viewModel.resumeChapter?.key, "three")
         subject.progress.readChapterIDs[identity] = ["one", "two", "three"]
         XCTAssertEqual(subject.viewModel.resumeChapter?.key, "three")
     }

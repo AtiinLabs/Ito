@@ -281,9 +281,16 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         }
     }
 
+    /// The chapter Resume opens: the last one opened if it is not finished, otherwise the
+    /// first unread one, otherwise the last.
     var resumeChapter: M.Chapter? {
         guard let chapters = media.chapterList, !chapters.isEmpty else { return nil }
         let identity = mediaIdentity
+        if let lastKey = dependencies.progress.lastReadChapter(for: identity),
+           let last = chapters.first(where: { $0.key == lastKey }),
+           !isRead(last) {
+            return last
+        }
         let ascending = chapters.sorted {
             ($0.chapterNumber ?? Float.infinity) < ($1.chapterNumber ?? Float.infinity)
         }
