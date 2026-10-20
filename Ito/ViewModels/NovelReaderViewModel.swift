@@ -709,6 +709,8 @@ final class NovelReaderViewModel: ObservableObject {
 
     /// Font sizes the reader offers.
     static let fontSizeRange: ClosedRange<Double> = 10...40
+    /// Line spacings the reader offers; the stored preference accepts the same range.
+    static let lineSpacingRange: ClosedRange<Double> = 0...40
 
     // Each setter shows the choice at once, then saves it; a failed save puts back the saved
     // value. Showing it at once also means quick repeated taps build on each other.
@@ -724,7 +726,7 @@ final class NovelReaderViewModel: ObservableObject {
 
     func setLineSpacing(_ value: Double) {
         guard isActive else { return }
-        let clamped = max(value, 0)
+        let clamped = min(max(value, Self.lineSpacingRange.lowerBound), Self.lineSpacingRange.upperBound)
         lineSpacing = clamped
         enqueueSettingsWrite(kind: .lineSpacing) {
             try await $0.setNovelLineSpacing(clamped)

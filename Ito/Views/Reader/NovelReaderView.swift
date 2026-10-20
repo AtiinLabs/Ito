@@ -132,7 +132,8 @@ struct NovelReaderView: View {
         } else {
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: CGFloat(viewModel.lineSpacing)) {
+                    // Paragraphs are a line apart, like the blank line between them in paged mode.
+                    LazyVStack(alignment: .leading, spacing: CGFloat(viewModel.fontSize)) {
                         ForEach(viewModel.loadedChapters) { loadedChapter in
                             Text(chapterTitle(loadedChapter.chapter))
                                 .font(
@@ -318,7 +319,8 @@ struct NovelReaderView: View {
             SelectableTextView(
                 text: text,
                 font: viewModel.fontFamily.uiFont(size: CGFloat(viewModel.fontSize)),
-                textColor: UIColor(viewModel.theme.textColor)
+                textColor: UIColor(viewModel.theme.textColor),
+                lineSpacing: CGFloat(viewModel.lineSpacing)
             )
             .padding(.horizontal)
             .padding(.vertical, 4)
@@ -524,8 +526,18 @@ struct SelectableTextView: UIViewRepresentable {
     let text: String
     let font: UIFont
     let textColor: UIColor
+    /// Space between lines, as in paged mode.
+    let lineSpacing: CGFloat
+
+    struct Style: Equatable {
+        let text: String
+        let font: UIFont
+        let textColor: UIColor
+        let lineSpacing: CGFloat
+    }
 
     class SelfSizingTextView: UITextView {
+        var appliedStyle: Style?
         private var measuredWidth: CGFloat = 0
 
         override var intrinsicContentSize: CGSize {
@@ -565,16 +577,19 @@ struct SelectableTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: SelfSizingTextView, context: Context) {
-        var sizeChanged = false
-        if uiView.text != text {
-            uiView.text = text
-            sizeChanged = true
-        }
-        if uiView.font != font {
-            uiView.font = font
-            sizeChanged = true
-        }
-        if uiView.textColor != textColor { uiView.textColor = textColor }
+        let style = Style(text: text, font: font, textColor: textColor, lineSpacing: lineSpacing)
+        guard uiView.appliedStyle != style else { return }
+        // Colour alone does not change the text's height.
+        let sizeChanged = uiView.appliedStyle.map {
+            $0.text != text || $0.font != font || $0.lineSpacing != lineSpacing
+        } ?? true
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = lineSpacing
+        uiView.attributedText = NSAttributedString(
+            string: text,
+            attributes: [.font: font, .foregroundColor: textColor, .paragraphStyle: paragraph]
+        )
+        uiView.appliedStyle = style
         if sizeChanged {
             uiView.invalidateIntrinsicContentSize()
         }
@@ -854,7 +869,7 @@ struct NovelReaderSettingsView: View {
     }
 
     private var readingTab: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 12) {
             Toggle(isOn: $prefetchChapters) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Seamless Reading")
@@ -866,6 +881,37 @@ struct NovelReaderSettingsView: View {
                 }
             }
             .tint(Color.primary)
+            .padding()
+            .background(Color(UIColor.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+            HStack {
+                Text("Line Spacing")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+
+                Spacer()
+
+                Button(action: { lineSpacing -= 2 }) {
+                    Image(systemName: "minus")
+                        .frame(width: 36, height: 36)
+                }
+                .disabled(lineSpacing <= NovelReaderViewModel.lineSpacingRange.lowerBound)
+                .accessibilityLabel("Less Line Spacing")
+
+                Text("\(Int(lineSpacing))")
+                    .font(.body.monospacedDigit())
+                    .frame(minWidth: 28)
+                    .accessibilityLabel("Line spacing \(Int(lineSpacing))")
+
+                Button(action: { lineSpacing += 2 }) {
+                    Image(systemName: "plus")
+                        .frame(width: 36, height: 36)
+                }
+                .disabled(lineSpacing >= NovelReaderViewModel.lineSpacingRange.upperBound)
+                .accessibilityLabel("More Line Spacing")
+            }
+            .foregroundColor(.primary)
             .padding()
             .background(Color(UIColor.secondarySystemBackground))
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
