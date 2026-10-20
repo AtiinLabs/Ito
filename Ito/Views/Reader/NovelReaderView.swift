@@ -47,26 +47,29 @@ struct NovelReaderView: View {
             viewModel.theme.backgroundColor.edgesIgnoringSafeArea(.all)
 
             switch viewModel.loadPhase {
+            // These sit on the reading theme's background, so they use its text colour too.
             case .idle, .loading:
-                VStack {
-                    ProgressView("Loading Chapter...")
-                }
+                ProgressView("Loading Chapter...")
+                    .tint(viewModel.theme.textColor)
+                    .foregroundColor(viewModel.theme.textColor)
             case .failure(let error):
-                VStack {
+                VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle")
-                        .foregroundColor(.red)
                         .font(.largeTitle)
-                    Text("Failed to load chapter")
+                        .foregroundColor(viewModel.theme.textColor.opacity(0.7))
+                    Text("Couldn't load this chapter")
                         .font(.headline)
-                        .padding(.top)
+                        .foregroundColor(viewModel.theme.textColor)
                     Text(error)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(.footnote)
+                        .foregroundColor(viewModel.theme.textColor.opacity(0.6))
                         .multilineTextAlignment(.center)
-                        .padding()
                     Button("Try Again") { viewModel.retry() }
-                        .padding()
+                        .buttonStyle(.bordered)
+                        .tint(viewModel.theme.textColor)
+                        .padding(.top, 4)
                 }
+                .padding(32)
             case .content:
                 readerContent(safeAreaBottom: safeAreaBottom)
             }

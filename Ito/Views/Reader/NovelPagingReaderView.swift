@@ -33,6 +33,8 @@ struct NovelPagingReaderView: View {
             ZStack {
                 if flattenedPages.isEmpty {
                     ProgressView("Paginating...")
+                        .tint(theme.textColor)
+                        .foregroundColor(theme.textColor)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     PageViewController(
