@@ -2,40 +2,8 @@ import Combine
 import Foundation
 import ito_runner
 
-enum MangaReaderLoadPhase: Equatable {
-    case idle
-    case loading
-    case content
-    case failure(String)
-}
-
-struct ChapterSegment: Identifiable, Equatable {
-    let id = UUID()
-    let chapter: Manga.Chapter
-    let pages: [Page]
-
-    static func == (lhs: ChapterSegment, rhs: ChapterSegment) -> Bool {
-        lhs.id == rhs.id
-    }
-}
-
-struct FlatPage: Identifiable {
-    let id: String
-    let segmentIndex: Int
-    let chapter: Manga.Chapter
-    let page: Page
-    let globalIndex: Int
-    /// Position of the page inside its chapter (array position, not `Page.index`).
-    var chapterPosition = 0
-}
-
 @MainActor
 final class MangaReaderViewModel: ObservableObject {
-    struct PagedProjection {
-        let pages: [Page]
-        let index: Int
-    }
-
     let pluginID: String
     let manga: Manga
     let pageLoader: any MangaPageLoading
@@ -49,9 +17,13 @@ final class MangaReaderViewModel: ObservableObject {
     @Published private(set) var pagedIndex = 0
     @Published private(set) var prefetchedChapters: [String: [Page]] = [:]
 
-    @Published private(set) var segments: [ChapterSegment] = []
+    @Published private(set) var segments: [ChapterSegment] = [] {
+        didSet { rebuildFlatPages() }
+    }
+    /// Every page of `segments` in reading order; rebuilt only when `segments` changes.
+    @Published private(set) var flatPages: [FlatPage] = []
     @Published private(set) var continuousPageIndex = 0
-    @Published private(set) var scrollTarget: Int?
+    @Published private(set) var scrollTarget: MangaScrollRequest?
     @Published private(set) var loadingNextChapter = false
     @Published private(set) var loadingPrevChapter = false
     /// The last automatic append failed; it waits for `retryAppendNextChapter` instead of
@@ -83,6 +55,7 @@ final class MangaReaderViewModel: ObservableObject {
     private var pageWriteTask: Task<Void, Never>?
     private var lastSavedPage: (chapterKey: String, page: Int)?
     private var settingsWriteTask: Task<Void, Never>?
+    private var flatPageIndexByID: [String: Int] = [:]
 
     nonisolated deinit {}
 
@@ -113,25 +86,37 @@ final class MangaReaderViewModel: ObservableObject {
         Self.isPagedViewer(activeViewer)
     }
 
-    var flatPages: [FlatPage] {
+    /// Most chapters kept loaded in continuous mode; chapters far from the reader are dropped.
+    static let maximumLoadedSegments = 4
+
+    private func rebuildFlatPages() {
+        let currentID = flatPages.indices.contains(continuousPageIndex)
+            ? flatPages[continuousPageIndex].id
+            : nil
         var result: [FlatPage] = []
-        var globalIndex = 0
+        var indexByID: [String: Int] = [:]
         for (segmentIndex, segment) in segments.enumerated() {
             for (position, page) in segment.pages.enumerated() {
+                let id = FlatPage.id(chapterKey: segment.chapter.key, position: position)
+                indexByID[id] = result.count
                 result.append(
                     FlatPage(
-                        id: "\(segment.chapter.key)#\(position)",
+                        id: id,
                         segmentIndex: segmentIndex,
                         chapter: segment.chapter,
                         page: page,
-                        globalIndex: globalIndex,
+                        globalIndex: result.count,
                         chapterPosition: position
                     )
                 )
-                globalIndex += 1
             }
         }
-        return result
+        flatPages = result
+        flatPageIndexByID = indexByID
+        // Keep pointing at the same page when chapters are added or dropped before it.
+        if let currentID, let index = indexByID[currentID] {
+            continuousPageIndex = index
+        }
     }
 
     var nextChapterForLastSegment: Manga.Chapter? {
@@ -287,7 +272,10 @@ final class MangaReaderViewModel: ObservableObject {
         } else {
             guard continuousPageIndex > 0 else { return }
             continuousPageIndex -= 1
-            scrollTarget = continuousPageIndex
+            scrollTarget = MangaScrollRequest(
+                pageID: flatPages[continuousPageIndex].id,
+                animated: true
+            )
         }
     }
 
@@ -299,7 +287,10 @@ final class MangaReaderViewModel: ObservableObject {
         } else {
             guard continuousPageIndex < flatPages.count - 1 else { return }
             continuousPageIndex += 1
-            scrollTarget = continuousPageIndex
+            scrollTarget = MangaScrollRequest(
+                pageID: flatPages[continuousPageIndex].id,
+                animated: true
+            )
         }
     }
 
@@ -323,17 +314,16 @@ final class MangaReaderViewModel: ObservableObject {
         }
     }
 
-    func consumeScrollTarget(_ target: Int) {
+    func consumeScrollTarget(_ target: MangaScrollRequest) {
         guard scrollTarget == target else { return }
         scrollTarget = nil
     }
 
-    func continuousPageAppeared(_ flatPage: FlatPage) {
-        guard isActive,
-              flatPages.contains(where: {
-                  $0.id == flatPage.id && $0.globalIndex == flatPage.globalIndex
-              }) else { return }
-        continuousPageIndex = flatPage.globalIndex
+    func continuousPageAppeared(_ appeared: FlatPage) {
+        // Look the page up by id: positions shift when chapters are added or dropped above it.
+        guard isActive, let index = flatPageIndexByID[appeared.id] else { return }
+        let flatPage = flatPages[index]
+        continuousPageIndex = index
         if flatPage.chapter.key != currentChapter.key {
             changeCurrentChapter(to: flatPage.chapter)
             chapterOpened(flatPage.chapter)
@@ -345,7 +335,7 @@ final class MangaReaderViewModel: ObservableObject {
                 pageCount: segments[flatPage.segmentIndex].pages.count
             )
         }
-        prefetchContinuousImages(around: flatPage.globalIndex, allPages: flatPages)
+        prefetchContinuousImages(around: index, allPages: flatPages)
     }
 
     private func pagedGoToChapter(_ chapter: Manga.Chapter, opensAtEnd: Bool = false) {
@@ -467,7 +457,12 @@ final class MangaReaderViewModel: ObservableObject {
         } else {
             segments = [ChapterSegment(chapter: chapter, pages: sorted)]
             continuousPageIndex = start
-            scrollTarget = start > 0 ? start : nil
+            scrollTarget = start > 0
+                ? MangaScrollRequest(
+                    pageID: FlatPage.id(chapterKey: chapter.key, position: start),
+                    animated: false
+                )
+                : nil
         }
         loadPhase = .content
         mainLoadTask = nil
@@ -683,6 +678,7 @@ final class MangaReaderViewModel: ObservableObject {
             ChapterSegment(chapter: chapter, pages: ReaderPageOrdering.ascending(pages))
         )
         finishAppend(operationID: operationID, outcome: .succeeded)
+        trimLoadedSegments(awayFrom: .bottom)
     }
 
     private func finishAppendFailure(
@@ -783,9 +779,43 @@ final class MangaReaderViewModel: ObservableObject {
         }
         let sorted = ReaderPageOrdering.ascending(pages)
         segments.insert(ChapterSegment(chapter: chapter, pages: sorted), at: 0)
-        continuousPageIndex += sorted.count
-        scrollTarget = continuousPageIndex
+        // Content added above the reader pushes it down; jump back to the same page.
+        if flatPages.indices.contains(continuousPageIndex) {
+            scrollTarget = MangaScrollRequest(
+                pageID: flatPages[continuousPageIndex].id,
+                animated: false
+            )
+        }
         finishPrepend(operationID: operationID, outcome: .succeeded)
+        trimLoadedSegments(awayFrom: .top)
+    }
+
+    /// Drops loaded chapters beyond `maximumLoadedSegments` from the end away from the one
+    /// that just grew, keeping one chapter past the current one. Skips an end that is still
+    /// loading, whose result is matched against that end.
+    private func trimLoadedSegments(awayFrom grownEnd: LoadedEnd) {
+        guard segments.count > Self.maximumLoadedSegments,
+              flatPages.indices.contains(continuousPageIndex) else { return }
+        let current = flatPages[continuousPageIndex]
+        let excess = segments.count - Self.maximumLoadedSegments
+
+        switch grownEnd {
+        case .bottom:
+            let removable = current.segmentIndex - 1
+            guard prependOperationID == nil, removable > 0 else { return }
+            segments.removeFirst(min(excess, removable))
+            // Removing content above the reader moves it up; jump back to the same page.
+            scrollTarget = MangaScrollRequest(pageID: current.id, animated: false)
+        case .top:
+            let removable = segments.count - 1 - (current.segmentIndex + 1)
+            guard appendOperationID == nil, removable > 0 else { return }
+            segments.removeLast(min(excess, removable))
+        }
+    }
+
+    private enum LoadedEnd {
+        case top
+        case bottom
     }
 
     private func finishPrependFailure(
@@ -847,31 +877,6 @@ final class MangaReaderViewModel: ObservableObject {
         loadPhase = .content
     }
 
-    /// Pages and position for paged mode, taken from the continuous position. Positions are
-    /// array positions; `Page.index` is plugin-supplied and need not start at 0 or be contiguous.
-    static func pagedProjection(
-        currentChapter: Manga.Chapter,
-        segments: [ChapterSegment],
-        flatPages: [FlatPage],
-        continuousPageIndex: Int
-    ) -> PagedProjection? {
-        guard let segmentIndex = segments.firstIndex(where: {
-            $0.chapter.key == currentChapter.key
-        }) else { return nil }
-        let segment = segments[segmentIndex]
-
-        guard flatPages.indices.contains(continuousPageIndex),
-              flatPages[continuousPageIndex].segmentIndex == segmentIndex else {
-            return PagedProjection(pages: segment.pages, index: 0)
-        }
-        let segmentStart = segments[..<segmentIndex].reduce(0) { $0 + $1.pages.count }
-        let index = flatPages[continuousPageIndex].globalIndex - segmentStart
-        return PagedProjection(
-            pages: segment.pages,
-            index: segment.pages.indices.contains(index) ? index : 0
-        )
-    }
-
     private func convertPagedToContinuousOrReload() {
         guard !pagedPages.isEmpty else {
             loadPhase = .loading
@@ -882,7 +887,10 @@ final class MangaReaderViewModel: ObservableObject {
         segments = [ChapterSegment(chapter: currentChapter, pages: pagedPages)]
         let position = pagedPages.indices.contains(pagedIndex) ? pagedIndex : 0
         continuousPageIndex = position
-        scrollTarget = position
+        scrollTarget = MangaScrollRequest(
+            pageID: FlatPage.id(chapterKey: currentChapter.key, position: position),
+            animated: false
+        )
         loadPhase = .content
     }
 
@@ -1081,33 +1089,5 @@ final class MangaReaderViewModel: ObservableObject {
                 outcome: outcome
             )
         )
-    }
-}
-
-private struct ChapterToken: Equatable {
-    let key: String
-    let title: String?
-    let volume: Float32?
-    let chapter: Float32?
-    let dateUpdated: Double?
-    let scanlator: String?
-    let url: String?
-    let language: String?
-    let paywalled: Bool?
-
-    init(_ chapter: Manga.Chapter) {
-        key = chapter.key
-        title = chapter.title
-        volume = chapter.volume
-        self.chapter = chapter.chapter
-        dateUpdated = chapter.dateUpdated
-        scanlator = chapter.scanlator
-        url = chapter.url
-        language = chapter.lang
-        paywalled = chapter.paywalled
-    }
-
-    init(_ segment: ChapterSegment) {
-        self.init(segment.chapter)
     }
 }

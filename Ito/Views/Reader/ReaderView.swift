@@ -167,9 +167,7 @@ struct ReaderView: View {
     // MARK: - Continuous Reader (Vertical/Webtoon)
 
     private var continuousReader: some View {
-        let allPages = viewModel.flatPages
-
-        return ScrollViewReader { proxy in
+        ScrollViewReader { proxy in
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: viewModel.activeViewer == .Webtoon ? 0 : 8) {
                     if let previous = viewModel.previousChapterForFirstSegment {
@@ -185,14 +183,14 @@ struct ReaderView: View {
                         .disabled(viewModel.loadingPrevChapter)
                     }
 
-                    ForEach(allPages) { flatPage in
+                    ForEach(viewModel.flatPages) { flatPage in
                         VStack(spacing: 0) {
                             if flatPage.chapterPosition == 0 && flatPage.segmentIndex > 0 {
                                 chapterDivider(for: flatPage.chapter)
                             }
 
                             pageImage(for: flatPage.page)
-                                .id(flatPage.globalIndex)
+                                .id(flatPage.id)
                                 .onAppear {
                                     viewModel.continuousPageAppeared(flatPage)
                                 }
@@ -218,14 +216,18 @@ struct ReaderView: View {
             }
             .onChange(of: viewModel.scrollTarget) { target in
                 guard let target else { return }
-                withAnimation { proxy.scrollTo(target, anchor: .top) }
+                if target.animated {
+                    withAnimation { proxy.scrollTo(target.pageID, anchor: .top) }
+                } else {
+                    proxy.scrollTo(target.pageID, anchor: .top)
+                }
                 viewModel.consumeScrollTarget(target)
             }
             // A target set before this view existed (a restored page, a mode switch) never
             // changes while it is on screen, so scroll to it once here.
             .onAppear {
                 guard let target = viewModel.scrollTarget else { return }
-                proxy.scrollTo(target, anchor: .top)
+                proxy.scrollTo(target.pageID, anchor: .top)
                 viewModel.consumeScrollTarget(target)
             }
         }

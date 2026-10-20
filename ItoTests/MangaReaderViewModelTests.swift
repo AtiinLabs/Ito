@@ -77,7 +77,10 @@ final class MangaReaderViewModelTests: XCTestCase {
         await waitForReader { subject.viewModel.loadPhase == .content }
 
         XCTAssertEqual(subject.viewModel.continuousPageIndex, 1)
-        XCTAssertEqual(subject.viewModel.scrollTarget, 1)
+        XCTAssertEqual(
+            subject.viewModel.scrollTarget,
+            MangaScrollRequest(pageID: "a#1", animated: false)
+        )
     }
 
     func testInitialContinuousLoadPublishesSingleSortedSegment() async {
@@ -485,7 +488,38 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.segments.map { $0.chapter.key }, ["a", "b"])
         XCTAssertEqual(subject.viewModel.segments[0].pages.map(\.index), [2, 5])
         XCTAssertEqual(subject.viewModel.continuousPageIndex, 3)
-        XCTAssertEqual(subject.viewModel.scrollTarget, 3)
+        XCTAssertEqual(
+            subject.viewModel.scrollTarget,
+            MangaScrollRequest(pageID: "b#1", animated: false)
+        )
+    }
+
+    func testContinuousDropsChaptersFarBehindTheReader() async {
+        let chapters = (1...5).map { makeChapter("c\($0)", number: Float($0)) }
+        let subject = makeSubject(chapters: chapters, initial: chapters[0], viewer: .Vertical)
+        for chapter in chapters {
+            subject.loader.enqueue(.pages([page(0), page(1)]), for: chapter.key)
+        }
+        subject.viewModel.start()
+        await waitForReader { subject.viewModel.loadPhase == .content }
+
+        for loaded in 1..<5 {
+            // Read to the end of the newest chapter, then load the next one.
+            subject.viewModel.continuousPageAppeared(subject.viewModel.flatPages.last!)
+            subject.viewModel.appendNextChapter()
+            await waitForReader { subject.viewModel.flatPages.last?.chapter.key == "c\(loaded + 1)" }
+        }
+
+        XCTAssertEqual(
+            subject.viewModel.segments.map { $0.chapter.key },
+            ["c2", "c3", "c4", "c5"]
+        )
+        // The reader stays on the same page after the chapter above it is dropped.
+        XCTAssertEqual(subject.viewModel.flatPages[subject.viewModel.continuousPageIndex].id, "c4#1")
+        XCTAssertEqual(
+            subject.viewModel.scrollTarget,
+            MangaScrollRequest(pageID: "c4#1", animated: false)
+        )
     }
 
     func testContinuousPrependFailureCleansOperationAndAllowsRetry() async {
@@ -680,7 +714,10 @@ final class MangaReaderViewModelTests: XCTestCase {
         mapped.viewModel.setPagedIndex(1)
         mapped.viewModel.setViewerOverride(.Vertical)
         XCTAssertEqual(mapped.viewModel.continuousPageIndex, 1)
-        XCTAssertEqual(mapped.viewModel.scrollTarget, 1)
+        XCTAssertEqual(
+            mapped.viewModel.scrollTarget,
+            MangaScrollRequest(pageID: "a#1", animated: false)
+        )
 
         let fallback = makeSubject(chapters: [makeChapter("a", number: 1)])
         fallback.loader.enqueue(.pages([page(2), page(4)]), for: "a")
@@ -688,7 +725,10 @@ final class MangaReaderViewModelTests: XCTestCase {
         await waitForReader { fallback.viewModel.loadPhase == .content }
         fallback.viewModel.setViewerOverride(.Vertical)
         XCTAssertEqual(fallback.viewModel.continuousPageIndex, 0)
-        XCTAssertEqual(fallback.viewModel.scrollTarget, 0)
+        XCTAssertEqual(
+            fallback.viewModel.scrollTarget,
+            MangaScrollRequest(pageID: "a#0", animated: false)
+        )
     }
 
     func testModeChangeWithoutAvailablePagesReloadsAndRejectsOldModeResult() async {
