@@ -40,11 +40,11 @@ final class CategoryHistoryDependencyBoundaryTests: XCTestCase {
         let history = try sourceFile("Ito/Views/Library/HistoryView.swift")
 
         XCTAssertTrue(assignment.contains("@StateObject private var viewModel: CategoryAssignmentViewModel"))
-        XCTAssertTrue(assignment.contains("init(viewModel: CategoryAssignmentViewModel)"))
+        XCTAssertTrue(assignment.contains("init(viewModel: @autoclosure @escaping () -> CategoryAssignmentViewModel)"))
         XCTAssertTrue(settings.contains("@StateObject private var viewModel: CategorySettingsViewModel"))
-        XCTAssertTrue(settings.contains("init(viewModel: CategorySettingsViewModel)"))
+        XCTAssertTrue(settings.contains("init(viewModel: @autoclosure @escaping () -> CategorySettingsViewModel)"))
         XCTAssertTrue(history.contains("@StateObject private var viewModel: HistoryViewModel"))
-        XCTAssertTrue(history.contains("init(viewModel: HistoryViewModel)"))
+        XCTAssertTrue(history.contains("init(viewModel: @autoclosure @escaping () -> HistoryViewModel)"))
     }
 
     func testEveryCategoryAndHistoryConstructionSiteUsesFactoryComposition() throws {

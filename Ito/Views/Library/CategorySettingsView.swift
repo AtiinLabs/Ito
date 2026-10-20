@@ -3,8 +3,8 @@ import SwiftUI
 struct CategorySettingsView: View {
     @StateObject private var viewModel: CategorySettingsViewModel
 
-    init(viewModel: CategorySettingsViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+    init(viewModel: @autoclosure @escaping () -> CategorySettingsViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel())
     }
 
     var body: some View {

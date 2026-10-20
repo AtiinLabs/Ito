@@ -4,8 +4,8 @@ import NukeUI
 struct HistoryView: View {
     @StateObject private var viewModel: HistoryViewModel
 
-    init(viewModel: HistoryViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+    init(viewModel: @autoclosure @escaping () -> HistoryViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel())
     }
 
     var body: some View {
