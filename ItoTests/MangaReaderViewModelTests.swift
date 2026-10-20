@@ -849,9 +849,8 @@ final class MangaReaderViewModelTests: XCTestCase {
             for: "a"
         )
         subject.viewModel.start()
+        // Loading the chapter preloads ahead of the first page without waiting for a swipe.
         await waitForReader { subject.viewModel.loadPhase == .content }
-
-        subject.viewModel.setPagedIndex(0)
 
         XCTAssertEqual(subject.imagePrefetcher.batches.count, 1)
         XCTAssertEqual(subject.imagePrefetcher.batches[0].map(\.index), [2])
@@ -896,7 +895,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         )
         subject.viewModel.start()
         await waitForReader { subject.viewModel.loadPhase == .content }
-        subject.viewModel.setPagedIndex(0)
+        subject.viewModel.setPagedIndex(1)
         subject.viewModel.disappear()
 
         XCTAssertTrue(subject.imagePrefetcher.batches.isEmpty)

@@ -47,4 +47,21 @@ extension MangaReaderViewModelTests {
         )
         XCTAssertEqual(subject.loader.callCount(for: "b"), 1)
     }
+
+    func testPagedChapterChangePreloadsAheadInTheNewChapter() async {
+        let a = makeChapter("a", number: 1)
+        let b = makeChapter("b", number: 2)
+        let subject = makeSubject(chapters: [a, b], initial: a, preload: 3)
+        subject.loader.enqueue(.pages([page(0, text: "only")]), for: "a")
+        subject.loader.enqueue(
+            .pages((0..<3).map { page(Int32($0), url: "https://example.com/b\($0)") }),
+            for: "b"
+        )
+        subject.viewModel.start()
+        await waitForReader { subject.viewModel.prefetchedChapters["b"] != nil }
+
+        subject.viewModel.goToNextChapter()
+
+        XCTAssertEqual(subject.imagePrefetcher.batches.last?.map(\.index), [1, 2])
+    }
 }

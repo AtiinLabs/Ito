@@ -263,8 +263,8 @@ final class MangaReaderViewModel: ObservableObject {
             pagedGoToChapter(previous, opensAtEnd: true)
         } else if pagedPages.indices.contains(newIndex) {
             pageShown(in: currentChapter, at: newIndex, pageCount: pagedPages.count)
+            prefetchPagedImages(around: newIndex)
         }
-        prefetchPagedImages(around: newIndex)
     }
 
     /// The current page within its chapter and that chapter's page count, as paged mode counts.
@@ -379,6 +379,7 @@ final class MangaReaderViewModel: ObservableObject {
             if !cached.isEmpty {
                 pageShown(in: chapter, at: pagedIndex, pageCount: cached.count)
             }
+            prefetchPagedImages(around: pagedIndex)
             beginAdjacentChapterPrefetch()
         } else {
             pagedPages = []
@@ -506,6 +507,7 @@ final class MangaReaderViewModel: ObservableObject {
             pageShown(in: chapter, at: start, pageCount: sorted.count)
         }
         if expectedPaged {
+            prefetchPagedImages(around: start)
             beginAdjacentChapterPrefetch()
         }
     }
