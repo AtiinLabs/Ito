@@ -422,7 +422,9 @@ final class NovelReaderViewModel: ObservableObject {
               appendOperationID == nil,
               !isLoadingNext,
               let last = loadedChapters.last,
-              let next = chapterAfter(last.chapter) else { return }
+              let next = chapterAfter(last.chapter),
+              // Never append a chapter twice; ordering must not loop back to a loaded one.
+              !loadedChapters.contains(where: { $0.chapter.key == next.key }) else { return }
 
         let operationID = UUID()
         let session = sessionID

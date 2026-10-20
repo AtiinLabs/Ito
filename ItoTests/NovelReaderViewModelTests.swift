@@ -150,25 +150,6 @@ final class NovelReaderViewModelTests: XCTestCase {
         }
     }
 
-    func testNavigationUsesPR12NumericAndAsymmetricFallbackOrdering() {
-        let one = makeChapter("one", number: 1)
-        let two = makeChapter("two", number: 2)
-        let three = makeChapter("three", number: 3)
-        let numeric = makeSubject(chapters: [three, one, two], initial: two)
-        XCTAssertEqual(numeric.viewModel.nextChapter?.key, "three")
-        XCTAssertEqual(numeric.viewModel.previousChapter?.key, "one")
-
-        let first = makeChapter("first", number: nil)
-        let middle = makeChapter("middle", number: nil)
-        let last = makeChapter("last", number: nil)
-        let fallback = makeSubject(chapters: [first, middle, last], initial: middle)
-        XCTAssertEqual(fallback.viewModel.nextChapter?.key, "first")
-        XCTAssertEqual(fallback.viewModel.previousChapter?.key, "last")
-
-        let boundary = makeSubject(chapters: [one, two], initial: two)
-        XCTAssertEqual(boundary.viewModel.nextChapter?.key, "one")
-    }
-
     func testDirectNavigationMutatesPresenceAndClearsChainBeforeLoadThenTracksAfterSuccess() async {
         let a = makeChapter("a", number: 1, title: "A")
         let b = makeChapter("b", number: 2, title: "B")
@@ -368,6 +349,22 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.loader.requests.map { $0.chapter.key }, ["a"])
         XCTAssertFalse(subject.viewModel.isLoadingNext)
         XCTAssertEqual(subject.viewModel.loadedChapters.count, 1)
+    }
+
+    func testAppendOnTheNewestChapterDoesNotLoadTheOneBeforeIt() async {
+        let a = makeChapter("a", number: 1)
+        let b = makeChapter("b", number: 2)
+        // Plugins list chapters newest first.
+        let subject = makeSubject(chapters: [b, a], initial: b)
+        subject.loader.enqueue(.pages([page(1)]), for: "b")
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        XCTAssertNil(subject.viewModel.chapterAfter(b))
+        subject.viewModel.loadNextChapter()
+
+        XCTAssertEqual(subject.loader.requests.map { $0.chapter.key }, ["b"])
+        XCTAssertEqual(subject.viewModel.loadedChapters.map { $0.chapter.key }, ["b"])
     }
 
     func testAppendFailureKeepsContentAndAllowsLaterRetry() async {

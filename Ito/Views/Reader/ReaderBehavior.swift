@@ -3,7 +3,6 @@ import ito_runner
 
 nonisolated enum ReaderChapterOrdering {
     static let chapterNumberEpsilon: Float32 = 0.0001
-    private static let missingChapterNumber: Float32 = -10000
 
     /// The next chapter: the closest higher-numbered one, or for an unnumbered chapter the one
     /// listed above it (lists are newest first). Nil at the end.
@@ -63,66 +62,41 @@ nonisolated enum ReaderChapterOrdering {
         return chapters.indices.contains(neighbor) ? chapters[neighbor] : nil
     }
 
+    /// The next chapter: the closest higher-numbered one, or for an unnumbered chapter the one
+    /// listed above it (lists are newest first). Nil at the end, never the chapter before.
     static func novelChapter(
         after chapter: Novel.Chapter,
         in chapters: [Novel.Chapter]?
     ) -> Novel.Chapter? {
         guard let chapters else { return nil }
-
-        if let currentNumber = chapter.chapter {
-            let candidates = chapters.filter {
-                ($0.chapter ?? missingChapterNumber) > currentNumber + chapterNumberEpsilon
-            }
-            if let next = candidates.min(by: {
-                ($0.chapter ?? missingChapterNumber) < ($1.chapter ?? missingChapterNumber)
-            }) {
-                return next
-            }
+        guard let currentNumber = chapter.chapter else {
+            return listNeighbor(of: chapter.key, in: chapters, offset: -1, key: \.key)
         }
-
-        guard let currentIndex = chapters.firstIndex(where: {
-            $0.key == chapter.key
-        }) else {
-            return nil
-        }
-        if currentIndex - 1 >= 0 {
-            return chapters[currentIndex - 1]
-        }
-        if currentIndex + 1 < chapters.count {
-            return chapters[currentIndex + 1]
-        }
-        return nil
+        return numbered(chapters)
+            .filter { $0.number > currentNumber + chapterNumberEpsilon }
+            .min { $0.number < $1.number }?
+            .chapter
     }
 
+    /// The previous chapter, mirroring `novelChapter(after:)`.
     static func novelChapter(
         before chapter: Novel.Chapter,
         in chapters: [Novel.Chapter]?
     ) -> Novel.Chapter? {
         guard let chapters else { return nil }
+        guard let currentNumber = chapter.chapter else {
+            return listNeighbor(of: chapter.key, in: chapters, offset: 1, key: \.key)
+        }
+        return numbered(chapters)
+            .filter { $0.number < currentNumber - chapterNumberEpsilon }
+            .max { $0.number < $1.number }?
+            .chapter
+    }
 
-        if let currentNumber = chapter.chapter {
-            let candidates = chapters.filter {
-                ($0.chapter ?? missingChapterNumber) < currentNumber - chapterNumberEpsilon
-            }
-            if let previous = candidates.max(by: {
-                ($0.chapter ?? missingChapterNumber) < ($1.chapter ?? missingChapterNumber)
-            }) {
-                return previous
-            }
-        }
-
-        guard let currentIndex = chapters.firstIndex(where: {
-            $0.key == chapter.key
-        }) else {
-            return nil
-        }
-        if currentIndex + 1 < chapters.count {
-            return chapters[currentIndex + 1]
-        }
-        if currentIndex - 1 >= 0 {
-            return chapters[currentIndex - 1]
-        }
-        return nil
+    private static func numbered(
+        _ chapters: [Novel.Chapter]
+    ) -> [(chapter: Novel.Chapter, number: Float32)] {
+        chapters.compactMap { chapter in chapter.chapter.map { (chapter, $0) } }
     }
 
     private static func preferredMangaSource(
@@ -131,7 +105,7 @@ nonisolated enum ReaderChapterOrdering {
         preferredScanlator: String?
     ) -> Manga.Chapter? {
         let sources = chapters.filter {
-            abs(($0.chapter ?? missingChapterNumber) - chapterNumber) < chapterNumberEpsilon
+            $0.chapter.map { abs($0 - chapterNumber) < chapterNumberEpsilon } ?? false
         }
         if let match = sources.first(where: {
             $0.scanlator == preferredScanlator
