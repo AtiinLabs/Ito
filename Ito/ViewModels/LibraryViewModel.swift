@@ -168,8 +168,14 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
+    /// Whether a search matches nothing on screen. "All" in the tabbed layout lists every series,
+    /// while the other views list the series of each list.
     var showsNoResults: Bool {
-        !searchText.isEmpty && groups.allSatisfy(\.items.isEmpty)
+        guard !searchText.isEmpty else { return false }
+        if layoutStyle == .tabbed && selectedCategoryID == nil {
+            return filteredItems.isEmpty
+        }
+        return groups.allSatisfy(\.items.isEmpty)
     }
 
     var updateProgressCurrent: Int { updateSnapshot.current }

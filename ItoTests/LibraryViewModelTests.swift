@@ -115,6 +115,21 @@ final class LibraryViewModelTests: XCTestCase {
         XCTAssertTrue(subject.viewModel.groups[0].items.isEmpty)
     }
 
+    func testSearchInAllFindsSeriesThatAreInNoList() {
+        let listless = item("listless", "The Infinite Mage")
+        let subject = makeSubject(
+            snapshot: snapshot(items: [listless]),
+            layoutRawValue: LibraryLayoutStyle.tabbed.rawValue
+        )
+
+        subject.viewModel.searchText = "Mage"
+
+        XCTAssertEqual(subject.viewModel.filteredItems.map(\.id), ["listless"])
+        XCTAssertFalse(subject.viewModel.showsNoResults)
+        subject.viewModel.searchText = "Knight"
+        XCTAssertTrue(subject.viewModel.showsNoResults)
+    }
+
     func testLayoutInitialFallbackPersistenceFailureAndRapidStaleWrites() async {
         let initialTabbed = makeSubject(layoutRawValue: LibraryLayoutStyle.tabbed.rawValue)
         XCTAssertEqual(initialTabbed.viewModel.layoutStyle, .tabbed)
