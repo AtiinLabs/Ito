@@ -19,6 +19,9 @@ struct NovelPaginationPage {
     let chapterID: UUID
     let chapter: Novel.Chapter
     let string: NSAttributedString
+    /// Offset of the page's first body character; see `NovelTextOffsets`.
+    let startOffset: Int
+    let isLastInChapter: Bool
 }
 
 @MainActor
@@ -79,17 +82,14 @@ enum NovelPaginationEngine {
         bodyAttributes: [NSAttributedString.Key: Any]
     ) -> [NovelPaginationPage] {
         let fullString = NSMutableAttributedString()
-        fullString.append(
-            NSAttributedString(
-                string: formattedTitle(for: chapter.chapter) + "\n\n",
-                attributes: titleAttributes
-            )
-        )
+        let title = formattedTitle(for: chapter.chapter) + "\n\n"
+        fullString.append(NSAttributedString(string: title, attributes: titleAttributes))
+        let titleLength = (title as NSString).length
         for page in chapter.pages {
             if case .text(let text) = page.content {
                 fullString.append(
                     NSAttributedString(
-                        string: text + "\n\n",
+                        string: text + NovelTextOffsets.blockSeparator,
                         attributes: bodyAttributes
                     )
                 )
@@ -113,17 +113,20 @@ enum NovelPaginationEngine {
             }
         } while NSMaxRange(glyphRange) < manager.numberOfGlyphs
 
-        return containers.compactMap { container in
-            let glyphRange = manager.glyphRange(for: container)
+        let ranges = containers.compactMap { container -> NSRange? in
             let characterRange = manager.characterRange(
-                forGlyphRange: glyphRange,
+                forGlyphRange: manager.glyphRange(for: container),
                 actualGlyphRange: nil
             )
-            guard characterRange.length > 0 else { return nil }
-            return NovelPaginationPage(
+            return characterRange.length > 0 ? characterRange : nil
+        }
+        return ranges.enumerated().map { index, characterRange in
+            NovelPaginationPage(
                 chapterID: chapter.id,
                 chapter: chapter.chapter,
-                string: storage.attributedSubstring(from: characterRange)
+                string: storage.attributedSubstring(from: characterRange),
+                startOffset: max(0, characterRange.location - titleLength),
+                isLastInChapter: index == ranges.count - 1
             )
         }
     }

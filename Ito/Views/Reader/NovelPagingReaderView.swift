@@ -12,13 +12,21 @@ struct NovelPagingReaderView: View {
     let prefetchChapters: Bool
     let onLoadNextChapter: () -> Void
     @Binding var currentChapter: Novel.Chapter
+    /// A place to open at once pages exist; reported back through `onRestoreAnchorApplied`.
+    let restoreAnchor: NovelReadingAnchor?
+    let onRestoreAnchorApplied: (NovelReadingAnchor) -> Void
+    /// Called with the chapter, offset and whether the page is the chapter's last.
+    let onPositionChanged: (UUID, Int, Bool) -> Void
 
     struct PagedItem {
+        let chapterID: UUID
         let chapter: Novel.Chapter
         let string: NSAttributedString
+        let startOffset: Int
+        let isLastInChapter: Bool
     }
 
-    @State private var paginatedCache: [UUID: [NSAttributedString]] = [:]
+    @State private var paginatedCache: [UUID: [NovelPaginationPage]] = [:]
     @State private var flattenedPages: [PagedItem] = []
     @State private var currentPageIndex: Int = 0
     @State private var pageSize: CGSize = .zero
@@ -42,6 +50,7 @@ struct NovelPagingReaderView: View {
                                 if newChap.key != currentChapter.key {
                                     currentChapter = newChap
                                 }
+                                reportPosition(of: flattenedPages, at: newIndex)
 
                                 // Prefetch trigger
                                 if prefetchChapters && newIndex >= flattenedPages.count - 3 {
@@ -150,23 +159,50 @@ struct NovelPagingReaderView: View {
             ) else {
                 return
             }
-            paginatedCache[loadedChapter.id] = pages.map(\.string)
+            paginatedCache[loadedChapter.id] = pages
         }
 
         // Rebuild flattened array preserving order of loadedChapters
         var newFlattened: [PagedItem] = []
         for loadedChapter in loadedChapters {
-            if let extracted = paginatedCache[loadedChapter.id] {
-                for str in extracted {
-                    newFlattened.append(PagedItem(chapter: loadedChapter.chapter, string: str))
-                }
+            for page in paginatedCache[loadedChapter.id] ?? [] {
+                newFlattened.append(
+                    PagedItem(
+                        chapterID: page.chapterID,
+                        chapter: page.chapter,
+                        string: page.string,
+                        startOffset: page.startOffset,
+                        isLastInChapter: page.isLastInChapter
+                    )
+                )
             }
         }
 
         AppLogger.ui.debug("[NovelPagingReaderView] Pagination complete. Total pages: \(newFlattened.count)")
 
+        let newIndex: Int
+        if let restoreAnchor, let index = pageIndex(for: restoreAnchor, in: newFlattened) {
+            newIndex = index
+            onRestoreAnchorApplied(restoreAnchor)
+        } else {
+            newIndex = min(currentPageIndex, max(0, newFlattened.count - 1))
+        }
         self.flattenedPages = newFlattened
-        self.currentPageIndex = min(currentPageIndex, max(0, newFlattened.count - 1))
+        self.currentPageIndex = newIndex
+        reportPosition(of: newFlattened, at: newIndex)
+    }
+
+    /// The page in the anchor's chapter that contains its offset.
+    private func pageIndex(for anchor: NovelReadingAnchor, in pages: [PagedItem]) -> Int? {
+        pages.indices.last { index in
+            pages[index].chapterID == anchor.chapterID && pages[index].startOffset <= anchor.offset
+        } ?? pages.firstIndex { $0.chapterID == anchor.chapterID }
+    }
+
+    private func reportPosition(of pages: [PagedItem], at index: Int) {
+        guard pages.indices.contains(index) else { return }
+        let page = pages[index]
+        onPositionChanged(page.chapterID, page.startOffset, page.isLastInChapter)
     }
 }
 
@@ -192,7 +228,7 @@ struct PageViewController: UIViewControllerRepresentable {
         pvc.delegate = context.coordinator
         pvc.view.backgroundColor = .clear
 
-        if let firstVC = context.coordinator.makePageContentVC(index: 0) {
+        if let firstVC = context.coordinator.makePageContentVC(index: currentPage) {
             pvc.setViewControllers([firstVC], direction: .forward, animated: false)
         }
 

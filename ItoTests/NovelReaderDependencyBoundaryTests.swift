@@ -169,8 +169,6 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
 
         XCTAssertTrue(viewModel.contains("ReaderChapterOrdering.novelChapter("))
         XCTAssertTrue(viewModel.contains("ReaderPageOrdering.ascending("))
-        XCTAssertTrue(viewModel.contains("alreadyMarked: false"))
-        XCTAssertFalse(viewModel.contains("markedChapterKeys"))
         XCTAssertFalse(viewModel.contains("chapterNumberEpsilon"))
         XCTAssertFalse(viewModel.contains("missingChapterNumber"))
         XCTAssertTrue(behavior.contains("static let chapterNumberEpsilon: Float32 = 0.0001"))

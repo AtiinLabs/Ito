@@ -27,6 +27,10 @@ protocol NovelReaderProgressTracking: AnyObject {
         chapterID: String,
         chapterNumber: Float?
     ) async throws
+    /// Where the reader last stopped in `chapterID` (see `NovelTextOffsets`), if that is the
+    /// last chapter read.
+    func savedNovelOffset(media: MediaIdentity, chapterID: String) -> Int?
+    func saveNovelOffset(_ offset: Int, media: MediaIdentity, chapterID: String) async throws
 }
 
 extension ReadProgressManager: NovelReaderProgressTracking {
@@ -40,6 +44,14 @@ extension ReadProgressManager: NovelReaderProgressTracking {
             chapterId: chapterID,
             chapterNum: chapterNumber
         )
+    }
+
+    func savedNovelOffset(media: MediaIdentity, chapterID: String) -> Int? {
+        savedPosition(media: media, chapterKey: chapterID).map { Int($0) }
+    }
+
+    func saveNovelOffset(_ offset: Int, media: MediaIdentity, chapterID: String) async throws {
+        try await savePosition(media: media, chapterKey: chapterID, position: Double(offset))
     }
 }
 
@@ -283,6 +295,18 @@ private final class UnavailableNovelReaderDependencies:
         _ = media
         _ = chapterID
         _ = chapterNumber
+    }
+
+    func savedNovelOffset(media: MediaIdentity, chapterID: String) -> Int? {
+        _ = media
+        _ = chapterID
+        return nil
+    }
+
+    func saveNovelOffset(_ offset: Int, media: MediaIdentity, chapterID: String) async throws {
+        _ = offset
+        _ = media
+        _ = chapterID
     }
 
     func recordNovel(

@@ -4,7 +4,7 @@ import ito_runner
 
 @MainActor
 final class NovelReaderViewModelTests: XCTestCase {
-    func testInitialLoadSortsPublishesThenRunsHistoryProgressTracker() async {
+    func testInitialLoadRecordsHistoryAndMarksReadOnlyAtTheEnd() async {
         let chapter = makeChapter("a", number: 12.75)
         let subject = makeSubject(chapters: [chapter], initial: chapter)
         subject.loader.enqueue(
@@ -26,11 +26,61 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.loadedChapters[0].pages.map(\.index), [2, 5, 8])
         XCTAssertEqual(phaseAtHistory, .content)
         XCTAssertEqual(chapterCountAtHistory, 1)
-        XCTAssertEqual(subject.events.events, ["history:a", "progress:a", "tracker:12"])
+        XCTAssertEqual(subject.events.events, ["history:a"])
         XCTAssertEqual(subject.history.requests[0].chapterTitle, "a")
         XCTAssertEqual(subject.history.requests[0].pluginID, "plugin.test")
+
+        let loaded = subject.viewModel.loadedChapters[0]
+        subject.viewModel.continuousPageAppeared(chapterID: loaded.id, pageIndex: 2)
+        await subject.viewModel.waitForAllOperationsForTesting()
+        XCTAssertEqual(subject.events.events, ["history:a"])
+
+        subject.viewModel.continuousChapterEndAppeared(chapterID: loaded.id)
+        await subject.viewModel.waitForAllOperationsForTesting()
+        XCTAssertEqual(subject.events.events, ["history:a", "progress:a", "tracker:12"])
         XCTAssertEqual(subject.progress.requests[0].media, mediaIdentity)
         XCTAssertEqual(subject.progress.requests[0].chapterNumber, 12.75)
+    }
+
+    func testChapterOpensAtTheSavedOffsetAndSavesNewOffsets() async {
+        let chapter = makeChapter("a", number: 1)
+        let subject = makeSubject(chapters: [chapter], initial: chapter)
+        // Blocks of 10, 20 and 5 characters plus separators start at 0, 12 and 34.
+        subject.loader.enqueue(
+            .pages([
+                page(0, text: String(repeating: "a", count: 10)),
+                page(1, text: String(repeating: "b", count: 20)),
+                page(2, text: String(repeating: "c", count: 5))
+            ]),
+            for: "a"
+        )
+        subject.progress.savedOffsets["a"] = 20
+
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        let loaded = subject.viewModel.loadedChapters[0]
+        XCTAssertEqual(subject.viewModel.restoreAnchor, NovelReadingAnchor(chapterID: loaded.id, offset: 20))
+        XCTAssertEqual(NovelTextOffsets.blockIndex(containing: 20, in: loaded.pages), 1)
+        subject.viewModel.consumeRestoreAnchor(NovelReadingAnchor(chapterID: loaded.id, offset: 20))
+        XCTAssertNil(subject.viewModel.restoreAnchor)
+
+        subject.viewModel.continuousPageAppeared(chapterID: loaded.id, pageIndex: 2)
+        await subject.viewModel.waitForAllOperationsForTesting()
+        XCTAssertEqual(subject.progress.savedOffsetWrites.map(\.offset), [34])
+        XCTAssertTrue(subject.progress.requests.isEmpty)
+    }
+
+    func testFinishedChapterStartsOverInsteadOfRestoringItsEnd() async {
+        let chapter = makeChapter("a", number: 1)
+        let subject = makeSubject(chapters: [chapter], initial: chapter)
+        subject.loader.enqueue(.pages([page(0, text: "abc")]), for: "a")
+        subject.progress.savedOffsets["a"] = 5
+
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        XCTAssertNil(subject.viewModel.restoreAnchor)
     }
 
     func testInitialFailureAndRetryReplaceFailureWithOneChapter() async {
@@ -448,7 +498,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         await short.viewModel.waitForAllOperationsForTesting()
     }
 
-    func testContinuousTitleTransitionTracksButSameTitleDoesNot() async {
+    func testContinuousTitleTransitionRecordsHistoryOnce() async {
         let a = makeChapter("a", number: 1)
         let b = makeChapter("b", number: 2)
         let subject = await loadedTwoChapterSubject(a: a, b: b)
@@ -461,8 +511,7 @@ final class NovelReaderViewModelTests: XCTestCase {
 
         XCTAssertEqual(subject.viewModel.currentChapter.key, "b")
         XCTAssertEqual(subject.history.requests.count, baseline + 1)
-        XCTAssertEqual(subject.progress.requests.last?.chapterID, "b")
-        XCTAssertEqual(subject.tracker.requests.last?.progress, 2)
+        XCTAssertFalse(subject.progress.requests.contains { $0.chapterID == "b" })
         XCTAssertEqual(subject.presence.presented.last?.resetTimer, false)
 
         subject.viewModel.continuousChapterTitleAppeared(loadedB)
@@ -470,7 +519,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.history.requests.count, baseline + 1)
     }
 
-    func testPagerTransitionChangesPresenceWithoutHistoryProgressOrTracker() async {
+    func testPagerTransitionRecordsHistoryWithoutProgressOrTracker() async {
         let a = makeChapter("a", number: 1)
         let b = makeChapter("b", number: 2)
         let subject = await loadedTwoChapterSubject(a: a, b: b)
@@ -484,7 +533,7 @@ final class NovelReaderViewModelTests: XCTestCase {
 
         XCTAssertEqual(subject.viewModel.currentChapter.key, "b")
         XCTAssertEqual(subject.presence.presented.last?.resetTimer, false)
-        XCTAssertEqual(subject.history.requests.count, historyCount)
+        XCTAssertEqual(subject.history.requests.count, historyCount + 1)
         XCTAssertEqual(subject.progress.requests.count, progressCount)
         XCTAssertEqual(subject.tracker.requests.count, trackerCount)
     }
@@ -497,6 +546,12 @@ final class NovelReaderViewModelTests: XCTestCase {
 
         subject.viewModel.start()
         await subject.viewModel.waitForAllOperationsForTesting()
+        subject.viewModel.readingPositionChanged(
+            chapterID: subject.viewModel.loadedChapters[0].id,
+            offset: 0,
+            reachedEnd: true
+        )
+        await subject.viewModel.waitForAllOperationsForTesting()
 
         XCTAssertEqual(subject.viewModel.loadPhase, .content)
         XCTAssertEqual(subject.history.requests.count, 1)
@@ -505,24 +560,23 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.events.events, ["history:a", "progress:a"])
     }
 
-    func testRepeatedNovelEffectsDoNotAdoptMangaSuppression() async {
+    func testRepeatedFinishInOneSessionMarksOnce() async {
         let chapter = makeChapter("a", number: 4)
         let subject = makeSubject(chapters: [chapter], initial: chapter)
 
-        subject.viewModel.markChapterRead(chapter)
-        subject.viewModel.markChapterRead(chapter)
+        subject.viewModel.markChapterFinished(chapter)
+        subject.viewModel.markChapterFinished(chapter)
         await subject.viewModel.waitForAllOperationsForTesting()
 
-        XCTAssertEqual(subject.history.requests.count, 2)
-        XCTAssertEqual(subject.progress.requests.count, 2)
-        XCTAssertEqual(subject.tracker.requests.map(\.progress), [4, 4])
+        XCTAssertEqual(subject.progress.requests.count, 1)
+        XCTAssertEqual(subject.tracker.requests.map(\.progress), [4])
     }
 
     func testNilChapterNumberUsesLeadingTitleNumberWithoutJoiningDecimals() async {
         let chapter = makeChapter("ignored", number: nil, title: "Chapter 12.5 Extra")
         let subject = makeSubject(chapters: [chapter], initial: chapter)
 
-        subject.viewModel.markChapterRead(chapter)
+        subject.viewModel.markChapterFinished(chapter)
         await subject.viewModel.waitForAllOperationsForTesting()
 
         XCTAssertNil(subject.progress.requests[0].chapterNumber)
@@ -716,6 +770,10 @@ final class NovelReaderViewModelTests: XCTestCase {
         subject.loader.enqueue(.pages([page(1)]), for: "a")
         subject.loader.enqueue(.suspended, for: "b")
         subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+        subject.viewModel.continuousChapterEndAppeared(
+            chapterID: subject.viewModel.loadedChapters[0].id
+        )
         await subject.progress.waitForPendingCount(1)
         subject.viewModel.loadNextChapter()
         await subject.loader.waitForPendingCount(1, for: "b")

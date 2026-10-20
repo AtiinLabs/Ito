@@ -173,3 +173,36 @@ nonisolated struct ReaderSessionEffectPlan: Equatable, Sendable {
         return TrackerProgressParser.number(inTitle: titleOrKey)
     }
 }
+
+/// Positions inside a novel chapter, as UTF-16 offsets into its body text: each text block
+/// followed by the two-character separator the paginator puts between blocks. The same offsets
+/// work in the paged and continuous readers and survive repagination.
+nonisolated enum NovelTextOffsets {
+    static let blockSeparator = "\n\n"
+
+    static func blockStarts(_ pages: [Page]) -> [Int] {
+        var starts: [Int] = []
+        starts.reserveCapacity(pages.count)
+        var offset = 0
+        for page in pages {
+            starts.append(offset)
+            offset += length(of: page)
+        }
+        return starts
+    }
+
+    static func bodyLength(_ pages: [Page]) -> Int {
+        pages.reduce(0) { $0 + length(of: $1) }
+    }
+
+    /// The block that contains `offset`, or the last block before it.
+    static func blockIndex(containing offset: Int, in pages: [Page]) -> Int {
+        let starts = blockStarts(pages)
+        return starts.lastIndex { $0 <= offset } ?? 0
+    }
+
+    private static func length(of page: Page) -> Int {
+        guard case .text(let text) = page.content else { return 0 }
+        return (text as NSString).length + (blockSeparator as NSString).length
+    }
+}

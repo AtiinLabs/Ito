@@ -25,6 +25,12 @@ struct NovelLoadedChapter: Identifiable, Equatable {
     }
 }
 
+/// A place to reopen a loaded chapter at; `offset` is a `NovelTextOffsets` offset.
+struct NovelReadingAnchor: Equatable {
+    let chapterID: UUID
+    let offset: Int
+}
+
 @MainActor
 final class NovelReaderViewModel: ObservableObject {
     let pluginID: String
@@ -35,6 +41,8 @@ final class NovelReaderViewModel: ObservableObject {
     @Published private(set) var loadedChapters: [NovelLoadedChapter] = []
     @Published private(set) var loadPhase: NovelReaderLoadPhase = .idle
     @Published private(set) var isLoadingNext = false
+    /// Where the reader should open the loaded chapter; the view applies it once and consumes it.
+    @Published private(set) var restoreAnchor: NovelReadingAnchor?
 
     @Published private(set) var fontSize: Double
     @Published private(set) var lineSpacing: Double
@@ -56,6 +64,10 @@ final class NovelReaderViewModel: ObservableObject {
     private var appendTask: Task<Void, Never>?
     private var appendOperationID: UUID?
     private var effectTasks: [UUID: Task<Void, Never>] = [:]
+    private var finishedChapterKeys: Set<String> = []
+    /// Offset writes run one after another so an older write cannot land after a newer one.
+    private var offsetWriteTask: Task<Void, Never>?
+    private var lastSavedOffset: (chapterKey: String, offset: Int)?
     private var settingsWriteTasks: [UUID: Task<Void, Never>] = [:]
     private var settingsWriteTailTasks: [NovelReaderSettingKind: Task<Void, Never>] = [:]
     private var settingsWriteOperationIDs: [NovelReaderSettingKind: UUID] = [:]
@@ -189,6 +201,7 @@ final class NovelReaderViewModel: ObservableObject {
         guard isActive else { return }
         changeCurrentChapter(to: chapter)
         loadedChapters = []
+        restoreAnchor = nil
         loadPhase = .loading
         invalidateContentOperations()
         beginMainLoad(for: chapter)
@@ -197,6 +210,7 @@ final class NovelReaderViewModel: ObservableObject {
     func retry() {
         guard isActive, case .failure = loadPhase else { return }
         loadedChapters = []
+        restoreAnchor = nil
         loadPhase = .loading
         invalidateContentOperations()
         beginMainLoad(for: currentChapter)
@@ -210,7 +224,7 @@ final class NovelReaderViewModel: ObservableObject {
               }),
               currentChapter.key != loadedChapter.chapter.key else { return }
         changeCurrentChapter(to: loadedChapter.chapter)
-        markChapterRead(loadedChapter.chapter)
+        chapterOpened(loadedChapter.chapter)
     }
 
     func pagedChapterChanged(_ chapter: Novel.Chapter) {
@@ -220,6 +234,24 @@ final class NovelReaderViewModel: ObservableObject {
               }),
               currentChapter.key != chapter.key else { return }
         changeCurrentChapter(to: chapter)
+        chapterOpened(chapter)
+    }
+
+    /// The reader moved to `offset` in a loaded chapter. Saves it, and marks the chapter read
+    /// when the end was reached.
+    func readingPositionChanged(chapterID: UUID, offset: Int, reachedEnd: Bool) {
+        guard isActive,
+              let loaded = loadedChapters.first(where: { $0.id == chapterID }) else { return }
+        let bodyLength = NovelTextOffsets.bodyLength(loaded.pages)
+        saveOffset(reachedEnd ? bodyLength : min(offset, bodyLength), in: loaded.chapter)
+        if reachedEnd {
+            markChapterFinished(loaded.chapter)
+        }
+    }
+
+    func consumeRestoreAnchor(_ anchor: NovelReadingAnchor) {
+        guard restoreAnchor == anchor else { return }
+        restoreAnchor = nil
     }
 
     private func changeCurrentChapter(to chapter: Novel.Chapter) {
@@ -297,15 +329,26 @@ final class NovelReaderViewModel: ObservableObject {
             return
         }
 
-        loadedChapters = [NovelLoadedChapter(
+        let loaded = NovelLoadedChapter(
             chapter: chapter,
             pages: ReaderPageOrdering.ascending(pages)
-        )]
+        )
+        loadedChapters = [loaded]
+        restoreAnchor = savedAnchor(for: loaded)
         loadPhase = .content
         mainLoadTask = nil
         mainLoadOperationID = nil
         logFinishedOnce(kind: .remoteLoad, operationID: operationID, outcome: .succeeded)
-        markChapterRead(chapter)
+        chapterOpened(chapter)
+    }
+
+    /// Where the reader stopped in `loaded` last time, unless it was finished.
+    private func savedAnchor(for loaded: NovelLoadedChapter) -> NovelReadingAnchor? {
+        guard let saved = dependencies.progress.savedNovelOffset(
+            media: mediaIdentity,
+            chapterID: loaded.chapter.key
+        ), saved > 0, saved < NovelTextOffsets.bodyLength(loaded.pages) else { return nil }
+        return NovelReadingAnchor(chapterID: loaded.id, offset: saved)
     }
 
     private func failMainLoad(
@@ -355,12 +398,23 @@ final class NovelReaderViewModel: ObservableObject {
 
     func continuousPageAppeared(chapterID: UUID, pageIndex: Int) {
         guard isActive,
-              prefetchChapters,
+              let loaded = loadedChapters.first(where: { $0.id == chapterID }),
+              loaded.pages.indices.contains(pageIndex) else { return }
+        readingPositionChanged(
+            chapterID: chapterID,
+            offset: NovelTextOffsets.blockStarts(loaded.pages)[pageIndex],
+            reachedEnd: false
+        )
+        guard prefetchChapters,
               let last = loadedChapters.last,
               last.id == chapterID,
-              last.pages.indices.contains(pageIndex),
               pageIndex >= last.pages.count - 5 else { return }
         loadNextChapter()
+    }
+
+    /// The marker after a chapter's last block scrolled into view: the chapter was read to the end.
+    func continuousChapterEndAppeared(chapterID: UUID) {
+        readingPositionChanged(chapterID: chapterID, offset: .max, reachedEnd: true)
     }
 
     func loadNextChapter() {
@@ -487,22 +541,47 @@ final class NovelReaderViewModel: ObservableObject {
 
     // MARK: - Chapter effects
 
-    func markChapterRead(_ chapter: Novel.Chapter) {
+    private func chapterOpened(_ chapter: Novel.Chapter) {
         guard isActive else { return }
-        let chapterTitle = chapter.title ?? chapter.key
         dependencies.history.recordNovel(
             novel,
             chapterKey: chapter.key,
-            chapterTitle: chapterTitle,
+            chapterTitle: chapter.title ?? chapter.key,
             pluginID: pluginID
         )
+    }
+
+    private func saveOffset(_ offset: Int, in chapter: Novel.Chapter) {
+        if let lastSavedOffset,
+           lastSavedOffset.chapterKey == chapter.key,
+           lastSavedOffset.offset == offset {
+            return
+        }
+        lastSavedOffset = (chapter.key, offset)
+        let operationID = UUID()
+        let progress = dependencies.progress
+        let identity = mediaIdentity
+        let preceding = offsetWriteTask
+        let task = Task { @MainActor [weak self, progress] in
+            defer { self?.finishTestingOperation(operationID) }
+            await preceding?.value
+            // Saving the position is best effort; reading carries on if it fails.
+            try? await progress.saveNovelOffset(offset, media: identity, chapterID: chapter.key)
+        }
+        offsetWriteTask = task
+        retainTestingOperation(task, operationID: operationID)
+    }
+
+    func markChapterFinished(_ chapter: Novel.Chapter) {
+        guard isActive else { return }
         let plan = ReaderSessionEffectPlan.chapterFinished(
             chapterNumber: chapter.chapter,
-            titleOrKey: chapterTitle,
-            alreadyMarked: false
+            titleOrKey: chapter.title ?? chapter.key,
+            alreadyMarked: finishedChapterKeys.contains(chapter.key)
         )
 
         guard !plan.effects.isEmpty else { return }
+        finishedChapterKeys.insert(chapter.key)
         let operationID = UUID()
         let session = sessionID
         let progress = dependencies.progress

@@ -110,53 +110,86 @@ struct NovelReaderView: View {
                 currentChapter: Binding(
                     get: { viewModel.currentChapter },
                     set: { viewModel.pagedChapterChanged($0) }
-                )
+                ),
+                restoreAnchor: viewModel.restoreAnchor,
+                onRestoreAnchorApplied: { viewModel.consumeRestoreAnchor($0) },
+                onPositionChanged: { chapterID, offset, isLast in
+                    viewModel.readingPositionChanged(
+                        chapterID: chapterID,
+                        offset: offset,
+                        reachedEnd: isLast
+                    )
+                }
             )
             .simultaneousGesture(toggleUIGesture)
         } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: CGFloat(viewModel.lineSpacing)) {
-                    ForEach(viewModel.loadedChapters) { loadedChapter in
-                        Text(chapterTitle(loadedChapter.chapter))
-                            .font(
-                                viewModel.fontFamily.swiftUIFont(
-                                    size: CGFloat(viewModel.fontSize) + 6,
-                                    weight: .bold
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: CGFloat(viewModel.lineSpacing)) {
+                        ForEach(viewModel.loadedChapters) { loadedChapter in
+                            Text(chapterTitle(loadedChapter.chapter))
+                                .font(
+                                    viewModel.fontFamily.swiftUIFont(
+                                        size: CGFloat(viewModel.fontSize) + 6,
+                                        weight: .bold
+                                    )
                                 )
-                            )
-                            .foregroundColor(viewModel.theme.textColor)
-                            .padding(.vertical)
-                            .padding(.horizontal)
-                            .onAppear {
-                                viewModel.continuousChapterTitleAppeared(loadedChapter)
+                                .foregroundColor(viewModel.theme.textColor)
+                                .padding(.vertical)
+                                .padding(.horizontal)
+                                .onAppear {
+                                    viewModel.continuousChapterTitleAppeared(loadedChapter)
+                                }
+
+                            ForEach(Array(loadedChapter.pages.enumerated()), id: \.offset) { index, page in
+                                pageText(for: page)
+                                    .id(blockID(loadedChapter.id, index))
+                                    .onAppear {
+                                        viewModel.continuousPageAppeared(
+                                            chapterID: loadedChapter.id,
+                                            pageIndex: index
+                                        )
+                                    }
                             }
 
-                        let pages = loadedChapter.pages
-                        ForEach(Array(pages.enumerated()), id: \.element.index) { index, page in
-                            pageText(for: page)
+                            // Only scrolls into view at the end of the chapter's text.
+                            Color.clear
+                                .frame(height: 1)
                                 .onAppear {
-                                    viewModel.continuousPageAppeared(
-                                        chapterID: loadedChapter.id,
-                                        pageIndex: index
-                                    )
+                                    viewModel.continuousChapterEndAppeared(chapterID: loadedChapter.id)
                                 }
                         }
-                    }
 
-                    if viewModel.isLoadingNext {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .padding()
-                            Spacer()
+                        if viewModel.isLoadingNext {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                    .padding()
+                                Spacer()
+                            }
                         }
-                    }
 
-                    Color.clear.frame(height: safeAreaBottom + 80)
+                        Color.clear.frame(height: safeAreaBottom + 80)
+                    }
                 }
+                .onAppear { applyRestoreAnchor(with: proxy) }
+                .onChange(of: viewModel.restoreAnchor) { _ in applyRestoreAnchor(with: proxy) }
             }
             .simultaneousGesture(toggleUIGesture)
         }
+    }
+
+    private func blockID(_ chapterID: UUID, _ index: Int) -> String {
+        "\(chapterID.uuidString)#\(index)"
+    }
+
+    private func applyRestoreAnchor(with proxy: ScrollViewProxy) {
+        guard let anchor = viewModel.restoreAnchor,
+              let loaded = viewModel.loadedChapters.first(where: { $0.id == anchor.chapterID })
+        else { return }
+        let block = NovelTextOffsets.blockIndex(containing: anchor.offset, in: loaded.pages)
+        proxy.scrollTo(blockID(anchor.chapterID, block), anchor: .top)
+        viewModel.consumeRestoreAnchor(anchor)
     }
 
     private var toggleUIGesture: some Gesture {

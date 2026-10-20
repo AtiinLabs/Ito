@@ -142,6 +142,9 @@ final class NovelReaderProgressFake: NovelReaderProgressTracking {
     let events: NovelReaderEventRecorder
     var responses: [Response] = []
     private(set) var requests: [Request] = []
+    /// Offsets the reader starts at, keyed by chapter.
+    var savedOffsets: [String: Int] = [:]
+    private(set) var savedOffsetWrites: [(chapterID: String, offset: Int)] = []
     private var pending: [CheckedContinuation<Void, any Error>] = []
 
     init(events: NovelReaderEventRecorder) {
@@ -177,6 +180,17 @@ final class NovelReaderProgressFake: NovelReaderProgressTracking {
 
     func enqueue(_ response: Response) {
         responses.append(response)
+    }
+
+    func savedNovelOffset(media: MediaIdentity, chapterID: String) -> Int? {
+        _ = media
+        return savedOffsets[chapterID]
+    }
+
+    func saveNovelOffset(_ offset: Int, media: MediaIdentity, chapterID: String) async throws {
+        _ = media
+        savedOffsetWrites.append((chapterID, offset))
+        savedOffsets[chapterID] = offset
     }
 
     var pendingCount: Int { pending.count }
