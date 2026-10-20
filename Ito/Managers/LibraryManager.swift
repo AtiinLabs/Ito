@@ -317,7 +317,8 @@ public class LibraryManager: ObservableObject {
     ) throws -> LibrarySnapshot {
         LibrarySnapshot(
             categories: try LibraryCategory.order(Column("sortOrder")).fetchAll(db),
-            items: try LibraryItem.order(Column("title")).fetchAll(db),
+            // Finder-style order: case-insensitive, with numbers compared by value.
+            items: try LibraryItem.order(Column("title").collating(.localizedStandardCompare)).fetchAll(db),
             links: try ItemCategoryLink.fetchAll(db)
         )
     }
