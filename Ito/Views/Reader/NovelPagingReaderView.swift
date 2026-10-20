@@ -66,7 +66,7 @@ struct NovelPagingReaderView: View {
 
                             Spacer()
 
-                            Text("\(currentPageIndex + 1)/\(flattenedPages.count)")
+                            Text(Self.chapterPageLabel(of: flattenedPages, at: currentPageIndex))
                                 .font(.system(size: 11, weight: .regular, design: .monospaced))
                                 .foregroundColor(theme.textColor.opacity(0.5))
                                 .padding(.trailing, 16)
@@ -185,6 +185,15 @@ struct NovelPagingReaderView: View {
         flattenedPages = pages
         currentPageIndex = newIndex
         reportPosition(of: pages, at: newIndex)
+    }
+
+    /// "3/12": the page's place within its own chapter, as the manga reader counts.
+    static func chapterPageLabel(of pages: [NovelPaginationPage], at index: Int) -> String {
+        guard pages.indices.contains(index) else { return "" }
+        let chapterID = pages[index].chapterID
+        let chapterPages = pages.indices.filter { pages[$0].chapterID == chapterID }
+        let position = (chapterPages.firstIndex(of: index) ?? 0) + 1
+        return "\(position)/\(chapterPages.count)"
     }
 
     /// The page in the anchor's chapter that contains its offset.
@@ -394,6 +403,10 @@ struct BatteryIndicator: View {
             UIDevice.current.isBatteryMonitoringEnabled = true
             level = UIDevice.current.batteryLevel
             state = UIDevice.current.batteryState
+        }
+        .onDisappear {
+            // Monitoring costs power and nothing else in the app reads the battery.
+            UIDevice.current.isBatteryMonitoringEnabled = false
         }
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.batteryLevelDidChangeNotification)) { _ in
             level = UIDevice.current.batteryLevel

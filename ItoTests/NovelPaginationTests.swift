@@ -33,6 +33,22 @@ final class NovelPaginationTests: XCTestCase {
         }
     }
 
+    func testPageCounterCountsWithinTheChapter() throws {
+        let first = loadedChapter(key: "one", number: 1, body: String(repeating: "Alpha beta. ", count: 400))
+        let second = loadedChapter(key: "two", number: 2, body: String(repeating: "Gamma delta. ", count: 400))
+        let pages = try XCTUnwrap(enginePaginate([first, second], size: CGSize(width: 320, height: 480)))
+        let firstCount = pages.filter { $0.chapterID == first.id }.count
+        let secondCount = pages.count - firstCount
+        XCTAssertGreaterThan(firstCount, 1)
+
+        XCTAssertEqual(NovelPagingReaderView.chapterPageLabel(of: pages, at: 0), "1/\(firstCount)")
+        // The second chapter's first page starts counting again.
+        XCTAssertEqual(
+            NovelPagingReaderView.chapterPageLabel(of: pages, at: firstCount),
+            "1/\(secondCount)"
+        )
+    }
+
     func testShortChapterKeepsImagesAsPagesAtTheirPlaceInTheText() throws {
         let loaded = NovelLoadedChapter(
             chapter: Novel.Chapter(key: "one", title: "Opening", chapter: 1),
