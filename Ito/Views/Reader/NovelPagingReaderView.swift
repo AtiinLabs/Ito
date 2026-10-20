@@ -235,21 +235,35 @@ struct PageViewController: UIViewControllerRepresentable {
         let oldPages = coordinator.parent.pages
         coordinator.parent = self
 
-        // Re-show only when the pages themselves changed, not on every re-render.
-        let contentChanged = oldPages.count != pages.count ||
-            zip(oldPages, pages).contains(where: { $0.0.string !== $0.1.string })
-        guard contentChanged else { return }
-        let targetIndex = min(currentPage, max(0, pages.count - 1))
-        if let vc = coordinator.makePageContentVC(index: targetIndex) {
-            pvc.setViewControllers([vc], direction: .forward, animated: false)
+        // Pages added after the existing ones need nothing: the data source serves them. Only
+        // changed pages, or a different current page, need the shown page replaced.
+        let existingChanged = pages.count < oldPages.count
+            || zip(oldPages, pages).contains(where: { $0.0.string !== $0.1.string })
+        let shownIndex = (pvc.viewControllers?.first as? PageContentViewController)?.index
+        guard existingChanged || shownIndex != currentPage else { return }
+        if coordinator.isTransitioning {
+            // Replacing pages in the middle of a swipe confuses the page controller.
+            coordinator.needsRefresh = true
+        } else {
+            coordinator.showCurrentPage(in: pvc)
         }
     }
 
     class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
         var parent: PageViewController
+        var isTransitioning = false
+        var needsRefresh = false
 
         init(_ parent: PageViewController) {
             self.parent = parent
+        }
+
+        func showCurrentPage(in pvc: UIPageViewController) {
+            needsRefresh = false
+            let target = min(parent.currentPage, max(0, parent.pages.count - 1))
+            if let vc = makePageContentVC(index: target) {
+                pvc.setViewControllers([vc], direction: .forward, animated: false)
+            }
         }
 
         func makePageContentVC(index: Int) -> PageContentViewController? {
@@ -274,13 +288,22 @@ struct PageViewController: UIViewControllerRepresentable {
         }
 
         func pageViewController(_ pageViewController: UIPageViewController,
+                                willTransitionTo pendingViewControllers: [UIViewController]) {
+            isTransitioning = true
+        }
+
+        func pageViewController(_ pageViewController: UIPageViewController,
                                 didFinishAnimating finished: Bool,
                                 previousViewControllers: [UIViewController],
                                 transitionCompleted completed: Bool) {
+            isTransitioning = false
             if completed,
                let vc = pageViewController.viewControllers?.first as? PageContentViewController {
                 parent.currentPage = vc.index
                 parent.onPageChanged(vc.index)
+            }
+            if needsRefresh {
+                showCurrentPage(in: pageViewController)
             }
         }
     }

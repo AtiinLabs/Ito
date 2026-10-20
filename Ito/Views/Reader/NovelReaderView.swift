@@ -522,6 +522,8 @@ struct SelectableTextView: UIViewRepresentable {
     let textColor: UIColor
 
     class SelfSizingTextView: UITextView {
+        private var measuredWidth: CGFloat = 0
+
         override var intrinsicContentSize: CGSize {
             let size = sizeThatFits(CGSize(width: bounds.width > 0 ? bounds.width : UIScreen.main.bounds.width, height: .greatestFiniteMagnitude))
             return size
@@ -529,7 +531,9 @@ struct SelectableTextView: UIViewRepresentable {
 
         override func layoutSubviews() {
             super.layoutSubviews()
-            if bounds.size != intrinsicContentSize {
+            // Height follows width: measure again only when the width actually changed.
+            if bounds.width != measuredWidth {
+                measuredWidth = bounds.width
                 invalidateIntrinsicContentSize()
             }
         }
@@ -557,10 +561,19 @@ struct SelectableTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: SelfSizingTextView, context: Context) {
-        if uiView.text != text { uiView.text = text }
-        if uiView.font != font { uiView.font = font }
+        var sizeChanged = false
+        if uiView.text != text {
+            uiView.text = text
+            sizeChanged = true
+        }
+        if uiView.font != font {
+            uiView.font = font
+            sizeChanged = true
+        }
         if uiView.textColor != textColor { uiView.textColor = textColor }
-        uiView.invalidateIntrinsicContentSize()
+        if sizeChanged {
+            uiView.invalidateIntrinsicContentSize()
+        }
     }
 }
 
