@@ -293,11 +293,6 @@ public class UpdateManager: ObservableObject {
     private func check(queue: [LibraryItem]) async -> [(LibraryItem, Int)] {
         var updated: [(LibraryItem, Int)] = []
         for (index, item) in queue.enumerated() {
-            if Task.isCancelled { break }
-            if let runDeadline, now() >= runDeadline {
-                AppLogger.update.debug("🔄 [UpdateManager] Time budget used up, leaving the rest for the next run.")
-                break
-            }
             if index > 0, sourcePacingNanoseconds > 0 {
                 // Spread requests to one source out; stop when the run is cancelled.
                 do {
@@ -305,6 +300,12 @@ public class UpdateManager: ObservableObject {
                 } catch {
                     break
                 }
+            }
+            // Checked right before each series starts, after any pause.
+            if Task.isCancelled { break }
+            if let runDeadline, now() >= runDeadline {
+                AppLogger.update.debug("🔄 [UpdateManager] Time budget used up, leaving the rest for the next run.")
+                break
             }
             if let delta = await checkSingleItem(item), delta > 0 {
                 updated.append((item, delta))
