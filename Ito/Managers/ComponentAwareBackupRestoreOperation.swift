@@ -1283,6 +1283,9 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                 outcomes[.libraryCore]?.skipped += 1
             }
         }
+        // A wipe can remove the system list, and backups from installs that never had one
+        // carry series in no list. Both end up in Uncategorized.
+        try AppDatabase.ensureSystemCategory(in: db)
     }
 
     private func restoreHistory(

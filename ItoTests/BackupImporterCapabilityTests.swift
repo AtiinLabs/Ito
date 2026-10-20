@@ -338,7 +338,8 @@ struct BackupImporterCapabilityTests {
             )
         }
         let expectedCount = mode == .merge ? 1 : 0
-        #expect(counts.0 == expectedCount)
+        // Merge keeps the local system list; a wipe leaves a fresh one.
+        #expect(counts.0 == 1)
         #expect(counts.1 == expectedCount)
         #expect(counts.2 == expectedCount)
         #expect(counts.3 == expectedCount)

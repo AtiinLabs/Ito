@@ -457,7 +457,7 @@ struct BackupRestoreOperationPhaseTests {
         )
     }
 
-    @Test func representedEmptyLibraryWipeDeletesLocalSystemCategory() async throws {
+    @Test func representedEmptyLibraryWipeReplacesLocalSystemListWithAFreshOne() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
         try await database.dbPool.write { db in
@@ -480,9 +480,34 @@ struct BackupRestoreOperationPhaseTests {
             report.outcomes.first { $0.component == .libraryCore }
         )
         #expect(outcome.replaced == 1)
-        #expect(try await database.dbPool.read { db in
-            try LibraryCategory.fetchCount(db)
-        } == 0)
+        let categories = try await database.dbPool.read { db in
+            try LibraryCategory.fetchAll(db)
+        }
+        #expect(categories.map(\.isSystemCategory) == [true])
+        #expect(categories.first?.id != "local-system")
+        #expect(categories.first?.name == "Uncategorized")
+    }
+
+    @Test func restoredSeriesWithoutAListAreFiledIntoUncategorized() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let listless = item(id: "listless", title: "Listless")
+
+        _ = try await operation(database).restore(
+            representedBackup(components: [.libraryCore], items: [listless]),
+            mode: .wipe,
+            operationId: "listless-series"
+        )
+
+        let state = try await database.dbPool.read { db in
+            (
+                try LibraryCategory.filter(Column("isSystemCategory") == true).fetchAll(db),
+                try ItemCategoryLink.fetchAll(db)
+            )
+        }
+        #expect(state.0.count == 1)
+        #expect(state.1.map(\.itemId) == [listless.id])
+        #expect(state.1.map(\.categoryId) == state.0.map(\.id))
     }
 
     @Test func representedLibraryWipeRestoresImportedSystemCategoryExactly() async throws {
