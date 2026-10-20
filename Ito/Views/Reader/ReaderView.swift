@@ -74,11 +74,9 @@ struct ReaderView: View {
                 .padding(32)
             case .content:
                 readComponent
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showUI.toggle()
-                        }
-                    }
+                    // Pages handle their own taps (so a double tap can zoom); this covers
+                    // the space around them.
+                    .onTapGesture(perform: toggleUI)
                     .ignoresSafeArea()
             }
 
@@ -314,12 +312,20 @@ struct ReaderView: View {
     private func pageImage(for page: Page) -> some View {
         switch page.content {
         case .url(let urlString):
-            MangaImage(urlStr: urlString, headers: page.headers)
+            ZoomablePage(onTap: toggleUI) {
+                MangaImage(urlStr: urlString, headers: page.headers)
+            }
         case .text(let text):
             Text(text)
                 .foregroundColor(.white)
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+
+    private func toggleUI() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showUI.toggle()
         }
     }
 }
