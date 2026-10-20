@@ -31,6 +31,14 @@ struct NovelReadingAnchor: Equatable {
     let offset: Int
 }
 
+/// A block of a loaded chapter in continuous mode, by index into its pages; the chapter's
+/// heading comes before them all.
+struct NovelBlockReference: Hashable {
+    static let titleIndex = -1
+    let chapterID: UUID
+    let index: Int
+}
+
 @MainActor
 final class NovelReaderViewModel: ObservableObject {
     let pluginID: String
@@ -38,7 +46,12 @@ final class NovelReaderViewModel: ObservableObject {
     let chapterLoader: any NovelChapterLoading
 
     @Published private(set) var currentChapter: Novel.Chapter
-    @Published private(set) var loadedChapters: [NovelLoadedChapter] = []
+    @Published private(set) var loadedChapters: [NovelLoadedChapter] = [] {
+        didSet {
+            let ids = Set(loadedChapters.map(\.id))
+            visibleBlocks = visibleBlocks.filter { ids.contains($0.chapterID) }
+        }
+    }
     @Published private(set) var loadPhase: NovelReaderLoadPhase = .idle
     @Published private(set) var isLoadingNext = false
     /// The last next-chapter load failed; it waits for `retryNextChapter` instead of being
@@ -68,6 +81,8 @@ final class NovelReaderViewModel: ObservableObject {
     private var appendOperationID: UUID?
     private var effectTasks: [UUID: Task<Void, Never>] = [:]
     private var finishedChapterKeys: Set<String> = []
+    /// Continuous-mode blocks on screen; the topmost one is where the reader is.
+    private var visibleBlocks: Set<NovelBlockReference> = []
     /// Offset writes run one after another so an older write cannot land after a newer one.
     private var offsetWriteTask: Task<Void, Never>?
     private var lastSavedOffset: (chapterKey: String, offset: Int)?
@@ -224,10 +239,43 @@ final class NovelReaderViewModel: ObservableObject {
               loadedChapters.contains(where: {
                   $0.id == loadedChapter.id
                       && NovelChapterToken($0.chapter) == NovelChapterToken(loadedChapter.chapter)
-              }),
-              currentChapter.key != loadedChapter.chapter.key else { return }
-        changeCurrentChapter(to: loadedChapter.chapter)
-        chapterOpened(loadedChapter.chapter)
+              }) else { return }
+        visibleBlocks.insert(
+            NovelBlockReference(chapterID: loadedChapter.id, index: NovelBlockReference.titleIndex)
+        )
+        updateContinuousPosition()
+    }
+
+    func continuousChapterTitleDisappeared(_ loadedChapter: NovelLoadedChapter) {
+        guard isActive,
+              visibleBlocks.remove(
+                  NovelBlockReference(chapterID: loadedChapter.id, index: NovelBlockReference.titleIndex)
+              ) != nil
+        else { return }
+        updateContinuousPosition()
+    }
+
+    /// Makes the chapter of the topmost visible block current and saves that place. Scrolling
+    /// up into an earlier chapter moves back to it, not only reaching a chapter's title.
+    private func updateContinuousPosition() {
+        let ranked = visibleBlocks.compactMap { block -> (rank: Int, block: NovelBlockReference)? in
+            guard let position = loadedChapters.firstIndex(where: { $0.id == block.chapterID }) else {
+                return nil
+            }
+            return (position, block)
+        }
+        guard let top = ranked.min(by: {
+            ($0.rank, $0.block.index) < ($1.rank, $1.block.index)
+        }) else { return }
+        let loaded = loadedChapters[top.rank]
+        if loaded.chapter.key != currentChapter.key {
+            changeCurrentChapter(to: loaded.chapter)
+            chapterOpened(loaded.chapter)
+        }
+        let offset = top.block.index == NovelBlockReference.titleIndex
+            ? 0
+            : NovelTextOffsets.blockStarts(loaded.pages)[top.block.index]
+        readingPositionChanged(chapterID: loaded.id, offset: offset, reachedEnd: false)
     }
 
     func pagedChapterChanged(_ chapter: Novel.Chapter) {
@@ -403,16 +451,20 @@ final class NovelReaderViewModel: ObservableObject {
         guard isActive,
               let loaded = loadedChapters.first(where: { $0.id == chapterID }),
               loaded.pages.indices.contains(pageIndex) else { return }
-        readingPositionChanged(
-            chapterID: chapterID,
-            offset: NovelTextOffsets.blockStarts(loaded.pages)[pageIndex],
-            reachedEnd: false
-        )
+        visibleBlocks.insert(NovelBlockReference(chapterID: chapterID, index: pageIndex))
+        updateContinuousPosition()
         guard prefetchChapters,
               let last = loadedChapters.last,
               last.id == chapterID,
               pageIndex >= last.pages.count - 5 else { return }
         loadNextChapter()
+    }
+
+    func continuousPageDisappeared(chapterID: UUID, pageIndex: Int) {
+        guard isActive,
+              visibleBlocks.remove(NovelBlockReference(chapterID: chapterID, index: pageIndex)) != nil
+        else { return }
+        updateContinuousPosition()
     }
 
     /// The marker after a chapter's last block scrolled into view: the chapter was read to the end.

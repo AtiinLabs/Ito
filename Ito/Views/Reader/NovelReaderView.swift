@@ -141,12 +141,21 @@ struct NovelReaderView: View {
                                 .onAppear {
                                     viewModel.continuousChapterTitleAppeared(loadedChapter)
                                 }
+                                .onDisappear {
+                                    viewModel.continuousChapterTitleDisappeared(loadedChapter)
+                                }
 
                             ForEach(Array(loadedChapter.pages.enumerated()), id: \.offset) { index, page in
                                 pageText(for: page)
                                     .id(blockID(loadedChapter.id, index))
                                     .onAppear {
                                         viewModel.continuousPageAppeared(
+                                            chapterID: loadedChapter.id,
+                                            pageIndex: index
+                                        )
+                                    }
+                                    .onDisappear {
+                                        viewModel.continuousPageDisappeared(
                                             chapterID: loadedChapter.id,
                                             pageIndex: index
                                         )

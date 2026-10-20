@@ -395,6 +395,30 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.loadedChapters.map { $0.chapter.key }, ["a", "b"])
     }
 
+    func testScrollingBackUpIntoAnEarlierChapterMakesItCurrent() async {
+        let a = makeChapter("a", number: 1)
+        let b = makeChapter("b", number: 2)
+        let subject = makeSubject(chapters: [a, b], initial: a)
+        subject.loader.enqueue(.pages([page(1), page(2)]), for: "a")
+        subject.loader.enqueue(.pages([page(1), page(2)]), for: "b")
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+        subject.viewModel.loadNextChapter()
+        await subject.viewModel.waitForAllOperationsForTesting()
+        let chapterA = subject.viewModel.loadedChapters[0]
+        let chapterB = subject.viewModel.loadedChapters[1]
+
+        // Read down into b: a's text leaves the screen, b's heading and text are on it.
+        subject.viewModel.continuousPageAppeared(chapterID: chapterA.id, pageIndex: 1)
+        subject.viewModel.continuousChapterTitleAppeared(chapterB)
+        subject.viewModel.continuousPageDisappeared(chapterID: chapterA.id, pageIndex: 1)
+        XCTAssertEqual(subject.viewModel.currentChapter.key, "b")
+
+        // Scroll back up until only a's last paragraph and b's heading are on screen.
+        subject.viewModel.continuousPageAppeared(chapterID: chapterA.id, pageIndex: 1)
+        XCTAssertEqual(subject.viewModel.currentChapter.key, "a")
+    }
+
     func testAppendStartedForOldChainCannotAppendAfterDirectNavigation() async {
         let a = makeChapter("a", number: 1)
         let b = makeChapter("b", number: 2)
