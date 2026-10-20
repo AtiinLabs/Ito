@@ -40,7 +40,7 @@ struct SettingsView: View {
                         Label("Trackers", systemImage: "arrow.triangle.2.circlepath")
                     }
                     NavigationLink(destination: viewFactory.makeSettingsDestination(for: .backup)) {
-                        Label("Backup & Restore", systemImage: "arrow.triangle.2.circlepath.doc")
+                        Label("Backup & Restore", systemImage: "externaldrive.badge.timemachine")
                     }
                 }
 
