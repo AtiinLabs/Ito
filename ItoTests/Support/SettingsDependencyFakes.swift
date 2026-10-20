@@ -331,6 +331,7 @@ func verifyLiveSettingsRestorePropagation(
     XCTAssertTrue(library.backgroundUpdatesEnabled)
     XCTAssertTrue(library.updateNotifications)
     XCTAssertEqual(library.updateInterval, .daily)
+    XCTAssertTrue(library.skipCompleted)
     XCTAssertTrue(privacy.incognitoMode)
     XCTAssertTrue(privacy.discordRPCEnabled)
     XCTAssertTrue(network.wifiOnlyUpdates)

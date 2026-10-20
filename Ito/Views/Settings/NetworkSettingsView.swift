@@ -20,7 +20,7 @@ struct NetworkSettingsView: View {
             } header: {
                 Text("Automatic Updates")
             } footer: {
-                Text("Automatic update checks wait for Wi-Fi or another network that isn't cellular. Refreshing the library by hand always checks.")
+                Text("Automatic update checks are skipped on cellular data and personal hotspots. Refreshing the library by hand always checks.")
             }
 
             Section {
