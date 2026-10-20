@@ -30,16 +30,22 @@ struct HistoryView: View {
                 .padding(.bottom, 60)
             case .content:
                 List {
-                    ForEach(viewModel.history) { entry in
-                        HistoryItemRow(entry: entry)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    Task { await viewModel.deleteEntry(id: entry.id) }
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
+                    Section {
+                        ForEach(viewModel.history) { entry in
+                            HistoryItemRow(entry: entry)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        Task { await viewModel.deleteEntry(id: entry.id) }
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                    .disabled(viewModel.deletingEntryIDs.contains(entry.id))
                                 }
-                                .disabled(viewModel.deletingEntryIDs.contains(entry.id))
-                            }
+                        }
+                    } footer: {
+                        if viewModel.isShowingFetchLimit {
+                            Text("Showing the \(HistoryEntry.fetchLimit) most recent entries.")
+                        }
                     }
                 }
                 .listStyle(.plain)

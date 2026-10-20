@@ -9,6 +9,9 @@ import ito_runner
 public struct HistoryEntry: Identifiable, Hashable, Sendable {
     public var id: String { record.id }
     public let record: ReadingHistoryRecord
+
+    /// Maximum number of entries fetched and shown; older entries stay stored.
+    nonisolated public static let fetchLimit = 200
 }
 
 nonisolated private struct HistoryPublication: Sendable {
@@ -211,7 +214,7 @@ public class HistoryManager: ObservableObject {
     nonisolated private static func fetchHistory(_ db: Database) throws -> [ReadingHistoryRecord] {
         try ReadingHistoryRecord
             .order(ReadingHistoryRecord.Columns.readAt.desc)
-            .limit(200)
+            .limit(HistoryEntry.fetchLimit)
             .fetchAll(db)
     }
 

@@ -45,6 +45,10 @@ final class HistoryViewModel: ObservableObject {
         !history.isEmpty
     }
 
+    var isShowingFetchLimit: Bool {
+        history.count >= HistoryEntry.fetchLimit
+    }
+
     func requestClear() {
         guard !history.isEmpty, !isClearing else { return }
         isClearConfirmationPresented = true
