@@ -774,7 +774,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         subject.viewModel.appear()
 
         let presence = subject.presence.presented.last
-        XCTAssertEqual(presence?.state, "Reading Chapter 3.0")
+        XCTAssertEqual(presence?.state, "Reading Chapter 3")
         XCTAssertNil(presence?.detailsURL)
         XCTAssertEqual(
             presence?.largeImageText,

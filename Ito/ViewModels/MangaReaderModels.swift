@@ -96,7 +96,7 @@ extension MangaReaderViewModel {
     ) -> MangaReaderPresence {
         MangaReaderPresence(
             details: manga.title,
-            state: "Reading \(chapter.title ?? "Chapter \(chapter.chapterNumber ?? 0)")",
+            state: "Reading \(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))",
             activityType: 3,
             detailsURL: anilistID.map { "https://anilist.co/manga/\($0)" },
             largeImageText: "Reading from \(chapter.scanlator ?? "Official") at \(pluginName ?? "Unknown Plugin")",

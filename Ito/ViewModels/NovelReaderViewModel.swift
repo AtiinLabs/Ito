@@ -883,7 +883,7 @@ final class NovelReaderViewModel: ObservableObject {
         dependencies.presence.presentNovelReaderPresence(
             NovelReaderPresence(
                 details: novel.title,
-                state: "Reading \(chapter.title ?? "Chapter \(chapter.chapter ?? 0)")",
+                state: "Reading \(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))",
                 activityType: 3,
                 detailsURL: detailsURL,
                 largeImageText: "Reading from \(scanlator) at \(pluginName)",

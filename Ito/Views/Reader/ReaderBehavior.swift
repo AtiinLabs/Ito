@@ -1,6 +1,16 @@
 import Foundation
 import ito_runner
 
+nonisolated enum ReaderChapterTitle {
+    /// The chapter's title, else "Chapter 12.5" from its number (whole numbers without ".0"),
+    /// else "Unknown Chapter".
+    static func text(title: String?, number: Float32?) -> String {
+        if let title, !title.isEmpty { return title }
+        if let number { return "Chapter \(number.formatted())" }
+        return "Unknown Chapter"
+    }
+}
+
 nonisolated enum ReaderChapterOrdering {
     static let chapterNumberEpsilon: Float32 = 0.0001
 

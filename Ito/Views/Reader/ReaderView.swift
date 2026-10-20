@@ -82,8 +82,10 @@ struct ReaderView: View {
                 VStack {
                     ReaderHeaderView(
                         title: viewModel.manga.title,
-                        chapterTitle: viewModel.currentChapter.title
-                            ?? "Chapter \(viewModel.currentChapter.chapter ?? 0)",
+                        chapterTitle: ReaderChapterTitle.text(
+                            title: viewModel.currentChapter.title,
+                            number: viewModel.currentChapter.chapter
+                        ),
                         onDismiss: { dismiss() }
                     )
 
@@ -251,7 +253,7 @@ struct ReaderView: View {
                     .foregroundColor(.white.opacity(0.35))
                     .textCase(.uppercase)
 
-                Text(chapter.title ?? "Chapter \(chapter.chapter ?? 0)")
+                Text(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))
                     .font(.headline)
                     .foregroundColor(.white.opacity(0.75))
                     .multilineTextAlignment(.center)
@@ -294,7 +296,7 @@ struct ReaderView: View {
                 .foregroundColor(.white)
                 .font(.headline)
                 .multilineTextAlignment(.center)
-            Text(chapter.title ?? "Chapter \(chapter.chapter ?? 0)")
+            Text(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))
                 .foregroundColor(.gray)
                 .font(.subheadline)
         }

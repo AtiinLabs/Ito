@@ -801,7 +801,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         subject.viewModel.appear()
         let initial = subject.presence.presented[0]
         XCTAssertEqual(initial.details, "Manga")
-        XCTAssertEqual(initial.state, "Reading Chapter 1.0")
+        XCTAssertEqual(initial.state, "Reading Chapter 1")
         XCTAssertEqual(initial.activityType, 3)
         XCTAssertEqual(initial.detailsURL, "https://anilist.co/manga/123")
         XCTAssertEqual(initial.largeImageText, "Reading from Group at Plugin Name")
