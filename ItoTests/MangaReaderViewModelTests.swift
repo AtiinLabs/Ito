@@ -362,6 +362,34 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.currentChapter.key, "b")
     }
 
+    func testSwipingBackOpensThePreviousChapterAtItsLastPage() async {
+        let a = makeChapter("a", number: 1)
+        let b = makeChapter("b", number: 2)
+        let c = makeChapter("c", number: 3)
+        let subject = makeSubject(chapters: [a, b, c], initial: c)
+        subject.loader.enqueue(.pages([page(0)]), for: "c")
+        subject.loader.enqueue(.suspended, for: "b")
+        subject.loader.enqueue(.pages([page(0), page(1), page(2)]), for: "b")
+        subject.loader.enqueue(.pages([page(0), page(1)]), for: "a")
+        subject.viewModel.start()
+        await waitForReader { subject.loader.pendingCount(for: "b") == 1 }
+
+        // Not cached yet: opens at the end once loaded.
+        subject.viewModel.setPagedIndex(-1)
+        await waitForReader {
+            subject.viewModel.currentChapter.key == "b"
+                && subject.viewModel.loadPhase == .content
+        }
+        XCTAssertEqual(subject.viewModel.pagedIndex, 2)
+
+        // Cached: opens at the end straight away.
+        await waitForReader { subject.viewModel.prefetchedChapters["a"] != nil }
+        subject.viewModel.setPagedIndex(-1)
+        XCTAssertEqual(subject.viewModel.currentChapter.key, "a")
+        XCTAssertEqual(subject.viewModel.pagedIndex, 1)
+        subject.loader.resolveFirst(for: "b", with: .success([]))
+    }
+
     func testContinuousAppendSortsSuppressesDuplicatesAndDoesNotChangeCurrentChapter() async {
         let a = makeChapter("a", number: 1)
         let b = makeChapter("b", number: 2)

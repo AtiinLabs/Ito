@@ -256,7 +256,8 @@ final class MangaReaderViewModel: ObservableObject {
             pagedGoToChapter(next)
         } else if newIndex == -1,
            let previous = chapterBefore(currentChapter) {
-            pagedGoToChapter(previous)
+            // Swiping back past the first page continues from the end of the previous chapter.
+            pagedGoToChapter(previous, opensAtEnd: true)
         } else if pagedPages.indices.contains(newIndex) {
             pageShown(in: currentChapter, at: newIndex, pageCount: pagedPages.count)
         }
@@ -332,12 +333,14 @@ final class MangaReaderViewModel: ObservableObject {
         prefetchContinuousImages(around: flatPage.globalIndex, allPages: flatPages)
     }
 
-    private func pagedGoToChapter(_ chapter: Manga.Chapter) {
+    private func pagedGoToChapter(_ chapter: Manga.Chapter, opensAtEnd: Bool = false) {
         invalidateContentOperations()
         changeCurrentChapter(to: chapter)
         if let cached = prefetchedChapters[chapter.key] {
             pagedPages = cached
-            pagedIndex = startPage(for: chapter, pageCount: cached.count)
+            pagedIndex = opensAtEnd
+                ? max(cached.count - 1, 0)
+                : startPage(for: chapter, pageCount: cached.count)
             loadPhase = .content
             chapterOpened(chapter)
             if !cached.isEmpty {
@@ -348,7 +351,7 @@ final class MangaReaderViewModel: ObservableObject {
             pagedPages = []
             pagedIndex = 0
             loadPhase = .loading
-            beginMainLoad(for: chapter)
+            beginMainLoad(for: chapter, opensAtEnd: opensAtEnd)
         }
     }
 
@@ -372,7 +375,7 @@ final class MangaReaderViewModel: ObservableObject {
 
     // MARK: - Main chapter loading
 
-    private func beginMainLoad(for chapter: Manga.Chapter) {
+    private func beginMainLoad(for chapter: Manga.Chapter, opensAtEnd: Bool = false) {
         guard isActive else { return }
         let token = ChapterToken(chapter)
         if loadPhase == .loading,
@@ -400,6 +403,7 @@ final class MangaReaderViewModel: ObservableObject {
                     chapter: chapter,
                     token: token,
                     expectedPaged: expectedPaged,
+                    opensAtEnd: opensAtEnd,
                     operationID: operationID,
                     session: session,
                     generation: generation
@@ -422,6 +426,7 @@ final class MangaReaderViewModel: ObservableObject {
         chapter: Manga.Chapter,
         token: ChapterToken,
         expectedPaged: Bool,
+        opensAtEnd: Bool,
         operationID: UUID,
         session: UUID,
         generation: UInt64
@@ -438,7 +443,9 @@ final class MangaReaderViewModel: ObservableObject {
         }
 
         let sorted = ReaderPageOrdering.ascending(pages)
-        let start = startPage(for: chapter, pageCount: sorted.count)
+        let start = opensAtEnd
+            ? max(sorted.count - 1, 0)
+            : startPage(for: chapter, pageCount: sorted.count)
         if expectedPaged {
             pagedPages = sorted
             pagedIndex = start
