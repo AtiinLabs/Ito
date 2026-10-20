@@ -8,10 +8,12 @@ struct ItoApp: App {
     @StateObject private var bootstrap = DurableStateBootstrap.shared
     @Environment(\.scenePhase) private var scenePhase
 
+    private static let refreshTaskIdentifier = "moe.itoapp.ito.refresh"
+
     init() {
         // The handler is MainActor-isolated in this target, so iOS must call it on the main queue;
         // with no queue it runs on a background one and fails the runtime isolation check.
-        BGTaskScheduler.shared.register(forTaskWithIdentifier: "moe.itoapp.ito.refresh", using: .main) { task in
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.refreshTaskIdentifier, using: .main) { task in
             guard let refreshTask = task as? BGAppRefreshTask else { return }
             Self.handleAppRefresh(task: refreshTask)
         }
@@ -37,10 +39,14 @@ struct ItoApp: App {
     private static func scheduleAppRefresh(bootstrap: DurableStateBootstrap) async {
         guard await bootstrap.prepare() else { return }
         do {
-            guard let settingsStore = bootstrap.settingsStore,
-                  settingsStore.backgroundUpdatesEnabled else { return }
+            guard let settingsStore = bootstrap.settingsStore else { return }
+            guard settingsStore.backgroundUpdatesEnabled else {
+                // Drop a check queued before the user turned updates off.
+                BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: refreshTaskIdentifier)
+                return
+            }
 
-            let request = BGAppRefreshTaskRequest(identifier: "moe.itoapp.ito.refresh")
+            let request = BGAppRefreshTaskRequest(identifier: refreshTaskIdentifier)
             request.earliestBeginDate = Date(
                 timeIntervalSinceNow: TimeInterval(settingsStore.updateInterval.rawValue * 3_600)
             )
@@ -59,6 +65,11 @@ struct ItoApp: App {
                 return
             }
 
+            // A request queued before the user turned updates off can still fire once.
+            guard bootstrap.settingsStore?.backgroundUpdatesEnabled == true else {
+                completion.finish(success: true)
+                return
+            }
             await scheduleAppRefresh(bootstrap: bootstrap)
             guard let updateManager = bootstrap.updateManager else {
                 completion.finish(success: false)
