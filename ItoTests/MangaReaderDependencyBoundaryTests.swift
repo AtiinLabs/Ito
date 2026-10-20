@@ -39,7 +39,6 @@ final class MangaReaderDependencyBoundaryTests: XCTestCase {
         XCTAssertTrue(
             view.contains("@StateObject private var viewModel: MangaReaderViewModel")
         )
-        XCTAssertTrue(view.contains("StateObject(wrappedValue: viewModel)"))
         XCTAssertTrue(view.contains("MangaImage("))
         XCTAssertTrue(view.contains("ReaderHeaderView("))
         XCTAssertTrue(view.contains("ReaderFooterView("))

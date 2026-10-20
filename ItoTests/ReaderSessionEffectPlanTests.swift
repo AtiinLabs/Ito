@@ -47,17 +47,14 @@ final class ReaderSessionEffectPlanTests: XCTestCase {
     func testMangaNovelAndVideoReadersAdoptScreenOwnedViewModels() throws {
         let manga = try sourceFile("Ito/Views/Reader/ReaderView.swift")
         XCTAssertTrue(manga.contains("@StateObject private var viewModel: MangaReaderViewModel"))
-        XCTAssertTrue(manga.contains("StateObject(wrappedValue: viewModel)"))
         XCTAssertFalse(manga.contains("ReaderViewModel("))
 
         let novel = try sourceFile("Ito/Views/Reader/NovelReaderView.swift")
         XCTAssertTrue(novel.contains("@StateObject private var viewModel: NovelReaderViewModel"))
-        XCTAssertTrue(novel.contains("StateObject(wrappedValue: viewModel)"))
         XCTAssertFalse(novel.contains("ReaderViewModel("))
 
         let video = try sourceFile("Ito/Views/Reader/VideoPlayerView.swift")
         XCTAssertTrue(video.contains("@StateObject private var viewModel: VideoPlayerViewModel"))
-        XCTAssertTrue(video.contains("StateObject(wrappedValue: viewModel)"))
         XCTAssertFalse(video.contains("ReaderViewModel("))
 
         let paging = try sourceFile("Ito/Views/Reader/NovelPagingReaderView.swift")

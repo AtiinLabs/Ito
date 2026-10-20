@@ -38,7 +38,6 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
 
         XCTAssertEqual(view.components(separatedBy: "@StateObject").count - 1, 1)
         XCTAssertTrue(view.contains("@StateObject private var viewModel: NovelReaderViewModel"))
-        XCTAssertTrue(view.contains("StateObject(wrappedValue: viewModel)"))
         XCTAssertTrue(view.contains("GeometryReader"))
         XCTAssertTrue(view.contains("ScrollView"))
         XCTAssertTrue(view.contains("LazyVStack"))

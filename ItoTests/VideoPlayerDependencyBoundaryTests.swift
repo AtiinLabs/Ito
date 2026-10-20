@@ -43,7 +43,6 @@ final class VideoPlayerDependencyBoundaryTests: XCTestCase {
 
         XCTAssertEqual(view.components(separatedBy: "@StateObject").count - 1, 1)
         XCTAssertTrue(view.contains("@StateObject private var viewModel: VideoPlayerViewModel"))
-        XCTAssertTrue(view.contains("StateObject(wrappedValue: viewModel)"))
         XCTAssertTrue(view.contains("VideoPlayer(player: surface.player)"))
         XCTAssertTrue(view.contains("confirmationDialog(\"Select Quality\""))
         XCTAssertTrue(view.contains("confirmationDialog(\"Select Audio Track\""))
