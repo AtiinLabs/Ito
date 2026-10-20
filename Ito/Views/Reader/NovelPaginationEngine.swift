@@ -176,7 +176,9 @@ nonisolated enum NovelPaginationEngine {
             manager.addTextContainer(container)
             containers.append(container)
             glyphRange = manager.glyphRange(for: container)
-            if containers.count > 1000 || glyphRange.length == 0 {
+            // A page that takes no text means nothing more fits (the size is too small), so
+            // stop; otherwise every page takes text and the loop ends with the chapter.
+            if glyphRange.length == 0 {
                 break
             }
         } while NSMaxRange(glyphRange) < manager.numberOfGlyphs
