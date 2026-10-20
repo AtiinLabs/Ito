@@ -7,6 +7,7 @@ final class CategoryAssignmentViewModel: ObservableObject {
 
     @Published private(set) var categories: [LibraryCategory]
     @Published private(set) var links: [ItemCategoryLink]
+    @Published private(set) var activeCategoryIDs: Set<String>
     @Published var isAddCategoryPresented = false
     @Published var newCategoryName = ""
     @Published private(set) var newlyCreatedCategoryID: String?
@@ -36,10 +37,16 @@ final class CategoryAssignmentViewModel: ObservableObject {
         let snapshot = organization.organizationSnapshot
         categories = snapshot.categories
         links = snapshot.links
+        activeCategoryIDs = Self.activeCategoryIDs(in: snapshot.links, itemID: itemID)
         organization.organizationSnapshotPublisher
             .sink { [weak self] snapshot in
-                self?.categories = snapshot.categories
-                self?.links = snapshot.links
+                guard let self else { return }
+                self.categories = snapshot.categories
+                self.links = snapshot.links
+                self.activeCategoryIDs = Self.activeCategoryIDs(
+                    in: snapshot.links,
+                    itemID: self.itemID
+                )
             }
             .store(in: &cancellables)
     }
@@ -48,8 +55,11 @@ final class CategoryAssignmentViewModel: ObservableObject {
         categories.filter { !$0.isSystemCategory }
     }
 
-    var activeCategoryIDs: Set<String> {
-        Set(links.lazy.filter { $0.itemId == self.itemID }.map(\.categoryId))
+    nonisolated private static func activeCategoryIDs(
+        in links: [ItemCategoryLink],
+        itemID: String
+    ) -> Set<String> {
+        Set(links.lazy.filter { $0.itemId == itemID }.map(\.categoryId))
     }
 
     var canCreateAndAssign: Bool {
