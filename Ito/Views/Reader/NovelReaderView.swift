@@ -5,6 +5,8 @@ struct NovelReaderView: View {
     @StateObject private var viewModel: NovelReaderViewModel
     @State private var showUI = true
     @State private var showSettings = false
+    /// Screen brightness before the reader's slider first changed it; put back on close.
+    @State private var brightnessBeforeReading: CGFloat?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -28,7 +30,13 @@ struct NovelReaderView: View {
         .statusBarHidden(!showUI)
         .task { viewModel.start() }
         .onAppear { viewModel.appear() }
-        .onDisappear { viewModel.disappear() }
+        .onDisappear {
+            viewModel.disappear()
+            if let brightnessBeforeReading {
+                UIScreen.main.brightness = brightnessBeforeReading
+                self.brightnessBeforeReading = nil
+            }
+        }
     }
 
     private func readerBody(
@@ -280,7 +288,13 @@ struct NovelReaderView: View {
                     prefetchChapters: Binding(
                         get: { viewModel.prefetchChapters },
                         set: { viewModel.setPrefetchChapters($0) }
-                    )
+                    ),
+                    onBrightnessChange: { value in
+                        if brightnessBeforeReading == nil {
+                            brightnessBeforeReading = UIScreen.main.brightness
+                        }
+                        UIScreen.main.brightness = value
+                    }
                 )
                 .frame(height: 280)
                 .padding(.bottom, safeAreaBottom)
@@ -554,6 +568,8 @@ struct NovelReaderSettingsView: View {
     @Binding var theme: NovelTheme
     @Binding var isPaging: Bool
     @Binding var prefetchChapters: Bool
+    /// Sets the screen brightness; the reader puts the old value back when it closes.
+    let onBrightnessChange: (CGFloat) -> Void
 
     @State private var activeTab: SettingsTab = .typography
     @State private var brightness: CGFloat = UIScreen.main.brightness
@@ -787,7 +803,7 @@ struct NovelReaderSettingsView: View {
 
                             if abs(brightness - newBrightness) > 0.01 {
                                 brightness = newBrightness
-                                UIScreen.main.brightness = newBrightness
+                                onBrightnessChange(newBrightness)
                             }
                         }
                 )
