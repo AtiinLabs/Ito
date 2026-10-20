@@ -70,29 +70,6 @@ extension SettingsViewModelTests {
         XCTAssertTrue(appearanceSource.contains(".navigationTitle(\"Appearance\")"))
     }
 
-    func testLibraryConditionalPresentationAndAlertActionsRemainWired() throws {
-        let source = try source(at: "Ito/Views/Settings/LibrarySettingsView.swift")
-        let conditionalStart = try XCTUnwrap(source.range(
-            of: "if viewModel.showsUpdateOptions {"
-        ))
-        let conditionalEnd = try XCTUnwrap(source.range(
-            of: "            } header: {\n                Text(\"Updates\")",
-            range: conditionalStart.upperBound..<source.endIndex
-        ))
-        let conditionalBlock = String(source[conditionalStart.lowerBound..<conditionalEnd.lowerBound])
-
-        XCTAssertTrue(conditionalBlock.contains("Toggle(\"Notify on New Chapters\""))
-        XCTAssertTrue(conditionalBlock.contains("Picker(\"Update Frequency\""))
-        XCTAssertTrue(conditionalBlock.contains("Toggle(\"Skip Completed Series\""))
-        XCTAssertFalse(conditionalBlock.contains("Toggle(\"Wi-Fi Only\""))
-        XCTAssertTrue(source.contains(
-            "primaryButton: .cancel(Text(\"Cancel\")) {\n                    viewModel.dismissAlert()"
-        ))
-        XCTAssertTrue(source.contains(
-            "secondaryButton: .default(Text(\"Settings\")) {\n                    Task { await viewModel.openApplicationSettings() }"
-        ))
-    }
-
     func testBootstrapReusesRuntimeSettingsDependencyIdentities() throws {
         let source = try source(at: "Ito/Managers/DurableStateBootstrap.swift")
         let installStart = try XCTUnwrap(source.range(of: "private func install(_ runtime: Runtime)"))

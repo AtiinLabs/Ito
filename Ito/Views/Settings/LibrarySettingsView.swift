@@ -30,7 +30,7 @@ struct LibrarySettingsView: View {
             }
 
             Section {
-                Toggle("Check for Updates", isOn: Binding(
+                Toggle("Check in Background", isOn: Binding(
                     get: { viewModel.backgroundUpdatesEnabled },
                     set: { value in
                         Task { await viewModel.setBackgroundUpdatesEnabled(value) }
@@ -51,25 +51,27 @@ struct LibrarySettingsView: View {
                             Task { await viewModel.setUpdateInterval(value) }
                         }
                     )) {
-                        Text("1 Hour").tag(UpdateIntervalPreference.hourly)
-                        Text("2 Hours").tag(UpdateIntervalPreference.twoHours)
-                        Text("4 Hours").tag(UpdateIntervalPreference.fourHours)
-                        Text("6 Hours").tag(UpdateIntervalPreference.sixHours)
-                        Text("12 Hours").tag(UpdateIntervalPreference.twelveHours)
-                        Text("24 Hours").tag(UpdateIntervalPreference.daily)
-                    }
-
-                    Toggle("Skip Completed Series", isOn: Binding(
-                        get: { viewModel.skipCompleted },
-                        set: { value in
-                            Task { await viewModel.setSkipCompleted(value) }
+                        ForEach(viewModel.updateIntervals, id: \.self) { interval in
+                            Text(interval.rawValue == 1 ? "1 Hour" : "\(interval.rawValue) Hours")
+                                .tag(interval)
                         }
-                    ))
+                    }
                 }
             } header: {
-                Text("Updates")
+                Text("Background Updates")
             } footer: {
-                Text("Background checks run approximately at the chosen interval. Actual timing is managed by iOS.")
+                Text("When on, Ito checks your library for new chapters while the app is closed. iOS decides the exact timing.")
+            }
+
+            Section {
+                Toggle("Skip Completed Series", isOn: Binding(
+                    get: { viewModel.skipCompleted },
+                    set: { value in
+                        Task { await viewModel.setSkipCompleted(value) }
+                    }
+                ))
+            } footer: {
+                Text("Completed and cancelled series are not checked for new chapters, in the background or when you refresh the library.")
             }
         }
         .navigationTitle("Library")
