@@ -55,7 +55,7 @@ struct PrivacySettingsView: View {
             } header: {
                 Text("Discord Integration")
             } footer: {
-                Text("Broadcasts your reading and watching activity to Discord via a local Rust WebSocket server.")
+                Text("Shows what you're reading or watching on your Discord profile. Needs a Rich Presence bridge running at the server address.")
             }
         }
         .navigationTitle("Privacy")

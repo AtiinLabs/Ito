@@ -9,7 +9,7 @@ struct AppearanceSettingsView: View {
 
     var body: some View {
         Form {
-            Section(header: Text("Theme"), footer: Text("Choose your preferred appearance.")) {
+            Section(header: Text("Theme"), footer: Text("System follows your device's Light or Dark Mode setting.")) {
                 Picker("Appearance", selection: Binding(
                     get: { viewModel.currentTheme },
                     set: { value in

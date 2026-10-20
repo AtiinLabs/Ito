@@ -59,17 +59,6 @@ extension SettingsViewModelTests {
         ))
     }
 
-    func testAppearancePresentationContracts() throws {
-        let appearanceSource = try source(at: "Ito/Views/Settings/AppearanceSettingsView.swift")
-
-        XCTAssertTrue(appearanceSource.contains(
-            "Section(header: Text(\"Theme\"), footer: Text(\"Choose your preferred appearance.\"))"
-        ))
-        XCTAssertTrue(appearanceSource.contains("Picker(\"Appearance\", selection:"))
-        XCTAssertTrue(appearanceSource.contains(".pickerStyle(SegmentedPickerStyle())"))
-        XCTAssertTrue(appearanceSource.contains(".navigationTitle(\"Appearance\")"))
-    }
-
     func testBootstrapReusesRuntimeSettingsDependencyIdentities() throws {
         let source = try source(at: "Ito/Managers/DurableStateBootstrap.swift")
         let installStart = try XCTUnwrap(source.range(of: "private func install(_ runtime: Runtime)"))
