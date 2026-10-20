@@ -106,6 +106,9 @@ struct ReaderView: View {
                             set: { viewModel.setViewerOverride($0) }
                         ),
                         safeAreaBottom: safeAreaBottom,
+                        // Paged right-to-left turns pages leftwards; the footer follows.
+                        isRightToLeft: viewModel.isPaged
+                            && (viewModel.activeViewer == .Rtl || viewModel.activeViewer == .Default),
                         onPrevChapter: { viewModel.goToPreviousChapter() },
                         onNextChapter: { viewModel.goToNextChapter() },
                         onPrevPage: { viewModel.previousPage() },
@@ -443,6 +446,7 @@ private struct ReaderFooterView: View {
     let hasNext: Bool
     @Binding var overrideViewer: Manga.Viewer
     let safeAreaBottom: CGFloat
+    let isRightToLeft: Bool
 
     let onPrevChapter: () -> Void
     let onNextChapter: () -> Void
@@ -450,17 +454,16 @@ private struct ReaderFooterView: View {
     let onNextPage: () -> Void
     let onSettings: () -> Void
 
+    private var canGoBack: Bool { displayIndex > 0 }
+    private var canGoForward: Bool { displayIndex < displayTotal - 1 }
+
     var body: some View {
         HStack {
-            if hasPrev {
-                Button(action: onPrevChapter) {
-                    Image(systemName: "backward.end.fill")
-                        .font(.body.weight(.semibold))
-                        .foregroundColor(.white)
-                }
-            } else {
-                Color.clear.frame(width: 16, height: 16)
-            }
+            chapterButton(
+                systemName: "backward.end.fill",
+                isAvailable: isRightToLeft ? hasNext : hasPrev,
+                action: isRightToLeft ? onNextChapter : onPrevChapter
+            )
 
             Spacer()
 
@@ -473,25 +476,22 @@ private struct ReaderFooterView: View {
             Spacer()
 
             HStack(spacing: 24) {
-                Button(action: onPrevPage) {
-                    Image(systemName: "chevron.left")
-                        .font(.title3.weight(.bold))
-                        .foregroundColor(displayIndex > 0 ? .white : .white.opacity(0.3))
-                }
-                .disabled(displayIndex == 0)
+                pageButton(
+                    systemName: "chevron.left",
+                    isEnabled: isRightToLeft ? canGoForward : canGoBack,
+                    action: isRightToLeft ? onNextPage : onPrevPage
+                )
 
                 Text("\(displayTotal == 0 ? 0 : displayIndex + 1) / \(displayTotal)")
                     .font(.subheadline.weight(.bold).monospacedDigit())
                     .foregroundColor(.white)
                     .frame(minWidth: 60, alignment: .center)
 
-                Button(action: onNextPage) {
-                    Image(systemName: "chevron.right")
-                        .font(.title3.weight(.bold))
-                        .foregroundColor(
-                            displayIndex < displayTotal - 1 ? .white : .white.opacity(0.3))
-                }
-                .disabled(displayIndex >= displayTotal - 1)
+                pageButton(
+                    systemName: "chevron.right",
+                    isEnabled: isRightToLeft ? canGoBack : canGoForward,
+                    action: isRightToLeft ? onPrevPage : onNextPage
+                )
             }
 
             Spacer()
@@ -512,15 +512,11 @@ private struct ReaderFooterView: View {
 
             Spacer()
 
-            if hasNext {
-                Button(action: onNextChapter) {
-                    Image(systemName: "forward.end.fill")
-                        .font(.body.weight(.semibold))
-                        .foregroundColor(.white)
-                }
-            } else {
-                Color.clear.frame(width: 16, height: 16)
-            }
+            chapterButton(
+                systemName: "forward.end.fill",
+                isAvailable: isRightToLeft ? hasPrev : hasNext,
+                action: isRightToLeft ? onPrevChapter : onNextChapter
+            )
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 14)
@@ -528,6 +524,36 @@ private struct ReaderFooterView: View {
         .environment(\.colorScheme, .dark)
         .padding(.horizontal, 20)
         .padding(.bottom, safeAreaBottom > 0 ? safeAreaBottom : 16)
+    }
+
+    @ViewBuilder
+    private func chapterButton(
+        systemName: String,
+        isAvailable: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        if isAvailable {
+            Button(action: action) {
+                Image(systemName: systemName)
+                    .font(.body.weight(.semibold))
+                    .foregroundColor(.white)
+            }
+        } else {
+            Color.clear.frame(width: 16, height: 16)
+        }
+    }
+
+    private func pageButton(
+        systemName: String,
+        isEnabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.title3.weight(.bold))
+                .foregroundColor(isEnabled ? .white : .white.opacity(0.3))
+        }
+        .disabled(!isEnabled)
     }
 }
 
