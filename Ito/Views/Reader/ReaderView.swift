@@ -535,7 +535,7 @@ private struct ReaderFooterView: View {
         .background(.ultraThinMaterial, in: Capsule())
         .environment(\.colorScheme, .dark)
         .padding(.horizontal, 20)
-        .padding(.bottom, safeAreaBottom > 0 ? safeAreaBottom : 16)
+        .padding(.bottom, safeAreaBottom)
     }
 
     @ViewBuilder
