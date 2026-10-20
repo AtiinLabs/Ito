@@ -649,13 +649,13 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertTrue(subject.history.requests.isEmpty)
     }
 
-    func testFailedSettingWriteDoesNotOptimisticallyPublish() async {
+    func testFailedSettingWriteShowsTheChoiceThenPutsBackTheSavedValue() async {
         let chapter = makeChapter("a", number: 1)
         let subject = makeSubject(chapters: [chapter], initial: chapter)
         subject.settings.enqueue(.failure(NovelReaderTestError.expected), for: .fontSize)
 
         subject.viewModel.setFontSize(30)
-        XCTAssertEqual(subject.viewModel.fontSize, 18)
+        XCTAssertEqual(subject.viewModel.fontSize, 30)
         await subject.viewModel.waitForAllOperationsForTesting()
 
         XCTAssertEqual(subject.viewModel.fontSize, 18)
@@ -663,22 +663,36 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertTrue(hasFinishedOutcome(.failed(.persistence), in: subject.logger.events))
     }
 
-    func testRapidSameSettingWritesSerializeAndConvergeToLatestAuthoritativeValue() async {
+    func testQuickSettingChangesBuildOnEachOtherAndSaveInOrder() async {
         let chapter = makeChapter("a", number: 1)
         let subject = makeSubject(chapters: [chapter], initial: chapter)
         subject.settings.enqueue(.suspended, for: .fontSize)
         subject.settings.enqueue(.success, for: .fontSize)
 
-        subject.viewModel.setFontSize(20)
-        subject.viewModel.setFontSize(26)
+        // Two A+ taps before the first save finishes: the second starts from the first.
+        subject.viewModel.setFontSize(subject.viewModel.fontSize + 2)
+        subject.viewModel.setFontSize(subject.viewModel.fontSize + 2)
+        XCTAssertEqual(subject.viewModel.fontSize, 22)
         await subject.settings.waitForPendingCount(1, for: .fontSize)
         XCTAssertEqual(subject.settings.writes, [.fontSize(20)])
-        XCTAssertEqual(subject.viewModel.fontSize, 18)
 
         subject.settings.resolveFirst(for: .fontSize)
         await subject.viewModel.waitForAllOperationsForTesting()
 
-        XCTAssertEqual(subject.settings.writes, [.fontSize(20), .fontSize(26)])
+        XCTAssertEqual(subject.settings.writes, [.fontSize(20), .fontSize(22)])
+        XCTAssertEqual(subject.viewModel.fontSize, 22)
+    }
+
+    func testFontSizeStaysWithinTheOfferedRange() async {
+        let chapter = makeChapter("a", number: 1)
+        let subject = makeSubject(chapters: [chapter], initial: chapter)
+
+        subject.viewModel.setFontSize(100)
+        XCTAssertEqual(subject.viewModel.fontSize, 40)
+        subject.viewModel.setFontSize(2)
+        XCTAssertEqual(subject.viewModel.fontSize, 10)
+        await subject.viewModel.waitForAllOperationsForTesting()
+        XCTAssertEqual(subject.settings.writes, [.fontSize(40), .fontSize(10)])
     }
 
     func testDisappearCancelsRetainedSettingWriteAndRejectsDismissedPresentationUpdate() async {
@@ -692,7 +706,6 @@ final class NovelReaderViewModelTests: XCTestCase {
         subject.settings.resolveFirst(for: .fontSize)
         await subject.viewModel.waitForAllOperationsForTesting()
 
-        XCTAssertEqual(subject.viewModel.fontSize, 18)
         let events = subject.logger.events.filter { $0.kind == .preferenceWrite }
         XCTAssertEqual(events.count, 2)
         XCTAssertEqual(events[0].phase, .started)

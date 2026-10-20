@@ -707,39 +707,57 @@ final class NovelReaderViewModel: ObservableObject {
 
     // MARK: - Settings
 
+    /// Font sizes the reader offers.
+    static let fontSizeRange: ClosedRange<Double> = 10...40
+
+    // Each setter shows the choice at once, then saves it; a failed save puts back the saved
+    // value. Showing it at once also means quick repeated taps build on each other.
+
     func setFontSize(_ value: Double) {
+        guard isActive else { return }
+        let clamped = min(max(value, Self.fontSizeRange.lowerBound), Self.fontSizeRange.upperBound)
+        fontSize = clamped
         enqueueSettingsWrite(kind: .fontSize) {
-            try await $0.setNovelFontSize(value)
+            try await $0.setNovelFontSize(clamped)
         }
     }
 
     func setLineSpacing(_ value: Double) {
+        guard isActive else { return }
+        let clamped = max(value, 0)
+        lineSpacing = clamped
         enqueueSettingsWrite(kind: .lineSpacing) {
-            try await $0.setNovelLineSpacing(value)
+            try await $0.setNovelLineSpacing(clamped)
         }
     }
 
     func setFontFamily(_ value: NovelFont) {
-        guard let preference = NovelFontPreference(rawValue: value.rawValue) else { return }
+        guard isActive, let preference = NovelFontPreference(rawValue: value.rawValue) else { return }
+        fontFamily = value
         enqueueSettingsWrite(kind: .fontFamily) {
             try await $0.setNovelFontFamily(preference)
         }
     }
 
     func setTheme(_ value: NovelTheme) {
-        guard let preference = NovelThemePreference(rawValue: value.rawValue) else { return }
+        guard isActive, let preference = NovelThemePreference(rawValue: value.rawValue) else { return }
+        theme = value
         enqueueSettingsWrite(kind: .theme) {
             try await $0.setNovelTheme(preference)
         }
     }
 
     func setIsPaging(_ value: Bool) {
+        guard isActive else { return }
+        isPaging = value
         enqueueSettingsWrite(kind: .isPaging) {
             try await $0.setNovelIsPaging(value)
         }
     }
 
     func setPrefetchChapters(_ value: Bool) {
+        guard isActive else { return }
+        prefetchChapters = value
         enqueueSettingsWrite(kind: .prefetchChapters) {
             try await $0.setNovelPrefetchChapters(value)
         }
@@ -779,6 +797,10 @@ final class NovelReaderViewModel: ObservableObject {
             do {
                 try await operation(settings)
             } catch {
+                // Put back the saved value, unless a newer choice is still being saved.
+                if self.settingsWriteGenerations[kind] == generation {
+                    self.applySetting(kind, from: settings.novelReaderSettings)
+                }
                 self.finishSettingsWrite(
                     kind: kind,
                     generation: generation,
@@ -800,7 +822,7 @@ final class NovelReaderViewModel: ObservableObject {
             }
             let outcome: PresentationEventOutcome
             if self.settingsWriteGenerations[kind] == generation {
-                self.applySettings(settings.novelReaderSettings)
+                self.applySetting(kind, from: settings.novelReaderSettings)
                 outcome = .succeeded
             } else {
                 outcome = .ignoredStale
@@ -831,13 +853,22 @@ final class NovelReaderViewModel: ObservableObject {
         settingsWriteOperationIDs[kind] = nil
     }
 
+    /// Takes saved settings, except those with a newer choice still being saved.
     private func applySettings(_ settings: NovelReaderSettingsSnapshot) {
-        fontSize = settings.fontSize
-        lineSpacing = settings.lineSpacing
-        fontFamily = NovelFont(rawValue: settings.fontFamily.rawValue) ?? .system
-        theme = NovelTheme(rawValue: settings.theme.rawValue) ?? .system
-        isPaging = settings.isPaging
-        prefetchChapters = settings.prefetchChapters
+        for kind in NovelReaderSettingKind.allCases where settingsWriteOperationIDs[kind] == nil {
+            applySetting(kind, from: settings)
+        }
+    }
+
+    private func applySetting(_ kind: NovelReaderSettingKind, from settings: NovelReaderSettingsSnapshot) {
+        switch kind {
+        case .fontSize: fontSize = settings.fontSize
+        case .lineSpacing: lineSpacing = settings.lineSpacing
+        case .fontFamily: fontFamily = NovelFont(rawValue: settings.fontFamily.rawValue) ?? .system
+        case .theme: theme = NovelTheme(rawValue: settings.theme.rawValue) ?? .system
+        case .isPaging: isPaging = settings.isPaging
+        case .prefetchChapters: prefetchChapters = settings.prefetchChapters
+        }
     }
 
     // MARK: - Discord presence
@@ -944,7 +975,7 @@ final class NovelReaderViewModel: ObservableObject {
 #endif
 }
 
-private enum NovelReaderSettingKind: Hashable {
+private enum NovelReaderSettingKind: Hashable, CaseIterable {
     case fontSize
     case lineSpacing
     case fontFamily
