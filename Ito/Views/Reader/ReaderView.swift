@@ -348,18 +348,14 @@ struct ReaderSettingsView: View {
 
     @Environment(\.dismiss) var dismiss
 
-    private let preloadOptions = [0, 3, 5, 10, 15, 20]
-
     var body: some View {
         NavigationView {
             Form {
                 Section(header: Text("Reading Mode")) {
                     Picker("Mode", selection: $viewer) {
-                        Text("Default (Automatic)").tag(Manga.Viewer.Default)
-                        Text("Right to Left").tag(Manga.Viewer.Rtl)
-                        Text("Left to Right").tag(Manga.Viewer.Ltr)
-                        Text("Vertical").tag(Manga.Viewer.Vertical)
-                        Text("Webtoon").tag(Manga.Viewer.Webtoon)
+                        ForEach(Self.modes, id: \.self) { mode in
+                            Text(Self.modeName(mode)).tag(mode)
+                        }
                     }
                     .pickerStyle(.inline)
                 }
@@ -369,17 +365,14 @@ struct ReaderSettingsView: View {
                     footer: Text("Number of images ahead of your current position to preload. Higher values use more data but reduce loading times.")
                 ) {
                     Picker("Preload Images", selection: $preloadCount) {
-                        ForEach(preloadOptions, id: \.self) { count in
-                            if count == 0 {
-                                Text("Off").tag(count)
-                            } else {
-                                Text("\(count) images").tag(count)
-                            }
+                        ForEach(ImagePreloadCountPreference.allCases, id: \.self) { option in
+                            Text(option == .none ? "Off" : "\(option.rawValue) images")
+                                .tag(option.rawValue)
                         }
                     }
                 }
 
-                Section(footer: Text("Manga requested default: \(modeName(defaultViewer))")) {}
+                Section(footer: Text(automaticModeDescription)) {}
             }
             .navigationTitle("Reader Settings")
             .navigationBarItems(
@@ -388,9 +381,18 @@ struct ReaderSettingsView: View {
         }
     }
 
-    private func modeName(_ mode: Manga.Viewer) -> String {
+    /// What Automatic means for this series.
+    private var automaticModeDescription: String {
+        defaultViewer == .Default
+            ? "Automatic reads right to left, since this series does not specify a mode."
+            : "Automatic uses this series' mode: \(Self.modeName(defaultViewer))."
+    }
+
+    static let modes: [Manga.Viewer] = [.Default, .Rtl, .Ltr, .Vertical, .Webtoon]
+
+    static func modeName(_ mode: Manga.Viewer) -> String {
         switch mode {
-        case .Default: return "None specified"
+        case .Default: return "Automatic"
         case .Rtl: return "Right to Left"
         case .Ltr: return "Left to Right"
         case .Vertical: return "Vertical"
@@ -508,11 +510,9 @@ private struct ReaderFooterView: View {
 
             Menu {
                 Picker("Reading Mode", selection: $overrideViewer) {
-                    Text("Auto").tag(Manga.Viewer.Default)
-                    Text("Right to Left").tag(Manga.Viewer.Rtl)
-                    Text("Left to Right").tag(Manga.Viewer.Ltr)
-                    Text("Vertical").tag(Manga.Viewer.Vertical)
-                    Text("Webtoon").tag(Manga.Viewer.Webtoon)
+                    ForEach(ReaderSettingsView.modes, id: \.self) { mode in
+                        Text(ReaderSettingsView.modeName(mode)).tag(mode)
+                    }
                 }
             } label: {
                 Image(systemName: "book.fill")
