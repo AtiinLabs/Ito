@@ -6,10 +6,8 @@ enum SettingsDestination: CaseIterable {
     case privacy
     case trackers
     case backup
-    case readerUnavailable
     case storage
     case network
-    case extensionsUnavailable
     case debugLogs
 }
 
@@ -29,9 +27,6 @@ struct SettingsView: View {
                     NavigationLink(destination: viewFactory.makeSettingsDestination(for: .privacy)) {
                         Label("Privacy", systemImage: "hand.raised")
                     }
-                    NavigationLink(destination: viewFactory.makeSettingsDestination(for: .readerUnavailable)) {
-                        Label("Reader", systemImage: "book")
-                    }
                 }
 
                 Section(header: Text("Data")) {
@@ -46,12 +41,6 @@ struct SettingsView: View {
                     }
                     NavigationLink(destination: viewFactory.makeSettingsDestination(for: .backup)) {
                         Label("Backup & Restore", systemImage: "arrow.triangle.2.circlepath.doc")
-                    }
-                }
-
-                Section(header: Text("Extensions")) {
-                    NavigationLink(destination: viewFactory.makeSettingsDestination(for: .extensionsUnavailable)) {
-                        Label("Browse Installers", systemImage: "puzzlepiece.extension")
                     }
                 }
 

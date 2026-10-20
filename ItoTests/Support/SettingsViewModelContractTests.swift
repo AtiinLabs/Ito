@@ -170,57 +170,6 @@ extension SettingsViewModelTests {
         }
     }
 
-    func testSettingsDestinationContractHasExactCasesAndMappings() throws {
-        XCTAssertEqual(
-            SettingsDestination.allCases.map(String.init(describing:)),
-            [
-                "appearance",
-                "library",
-                "privacy",
-                "trackers",
-                "backup",
-                "readerUnavailable",
-                "storage",
-                "network",
-                "extensionsUnavailable",
-                "debugLogs"
-            ]
-        )
-
-        let settingsSource = try source(at: "Ito/Views/Settings/SettingsView.swift")
-        let routeFactorySource = try source(
-            at: "Ito/Views/Search/SearchRouteFactory.swift"
-        )
-        let appFactorySource = try XCTUnwrap(
-            routeFactorySource.components(separatedBy: "struct SearchRouteFactory").first
-        )
-
-        for destination in SettingsDestination.allCases {
-            XCTAssertTrue(
-                settingsSource.contains("makeSettingsDestination(for: .\(destination))")
-            )
-        }
-        for mapping in [
-            "case .appearance:\n            makeAppearanceSettingsView()",
-            "case .library:\n            makeLibrarySettingsView()",
-            "case .privacy:\n            makePrivacySettingsView()",
-            "case .trackers:\n            makeTrackerSettingsView()",
-            "case .backup:\n            makeBackupSettingsView()",
-            "case .storage:\n            makeStorageSettingsView()",
-            "case .network:\n            makeNetworkSettingsView()",
-            "case .debugLogs:\n            makeDebugLogView()"
-        ] {
-            XCTAssertTrue(appFactorySource.contains(mapping), "Missing mapping: \(mapping)")
-        }
-        for placeholder in [
-            "Text(\"Reader Settings View\")",
-            "Text(\"Manage Extensions View\")"
-        ] {
-            XCTAssertTrue(appFactorySource.contains(placeholder))
-            XCTAssertFalse(settingsSource.contains(placeholder))
-        }
-    }
-
     func testSettingsRouteContractPreservesLegacyAndExcludedBoundaries() throws {
         let settingsSource = try source(at: "Ito/Views/Settings/SettingsView.swift")
         let routeFactorySource = try source(

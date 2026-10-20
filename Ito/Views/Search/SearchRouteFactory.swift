@@ -348,14 +348,10 @@ struct AppViewFactory {
             makeTrackerSettingsView()
         case .backup:
             makeBackupSettingsView()
-        case .readerUnavailable:
-            Text("Reader Settings View")
         case .storage:
             makeStorageSettingsView()
         case .network:
             makeNetworkSettingsView()
-        case .extensionsUnavailable:
-            Text("Manage Extensions View")
         case .debugLogs:
             makeDebugLogView()
         }
