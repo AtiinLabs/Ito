@@ -199,7 +199,7 @@ struct LibraryView: View {
     @ViewBuilder
     private var pillBar: some View {
         if dynamicTypeSize >= .accessibility1 {
-            Picker("Category", selection: categorySelectionBinding) {
+            Picker("List", selection: categorySelectionBinding) {
                 Text("All").tag(String?.none)
                 ForEach(viewModel.categories) { category in
                     Text(category.name).tag(String?.some(category.id))
@@ -262,7 +262,7 @@ struct LibraryView: View {
                 }
                 NavigationLink(destination: viewFactory.makeCategorySettingsView()) {
                     Image(systemName: "folder.badge.gearshape")
-                        .accessibilityLabel("Manage Categories")
+                        .accessibilityLabel("Manage Lists")
                 }
             }
         }

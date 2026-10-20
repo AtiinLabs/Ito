@@ -38,7 +38,7 @@ struct CategorySettingsView: View {
                 Text("Your Lists")
             }
         }
-        .navigationTitle("Manage Categories")
+        .navigationTitle("Manage Lists")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -124,7 +124,7 @@ struct CategorySettingsView: View {
                     TextField("List Name", text: $viewModel.newCategoryName)
                         .font(.body)
                 } footer: {
-                    Text("Enter a name for your new category.")
+                    Text("Enter a name for your new list.")
                 }
             }
             .navigationTitle("New List")
@@ -182,7 +182,7 @@ struct EditCategoryView: View {
                 TextField("List Name", text: $viewModel.editedCategoryName)
                     .font(.body)
             } footer: {
-                Text("Rename your category. Tap outside to dismiss.")
+                Text("Tap Done to save. Going back discards your changes.")
             }
         }
         .navigationTitle("Edit List")

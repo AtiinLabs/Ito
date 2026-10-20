@@ -17,7 +17,7 @@ struct LibrarySettingsView: View {
                     }
                 )) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Prompt Category on Save")
+                        Text("Choose List on Save")
                         Text("Show the list picker when saving a new series.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -26,7 +26,7 @@ struct LibrarySettingsView: View {
             } header: {
                 Text("Saving")
             } footer: {
-                Text("When enabled, saving a new series will immediately show the category assignment sheet instead of saving to Uncategorized. Only applies when you have at least one custom category.")
+                Text("When on, saving a new series opens the list picker instead of saving to Uncategorized. Only applies when you have at least one list of your own.")
             }
 
             Section {
