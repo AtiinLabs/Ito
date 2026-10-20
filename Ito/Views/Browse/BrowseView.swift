@@ -104,7 +104,7 @@ private struct BrowseContentView: View {
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
                     .background(Color.accentColor)
-                    .foregroundColor(.white)
+                    .foregroundColor(.itoOnAccent)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             }
             .padding(.top, 4)
@@ -133,7 +133,7 @@ private struct BrowseContentView: View {
                             .padding(.horizontal, 7)
                             .padding(.vertical, 2)
                             .background(Color.accentColor)
-                            .foregroundColor(.white)
+                            .foregroundColor(.itoOnAccent)
                             .clipShape(Capsule())
                     }
                 }
@@ -258,7 +258,7 @@ private struct UpdateRowView: View {
                     .frame(width: 70)
             } else {
                 Button("Update", action: onUpdate)
-                    .buttonStyle(.borderedProminent)
+                    .itoProminentButtonStyle()
                     .controlSize(.small)
             }
         }

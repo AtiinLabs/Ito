@@ -46,7 +46,7 @@ struct DiscoverErrorView: View {
                 Button(action: onRetry) {
                     Text("Try Again")
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(.itoOnAccent)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
                         .background(Color.accentColor)

@@ -123,7 +123,7 @@ private struct BootstrapGateView: View {
                 Button("Retry") {
                     Task { _ = await bootstrap.retry() }
                 }
-                .buttonStyle(.borderedProminent)
+                .itoProminentButtonStyle()
             }
             .padding()
         case .ready:
@@ -175,7 +175,7 @@ private struct BootstrapFailureView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("Retry", action: retry)
-                .buttonStyle(.borderedProminent)
+                .itoProminentButtonStyle()
         }
         .padding()
     }

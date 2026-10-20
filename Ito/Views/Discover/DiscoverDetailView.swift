@@ -307,7 +307,7 @@ struct DiscoverDetailView: View {
                             resolverViewModel.openSavedSource(mapping: mapping, payload: payload)
                         }
                         .font(.caption.weight(.bold))
-                        .buttonStyle(.borderedProminent)
+                        .itoProminentButtonStyle()
                         .disabled(resolverViewModel.processingMatchIdentity != nil)
                     }
                     .padding(.horizontal, 16)

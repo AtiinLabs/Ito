@@ -25,7 +25,18 @@ public extension Font {
 
 public extension Color {
     static let itoAccent = Color.accentColor
+    /// Text and icons drawn on an accent fill: white on the deep light-mode mint,
+    /// black on the pastel dark-mode mint.
+    static let itoOnAccent = Color("AccentForeground")
     static let itoSecondaryText = Color(.secondaryLabel)
     static let itoCardBackground = Color(.secondarySystemFill)
     static let itoBadgeBackground = Color(.tertiarySystemFill)
+}
+
+public extension View {
+    /// A filled accent button. Its label uses ``Color/itoOnAccent`` because the system keeps it
+    /// white, which is unreadable on the pastel dark-mode mint.
+    func itoProminentButtonStyle() -> some View {
+        buttonStyle(.borderedProminent).foregroundStyle(Color.itoOnAccent)
+    }
 }

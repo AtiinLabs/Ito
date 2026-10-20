@@ -158,7 +158,7 @@ struct DiscoverFilterView: View {
                                         .padding(.horizontal, 14)
                                         .padding(.vertical, 8)
                                         .background(isSelected ? Color.accentColor : Color(.tertiarySystemFill))
-                                        .foregroundColor(isSelected ? .white : .primary)
+                                        .foregroundColor(isSelected ? .itoOnAccent : .primary)
                                         .cornerRadius(16)
                                         .contentShape(Rectangle())
                                 }
@@ -398,7 +398,8 @@ struct DiscoverFilterView: View {
     }
 
     private func chipForeground(included: Bool, excluded: Bool) -> Color {
-        if included || excluded { return .white }
+        if included { return .itoOnAccent }
+        if excluded { return .white }
         return .primary
     }
 

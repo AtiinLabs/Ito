@@ -239,7 +239,7 @@ struct LibraryView: View {
                 .padding(.horizontal, 16)
                 .frame(minWidth: 44, minHeight: 44)
                 .background(isSelected ? Color.accentColor : Color(.systemGray5))
-                .foregroundColor(isSelected ? .white : .primary)
+                .foregroundColor(isSelected ? .itoOnAccent : .primary)
                 .clipShape(Capsule())
         }
     }
@@ -719,7 +719,7 @@ struct DeferredPluginView: View {
                 .padding(.horizontal, 32)
             if let retryTitle, let retry {
                 Button(retryTitle, action: retry)
-                    .buttonStyle(.borderedProminent)
+                    .itoProminentButtonStyle()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

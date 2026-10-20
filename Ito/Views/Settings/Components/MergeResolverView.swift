@@ -90,11 +90,11 @@ struct ConflictDetailCard: View {
                     Text(title)
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .foregroundColor(isSelected ? .white : .secondary)
+                        .foregroundColor(isSelected ? .itoOnAccent : .secondary)
                     Spacer()
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.white)
+                            .foregroundColor(.itoOnAccent)
                     } else {
                         Image(systemName: "circle")
                             .foregroundColor(.secondary)
@@ -104,11 +104,11 @@ struct ConflictDetailCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Label(category ?? "Uncategorized", systemImage: "folder")
                         .font(.caption2)
-                        .foregroundColor(isSelected ? .white : .primary)
+                        .foregroundColor(isSelected ? .itoOnAccent : .primary)
 
                     Label("\(history) chapters read", systemImage: "text.book.closed")
                         .font(.caption2)
-                        .foregroundColor(isSelected ? .white : .primary)
+                        .foregroundColor(isSelected ? .itoOnAccent : .primary)
                 }
             }
             .padding(10)
