@@ -458,6 +458,15 @@ public final class AppDatabase: Sendable {
             try ensureSystemCategory(in: db)
         }
 
+        // MARK: - v10: Reading Position
+        // Where the reader was inside `lastReadChapterKey`: a page index for manga and novels,
+        // seconds for video. Null when unknown, such as rows written before v10.
+        migrator.registerMigration("v10") { db in
+            try db.alter(table: "mediaReadProgress") { t in
+                t.add(column: "lastReadPosition", .double)
+            }
+        }
+
         return migrator
     }
 

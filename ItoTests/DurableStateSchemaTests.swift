@@ -27,9 +27,9 @@ struct DurableStateSchemaTests {
                 nullable: ["markedAt", "provenance"]
             ),
             "mediaReadProgress": .init(
-                columns: ["pluginId", "canonicalMediaId", "lastReadChapterKey", "updatedAt", "provenance"],
+                columns: ["pluginId", "canonicalMediaId", "lastReadChapterKey", "updatedAt", "provenance", "lastReadPosition"],
                 primaryKey: ["pluginId", "canonicalMediaId"],
-                nullable: ["updatedAt", "provenance"]
+                nullable: ["updatedAt", "provenance", "lastReadPosition"]
             ),
             "trackerLink": .init(
                 columns: ["pluginId", "canonicalMediaId", "providerId", "remoteMediaId", "updatedAt", "provenance"],

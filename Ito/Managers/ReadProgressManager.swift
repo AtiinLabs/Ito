@@ -7,6 +7,7 @@ public final class ReadProgressManager: ObservableObject {
     @Published private var readChapters: [MediaIdentity: Set<String>] = [:]
     @Published private var readChapterNumbers: [MediaIdentity: Set<Float>] = [:]
     @Published private var lastReadChapter: [MediaIdentity: String] = [:]
+    @Published private var lastReadPosition: [MediaIdentity: Double] = [:]
 
     private let dbPool: DatabasePool
     private weak var updateManager: UpdateManager?
@@ -41,6 +42,44 @@ public final class ReadProgressManager: ObservableObject {
                 )
             }
         )
+        lastReadPosition = Dictionary(
+            uniqueKeysWithValues: snapshot.2.compactMap { record in
+                record.lastReadPosition.map {
+                    (
+                        MediaIdentity(pluginId: record.pluginId, canonicalMediaId: record.canonicalMediaId),
+                        $0
+                    )
+                }
+            }
+        )
+    }
+
+    /// Remembers where the reader is inside `chapterKey`, which becomes the series' last-read chapter.
+    public func savePosition(
+        media: MediaIdentity,
+        chapterKey: String,
+        position: Double
+    ) async throws {
+        guard position.isFinite, position >= 0 else { return }
+        let now = Date()
+        try await dbPool.write { db in
+            try MediaReadProgressRecord(
+                pluginId: media.pluginId,
+                canonicalMediaId: media.canonicalMediaId,
+                lastReadChapterKey: chapterKey,
+                updatedAt: now,
+                provenance: .runtime,
+                lastReadPosition: position
+            ).save(db)
+        }
+        lastReadChapter[media] = chapterKey
+        lastReadPosition[media] = position
+    }
+
+    /// The saved position inside `chapterKey`, if it is the series' last-read chapter.
+    public func savedPosition(media: MediaIdentity, chapterKey: String) -> Double? {
+        guard lastReadChapter[media] == chapterKey else { return nil }
+        return lastReadPosition[media]
     }
 
     public func markAsRead(
@@ -66,18 +105,29 @@ public final class ReadProgressManager: ObservableObject {
                     provenance: .runtime
                 ).save(db)
             }
+            // Keep the saved position when the chapter being finished is the one it belongs to.
+            let existing = try MediaReadProgressRecord.fetchOne(
+                db,
+                key: ["pluginId": media.pluginId, "canonicalMediaId": media.canonicalMediaId]
+            )
             try MediaReadProgressRecord(
                 pluginId: media.pluginId,
                 canonicalMediaId: media.canonicalMediaId,
                 lastReadChapterKey: chapterId,
                 updatedAt: now,
-                provenance: .runtime
+                provenance: .runtime,
+                lastReadPosition: existing?.lastReadChapterKey == chapterId
+                    ? existing?.lastReadPosition
+                    : nil
             ).save(db)
         }
 
         readChapters[media, default: []].insert(chapterId)
         if let chapterNum {
             readChapterNumbers[media, default: []].insert(chapterNum)
+        }
+        if lastReadChapter[media] != chapterId {
+            lastReadPosition[media] = nil
         }
         lastReadChapter[media] = chapterId
     }

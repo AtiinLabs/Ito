@@ -51,6 +51,8 @@ public struct MediaReadProgressRecord: Codable, Hashable, Sendable, FetchableRec
     public var lastReadChapterKey: String
     public var updatedAt: Date?
     public var provenance: DurableStateProvenance?
+    /// Position inside `lastReadChapterKey`: page index (manga, novel) or seconds (video).
+    public var lastReadPosition: Double?
 }
 
 public struct TrackerLinkRecord: Codable, Hashable, Sendable, FetchableRecord, PersistableRecord {

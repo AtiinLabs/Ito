@@ -119,6 +119,62 @@ struct ReadProgressStoreTests {
         }
     }
 
+    @Test func positionIsSavedPerLastChapterAndSurvivesReload() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let manager = ReadProgressManager(dbPool: database.dbPool)
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+
+        try await manager.savePosition(media: media, chapterKey: "chapter-3", position: 12)
+
+        #expect(manager.savedPosition(media: media, chapterKey: "chapter-3") == 12)
+        #expect(manager.savedPosition(media: media, chapterKey: "chapter-4") == nil)
+        #expect(manager.lastReadChapter(for: media) == "chapter-3")
+        #expect(!manager.isRead(media: media, chapterId: "chapter-3"))
+
+        let reloaded = ReadProgressManager(dbPool: database.dbPool)
+        try await reloaded.reload()
+        #expect(reloaded.savedPosition(media: media, chapterKey: "chapter-3") == 12)
+    }
+
+    @Test func finishingTheSavedChapterKeepsItsPositionButAnotherChapterClearsIt() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let manager = ReadProgressManager(dbPool: database.dbPool)
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+
+        try await manager.savePosition(media: media, chapterKey: "chapter-3", position: 19)
+        try await manager.markAsRead(media: media, chapterId: "chapter-3", chapterNum: 3)
+        #expect(manager.savedPosition(media: media, chapterKey: "chapter-3") == 19)
+
+        try await manager.markAsRead(media: media, chapterId: "chapter-7", chapterNum: 7)
+        #expect(manager.savedPosition(media: media, chapterKey: "chapter-7") == nil)
+        let reloaded = ReadProgressManager(dbPool: database.dbPool)
+        try await reloaded.reload()
+        #expect(reloaded.lastReadChapter(for: media) == "chapter-7")
+        #expect(reloaded.savedPosition(media: media, chapterKey: "chapter-7") == nil)
+    }
+
+    @Test func rowsWithoutThePositionColumnDecodeWithNoPosition() throws {
+        // Backups made before v10 have no lastReadPosition column.
+        let queue = try DatabaseQueue()
+        let record = try queue.write { db in
+            try db.execute(sql: """
+                CREATE TABLE mediaReadProgress (
+                    pluginId TEXT NOT NULL, canonicalMediaId TEXT NOT NULL,
+                    lastReadChapterKey TEXT NOT NULL, updatedAt DATETIME, provenance TEXT
+                )
+                """)
+            try db.execute(sql: """
+                INSERT INTO mediaReadProgress (pluginId, canonicalMediaId, lastReadChapterKey)
+                VALUES ('plugin', 'media', 'chapter')
+                """)
+            return try MediaReadProgressRecord.fetchOne(db)
+        }
+        #expect(record?.lastReadChapterKey == "chapter")
+        #expect(record?.lastReadPosition == nil)
+    }
+
     private func expectMarkUpToNoOp(maxChapterNum: Float) async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }

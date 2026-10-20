@@ -2009,7 +2009,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             canonicalMediaId: identity.canonicalMediaId,
             lastReadChapterKey: record.lastReadChapterKey,
             updatedAt: record.updatedAt,
-            provenance: record.provenance
+            provenance: record.provenance,
+            lastReadPosition: record.lastReadPosition
         )
     }
 
