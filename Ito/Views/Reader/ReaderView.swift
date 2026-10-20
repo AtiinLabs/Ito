@@ -20,9 +20,6 @@ struct ReaderView: View {
     var body: some View {
         GeometryReader { geometry in
             readerBody(
-                safeAreaTop: geometry.safeAreaInsets.top > 0
-                    ? geometry.safeAreaInsets.top
-                    : 44,
                 safeAreaBottom: geometry.safeAreaInsets.bottom > 0
                     ? geometry.safeAreaInsets.bottom
                     : 34
@@ -48,7 +45,7 @@ struct ReaderView: View {
         .onDisappear { viewModel.disappear() }
     }
 
-    private func readerBody(safeAreaTop: CGFloat, safeAreaBottom: CGFloat) -> some View {
+    private func readerBody(safeAreaBottom: CGFloat) -> some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
@@ -87,7 +84,6 @@ struct ReaderView: View {
                         title: viewModel.manga.title,
                         chapterTitle: viewModel.currentChapter.title
                             ?? "Chapter \(viewModel.currentChapter.chapter ?? 0)",
-                        safeAreaTop: safeAreaTop,
                         onDismiss: { dismiss() }
                     )
 
@@ -149,7 +145,7 @@ struct ReaderView: View {
             }
 
             ForEach(Array(viewModel.pagedPages.enumerated()), id: \.offset) { position, page in
-                pageImage(for: page)
+                pageImage(for: page, number: position + 1)
                     .tag(position)
             }
 
@@ -193,7 +189,7 @@ struct ReaderView: View {
                                 chapterDivider(for: flatPage.chapter)
                             }
 
-                            pageImage(for: flatPage.page)
+                            pageImage(for: flatPage.page, number: flatPage.chapterPosition + 1)
                                 .id(flatPage.id)
                                 .onAppear {
                                     viewModel.continuousPageAppeared(flatPage)
@@ -317,13 +313,16 @@ struct ReaderView: View {
         }
     }
 
+    /// `number` is the page's place in its chapter, read out for image pages; text pages read
+    /// their own text.
     @ViewBuilder
-    private func pageImage(for page: Page) -> some View {
+    private func pageImage(for page: Page, number: Int) -> some View {
         switch page.content {
         case .url(let urlString):
             ZoomablePage(onTap: toggleUI) {
                 MangaImage(urlStr: urlString, headers: page.headers)
             }
+            .accessibilityLabel("Page \(number)")
         case .text(let text):
             Text(text)
                 .foregroundColor(.white)
@@ -403,7 +402,6 @@ struct ReaderSettingsView: View {
 private struct ReaderHeaderView: View {
     let title: String
     let chapterTitle: String
-    let safeAreaTop: CGFloat
     let onDismiss: () -> Void
 
     var body: some View {
@@ -434,9 +432,11 @@ private struct ReaderHeaderView: View {
                     .background(.ultraThinMaterial, in: Circle())
                     .environment(\.colorScheme, .dark)
             }
+            .accessibilityLabel("Close Reader")
         }
         .padding(.horizontal)
-        .padding(.top, safeAreaTop)
+        // The header's container already keeps clear of the top safe area.
+        .padding(.top, 8)
     }
 }
 
@@ -462,6 +462,7 @@ private struct ReaderFooterView: View {
         HStack {
             chapterButton(
                 systemName: "backward.end.fill",
+                label: isRightToLeft ? "Next Chapter" : "Previous Chapter",
                 isAvailable: isRightToLeft ? hasNext : hasPrev,
                 action: isRightToLeft ? onNextChapter : onPrevChapter
             )
@@ -473,12 +474,14 @@ private struct ReaderFooterView: View {
                     .font(.title3.weight(.semibold))
                     .foregroundColor(.white)
             }
+            .accessibilityLabel("Reader Settings")
 
             Spacer()
 
             HStack(spacing: 24) {
                 pageButton(
                     systemName: "chevron.left",
+                    label: isRightToLeft ? "Next Page" : "Previous Page",
                     isEnabled: isRightToLeft ? canGoForward : canGoBack,
                     action: isRightToLeft ? onNextPage : onPrevPage
                 )
@@ -487,9 +490,13 @@ private struct ReaderFooterView: View {
                     .font(.subheadline.weight(.bold).monospacedDigit())
                     .foregroundColor(.white)
                     .frame(minWidth: 60, alignment: .center)
+                    .accessibilityLabel(
+                        "Page \(displayTotal == 0 ? 0 : displayIndex + 1) of \(displayTotal)"
+                    )
 
                 pageButton(
                     systemName: "chevron.right",
+                    label: isRightToLeft ? "Previous Page" : "Next Page",
                     isEnabled: isRightToLeft ? canGoBack : canGoForward,
                     action: isRightToLeft ? onPrevPage : onNextPage
                 )
@@ -510,11 +517,13 @@ private struct ReaderFooterView: View {
                     .font(.title3.weight(.semibold))
                     .foregroundColor(.white)
             }
+            .accessibilityLabel("Reading Mode")
 
             Spacer()
 
             chapterButton(
                 systemName: "forward.end.fill",
+                label: isRightToLeft ? "Previous Chapter" : "Next Chapter",
                 isAvailable: isRightToLeft ? hasPrev : hasNext,
                 action: isRightToLeft ? onPrevChapter : onNextChapter
             )
@@ -530,6 +539,7 @@ private struct ReaderFooterView: View {
     @ViewBuilder
     private func chapterButton(
         systemName: String,
+        label: String,
         isAvailable: Bool,
         action: @escaping () -> Void
     ) -> some View {
@@ -539,13 +549,17 @@ private struct ReaderFooterView: View {
                     .font(.body.weight(.semibold))
                     .foregroundColor(.white)
             }
+            .accessibilityLabel(label)
         } else {
-            Color.clear.frame(width: 16, height: 16)
+            Color.clear
+                .frame(width: 16, height: 16)
+                .accessibilityHidden(true)
         }
     }
 
     private func pageButton(
         systemName: String,
+        label: String,
         isEnabled: Bool,
         action: @escaping () -> Void
     ) -> some View {
@@ -555,6 +569,7 @@ private struct ReaderFooterView: View {
                 .foregroundColor(isEnabled ? .white : .white.opacity(0.3))
         }
         .disabled(!isEnabled)
+        .accessibilityLabel(label)
     }
 }
 

@@ -18,9 +18,6 @@ struct NovelReaderView: View {
     var body: some View {
         GeometryReader { geometry in
             readerBody(
-                safeAreaTop: geometry.safeAreaInsets.top > 0
-                    ? geometry.safeAreaInsets.top
-                    : 44,
                 safeAreaBottom: geometry.safeAreaInsets.bottom > 0
                     ? geometry.safeAreaInsets.bottom
                     : 34
@@ -40,7 +37,6 @@ struct NovelReaderView: View {
     }
 
     private func readerBody(
-        safeAreaTop: CGFloat,
         safeAreaBottom: CGFloat
     ) -> some View {
         ZStack {
@@ -79,7 +75,6 @@ struct NovelReaderView: View {
                     NovelReaderHeaderView(
                         title: viewModel.novel.title,
                         chapterTitle: chapterTitle(viewModel.currentChapter),
-                        safeAreaTop: safeAreaTop,
                         onDismiss: { dismiss() }
                     )
 
@@ -256,11 +251,9 @@ struct NovelReaderView: View {
         ZStack {
             Color.black.opacity(0.4)
                 .edgesIgnoringSafeArea(.all)
-                .onTapGesture {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        showSettings = false
-                    }
-                }
+                .onTapGesture(perform: closeSettings)
+                .accessibilityLabel("Close Settings")
+                .accessibilityAddTraits(.isButton)
                 .transition(.opacity)
                 .zIndex(10)
 
@@ -299,7 +292,7 @@ struct NovelReaderView: View {
                         UIScreen.main.brightness = value
                     }
                 )
-                .frame(height: 280)
+                // No fixed height: the panel grows with larger text sizes.
                 .padding(.bottom, safeAreaBottom)
                 .background(Color(UIColor.systemBackground))
                 .cornerRadius(24)
@@ -308,6 +301,13 @@ struct NovelReaderView: View {
             .edgesIgnoringSafeArea(.bottom)
             .transition(.move(edge: .bottom))
             .zIndex(11)
+        }
+        .accessibilityAction(.escape, closeSettings)
+    }
+
+    private func closeSettings() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            showSettings = false
         }
     }
 
@@ -344,7 +344,6 @@ struct NovelReaderView: View {
 private struct NovelReaderHeaderView: View {
     let title: String
     let chapterTitle: String
-    let safeAreaTop: CGFloat
     let onDismiss: () -> Void
 
     var body: some View {
@@ -375,9 +374,11 @@ private struct NovelReaderHeaderView: View {
                     .background(.ultraThinMaterial, in: Circle())
                     .environment(\.colorScheme, .dark)
             }
+            .accessibilityLabel("Close Reader")
         }
         .padding(.horizontal)
-        .padding(.top, safeAreaTop)
+        // The header's container already keeps clear of the top safe area.
+        .padding(.top, 8)
     }
 }
 
@@ -398,8 +399,9 @@ private struct NovelReaderFooterView: View {
                         .font(.body.weight(.semibold))
                         .foregroundColor(.white)
                 }
+                .accessibilityLabel("Previous Chapter")
             } else {
-                Color.clear.frame(width: 16, height: 16)
+                Color.clear.frame(width: 16, height: 16).accessibilityHidden(true)
             }
 
             Spacer()
@@ -409,6 +411,7 @@ private struct NovelReaderFooterView: View {
                     .font(.title3.weight(.semibold))
                     .foregroundColor(.white)
             }
+            .accessibilityLabel("Reader Settings")
 
             Spacer()
 
@@ -418,8 +421,9 @@ private struct NovelReaderFooterView: View {
                         .font(.body.weight(.semibold))
                         .foregroundColor(.white)
                 }
+                .accessibilityLabel("Next Chapter")
             } else {
-                Color.clear.frame(width: 16, height: 16)
+                Color.clear.frame(width: 16, height: 16).accessibilityHidden(true)
             }
         }
         .padding(.horizontal, 24)
@@ -608,42 +612,39 @@ struct NovelReaderSettingsView: View {
                     readingTab
                 }
             }
-            .frame(height: 170, alignment: .top)
+            // A minimum, not a fixed height, so larger text sizes are not cut off.
+            .frame(minHeight: 170, alignment: .top)
 
             // Bottom Toolbar (Footer)
             HStack {
                 Spacer()
 
-                Button(action: { activeTab = .typography }) {
-                    Image(systemName: "textformat")
-                        .font(.title2)
-                        .frame(width: 60, height: 44)
-                        .foregroundColor(activeTab == .typography ? .primary : Color(UIColor.tertiaryLabel))
-                }
+                tabButton(.typography, systemName: "textformat", label: "Text")
 
                 Spacer()
 
-                Button(action: { activeTab = .theme }) {
-                    Image(systemName: "sun.max.fill")
-                        .font(.title2)
-                        .frame(width: 60, height: 44)
-                        .foregroundColor(activeTab == .theme ? .primary : Color(UIColor.tertiaryLabel))
-                }
+                tabButton(.theme, systemName: "sun.max.fill", label: "Appearance")
 
                 Spacer()
 
-                Button(action: { activeTab = .reading }) {
-                    Image(systemName: "book.fill")
-                        .font(.title2)
-                        .frame(width: 60, height: 44)
-                        .foregroundColor(activeTab == .reading ? .primary : Color(UIColor.tertiaryLabel))
-                }
+                tabButton(.reading, systemName: "book.fill", label: "Reading")
 
                 Spacer()
             }
             .padding(.bottom, 24)
         }
         .background(Color(UIColor.systemBackground))
+    }
+
+    private func tabButton(_ tab: SettingsTab, systemName: String, label: String) -> some View {
+        Button(action: { activeTab = tab }) {
+            Image(systemName: systemName)
+                .font(.title2)
+                .frame(width: 60, height: 44)
+                .foregroundColor(activeTab == tab ? .primary : Color(UIColor.tertiaryLabel))
+        }
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(activeTab == tab ? .isSelected : [])
     }
 
     private var typographyTab: some View {
@@ -656,6 +657,7 @@ struct NovelReaderSettingsView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color(UIColor.secondarySystemBackground))
                 }
+                .accessibilityLabel("Larger Text")
 
                 Divider()
 
@@ -665,6 +667,7 @@ struct NovelReaderSettingsView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color(UIColor.tertiarySystemBackground))
                 }
+                .accessibilityLabel("Smaller Text")
             }
             .foregroundColor(.primary)
             .frame(width: 70, height: 140)
@@ -698,7 +701,7 @@ struct NovelReaderSettingsView: View {
                             .foregroundColor(.secondary)
                     }
                     .padding()
-                    .frame(height: 62)
+                    .frame(minHeight: 62)
                     .background(Color(UIColor.secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
@@ -711,11 +714,12 @@ struct NovelReaderSettingsView: View {
                             Text("Scrolling")
                                 .font(.caption.weight(.medium))
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(maxWidth: .infinity, minHeight: 54)
                         .background(!isPaging ? Color(UIColor.secondarySystemBackground) : Color.clear)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .foregroundColor(!isPaging ? .primary : .secondary)
                     }
+                    .accessibilityAddTraits(!isPaging ? .isSelected : [])
 
                     Button(action: { isPaging = true }) {
                         VStack(spacing: 4) {
@@ -723,14 +727,15 @@ struct NovelReaderSettingsView: View {
                             Text("Paging")
                                 .font(.caption.weight(.medium))
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(maxWidth: .infinity, minHeight: 54)
                         .background(isPaging ? Color(UIColor.secondarySystemBackground) : Color.clear)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .foregroundColor(isPaging ? .primary : .secondary)
                     }
+                    .accessibilityAddTraits(isPaging ? .isSelected : [])
                 }
                 .padding(4)
-                .frame(height: 62)
+                .frame(minHeight: 62)
                 .background(Color(UIColor.systemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(
@@ -779,6 +784,8 @@ struct NovelReaderSettingsView: View {
                         }
                         .frame(width: 50, height: 50)
                     }
+                    .accessibilityLabel("\(t.rawValue) theme")
+                    .accessibilityAddTraits(theme == t ? .isSelected : [])
                     Spacer()
                 }
             }
@@ -825,6 +832,20 @@ struct NovelReaderSettingsView: View {
                 )
             }
             .frame(height: 60)
+            // VoiceOver: one adjustable control, swiped up or down in steps of 10%.
+            .accessibilityElement()
+            .accessibilityLabel("Brightness")
+            .accessibilityValue("\(Int((brightness * 100).rounded())) percent")
+            .accessibilityAdjustableAction { direction in
+                let step: CGFloat
+                switch direction {
+                case .increment: step = 0.1
+                case .decrement: step = -0.1
+                @unknown default: return
+                }
+                brightness = max(0, min(1, brightness + step))
+                onBrightnessChange(brightness)
+            }
             .onAppear {
                 brightness = UIScreen.main.brightness
             }
