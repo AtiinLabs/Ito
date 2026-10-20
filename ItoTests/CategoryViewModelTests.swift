@@ -146,6 +146,29 @@ final class CategoryViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.renameDismissalID, "alpha")
     }
 
+    func testSettingsBeginRenameForAnotherCategoryWorksWhileRenameIsSaving() async {
+        let (viewModel, service, _, _) = makeSettings()
+        service.renameResponses = [.suspended]
+        viewModel.beginRename(categoryID: "alpha")
+        viewModel.editedCategoryName = "Alpha Edited"
+
+        let first = Task { await viewModel.saveRename() }
+        await waitUntil { service.pendingRenameCount == 1 }
+        viewModel.endRename(categoryID: "alpha")
+        viewModel.beginRename(categoryID: "beta")
+
+        XCTAssertEqual(viewModel.editingCategoryID, "beta")
+        XCTAssertEqual(viewModel.editedCategoryName, "Beta")
+
+        service.resolveRename(at: 0, result: .success(()))
+        await first.value
+
+        XCTAssertEqual(viewModel.editingCategoryID, "beta")
+        XCTAssertEqual(viewModel.editedCategoryName, "Beta")
+        XCTAssertNil(viewModel.renameDismissalID)
+        XCTAssertTrue(viewModel.canSaveRename)
+    }
+
     func testSettingsNormalizesRenameAndDeleteWhenCategoryDisappears() {
         let (viewModel, service, _, _) = makeSettings()
         viewModel.beginRename(categoryID: "alpha")

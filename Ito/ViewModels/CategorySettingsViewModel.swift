@@ -130,7 +130,7 @@ final class CategorySettingsViewModel: ObservableObject {
     }
 
     func beginRename(categoryID: String) {
-        guard !isRenaming,
+        guard !(isRenaming && editingCategoryID == categoryID),
               let category = categories.first(where: { $0.id == categoryID }),
               !category.isSystemCategory else { return }
         renameSessionID = UUID()
