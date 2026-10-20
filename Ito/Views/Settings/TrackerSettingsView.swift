@@ -87,7 +87,7 @@ struct TrackerSettingsView: View {
                         ProgressView()
                             .padding(.trailing, 8)
                     }
-                    Text("Log Out")
+                    Text("Sign Out")
                         .foregroundColor(.red)
                 }
             }
@@ -102,7 +102,7 @@ struct TrackerSettingsView: View {
                         ProgressView()
                             .padding(.trailing, 8)
                     }
-                    Text("Login with \(provider.name)")
+                    Text("Sign In with \(provider.name)")
                         .foregroundColor(.accentColor)
                 }
             }
