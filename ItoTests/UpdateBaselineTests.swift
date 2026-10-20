@@ -83,9 +83,10 @@ struct UpdateBaselineTests {
         #expect(try await persistedItem(database, id: item.id).knownChapterCount == 11)
     }
 
-    @Test func failedFetchDoesNotMutatePersistedUpdateStateOrBadge() async throws {
+    @Test func failedFetchRecordsOnlyTheAttemptTime() async throws {
         let checkedAt = Date(timeIntervalSince1970: 1_700_000_001)
         let updatedAt = Date(timeIntervalSince1970: 1_700_000_002)
+        let attemptedAt = Date(timeIntervalSince1970: 1_700_003_600)
         let (database, manager, item) = try await makeSubject(
             knownCount: 10,
             status: "ongoing",
@@ -94,7 +95,7 @@ struct UpdateBaselineTests {
         )
         defer { database.cleanup() }
 
-        let delta = await manager.processUpdate(for: item) {
+        let delta = await manager.processUpdate(for: item, checkedAt: attemptedAt) {
             throw StubError.fetchFailed
         }
 
@@ -103,7 +104,7 @@ struct UpdateBaselineTests {
         let persisted = try await persistedItem(database, id: item.id)
         #expect(persisted.knownChapterCount == 10)
         #expect(persisted.status == "ongoing")
-        #expect(persisted.lastCheckedAt == checkedAt)
+        #expect(persisted.lastCheckedAt == attemptedAt)
         #expect(persisted.lastUpdatedAt == updatedAt)
     }
 

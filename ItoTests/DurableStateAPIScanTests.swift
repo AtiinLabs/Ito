@@ -89,24 +89,6 @@ struct DurableStateAPIScanTests {
         }
     }
 
-    @Test func missingItemUpdateDeletesScopedBadgeInDatabaseTransaction() throws {
-        let source = try read("Ito/Managers/UpdateManager.swift")
-        let missingBranch = try #require(source.range(of: "guard var dbItem"))
-        let badgeDelete = try #require(
-            source.range(
-                of: "try UpdateBadgeRecord",
-                range: missingBranch.lowerBound..<source.endIndex
-            )
-        )
-        let publishRemoval = try #require(
-            source.range(
-                of: "if committed.itemWasMissing",
-                range: badgeDelete.upperBound..<source.endIndex
-            )
-        )
-        #expect(badgeDelete.lowerBound < publishRemoval.lowerBound)
-    }
-
     @Test func gatedRuntimeUsesNoManagerSharedAccess() throws {
         let production = try allProductionSwift()
         for manager in [

@@ -3,7 +3,94 @@ import Combine
 import Foundation
 import SwiftUI
 import GRDB
+import Network
 import ito_runner
+
+/// Whether the device is on a network that automatic update checks may use with "Wi-Fi only" on.
+nonisolated protocol UpdateNetworkConditions: Sendable {
+    /// `true` on Wi-Fi or wired networks; `false` on cellular, personal hotspots or no network.
+    nonisolated func isOnUnmeteredNetwork() async -> Bool
+}
+
+/// Reads the current network path once.
+nonisolated struct PathMonitorNetworkConditions: UpdateNetworkConditions {
+    nonisolated func isOnUnmeteredNetwork() async -> Bool {
+        await withCheckedContinuation { continuation in
+            let monitor = NWPathMonitor()
+            let firstPath = OnceFlag()
+            monitor.pathUpdateHandler = { path in
+                guard firstPath.claim() else { return }
+                monitor.cancel()
+                continuation.resume(returning: path.status == .satisfied && !path.isExpensive)
+            }
+            monitor.start(queue: DispatchQueue(label: "moe.itoapp.ito.update-network-path"))
+        }
+    }
+}
+
+/// Lets exactly one caller through, from any thread.
+nonisolated final class OnceFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var claimed = false
+
+    /// - Returns: `true` the first time only.
+    func claim() -> Bool {
+        lock.withLock {
+            defer { claimed = true }
+            return !claimed
+        }
+    }
+}
+
+/// Fetches the current chapter count and status of library series from their sources.
+@MainActor
+protocol LibraryUpdateSource: AnyObject {
+    /// The sources that can be checked now.
+    var installedPluginIDs: Set<String> { get }
+    func fetchUpdate(for item: LibraryItem) async throws -> UpdateManager.SuccessfulUpdate
+}
+
+/// Checks series through their installed plugins.
+@MainActor
+final class PluginLibraryUpdateSource: LibraryUpdateSource {
+    private let pluginManager: PluginManager
+
+    init(pluginManager: PluginManager) {
+        self.pluginManager = pluginManager
+    }
+
+    var installedPluginIDs: Set<String> {
+        Set(pluginManager.installedPlugins.keys)
+    }
+
+    func fetchUpdate(for item: LibraryItem) async throws -> UpdateManager.SuccessfulUpdate {
+        let runner = try await pluginManager.getRunner(for: item.pluginId)
+        switch item.effectiveType {
+        case .manga:
+            let manga = try await runner.getMangaUpdate(manga: try JSONDecoder().decode(Manga.self, from: item.rawPayload))
+            return UpdateManager.SuccessfulUpdate(
+                freshCount: manga.chapters?.distinctChapterCount ?? 0,
+                status: String(describing: manga.status)
+            )
+        case .anime:
+            let anime = try await runner.getAnimeUpdate(
+                anime: try JSONDecoder().decode(Anime.self, from: item.rawPayload),
+                needsDetails: false,
+                needsEpisodes: true
+            )
+            return UpdateManager.SuccessfulUpdate(
+                freshCount: anime.episodes?.distinctChapterCount ?? 0,
+                status: String(describing: anime.status)
+            )
+        case .novel:
+            let novel = try await runner.getNovelUpdate(novel: try JSONDecoder().decode(Novel.self, from: item.rawPayload))
+            return UpdateManager.SuccessfulUpdate(
+                freshCount: novel.chapters?.distinctChapterCount ?? 0,
+                status: String(describing: novel.status)
+            )
+        }
+    }
+}
 
 @MainActor
 public class UpdateManager: ObservableObject {
@@ -24,16 +111,38 @@ public class UpdateManager: ObservableObject {
     @Published public private(set) var totalItemsToCheck: Int = 0
     @Published public private(set) var itemsCheckedCurrentRun: Int = 0
 
-    private let dbPool: DatabasePool
-    private let pluginManager: PluginManager?
-    private var settingsStore: AppSettingsStore?
+    /// Sources checked at the same time. Series of one source are always checked one at a time.
+    static let maxConcurrentSources = 3
+    /// Background checks look at most this share of the eligible library, at least `minimumBackgroundBatch`.
+    private static let backgroundBatchDivisor = 4
+    private static let minimumBackgroundBatch = 5
 
+    private let dbPool: DatabasePool
+    private let updateSource: (any LibraryUpdateSource)?
+    private let networkConditions: any UpdateNetworkConditions
+    private let sourcePacingNanoseconds: UInt64
+    private let now: () -> Date
+    private var settingsStore: AppSettingsStore?
+    /// No new series are started after this, so a background run ends inside its time.
+    private var runDeadline: Date?
+
+    /// - Parameters:
+    ///   - updateSource: Where series are checked; without one, checks do nothing.
+    ///   - networkConditions: Whether the current network allows automatic checks on Wi-Fi only.
+    ///   - sourcePacingNanoseconds: The pause between two requests to the same source.
+    ///   - now: The clock used for ordering, recorded check times and time budgets.
     internal init(
         dbPool: DatabasePool,
-        pluginManager: PluginManager? = nil
+        updateSource: (any LibraryUpdateSource)? = nil,
+        networkConditions: any UpdateNetworkConditions = PathMonitorNetworkConditions(),
+        sourcePacingNanoseconds: UInt64 = 500_000_000,
+        now: @escaping () -> Date = Date.init
     ) {
         self.dbPool = dbPool
-        self.pluginManager = pluginManager
+        self.updateSource = updateSource
+        self.networkConditions = networkConditions
+        self.sourcePacingNanoseconds = sourcePacingNanoseconds
+        self.now = now
     }
 
     func configure(settingsStore: AppSettingsStore) {
@@ -42,11 +151,43 @@ public class UpdateManager: ObservableObject {
 
     // MARK: - Core Refresh Flow
 
-    @MainActor
+    /// Checks every eligible series, for a refresh the user asked for. Runs on any network.
     public func checkForUpdates() async {
+        _ = await runSmartUpdate(isBackground: false, budget: nil)
+    }
+
+    /// Entry point for BGAppRefreshTask: checks the series most likely to have new chapters. With
+    /// "Wi-Fi only" on, it does nothing on cellular or other expensive networks.
+    /// - Parameter budget: Seconds after which no new series are started; iOS gives an app
+    ///   refresh task about 30 seconds in all.
+    /// - Returns: The series with new chapters and how many are new.
+    public func checkForUpdatesInBackground(budget: TimeInterval = 20) async -> [(LibraryItem, Int)] {
+        await runSmartUpdate(isBackground: true, budget: budget)
+    }
+
+    private func runSmartUpdate(isBackground: Bool, budget: TimeInterval?) async -> [(LibraryItem, Int)] {
         guard !isRefreshing else {
             AppLogger.update.debug("🔄 [UpdateManager] Already refreshing, skipping.")
-            return
+            return []
+        }
+        guard let settingsStore else {
+            AppLogger.update.error("🔄 [UpdateManager] Settings unavailable before durable bootstrap.")
+            return []
+        }
+        guard let updateSource, case let installed = updateSource.installedPluginIDs, !installed.isEmpty else {
+            AppLogger.update.debug("🔄 [UpdateManager] No plugins installed, nothing to check.")
+            return []
+        }
+        isRefreshing = true
+        let started = now()
+        runDeadline = budget.map { started.addingTimeInterval($0) }
+        defer {
+            isRefreshing = false
+            runDeadline = nil
+        }
+        if isBackground, settingsStore.wifiOnlyUpdates, await !networkConditions.isOnUnmeteredNetwork() {
+            AppLogger.update.debug("🔄 [UpdateManager] Wi-Fi only: skipping the automatic check on this network.")
+            return []
         }
 
         let items: [LibraryItem]
@@ -54,119 +195,57 @@ public class UpdateManager: ObservableObject {
             items = try await dbPool.read { db in try LibraryItem.fetchAll(db) }
         } catch {
             AppLogger.update.error("🔄 [UpdateManager] Failed to load library: \(error)")
-            return
-        }
-        guard !items.isEmpty else {
-            AppLogger.update.debug("🔄 [UpdateManager] No library items to check.")
-            return
-        }
-
-        _ = await runSmartUpdate(items: items, isBackground: false)
-    }
-
-    /// Entry point for BGAppRefreshTask.
-    /// Returns the items that have new chapters and their new chapter count.
-    @MainActor
-    public func checkForUpdatesInBackground() async -> [(LibraryItem, Int)] {
-        guard !isRefreshing else { return [] }
-
-        AppLogger.update.debug("🔄 [UpdateManager] Starting background update check.")
-        let items: [LibraryItem]
-        do {
-            items = try await dbPool.read { db in
-                try LibraryItem.fetchAll(db)
-            }
-        } catch {
-            AppLogger.update.error("🔄 [UpdateManager] Background error fetching items: \(error)")
             return []
         }
 
-        return await runSmartUpdate(items: items, isBackground: true)
-    }
-
-    @MainActor
-    private func runSmartUpdate(items: [LibraryItem], isBackground: Bool) async -> [(LibraryItem, Int)] {
-        AppLogger.update.debug("\("🔄 [UpdateManager] Starting smart update check for \(items.count)") total items...")
-
-        // Wait for PluginManager to finish loading plugins on cold start
-        var waitAttempts = 0
-        while pluginManager?.installedPlugins.isEmpty == true && waitAttempts < 20 {
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            waitAttempts += 1
-        }
-
-        guard pluginManager?.installedPlugins.isEmpty == false else {
-            AppLogger.update.debug("🔄 [UpdateManager] No plugins loaded, aborting.")
-            return []
-        }
-
-        isRefreshing = true
-        var updatedItemsWithCounts: [(LibraryItem, Int)] = []
-
-        // 1. Filter out completed/cancelled if setting is on
-        guard let settingsStore else {
-            AppLogger.update.error("🔄 [UpdateManager] Settings unavailable before durable bootstrap.")
-            return []
-        }
-        let skipCompleted = settingsStore.skipCompleted
-        var candidates = items
-        if skipCompleted {
-            candidates = candidates.filter { item in
-                let status = item.status?.lowercased() ?? ""
-                return status != "completed" && status != "cancelled"
-            }
-        }
-
-        // 2. Score items
-        var scoredItems: [(item: LibraryItem, score: Int)] = candidates.map { item in
-            let score = calculateScore(for: item)
-            return (item, score)
-        }
-
-        scoredItems.sort { $0.score > $1.score }
-
-        // 3. Dynamic Batch Size (only for background updates)
-        let maxBatchSize = max(5, items.count / 4)
-        let batchItems = isBackground && items.count > 10
-            ? Array(scoredItems.prefix(maxBatchSize).map(\.item))
-            : scoredItems.map(\.item)
-
-        totalItemsToCheck = batchItems.count
+        let batch = plannedBatch(
+            from: items,
+            installedPluginIDs: installed,
+            skipCompleted: settingsStore.skipCompleted,
+            isBackground: isBackground
+        )
+        totalItemsToCheck = batch.count
         itemsCheckedCurrentRun = 0
+        AppLogger.update.debug("🔄 [UpdateManager] Checking \(batch.count) of \(items.count) series.")
 
-        AppLogger.update.debug("🔄 [UpdateManager] Batch size: \(batchItems.count)")
-
-        // 4. Check Items
-        for item in batchItems {
-            if Task.isCancelled { break }
-
-            AppLogger.update.debug("🔄 [UpdateManager] Checking: \(item.title)")
-            if let newCount = await checkSingleItem(item) {
-                updatedItemsWithCounts.append((item, newCount))
-            }
-            itemsCheckedCurrentRun += 1
-            AppLogger.update.debug("🔄 [UpdateManager] Progress: \(self.itemsCheckedCurrentRun)/\(self.totalItemsToCheck)")
-
-            // Be gentle on source networks for big manual updates
-            if !isBackground {
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
-            }
-        }
-
-        AppLogger.update.debug("\("🔄 [UpdateManager] Finished smart update. Found \(updatedItemsWithCounts.count)") new updates.")
-        isRefreshing = false
-        return updatedItemsWithCounts
+        let updated = await check(Self.sourceQueues(batch))
+        AppLogger.update.debug("🔄 [UpdateManager] Finished: \(updated.count) series have new chapters.")
+        return updated
     }
 
-    private func calculateScore(for item: LibraryItem) -> Int {
+    /// The series to check, most likely to have new chapters first. Series whose plugin is not
+    /// installed are skipped, and with `skipCompleted` so are completed and cancelled ones.
+    private func plannedBatch(
+        from items: [LibraryItem],
+        installedPluginIDs: Set<String>,
+        skipCompleted: Bool,
+        isBackground: Bool
+    ) -> [LibraryItem] {
+        let date = now()
+        let eligible = items.filter { item in
+            guard installedPluginIDs.contains(item.pluginId) else { return false }
+            guard skipCompleted else { return true }
+            let status = item.status?.lowercased() ?? ""
+            return status != "completed" && status != "cancelled"
+        }
+        let ordered = eligible
+            .map { (item: $0, score: Self.score(for: $0, at: date)) }
+            .sorted { $0.score != $1.score ? $0.score > $1.score : $0.item.id < $1.item.id }
+            .map(\.item)
+        guard isBackground, ordered.count > 10 else { return ordered }
+        return Array(ordered.prefix(max(Self.minimumBackgroundBatch, ordered.count / Self.backgroundBatchDivisor)))
+    }
+
+    private static func score(for item: LibraryItem, at date: Date) -> Int {
         var baseStatusScore = 7 // Unknown/nil
         if let status = item.status?.lowercased() {
             if status.contains("ongoing") { baseStatusScore = 10 } else if status.contains("hiatus") { baseStatusScore = 3 }
         }
 
+        // Failed attempts count as checks, so a series that keeps failing does not stay first.
         let hoursSinceChecked: Int
         if let lastChecked = item.lastCheckedAt {
-            let diff = Calendar.current.dateComponents([.hour], from: lastChecked, to: Date()).hour ?? 0
+            let diff = Calendar.current.dateComponents([.hour], from: lastChecked, to: date).hour ?? 0
             hoursSinceChecked = min(24, max(0, diff))
         } else {
             hoursSinceChecked = 24
@@ -174,7 +253,7 @@ public class UpdateManager: ObservableObject {
 
         var recentUpdateBonus = 0
         if let lastUpdated = item.lastUpdatedAt {
-            let daysSinceUpdate = Calendar.current.dateComponents([.day], from: lastUpdated, to: Date()).day ?? 999
+            let daysSinceUpdate = Calendar.current.dateComponents([.day], from: lastUpdated, to: date).day ?? 999
             if daysSinceUpdate <= 7 {
                 recentUpdateBonus = 30
             }
@@ -183,47 +262,63 @@ public class UpdateManager: ObservableObject {
         return baseStatusScore + hoursSinceChecked + recentUpdateBonus
     }
 
-    private func checkSingleItem(_ item: LibraryItem) async -> Int? {
-        do {
-            guard let pluginManager else { return nil }
-            let runner = try await pluginManager.getRunner(for: item.pluginId)
+    /// Groups series by source, keeping their order, with sources in order of their first series.
+    private static func sourceQueues(_ batch: [LibraryItem]) -> [[LibraryItem]] {
+        let queues = Dictionary(grouping: batch, by: \.pluginId)
+        var started = Set<String>()
+        return batch.compactMap { item in
+            started.insert(item.pluginId).inserted ? queues[item.pluginId] : nil
+        }
+    }
 
-            let delta = await processUpdate(for: item) {
-                switch item.effectiveType {
-                case .manga:
-                    let baseManga = try JSONDecoder().decode(Manga.self, from: item.rawPayload)
-                    let fullManga = try await runner.getMangaUpdate(manga: baseManga)
-                    return SuccessfulUpdate(
-                        freshCount: fullManga.chapters?.distinctChapterCount ?? 0,
-                        status: String(describing: fullManga.status)
-                    )
-                case .anime:
-                    let baseAnime = try JSONDecoder().decode(Anime.self, from: item.rawPayload)
-                    let fullAnime = try await runner.getAnimeUpdate(
-                        anime: baseAnime,
-                        needsDetails: false,
-                        needsEpisodes: true
-                    )
-                    return SuccessfulUpdate(
-                        freshCount: fullAnime.episodes?.distinctChapterCount ?? 0,
-                        status: String(describing: fullAnime.status)
-                    )
-                case .novel:
-                    let baseNovel = try JSONDecoder().decode(Novel.self, from: item.rawPayload)
-                    let fullNovel = try await runner.getNovelUpdate(novel: baseNovel)
-                    return SuccessfulUpdate(
-                        freshCount: fullNovel.chapters?.distinctChapterCount ?? 0,
-                        status: String(describing: fullNovel.status)
-                    )
+    /// Checks up to `maxConcurrentSources` sources at once, each one series at a time.
+    private func check(_ queues: [[LibraryItem]]) async -> [(LibraryItem, Int)] {
+        await withTaskGroup(of: [(LibraryItem, Int)].self) { group in
+            var remaining = queues.makeIterator()
+            for _ in 0..<Self.maxConcurrentSources {
+                guard let queue = remaining.next() else { break }
+                group.addTask { await self.check(queue: queue) }
+            }
+            var updated: [(LibraryItem, Int)] = []
+            for await result in group {
+                updated += result
+                if let queue = remaining.next() {
+                    group.addTask { await self.check(queue: queue) }
                 }
             }
+            return updated
+        }
+    }
 
-            guard let delta, delta > 0 else { return nil }
-            return delta
+    private func check(queue: [LibraryItem]) async -> [(LibraryItem, Int)] {
+        var updated: [(LibraryItem, Int)] = []
+        for (index, item) in queue.enumerated() {
+            if Task.isCancelled { break }
+            if let runDeadline, now() >= runDeadline {
+                AppLogger.update.debug("🔄 [UpdateManager] Time budget used up, leaving the rest for the next run.")
+                break
+            }
+            if index > 0, sourcePacingNanoseconds > 0 {
+                // Spread requests to one source out; stop when the run is cancelled.
+                do {
+                    try await Task.sleep(nanoseconds: sourcePacingNanoseconds)
+                } catch {
+                    break
+                }
+            }
+            if let delta = await checkSingleItem(item), delta > 0 {
+                updated.append((item, delta))
+            }
+            itemsCheckedCurrentRun += 1
+        }
+        return updated
+    }
 
-        } catch {
-            AppLogger.update.error("\("🔄 [UpdateManager] ❌ Failed for \(item.title)"): \(error)")
-            return nil
+    private func checkSingleItem(_ item: LibraryItem) async -> Int? {
+        guard let updateSource else { return nil }
+        AppLogger.update.debug("🔄 [UpdateManager] Checking: \(item.title)")
+        return await processUpdate(for: item, checkedAt: now()) {
+            try await updateSource.fetchUpdate(for: item)
         }
     }
 
@@ -234,14 +329,24 @@ public class UpdateManager: ObservableObject {
 
     /// Persists a fetched update and derives badge state only from committed database state. New
     /// chapters add to the series' unread badge, which stays until the series is opened or cleared.
+    /// A failed fetch records only the attempt time, so the series moves behind others next time.
     /// - Returns: The chapters new in this check, or `nil` when nothing was recorded.
     internal func processUpdate(
         for item: LibraryItem,
         checkedAt: Date = Date(),
         fetchUpdate: () async throws -> SuccessfulUpdate
     ) async -> Int? {
+        let update: SuccessfulUpdate
         do {
-            let update = try await fetchUpdate()
+            update = try await fetchUpdate()
+        } catch is CancellationError {
+            return nil
+        } catch {
+            AppLogger.update.error("🔄 [UpdateManager] ❌ Failed for \(item.title): \(error)")
+            await recordFailedAttempt(for: item.id, at: checkedAt)
+            return nil
+        }
+        do {
             let media = MediaIdentity(pluginId: item.pluginId, itemId: item.id)
             let committed = try await dbPool.write { db -> (
                 oldCount: Int?,
@@ -298,14 +403,25 @@ public class UpdateManager: ObservableObject {
             }
             return committed.delta
         } catch {
-            AppLogger.update.error("🔄 [UpdateManager] ❌ Failed for \(item.title): \(error)")
+            AppLogger.update.error("🔄 [UpdateManager] ❌ Failed to save the check for \(item.title): \(error)")
             return nil
+        }
+    }
+
+    private func recordFailedAttempt(for itemID: String, at date: Date) async {
+        do {
+            try await dbPool.write { db in
+                guard var dbItem = try LibraryItem.fetchOne(db, key: itemID) else { return }
+                dbItem.lastCheckedAt = date
+                try dbItem.update(db)
+            }
+        } catch {
+            AppLogger.update.error("🔄 [UpdateManager] ❌ Failed to record a failed check: \(error)")
         }
     }
 
     // MARK: - State Management
 
-    @MainActor
     public func badgeCount(for media: MediaIdentity) -> Int {
         max(0, newChapterCounts[media] ?? 0)
     }

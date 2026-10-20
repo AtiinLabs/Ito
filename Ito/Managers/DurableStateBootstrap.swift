@@ -280,7 +280,7 @@ public final class DurableStateBootstrap: ObservableObject {
         let history = HistoryManager(dbPool: dbPool, libraryManager: library)
         let notifications = NotificationManager()
         let remapper = LibrarySourceRemapper(dbPool: dbPool)
-        let updates = UpdateManager(dbPool: dbPool, pluginManager: plugins)
+        let updates = UpdateManager(dbPool: dbPool, updateSource: PluginLibraryUpdateSource(pluginManager: plugins))
         let progress = ReadProgressManager(dbPool: dbPool)
         #if DEBUG
         let usernameDefaults: UserDefaults
