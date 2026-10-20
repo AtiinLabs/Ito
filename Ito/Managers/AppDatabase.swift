@@ -451,7 +451,43 @@ public final class AppDatabase: Sendable {
             try db.drop(table: "backupCapability_v7")
         }
 
+        // MARK: - v9: Uncategorized System List
+        // Installs that started after the GRDB move never got the system list, so their
+        // series belonged to no list and disappeared from search and the sectioned layout.
+        migrator.registerMigration("v9") { db in
+            try ensureSystemCategory(in: db)
+        }
+
         return migrator
+    }
+
+    /// Makes sure the "Uncategorized" system list exists and holds every series that is in no list.
+    nonisolated static func ensureSystemCategory(in db: Database) throws {
+        let existingID = try String.fetchOne(
+            db,
+            sql: "SELECT id FROM libraryCategory WHERE isSystemCategory = 1 ORDER BY sortOrder LIMIT 1"
+        )
+        let systemID: String
+        if let existingID {
+            systemID = existingID
+        } else {
+            systemID = UUID().uuidString
+            try db.execute(
+                sql: """
+                    INSERT INTO libraryCategory (id, name, sortOrder, isSystemCategory, createdAt)
+                    VALUES (?, 'Uncategorized', 0, 1, ?)
+                    """,
+                arguments: [systemID, Date()]
+            )
+        }
+        try db.execute(
+            sql: """
+                INSERT INTO itemCategoryLink (itemId, categoryId, addedAt)
+                SELECT id, ?, ? FROM libraryItem
+                WHERE id NOT IN (SELECT itemId FROM itemCategoryLink)
+                """,
+            arguments: [systemID, Date()]
+        )
     }
 
     nonisolated static func backfillLegacyAniListLinks(in db: Database) throws {

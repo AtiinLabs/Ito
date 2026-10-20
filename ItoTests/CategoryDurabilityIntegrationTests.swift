@@ -486,6 +486,8 @@ final class CategoryDurabilityIntegrationTests: XCTestCase {
     private func seedOrganization(in database: TestDatabase) async throws -> CategoryFixture {
         let fixture = CategoryFixture()
         try await database.dbPool.write { db in
+            // The fixture's system list replaces the migrated one.
+            try db.execute(sql: "DELETE FROM libraryCategory WHERE isSystemCategory = 1")
             try fixture.system.insert(db)
             try fixture.alpha.insert(db)
             try fixture.beta.insert(db)

@@ -59,7 +59,8 @@ struct BackupRestoreOperationPhaseTests {
         )
 
         #expect(report.outcomes.map(\.component) == [.libraryCore, .readingHistory])
-        #expect(report.outcomes[0].replaced == 1)
+        // The local item and the migrated system list.
+        #expect(report.outcomes[0].replaced == 2)
         #expect(report.outcomes[0].inserted == 1)
         #expect(report.outcomes[1].dependencyRepaired == 1)
         let state = try await database.dbPool.read { db in
@@ -460,6 +461,7 @@ struct BackupRestoreOperationPhaseTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         try await database.dbPool.write { db in
+            try db.execute(sql: "DELETE FROM libraryCategory WHERE isSystemCategory = 1")
             try LibraryCategory(
                 id: "local-system",
                 name: "Local System",

@@ -183,6 +183,8 @@ struct SourceMappingBackupTests {
         defer { database.cleanup() }
         let physicalRow = mapping(canonicalMediaId: "legacy-physical")
         try await database.dbPool.write { db in
+            // The backup holds only the rows seeded here, not the migrated system list.
+            try db.execute(sql: "DELETE FROM libraryCategory")
             try physicalRow.insert(db)
             try BackupMetadataRecord(formatVersion: 1, createdAt: date).insert(db)
             try BackupCapabilityRecord(

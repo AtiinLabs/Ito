@@ -15,6 +15,7 @@ final class LibraryPublicationOrderTests: XCTestCase {
             isSystem: true
         )
         try await database.dbPool.write { db in
+            try db.execute(sql: "DELETE FROM libraryCategory WHERE isSystemCategory = 1")
             try uncategorized.insert(db)
         }
         let scheduler = ManualLibraryObservationScheduler()
@@ -53,6 +54,7 @@ final class LibraryPublicationOrderTests: XCTestCase {
             isSystem: true
         )
         try await database.dbPool.write { db in
+            try db.execute(sql: "DELETE FROM libraryCategory WHERE isSystemCategory = 1")
             try uncategorized.insert(db)
         }
         let scheduler = ManualLibraryObservationScheduler()
@@ -97,6 +99,7 @@ final class LibraryPublicationOrderTests: XCTestCase {
             isSystem: true
         )
         try await database.dbPool.write { db in
+            try db.execute(sql: "DELETE FROM libraryCategory WHERE isSystemCategory = 1")
             try uncategorized.insert(db)
         }
         let scheduler = ManualLibraryObservationScheduler()
@@ -179,6 +182,7 @@ final class LibraryPublicationOrderTests: XCTestCase {
         )
         let item = makeItem(id: "organized")
         try await database.dbPool.write { db in
+            try db.execute(sql: "DELETE FROM libraryCategory WHERE isSystemCategory = 1")
             try uncategorized.insert(db)
             try item.insert(db)
             try ItemCategoryLink(

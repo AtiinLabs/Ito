@@ -358,6 +358,8 @@ final class LibraryViewModelTests: XCTestCase {
             createdAt: Date(timeIntervalSince1970: 0)
         )
         try await database.dbPool.write { db in
+            // The fixture's system list replaces the migrated one.
+            try db.execute(sql: "DELETE FROM libraryCategory WHERE isSystemCategory = 1")
             try uncategorized.insert(db)
         }
         try await manager.reload()

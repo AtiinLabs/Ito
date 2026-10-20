@@ -139,21 +139,16 @@ final class UITestLaunchFixtureCoordinator: ObservableObject {
     ) async {
         backupFixtureState = .preparing
         do {
-            let categoryID = try await AppDatabase.shared.dbPool.write { database in
-                if let category = try LibraryCategory
-                    .filter(Column("isSystemCategory") == true)
-                    .fetchOne(database) {
-                    return category.id
-                }
-                let category = LibraryCategory(
-                    id: "ui-test-system-category",
-                    name: "Uncategorized",
-                    sortOrder: 0,
-                    isSystemCategory: true,
-                    createdAt: Date(timeIntervalSince1970: 0)
+            // The v9 migration guarantees the system list.
+            let categoryID = try await AppDatabase.shared.dbPool.read { database in
+                try String.fetchOne(
+                    database,
+                    sql: "SELECT id FROM libraryCategory WHERE isSystemCategory = 1"
                 )
-                try category.insert(database)
-                return category.id
+            }
+            guard let categoryID else {
+                backupFixtureState = .failed
+                return
             }
             let backupURL = try await backupManager.createBackupFile()
             try await AppDatabase.shared.dbPool.write { database in
