@@ -4,13 +4,41 @@ import UserNotifications
 import UIKit
 import Combine
 
+/// The parts of the system notification settings `NotificationManager` uses.
+nonisolated protocol NotificationSystem: Sendable {
+    /// Whether the app may post notifications (authorized or provisional).
+    nonisolated func isAuthorized() async -> Bool
+    /// Sets the number on the app icon.
+    nonisolated func setIconBadgeCount(_ count: Int) async
+}
+
+nonisolated struct UserNotificationSystem: NotificationSystem {
+    nonisolated func isAuthorized() async -> Bool {
+        let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        return status == .authorized || status == .provisional
+    }
+
+    nonisolated func setIconBadgeCount(_ count: Int) async {
+        if #available(iOS 16.0, *) {
+            try? await UNUserNotificationCenter.current().setBadgeCount(count)
+        } else {
+            await MainActor.run { UIApplication.shared.applicationIconBadgeNumber = count }
+        }
+    }
+}
+
 @MainActor
 public class NotificationManager: ObservableObject {
     @Published public private(set) var isAuthorized = false
     private var settingsStore: AppSettingsStore?
     private weak var updateManager: UpdateManager?
+    private let system: any NotificationSystem
+    private var iconBadgeSubscription: AnyCancellable?
+    /// Icon badge writes run one after another, so an older count never lands last.
+    private var iconBadgeWrite: Task<Void, Never>?
 
-    public init() {
+    init(system: any NotificationSystem = UserNotificationSystem()) {
+        self.system = system
         Task {
             await checkStatus()
         }
@@ -20,8 +48,26 @@ public class NotificationManager: ObservableObject {
         self.settingsStore = settingsStore
     }
 
+    /// Keeps the app icon badge equal to the library's unread new chapters.
     func configure(updateManager: UpdateManager) {
         self.updateManager = updateManager
+        iconBadgeSubscription = $isAuthorized
+            .combineLatest(updateManager.libraryBadgeCountsPublisher.map { $0.values.reduce(0, +) })
+            .filter { isAuthorized, _ in isAuthorized }
+            .map { _, unread in unread }
+            .removeDuplicates()
+            .sink { [weak self] unread in
+                self?.setIconBadge(unread)
+            }
+    }
+
+    private func setIconBadge(_ count: Int) {
+        let previous = iconBadgeWrite
+        let system = system
+        iconBadgeWrite = Task {
+            await previous?.value
+            await system.setIconBadgeCount(count)
+        }
     }
 
     public func requestPermission() async -> Bool {
@@ -37,9 +83,7 @@ public class NotificationManager: ObservableObject {
     }
 
     public func checkStatus() async {
-        let center = UNUserNotificationCenter.current()
-        let settings = await center.notificationSettings()
-        self.isAuthorized = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
+        isAuthorized = await system.isAuthorized()
     }
 
     /// Dispatch a summary notification for updated library items
