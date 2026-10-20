@@ -11,8 +11,9 @@ struct VideoPlayerView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    init(viewModel: VideoPlayerViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+    /// `viewModel` is evaluated once, when SwiftUI first creates this view's state.
+    init(viewModel: @autoclosure @escaping () -> VideoPlayerViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel())
     }
 
     var body: some View {

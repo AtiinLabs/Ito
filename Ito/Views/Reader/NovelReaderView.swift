@@ -8,8 +8,9 @@ struct NovelReaderView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    init(viewModel: NovelReaderViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+    /// `viewModel` is evaluated once, when SwiftUI first creates this view's state.
+    init(viewModel: @autoclosure @escaping () -> NovelReaderViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel())
     }
 
     var body: some View {
