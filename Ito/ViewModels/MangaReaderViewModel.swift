@@ -192,6 +192,17 @@ final class MangaReaderViewModel: ObservableObject {
         dependencies.presence.clearMangaReaderPresence()
     }
 
+    /// Loads the current chapter again after it failed to load.
+    func retry() {
+        guard isActive, case .failure = loadPhase else { return }
+        pagedPages = []
+        pagedIndex = 0
+        segments = []
+        continuousPageIndex = 0
+        scrollTarget = nil
+        beginMainLoad(for: currentChapter)
+    }
+
     // MARK: - Viewer and settings
 
     func setViewerOverride(_ viewer: Manga.Viewer) {

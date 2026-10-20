@@ -56,9 +56,22 @@ struct ReaderView: View {
                 ProgressView("Loading Chapter...")
                     .foregroundColor(.white)
             case .failure(let error):
-                Text("Error: \(error)")
-                    .foregroundColor(.red)
-                    .padding()
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                        .foregroundColor(.white.opacity(0.7))
+                    Text("Couldn't load this chapter")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundColor(.white.opacity(0.6))
+                        .multilineTextAlignment(.center)
+                    Button("Try Again") { viewModel.retry() }
+                        .buttonStyle(.borderedProminent)
+                        .padding(.top, 4)
+                }
+                .padding(32)
             case .content:
                 readComponent
                     .onTapGesture {
@@ -486,6 +499,9 @@ struct MangaImage: View {
     let urlStr: String
     let headers: [String: String]?
 
+    /// Bumped by Try Again so `LazyImage` starts a fresh request.
+    @State private var attempt = 0
+
     var body: some View {
         if let url = URL(string: urlStr) {
             LazyImage(request: ImageRequest(urlRequest: createRequest(url: url))) { state in
@@ -493,25 +509,40 @@ struct MangaImage: View {
                     image
                         .resizable()
                         .scaledToFit()
-                } else if let error = state.error {
-                    VStack {
+                } else if state.error != nil {
+                    VStack(spacing: 12) {
                         Image(systemName: "exclamationmark.triangle")
-                            .foregroundColor(.red)
+                            .foregroundColor(.white.opacity(0.7))
                             .font(.largeTitle)
-                        Text(error.localizedDescription)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                            .multilineTextAlignment(.center)
-                            .padding()
+                        Text("Couldn't load this page")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.8))
+                        Button("Try Again") { attempt += 1 }
+                            .buttonStyle(.bordered)
+                            .tint(.white)
                     }
                     .frame(maxWidth: .infinity, minHeight: 400, alignment: .center)
                     .padding(40)
                 } else {
                     ProgressView()
+                        .tint(.white)
                         .frame(maxWidth: .infinity, minHeight: 400, alignment: .center)
                         .padding(40)
                 }
             }
+            .id(attempt)
+        } else {
+            VStack(spacing: 12) {
+                Image(systemName: "photo")
+                    .foregroundColor(.white.opacity(0.5))
+                    .font(.largeTitle)
+                Text("This page has no valid image address")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.7))
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, minHeight: 400, alignment: .center)
+            .padding(40)
         }
     }
 

@@ -108,9 +108,10 @@ final class MangaReaderViewModelTests: XCTestCase {
         await waitForReader { subject.viewModel.loadPhase == .content }
     }
 
-    func testInitialFailurePublishesEquivalentInlineFailure() async {
+    func testInitialFailurePublishesInlineFailureAndRetryLoadsAgain() async {
         let subject = makeSubject(chapters: [makeChapter("a", number: 1)])
         subject.loader.enqueue(.failure(MangaReaderTestError.expected), for: "a")
+        subject.loader.enqueue(.pages([page(0), page(1)]), for: "a")
 
         subject.viewModel.start()
         await waitForReader {
@@ -119,6 +120,11 @@ final class MangaReaderViewModelTests: XCTestCase {
 
         XCTAssertTrue(subject.viewModel.pagedPages.isEmpty)
         XCTAssertTrue(subject.history.requests.isEmpty)
+
+        subject.viewModel.retry()
+        await waitForReader { subject.viewModel.loadPhase == .content }
+        XCTAssertEqual(subject.viewModel.pagedPages.count, 2)
+        XCTAssertEqual(subject.loader.callCount(for: "a"), 2)
     }
 
     func testStaleInitialCompletionCannotReplaceDirectNavigation() async {
