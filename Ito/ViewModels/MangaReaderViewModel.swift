@@ -55,6 +55,7 @@ final class MangaReaderViewModel: ObservableObject {
     private var pageWriteTask: Task<Void, Never>?
     private var lastSavedPage: (chapterKey: String, page: Int)?
     private var settingsWriteTask: Task<Void, Never>?
+    private var viewerWriteTask: Task<Void, Never>?
     private var flatPageIndexByID: [String: Int] = [:]
     /// Continuous pages on screen; the topmost is the current page.
     private var visiblePageIDs: Set<String> = []
@@ -76,6 +77,7 @@ final class MangaReaderViewModel: ObservableObject {
         imagePrefetcher = dependencies.makeImagePrefetcher()
         preloadImageCount = dependencies.settings.mangaReaderPreloadImageCount
         mediaIdentity = MediaIdentity(pluginId: pluginID, itemId: manga.key)
+        overrideViewer = dependencies.progress.savedViewer(media: mediaIdentity) ?? .Default
     }
 
     var activeViewer: Manga.Viewer {
@@ -201,6 +203,7 @@ final class MangaReaderViewModel: ObservableObject {
         guard isActive, overrideViewer != viewer else { return }
         let wasPaged = isPaged
         overrideViewer = viewer
+        saveViewer(viewer)
         let isNowPaged = isPaged
         guard wasPaged != isNowPaged else { return }
 
@@ -209,6 +212,18 @@ final class MangaReaderViewModel: ObservableObject {
             convertContinuousToPagedOrReload()
         } else {
             convertPagedToContinuousOrReload()
+        }
+    }
+
+    /// Remembers the reading mode for the series. Writes run in order; failing is harmless.
+    private func saveViewer(_ viewer: Manga.Viewer) {
+        let progress = dependencies.progress
+        let identity = mediaIdentity
+        let chapterKey = currentChapter.key
+        let preceding = viewerWriteTask
+        viewerWriteTask = Task { @MainActor [progress] in
+            await preceding?.value
+            try? await progress.saveViewer(viewer, media: identity, chapterID: chapterKey)
         }
     }
 
@@ -1031,49 +1046,28 @@ final class MangaReaderViewModel: ObservableObject {
     // MARK: - Image prefetch
 
     private func prefetchPagedImages(around index: Int) {
-        guard preloadImageCount > 0, !pagedPages.isEmpty else { return }
-        let start = index + 1
-        let end = min(index + preloadImageCount, pagedPages.count - 1)
-        guard start <= end else { return }
-        let pages = prefetchablePages(in: Array(pagedPages[start...end]))
-        guard !pages.isEmpty else { return }
-        imagePrefetcher.prefetch(pages)
+        preload(Self.pagesToPreload(after: index, count: preloadImageCount, in: pagedPages) { $0 })
     }
 
     private func prefetchContinuousImages(around index: Int, allPages: [FlatPage]) {
-        guard preloadImageCount > 0, !allPages.isEmpty else { return }
-        let start = index + 1
-        let end = min(index + preloadImageCount, allPages.count - 1)
-        guard start <= end else { return }
-        let pages = prefetchablePages(in: allPages[start...end].map(\.page))
-        guard !pages.isEmpty else { return }
-        imagePrefetcher.prefetch(pages)
+        preload(Self.pagesToPreload(after: index, count: preloadImageCount, in: allPages) { $0.page })
     }
 
-    private func prefetchablePages(in pages: [Page]) -> [Page] {
-        pages.filter { page in
-            guard case .url(let urlString) = page.content else { return false }
-            return URL(string: urlString) != nil
-        }
+    private func preload(_ pages: [Page]) {
+        guard !pages.isEmpty else { return }
+        imagePrefetcher.prefetch(pages)
     }
 
     // MARK: - Discord presence
 
     private func presentPresence(for chapter: Manga.Chapter, resetTimer: Bool) {
         guard isActive else { return }
-        let anilistID = dependencies.tracker.anilistID(for: mediaIdentity)
-        let detailsURL = anilistID.map { "https://anilist.co/manga/\($0)" }
-        let pluginName = dependencies.pluginMetadata.displayName(for: pluginID)
-            ?? "Unknown Plugin"
-        let scanlator = chapter.scanlator ?? "Official"
         dependencies.presence.presentMangaReaderPresence(
-            MangaReaderPresence(
-                details: manga.title,
-                state: "Reading \(chapter.title ?? "Chapter \(chapter.chapterNumber ?? 0)")",
-                activityType: 3,
-                detailsURL: detailsURL,
-                largeImageText: "Reading from \(scanlator) at \(pluginName)",
-                imageURL: manga.cover,
+            Self.presence(
+                manga: manga,
+                chapter: chapter,
+                anilistID: dependencies.tracker.anilistID(for: mediaIdentity),
+                pluginName: dependencies.pluginMetadata.displayName(for: pluginID),
                 resetTimer: resetTimer
             )
         )

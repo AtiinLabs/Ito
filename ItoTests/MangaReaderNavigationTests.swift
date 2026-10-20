@@ -64,4 +64,21 @@ extension MangaReaderViewModelTests {
 
         XCTAssertEqual(subject.imagePrefetcher.batches.last?.map(\.index), [1, 2])
     }
+
+    func testReadingModeChoiceIsRestoredAndSaved() async {
+        let subject = makeSubject(chapters: [makeChapter("a", number: 1)])
+        subject.progress.savedViewer = .Webtoon
+        let reopened = MangaReaderViewModel(
+            pageLoader: subject.loader,
+            pluginID: subject.viewModel.pluginID,
+            manga: subject.viewModel.manga,
+            initialChapter: makeChapter("a", number: 1),
+            dependencies: subject.dependencies
+        )
+        XCTAssertEqual(reopened.overrideViewer, .Webtoon)
+        XCTAssertFalse(reopened.isPaged)
+
+        reopened.setViewerOverride(.Ltr)
+        await waitForReader { subject.progress.savedViewerWrites == [.Ltr] }
+    }
 }

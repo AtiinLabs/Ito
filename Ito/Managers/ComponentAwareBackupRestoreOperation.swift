@@ -2010,7 +2010,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             lastReadChapterKey: record.lastReadChapterKey,
             updatedAt: record.updatedAt,
             provenance: record.provenance,
-            lastReadPosition: record.lastReadPosition
+            lastReadPosition: record.lastReadPosition,
+            readerViewer: record.readerViewer
         )
     }
 

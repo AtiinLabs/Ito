@@ -459,11 +459,20 @@ public final class AppDatabase: Sendable {
         }
 
         // MARK: - v10: Reading Position
-        // Where the reader was inside `lastReadChapterKey`: a page index for manga and novels,
-        // seconds for video. Null when unknown, such as rows written before v10.
+        // Where the reader was inside `lastReadChapterKey`: a page index for manga, a character
+        // offset for novels, seconds for video. Null when unknown, such as rows written before v10.
         migrator.registerMigration("v10") { db in
             try db.alter(table: "mediaReadProgress") { t in
                 t.add(column: "lastReadPosition", .double)
+            }
+        }
+
+        // MARK: - v11: Reading Mode
+        // The manga reading mode chosen for the series (`Manga.Viewer` raw value). Null means
+        // the series' own default.
+        migrator.registerMigration("v11") { db in
+            try db.alter(table: "mediaReadProgress") { t in
+                t.add(column: "readerViewer", .integer)
             }
         }
 

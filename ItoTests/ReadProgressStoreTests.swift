@@ -155,6 +155,31 @@ struct ReadProgressStoreTests {
         #expect(reloaded.savedPosition(media: media, chapterKey: "chapter-7") == nil)
     }
 
+    @Test func readingModeSurvivesPositionAndReadWritesAndReload() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let manager = ReadProgressManager(dbPool: database.dbPool)
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+
+        // No reading state yet: choosing a mode starts it at the chapter being read.
+        try await manager.saveReaderViewer(4, media: media, chapterKey: "chapter-1")
+        #expect(manager.lastReadChapter(for: media) == "chapter-1")
+
+        try await manager.savePosition(media: media, chapterKey: "chapter-2", position: 5)
+        try await manager.markAsRead(media: media, chapterId: "chapter-2", chapterNum: 2)
+        #expect(manager.savedReaderViewer(media: media) == 4)
+
+        let reloaded = ReadProgressManager(dbPool: database.dbPool)
+        try await reloaded.reload()
+        #expect(reloaded.savedReaderViewer(media: media) == 4)
+        #expect(reloaded.savedPosition(media: media, chapterKey: "chapter-2") == 5)
+
+        try await reloaded.saveReaderViewer(nil, media: media, chapterKey: "chapter-9")
+        #expect(reloaded.savedReaderViewer(media: media) == nil)
+        // An existing reading state keeps its chapter.
+        #expect(reloaded.lastReadChapter(for: media) == "chapter-2")
+    }
+
     @Test func rowsWithoutThePositionColumnDecodeWithNoPosition() throws {
         // Backups made before v10 have no lastReadPosition column.
         let queue = try DatabaseQueue()

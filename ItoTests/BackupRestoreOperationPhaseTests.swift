@@ -488,7 +488,7 @@ struct BackupRestoreOperationPhaseTests {
         #expect(categories.first?.name == "Uncategorized")
     }
 
-    @Test func restoreKeepsTheSavedReadingPosition() async throws {
+    @Test func restoreKeepsTheSavedReadingPositionAndMode() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let backup = ImportedBackup(
@@ -501,7 +501,8 @@ struct BackupRestoreOperationPhaseTests {
                     lastReadChapterKey: "chapter-4",
                     updatedAt: Date(timeIntervalSince1970: 2),
                     provenance: .runtime,
-                    lastReadPosition: 17
+                    lastReadPosition: 17,
+                    readerViewer: 4
                 )
             ]
         )
@@ -513,6 +514,7 @@ struct BackupRestoreOperationPhaseTests {
         }
         #expect(restored?.lastReadChapterKey == "chapter-4")
         #expect(restored?.lastReadPosition == 17)
+        #expect(restored?.readerViewer == 4)
     }
 
     @Test func restoredSeriesWithoutAListAreFiledIntoUncategorized() async throws {

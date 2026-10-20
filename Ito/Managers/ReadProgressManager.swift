@@ -8,6 +8,7 @@ public final class ReadProgressManager: ObservableObject {
     @Published private var readChapterNumbers: [MediaIdentity: Set<Float>] = [:]
     @Published private var lastReadChapter: [MediaIdentity: String] = [:]
     @Published private var lastReadPosition: [MediaIdentity: Double] = [:]
+    @Published private var readerViewer: [MediaIdentity: Int] = [:]
 
     private let dbPool: DatabasePool
     private weak var updateManager: UpdateManager?
@@ -52,6 +53,16 @@ public final class ReadProgressManager: ObservableObject {
                 }
             }
         )
+        readerViewer = Dictionary(
+            uniqueKeysWithValues: snapshot.2.compactMap { record in
+                record.readerViewer.map {
+                    (
+                        MediaIdentity(pluginId: record.pluginId, canonicalMediaId: record.canonicalMediaId),
+                        $0
+                    )
+                }
+            }
+        )
     }
 
     /// Remembers where the reader is inside `chapterKey`, which becomes the series' last-read chapter.
@@ -63,13 +74,18 @@ public final class ReadProgressManager: ObservableObject {
         guard position.isFinite, position >= 0 else { return }
         let now = Date()
         try await dbPool.write { db in
+            let existing = try MediaReadProgressRecord.fetchOne(
+                db,
+                key: ["pluginId": media.pluginId, "canonicalMediaId": media.canonicalMediaId]
+            )
             try MediaReadProgressRecord(
                 pluginId: media.pluginId,
                 canonicalMediaId: media.canonicalMediaId,
                 lastReadChapterKey: chapterKey,
                 updatedAt: now,
                 provenance: .runtime,
-                lastReadPosition: position
+                lastReadPosition: position,
+                readerViewer: existing?.readerViewer
             ).save(db)
         }
         lastReadChapter[media] = chapterKey
@@ -80,6 +96,43 @@ public final class ReadProgressManager: ObservableObject {
     public func savedPosition(media: MediaIdentity, chapterKey: String) -> Double? {
         guard lastReadChapter[media] == chapterKey else { return nil }
         return lastReadPosition[media]
+    }
+
+    /// The manga reading mode chosen for the series, if any (`Manga.Viewer` raw value).
+    public func savedReaderViewer(media: MediaIdentity) -> Int? {
+        readerViewer[media]
+    }
+
+    /// Remembers the reading mode chosen for the series; nil goes back to its default. A series
+    /// with no reading state yet starts it at `chapterKey`, the chapter being read.
+    public func saveReaderViewer(
+        _ viewer: Int?,
+        media: MediaIdentity,
+        chapterKey: String
+    ) async throws {
+        let now = Date()
+        let chapter = try await dbPool.write { db -> String in
+            let key: [String: DatabaseValueConvertible] = [
+                "pluginId": media.pluginId,
+                "canonicalMediaId": media.canonicalMediaId
+            ]
+            if var existing = try MediaReadProgressRecord.fetchOne(db, key: key) {
+                existing.readerViewer = viewer
+                try existing.update(db)
+                return existing.lastReadChapterKey
+            }
+            try MediaReadProgressRecord(
+                pluginId: media.pluginId,
+                canonicalMediaId: media.canonicalMediaId,
+                lastReadChapterKey: chapterKey,
+                updatedAt: now,
+                provenance: .runtime,
+                readerViewer: viewer
+            ).insert(db)
+            return chapterKey
+        }
+        lastReadChapter[media] = chapter
+        readerViewer[media] = viewer
     }
 
     public func markAsRead(
@@ -118,7 +171,8 @@ public final class ReadProgressManager: ObservableObject {
                 provenance: .runtime,
                 lastReadPosition: existing?.lastReadChapterKey == chapterId
                     ? existing?.lastReadPosition
-                    : nil
+                    : nil,
+                readerViewer: existing?.readerViewer
             ).save(db)
         }
 

@@ -69,6 +69,41 @@ extension MangaReaderViewModel {
             index: segment.pages.indices.contains(index) ? index : 0
         )
     }
+
+    /// The pages to preload after `index`: up to `count` items ahead, keeping only pages with
+    /// a valid image URL, in reading order.
+    static func pagesToPreload<Item>(
+        after index: Int,
+        count: Int,
+        in items: [Item],
+        page: (Item) -> Page
+    ) -> [Page] {
+        let start = index + 1
+        let end = min(index + count, items.count - 1)
+        guard count > 0, start >= 0, start <= end else { return [] }
+        return items[start...end].map(page).filter { page in
+            guard case .url(let urlString) = page.content else { return false }
+            return URL(string: urlString) != nil
+        }
+    }
+
+    static func presence(
+        manga: Manga,
+        chapter: Manga.Chapter,
+        anilistID: String?,
+        pluginName: String?,
+        resetTimer: Bool
+    ) -> MangaReaderPresence {
+        MangaReaderPresence(
+            details: manga.title,
+            state: "Reading \(chapter.title ?? "Chapter \(chapter.chapterNumber ?? 0)")",
+            activityType: 3,
+            detailsURL: anilistID.map { "https://anilist.co/manga/\($0)" },
+            largeImageText: "Reading from \(chapter.scanlator ?? "Official") at \(pluginName ?? "Unknown Plugin")",
+            imageURL: manga.cover,
+            resetTimer: resetTimer
+        )
+    }
 }
 
 /// Everything that identifies a chapter request; a load result applies only if it still matches.

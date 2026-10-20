@@ -30,6 +30,9 @@ protocol MangaReaderProgressTracking: AnyObject {
     /// The page the reader last stopped on in `chapterID`, if that is the last chapter read.
     func savedPage(media: MediaIdentity, chapterID: String) -> Int?
     func savePage(_ page: Int, media: MediaIdentity, chapterID: String) async throws
+    /// The reading mode chosen for the series, if one was chosen.
+    func savedViewer(media: MediaIdentity) -> Manga.Viewer?
+    func saveViewer(_ viewer: Manga.Viewer, media: MediaIdentity, chapterID: String) async throws
 }
 
 extension ReadProgressManager: MangaReaderProgressTracking {
@@ -51,6 +54,19 @@ extension ReadProgressManager: MangaReaderProgressTracking {
 
     func savePage(_ page: Int, media: MediaIdentity, chapterID: String) async throws {
         try await savePosition(media: media, chapterKey: chapterID, position: Double(page))
+    }
+
+    func savedViewer(media: MediaIdentity) -> Manga.Viewer? {
+        savedReaderViewer(media: media).flatMap { Manga.Viewer(rawValue: Int32($0)) }
+    }
+
+    func saveViewer(_ viewer: Manga.Viewer, media: MediaIdentity, chapterID: String) async throws {
+        // `Default` means no choice: store nothing so the series' own mode applies.
+        try await saveReaderViewer(
+            viewer == .Default ? nil : Int(viewer.rawValue),
+            media: media,
+            chapterKey: chapterID
+        )
     }
 }
 
@@ -281,6 +297,17 @@ private final class UnavailableMangaReaderDependencies:
 
     func savePage(_ page: Int, media: MediaIdentity, chapterID: String) async throws {
         _ = page
+        _ = media
+        _ = chapterID
+    }
+
+    func savedViewer(media: MediaIdentity) -> Manga.Viewer? {
+        _ = media
+        return nil
+    }
+
+    func saveViewer(_ viewer: Manga.Viewer, media: MediaIdentity, chapterID: String) async throws {
+        _ = viewer
         _ = media
         _ = chapterID
     }
