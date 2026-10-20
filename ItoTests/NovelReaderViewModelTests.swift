@@ -367,7 +367,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.loadedChapters.map { $0.chapter.key }, ["b"])
     }
 
-    func testAppendFailureKeepsContentAndAllowsLaterRetry() async {
+    func testAppendFailureKeepsContentAndWaitsForAnExplicitRetry() async {
         let a = makeChapter("a", number: 1)
         let b = makeChapter("b", number: 2)
         let subject = makeSubject(chapters: [a, b], initial: a)
@@ -382,10 +382,16 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.loadPhase, .content)
         XCTAssertEqual(subject.viewModel.loadedChapters.map { $0.chapter.key }, ["a"])
         XCTAssertFalse(subject.viewModel.isLoadingNext)
+        XCTAssertTrue(subject.viewModel.appendFailed)
 
+        // Scrolling to the end or turning pages again does not retry by itself.
         subject.viewModel.loadNextChapter()
+        XCTAssertEqual(subject.loader.callCount(for: "b"), 1)
+
+        subject.viewModel.retryNextChapter()
         await subject.viewModel.waitForAllOperationsForTesting()
         XCTAssertEqual(subject.loader.callCount(for: "b"), 2)
+        XCTAssertFalse(subject.viewModel.appendFailed)
         XCTAssertEqual(subject.viewModel.loadedChapters.map { $0.chapter.key }, ["a", "b"])
     }
 

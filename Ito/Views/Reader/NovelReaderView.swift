@@ -161,14 +161,7 @@ struct NovelReaderView: View {
                                 }
                         }
 
-                        if viewModel.isLoadingNext {
-                            HStack {
-                                Spacer()
-                                ProgressView()
-                                    .padding()
-                                Spacer()
-                            }
-                        }
+                        endOfListRow
 
                         Color.clear.frame(height: safeAreaBottom + 80)
                     }
@@ -177,6 +170,44 @@ struct NovelReaderView: View {
                 .onChange(of: viewModel.restoreAnchor) { _ in applyRestoreAnchor(with: proxy) }
             }
             .simultaneousGesture(toggleUIGesture)
+        }
+    }
+
+    /// After the last loaded chapter: loading, a failed load to retry, or (with Seamless
+    /// Reading off) a button that adds the next chapter below.
+    @ViewBuilder
+    private var endOfListRow: some View {
+        if viewModel.isLoadingNext {
+            ProgressView()
+                .tint(viewModel.theme.textColor)
+                .frame(maxWidth: .infinity)
+                .padding()
+        } else if let last = viewModel.loadedChapters.last,
+                  let next = viewModel.chapterAfter(last.chapter) {
+            if viewModel.appendFailed {
+                VStack(spacing: 8) {
+                    Text("Couldn't load the next chapter")
+                        .font(.subheadline)
+                        .foregroundColor(viewModel.theme.textColor)
+                    Button("Try Again") { viewModel.retryNextChapter() }
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+            } else if !viewModel.prefetchChapters {
+                Button(action: { viewModel.loadNextChapter() }) {
+                    VStack(spacing: 4) {
+                        Text("Next Chapter")
+                            .font(.caption.weight(.semibold))
+                            .textCase(.uppercase)
+                        Text(chapterTitle(next))
+                            .font(.headline)
+                            .multilineTextAlignment(.center)
+                    }
+                    .foregroundColor(viewModel.theme.textColor)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                }
+            }
         }
     }
 

@@ -41,6 +41,9 @@ final class NovelReaderViewModel: ObservableObject {
     @Published private(set) var loadedChapters: [NovelLoadedChapter] = []
     @Published private(set) var loadPhase: NovelReaderLoadPhase = .idle
     @Published private(set) var isLoadingNext = false
+    /// The last next-chapter load failed; it waits for `retryNextChapter` instead of being
+    /// started again by scrolling or page turns.
+    @Published private(set) var appendFailed = false
     /// Where the reader should open the loaded chapter; the view applies it once and consumes it.
     @Published private(set) var restoreAnchor: NovelReadingAnchor?
 
@@ -417,10 +420,18 @@ final class NovelReaderViewModel: ObservableObject {
         readingPositionChanged(chapterID: chapterID, offset: .max, reachedEnd: true)
     }
 
+    /// Loads the next chapter again after `appendFailed`.
+    func retryNextChapter() {
+        guard appendFailed else { return }
+        appendFailed = false
+        loadNextChapter()
+    }
+
     func loadNextChapter() {
         guard isActive,
               appendOperationID == nil,
               !isLoadingNext,
+              !appendFailed,
               let last = loadedChapters.last,
               let next = chapterAfter(last.chapter),
               // Never append a chapter twice; ordering must not loop back to a loaded one.
@@ -511,6 +522,7 @@ final class NovelReaderViewModel: ObservableObject {
             )
             return
         }
+        appendFailed = true
         finishAppend(operationID: operationID, outcome: .failed(.pluginExecution))
     }
 
@@ -820,6 +832,7 @@ final class NovelReaderViewModel: ObservableObject {
         appendTask = nil
         appendOperationID = nil
         isLoadingNext = false
+        appendFailed = false
     }
 
     private func logStarted(kind: PresentationEventKind, operationID: UUID) {
