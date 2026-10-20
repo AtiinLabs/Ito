@@ -559,7 +559,8 @@ final class SettingsViewModelTests: XCTestCase {
 
         await viewModel.setIncognitoMode(true)
         await viewModel.setDiscordRPCEnabled(true)
-        await viewModel.setDiscordRPCURL("wss://example.com/socket")
+        viewModel.discordRPCURLDraft = "wss://example.com/socket"
+        await viewModel.commitDiscordRPCURLDraft()
 
         let history = await persistence.writeHistory
         XCTAssertEqual(history.count, 3)
@@ -650,9 +651,11 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.alert, .saveFailed)
 
         await persistence.failNextWriteAttempt()
-        await viewModel.setDiscordRPCURL("wss://example.com/socket")
+        viewModel.discordRPCURLDraft = "wss://example.com/socket"
+        await viewModel.commitDiscordRPCURLDraft()
         XCTAssertEqual(store.discordRPCURL, "ws://127.0.0.1:3000")
         XCTAssertEqual(viewModel.discordRPCURL, "ws://127.0.0.1:3000")
+        XCTAssertEqual(viewModel.discordRPCURLDraft, "wss://example.com/socket")
         XCTAssertEqual(viewModel.alert, .saveFailed)
 
         let history = await persistence.writeHistory
@@ -667,27 +670,47 @@ final class SettingsViewModelTests: XCTestCase {
         )
     }
 
-    func testPrivacyInvalidDiscordURLDoesNotWriteAndValidRetryClearsAlert() async throws {
+    func testPrivacyInvalidDiscordURLKeepsTypedTextWithoutWritingAndValidRetrySaves() async throws {
         let (store, persistence, manager) = try await makePrivacySettingsStore()
         let viewModel = PrivacySettingsViewModel(
             settingsStore: store,
             discordRPCManager: manager
         )
 
-        await viewModel.setDiscordRPCURL("https://example.com/not-a-websocket")
+        viewModel.discordRPCURLDraft = "https://example.com/not-a-websocket"
+        await viewModel.commitDiscordRPCURLDraft()
 
         var history = await persistence.writeHistory
         XCTAssertTrue(history.isEmpty)
         XCTAssertEqual(store.discordRPCURL, "ws://127.0.0.1:3000")
         XCTAssertEqual(viewModel.discordRPCURL, "ws://127.0.0.1:3000")
-        XCTAssertEqual(viewModel.alert, .saveFailed)
+        XCTAssertEqual(viewModel.discordRPCURLDraft, "https://example.com/not-a-websocket")
+        XCTAssertEqual(viewModel.alert, .invalidDiscordURL)
 
-        await viewModel.setDiscordRPCURL("wss://example.com/socket")
+        viewModel.discordRPCURLDraft = " wss://example.com/socket "
+        await viewModel.commitDiscordRPCURLDraft()
 
         history = await persistence.writeHistory
         XCTAssertEqual(history.count, 1)
         XCTAssertEqual(store.discordRPCURL, "wss://example.com/socket")
         XCTAssertEqual(viewModel.discordRPCURL, "wss://example.com/socket")
+        XCTAssertEqual(viewModel.discordRPCURLDraft, "wss://example.com/socket")
+        XCTAssertNil(viewModel.alert)
+    }
+
+    func testPrivacyLeavingWithInvalidDiscordURLResetsFieldWithoutAlert() async throws {
+        let (store, persistence, manager) = try await makePrivacySettingsStore()
+        let viewModel = PrivacySettingsViewModel(
+            settingsStore: store,
+            discordRPCManager: manager
+        )
+
+        viewModel.discordRPCURLDraft = "ws://"
+        await viewModel.commitDiscordRPCURLDraft(discardingInvalid: true)
+
+        let history = await persistence.writeHistory
+        XCTAssertTrue(history.isEmpty)
+        XCTAssertEqual(viewModel.discordRPCURLDraft, "ws://127.0.0.1:3000")
         XCTAssertNil(viewModel.alert)
     }
 

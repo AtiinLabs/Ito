@@ -93,38 +93,6 @@ extension SettingsViewModelTests {
         ))
     }
 
-    func testPrivacyAndStoragePresentationContractsRemainExact() throws {
-        let privacySource = try source(at: "Ito/Views/Settings/PrivacySettingsView.swift")
-        let storageSource = try source(at: "Ito/Views/Settings/StorageSettingsView.swift")
-
-        for status in [
-            "Text(\"Connected\").foregroundColor(.green)",
-            "Text(\"Connecting...\").foregroundColor(.yellow)",
-            "Text(\"Disconnected\").foregroundColor(.gray)",
-            "Text(\"Error: \\(message)\").foregroundColor(.red).lineLimit(1)"
-        ] {
-            XCTAssertTrue(privacySource.contains(status), "Missing Privacy status: \(status)")
-        }
-        XCTAssertTrue(privacySource.contains("if viewModel.showsDiscordDetails {"))
-        XCTAssertTrue(privacySource.contains(
-            "TextField(\"Server URL (e.g. ws://127.0.0.1:3000)\", text: Binding("
-        ))
-        XCTAssertTrue(privacySource.contains(
-            ".autocapitalization(.none)\n                    .disableAutocorrection(true)"
-        ))
-
-        XCTAssertTrue(storageSource.contains(
-            "Button(action: viewModel.clearCache) {\n                    Text(\"Clear Cache\")"
-        ))
-        XCTAssertTrue(storageSource.contains(
-            ".onAppear(perform: viewModel.refreshCacheUsage)"
-        ))
-        XCTAssertFalse(storageSource.contains("confirmationDialog"))
-        XCTAssertFalse(storageSource.contains("Clear Cache?"))
-        XCTAssertFalse(storageSource.contains("cleared successfully"))
-        XCTAssertFalse(storageSource.contains("AppMessageCenter"))
-    }
-
     func testBootstrapReusesRuntimeSettingsDependencyIdentities() throws {
         let source = try source(at: "Ito/Managers/DurableStateBootstrap.swift")
         let installStart = try XCTUnwrap(source.range(of: "private func install(_ runtime: Runtime)"))

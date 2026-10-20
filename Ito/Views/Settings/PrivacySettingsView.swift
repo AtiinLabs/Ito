@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PrivacySettingsView: View {
     @StateObject private var viewModel: PrivacySettingsViewModel
+    @FocusState private var isEditingDiscordURL: Bool
 
     init(viewModel: PrivacySettingsViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -34,14 +35,16 @@ struct PrivacySettingsView: View {
                 }
 
                 if viewModel.showsDiscordDetails {
-                    TextField("Server URL (e.g. ws://127.0.0.1:3000)", text: Binding(
-                        get: { viewModel.discordRPCURL },
-                        set: { value in
-                            Task { await viewModel.setDiscordRPCURL(value) }
+                    TextField("Server URL (e.g. ws://127.0.0.1:3000)", text: $viewModel.discordRPCURLDraft)
+                        .keyboardType(.URL)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .submitLabel(.done)
+                        .focused($isEditingDiscordURL)
+                        .onChange(of: isEditingDiscordURL) { isEditing in
+                            guard !isEditing else { return }
+                            Task { await viewModel.commitDiscordRPCURLDraft() }
                         }
-                    ))
-                    .autocapitalization(.none)
-                    .disableAutocorrection(true)
 
                     HStack {
                         Text("Status")
@@ -57,6 +60,9 @@ struct PrivacySettingsView: View {
         }
         .navigationTitle("Privacy")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            Task { await viewModel.commitDiscordRPCURLDraft(discardingInvalid: true) }
+        }
         .alert(item: Binding(
             get: { viewModel.alert },
             set: { alert in

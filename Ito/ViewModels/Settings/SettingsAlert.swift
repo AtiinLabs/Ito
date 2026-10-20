@@ -2,6 +2,7 @@ import Foundation
 
 enum SettingsAlert: Identifiable, Equatable {
     case saveFailed
+    case invalidDiscordURL
     case notificationsDisabled
     case notificationRollbackFailed
     case applicationSettingsOpenFailed
@@ -14,6 +15,8 @@ enum SettingsAlert: Identifiable, Equatable {
         switch self {
         case .saveFailed:
             return "Unable to Save Settings"
+        case .invalidDiscordURL:
+            return "Invalid Server Address"
         case .notificationsDisabled:
             return "Notifications Disabled"
         case .notificationRollbackFailed:
@@ -31,6 +34,8 @@ enum SettingsAlert: Identifiable, Equatable {
         switch self {
         case .saveFailed:
             return "Your changes could not be saved. Please try again."
+        case .invalidDiscordURL:
+            return "Enter a ws:// or wss:// address, such as ws://127.0.0.1:3000."
         case .notificationsDisabled:
             return "Please enable notifications for Ito in your device Settings to receive update alerts."
         case .notificationRollbackFailed:

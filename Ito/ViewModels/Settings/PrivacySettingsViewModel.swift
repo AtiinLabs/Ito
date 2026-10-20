@@ -1,3 +1,4 @@
+import Foundation
 import Combine
 
 @MainActor
@@ -5,6 +6,8 @@ final class PrivacySettingsViewModel: ObservableObject {
     @Published private(set) var incognitoMode: Bool
     @Published private(set) var discordRPCEnabled: Bool
     @Published private(set) var discordRPCURL: String
+    /// Text in the server address field; saved by `commitDiscordRPCURLDraft()`.
+    @Published var discordRPCURLDraft: String
     @Published private(set) var discordState: DiscordRPCState
     @Published private(set) var alert: SettingsAlert?
 
@@ -15,6 +18,7 @@ final class PrivacySettingsViewModel: ObservableObject {
     private let settingsStore: AppSettingsStore
     private let discordRPCManager: DiscordRPCManager
     private var cancellables = Set<AnyCancellable>()
+    private var committingDiscordRPCURL: String?
 
     init(
         settingsStore: AppSettingsStore,
@@ -25,6 +29,7 @@ final class PrivacySettingsViewModel: ObservableObject {
         incognitoMode = settingsStore.incognitoMode
         discordRPCEnabled = settingsStore.discordRPCEnabled
         discordRPCURL = settingsStore.discordRPCURL
+        discordRPCURLDraft = settingsStore.discordRPCURL
         discordState = discordRPCManager.state
 
         settingsStore.$discordRPCEnabled
@@ -39,7 +44,12 @@ final class PrivacySettingsViewModel: ObservableObject {
             .store(in: &cancellables)
         settingsStore.$discordRPCURL
             .sink { [weak self] url in
-                self?.discordRPCURL = url
+                guard let self else { return }
+                // Follow outside changes (e.g. a restore) unless the user is mid-edit.
+                if self.discordRPCURLDraft == self.discordRPCURL {
+                    self.discordRPCURLDraft = url
+                }
+                self.discordRPCURL = url
             }
             .store(in: &cancellables)
         discordRPCManager.$state
@@ -71,10 +81,30 @@ final class PrivacySettingsViewModel: ObservableObject {
         }
     }
 
-    func setDiscordRPCURL(_ value: String) async {
+    /// Saves the address field. While editing, invalid text stays in the field so
+    /// it can be corrected; when the page closes (`discardingInvalid`) it is reset.
+    func commitDiscordRPCURLDraft(discardingInvalid: Bool = false) async {
+        let value = discordRPCURLDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value != settingsStore.discordRPCURL, value != committingDiscordRPCURL else {
+            if value == discordRPCURL { discordRPCURLDraft = value }
+            return
+        }
+        guard AppPreferenceCatalog.discordRPCURL.isValid(value) else {
+            if discardingInvalid {
+                discordRPCURLDraft = discordRPCURL
+            } else {
+                alert = .invalidDiscordURL
+            }
+            return
+        }
+        committingDiscordRPCURL = value
+        defer { committingDiscordRPCURL = nil }
         do {
             try await settingsStore.set(value, for: AppPreferenceCatalog.discordRPCURL)
             discordRPCURL = settingsStore.discordRPCURL
+            if discordRPCURLDraft.trimmingCharacters(in: .whitespacesAndNewlines) == value {
+                discordRPCURLDraft = value
+            }
             alert = nil
         } catch {
             discordRPCURL = settingsStore.discordRPCURL
