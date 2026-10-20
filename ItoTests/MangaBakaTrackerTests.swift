@@ -346,6 +346,21 @@ struct MangaBakaTrackerTests {
         #expect(try await mangaBakaStoredCredential(in: subject.store) == .oauth(mangaBakaToken("old")))
     }
 
+    @Test func aTokenRejectedRightAfterARefreshSignsOut() async throws {
+        let refresher = FakeMangaBakaRefresher(results: [.success(mangaBakaToken("new"))])
+        let subject = try await makeTracker(.oauth(mangaBakaToken("old")), refresher: refresher)
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (200, ""), accepts: { _ in false })
+
+        await #expect(throws: MangaBakaCredentialRepository.CredentialError.sessionExpired) {
+            _ = try await subject.tracker.getMediaListEntry(mediaId: "42")
+        }
+
+        #expect(refresher.refreshedTokens == ["refresh-old"])
+        #expect(libraryReads().map(\.authorization) == ["Bearer access-old", "Bearer access-new"])
+        #expect(!subject.tracker.isAuthenticated)
+        #expect(try await subject.store.token(for: "mangabaka") == nil)
+    }
+
     @Test func aRefreshFromAnEndedSessionLeavesTheNewSessionSignedIn() async throws {
         let gate = AsyncTestGate()
         let refresher = FakeMangaBakaRefresher(results: [.success(mangaBakaToken("stale"))], gate: gate)

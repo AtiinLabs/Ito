@@ -178,13 +178,25 @@ actor MangaBakaCredentialRepository {
         case .oauth(let token):
             return .oauthAccessToken(try await refreshed(from: token).accessToken)
         case .personalAccessToken:
-            AppLogger.auth.error("MangaBaka rejected the saved token; signing out.")
-            sessionEpoch += 1
-            credential = nil
-            pendingPersistence = nil
-            try? await store.removeToken(for: Self.providerID)
-            throw CredentialError.tokenRejected
+            throw await self.rejected(rejected)
         }
+    }
+
+    /// Ends the session when MangaBaka rejects its credential and no replacement can help (a Personal
+    /// Access Token, or an OAuth token that was just refreshed), so the user signs in again.
+    /// - Returns: The error to report; `notSignedIn` when the session already changed.
+    func rejected(_ rejected: MangaBakaCredential) async -> CredentialError {
+        guard let current = credential, current.requestCredential == rejected else { return .notSignedIn }
+        AppLogger.auth.error("MangaBaka rejected the saved credential; signing out.")
+        sessionEpoch += 1
+        refreshTask = nil
+        credential = nil
+        pendingPersistence = nil
+        try? await store.removeToken(for: Self.providerID)
+        if case .oauth = current {
+            return .sessionExpired
+        }
+        return .tokenRejected
     }
 
     private func refreshed(from oldToken: MangaBakaToken) async throws -> MangaBakaToken {

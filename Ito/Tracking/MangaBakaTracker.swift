@@ -209,19 +209,24 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
         return result.state
     }
 
-    /// Signs in through MangaBaka's OAuth page with PKCE.
+    /// Signs in through MangaBaka's OAuth page with PKCE. The token is kept only once the API
+    /// accepts it, so a sign-in that cannot sync fails here instead of later.
     public func authenticate(using oauthManager: OAuthManager) async throws {
         let request = oauth.authorizationRequest()
         let callbackURL = try await oauthManager.authenticate(url: request.url, callbackScheme: "ito")
         let code = try oauth.authorizationCode(from: callbackURL, matching: request)
         let token = try await oauth.exchangeCode(code, for: request)
+        let profile: MangaBakaProfile
+        do {
+            profile = try await Self.client(credential: .oauthAccessToken(token.accessToken), session: session).profile()
+        } catch {
+            AppLogger.auth.error("MangaBaka did not accept the new sign-in: \(error.localizedDescription)")
+            try? await oauth.revoke(token)
+            throw error
+        }
         await credentialRepository.persist(.oauth(token))
         isSignedIn = true
-        do {
-            storeUsername(of: try await Self.client(credential: .oauthAccessToken(token.accessToken), session: session).profile())
-        } catch {
-            AppLogger.auth.error("Failed to fetch the MangaBaka profile: \(error.localizedDescription)")
-        }
+        storeUsername(of: profile)
     }
 
     /// Signs in with a Personal Access Token the user created on mangabaka.org.
@@ -344,8 +349,8 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
 
     /// Runs a library request with the saved credential. After a 401 it retries once with a
     /// refreshed OAuth token, or with a credential saved since the request started; it signs out
-    /// when MangaBaka rejects the session. A failure from a session that has since been replaced
-    /// leaves the new session signed in.
+    /// when MangaBaka rejects the session, including a token rejected again right after a refresh.
+    /// A failure from a session that has since been replaced leaves the new session signed in.
     private func perform<T>(_ operation: (MangaBakaClient) async throws -> T) async throws -> T {
         do {
             let credential = try await credentialRepository.validCredential()
@@ -353,7 +358,11 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
                 return try await operation(Self.client(credential: credential, session: session))
             } catch MangaBakaError.unauthorized {
                 let replacement = try await credentialRepository.credential(replacing: credential)
-                return try await operation(Self.client(credential: replacement, session: session))
+                do {
+                    return try await operation(Self.client(credential: replacement, session: session))
+                } catch MangaBakaError.unauthorized {
+                    throw await credentialRepository.rejected(replacement)
+                }
             }
         } catch let error as MangaBakaCredentialRepository.CredentialError {
             if await !credentialRepository.hasSession {
