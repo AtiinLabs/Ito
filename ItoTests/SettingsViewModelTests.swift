@@ -208,7 +208,7 @@ final class SettingsViewModelTests: XCTestCase {
                 AppPreferenceKeys.skipCompleted
             ]
         )
-        XCTAssertEqual(notification.requestCallCount, 0)
+        XCTAssertEqual(notification.requestCallCount, 1)
         XCTAssertTrue(viewModel.alwaysShowCategoryPicker)
         XCTAssertTrue(viewModel.backgroundUpdatesEnabled)
         XCTAssertFalse(viewModel.updateNotifications)
@@ -954,7 +954,7 @@ final class SettingsViewModelTests: XCTestCase {
         return (store, persistence)
     }
 
-    private func makeLibrarySettingsStore(
+    func makeLibrarySettingsStore(
         updateNotifications: Bool = true
     ) async throws -> (
         AppSettingsStore,

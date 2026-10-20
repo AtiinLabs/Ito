@@ -87,15 +87,31 @@ final class LibrarySettingsViewModel: ObservableObject {
         } catch {
             backgroundUpdatesEnabled = settingsStore.backgroundUpdatesEnabled
             alert = .saveFailed
+            return
+        }
+
+        // "Notify on New Chapters" defaults to on, so turning background checks on
+        // is often the first moment notifications matter: ask for permission now.
+        guard value, settingsStore.updateNotifications else { return }
+        await serializeNotificationMutation { viewModel in
+            await viewModel.confirmNotificationPermission()
         }
     }
 
     func setUpdateNotifications(_ value: Bool) async {
+        await serializeNotificationMutation { viewModel in
+            await viewModel.performUpdateNotificationsMutation(value)
+        }
+    }
+
+    private func serializeNotificationMutation(
+        _ body: @escaping @MainActor (LibrarySettingsViewModel) async -> Void
+    ) async {
         let precedingMutation = notificationMutationTail
         let mutation = Task { @MainActor [weak self] in
             await precedingMutation?.value
             guard let self else { return }
-            await self.performUpdateNotificationsMutation(value)
+            await body(self)
         }
         notificationMutationTail = mutation
         await mutation.value
@@ -113,6 +129,13 @@ final class LibrarySettingsViewModel: ObservableObject {
         }
 
         guard value else { return }
+        await confirmNotificationPermission()
+    }
+
+    /// Requests notification permission while notifications are enabled, and turns
+    /// them back off when the user denies it.
+    private func confirmNotificationPermission() async {
+        guard settingsStore.updateNotifications else { return }
         let granted = await notificationAuthorization.requestPermission()
         guard !granted else { return }
 
