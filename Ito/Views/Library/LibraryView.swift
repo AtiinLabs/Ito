@@ -425,6 +425,7 @@ struct LibraryItemView: View {
     let onRemove: () -> Void
 
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var wiggleAngle = Double.random(in: -1.2...1.2)
     @State private var isWiggling = false
 
@@ -472,8 +473,13 @@ struct LibraryItemView: View {
                 : .easeInOut(duration: 0.15),
             value: isWiggling
         )
+        // Cards that appear while editing wiggle too; Reduce Motion turns the wiggle off.
+        .onAppear { isWiggling = isEditing && !reduceMotion }
         .onChange(of: isEditing) { editing in
-            withAnimation { isWiggling = editing }
+            withAnimation { isWiggling = editing && !reduceMotion }
+        }
+        .onChange(of: reduceMotion) { reduce in
+            isWiggling = isEditing && !reduce
         }
     }
 
