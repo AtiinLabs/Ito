@@ -66,7 +66,8 @@ struct ReaderView: View {
                         .foregroundColor(.white.opacity(0.6))
                         .multilineTextAlignment(.center)
                     Button("Try Again") { viewModel.retry() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.bordered)
+                        .tint(.white)
                         .padding(.top, 4)
                 }
                 .padding(32)
