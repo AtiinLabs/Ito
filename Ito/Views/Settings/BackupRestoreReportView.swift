@@ -12,7 +12,6 @@ struct BackupRestoreReportView: View {
                         "Mode",
                         report.mode == .wipe ? "Wipe and replace" : "Merge"
                     )
-                    valueRow("Operation", report.operationId)
                 }
 
                 totalsSection
@@ -36,7 +35,7 @@ struct BackupRestoreReportView: View {
                             Array(report.preflightWarnings.enumerated()),
                             id: \.offset
                         ) { _, warning in
-                            Text(String(describing: warning.reason))
+                            Text(warning.reason.userMessage)
                                 .font(.caption)
                         }
                     }
@@ -48,7 +47,7 @@ struct BackupRestoreReportView: View {
                             destination:
                             MigrationReportView.readOnly(report: migrationReport)
                         ) {
-                            Text("View read-only migration report")
+                            Text("Unmatched Sources")
                         }
                     }
                 }
