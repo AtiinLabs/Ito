@@ -2,10 +2,9 @@ import SwiftUI
 
 // MARK: - MigrationReportView
 
-/// Presented as a sheet after a backup restore completes.
-/// HIG: Sheets are appropriate for "task-specific workflows" that present
-/// additional information after an action. The user initiated a restore,
-/// so surfacing resolution options in a sheet is the correct pattern.
+/// Lists sources a restore could not match. Pushed read-only inside the restore report, or
+/// presented editable in a sheet (wrapped in a NavigationView by the presenter) after the
+/// report is acknowledged.
 struct MigrationReportView: View {
     @StateObject private var viewModel: MigrationReportViewModel
     private let onDismiss: () -> Void
@@ -30,46 +29,51 @@ struct MigrationReportView: View {
         )
     }
 
+    @ViewBuilder
     var body: some View {
-        NavigationView {
-            List {
-                summarySection
-                unresolvedSourcesSection
-            }
-            .listStyle(.insetGrouped)
-            .navigationTitle("Import Results")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
+        // `if` inside a toolbar builder needs iOS 16, so choose the whole toolbar instead.
+        if showsDismissButton {
+            report.toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", action: onDismiss)
                         .font(.headline)
-                        .opacity(showsDismissButton ? 1 : 0)
-                        .disabled(!showsDismissButton)
                 }
             }
-            .sheet(item: Binding(
-                get: { viewModel.remapPicker },
-                set: { if $0 == nil { viewModel.cancelRemapPicker() } }
-            )) { picker in
-                RemapPickerView(
-                    foreignId: picker.foreignID,
-                    options: viewModel.filteredPickerOptions,
-                    searchText: $viewModel.pickerSearchText,
-                    onSelect: { _ = viewModel.selectRemapTarget(pluginID: $0) },
-                    onCancel: viewModel.cancelRemapPicker
-                )
-            }
-            // HIG: Alerts inform people about a problem or a change.
-            .alert(item: Binding(
-                get: { viewModel.alert },
-                set: { if $0 == nil { viewModel.dismissAlert() } }
-            )) { alert in
-                Alert(
-                    title: Text(alert.title),
-                    message: Text(alert.message),
-                    dismissButton: .cancel(Text("OK"))
-                )
-            }
+        } else {
+            report
+        }
+    }
+
+    private var report: some View {
+        List {
+            summarySection
+            unresolvedSourcesSection
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle("Import Results")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: Binding(
+            get: { viewModel.remapPicker },
+            set: { if $0 == nil { viewModel.cancelRemapPicker() } }
+        )) { picker in
+            RemapPickerView(
+                foreignId: picker.foreignID,
+                options: viewModel.filteredPickerOptions,
+                searchText: $viewModel.pickerSearchText,
+                onSelect: { _ = viewModel.selectRemapTarget(pluginID: $0) },
+                onCancel: viewModel.cancelRemapPicker
+            )
+        }
+        // HIG: Alerts inform people about a problem or a change.
+        .alert(item: Binding(
+            get: { viewModel.alert },
+            set: { if $0 == nil { viewModel.dismissAlert() } }
+        )) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .cancel(Text("OK"))
+            )
         }
     }
 

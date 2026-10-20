@@ -163,10 +163,13 @@ struct BackupSettingsView: View {
             )
         ) {
             if let report = viewModel.migrationReportToResolve {
-                MigrationReportView(
-                    viewModel: makeMigrationReportViewModel(report),
-                    onDismiss: viewModel.dismissMigrationReport
-                )
+                NavigationView {
+                    MigrationReportView(
+                        viewModel: makeMigrationReportViewModel(report),
+                        onDismiss: viewModel.dismissMigrationReport
+                    )
+                }
+                .navigationViewStyle(.stack)
             }
         }
         .alert(
