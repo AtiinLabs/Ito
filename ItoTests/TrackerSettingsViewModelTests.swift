@@ -84,6 +84,19 @@ final class TrackerSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(service.authenticationInvocations, ["anilist", "anilist"])
     }
 
+    func testCancelledSignInShowsNoFailure() async {
+        let service = TrackerSettingsServiceFake(state: state(providers: [provider(id: "anilist")]))
+        service.authenticationError = CancellationError()
+        let logger = PresentationEventCaptureSpy()
+        let viewModel = makeViewModel(service: service, logger: logger)
+
+        viewModel.authenticate(providerID: "anilist")
+        await trackingWaitUntil { !viewModel.isAuthenticationOperationActive }
+
+        XCTAssertNil(viewModel.failure(for: "anilist"))
+        XCTAssertEqual(logger.events.last?.outcome, .cancelled)
+    }
+
     func testLogoutSuccessAndFailureRefreshAuthoritativeProviderState() async {
         let service = TrackerSettingsServiceFake(
             state: state(providers: [provider(id: "anilist", authenticated: true, username: "reader")])

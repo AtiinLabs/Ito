@@ -12,7 +12,12 @@ public class OAuthManager {
         return try await withCheckedThrowingContinuation { continuation in
             let session = ASWebAuthenticationSession(url: url, callbackURLScheme: callbackScheme) { callbackURL, error in
                 if let error = error {
-                    continuation.resume(throwing: error)
+                    if let authError = error as? ASWebAuthenticationSessionError,
+                       authError.code == .canceledLogin {
+                        continuation.resume(throwing: CancellationError())
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
                     return
                 }
 
