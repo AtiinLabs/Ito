@@ -42,7 +42,7 @@ struct BackupSettingsView: View {
 
             Section(
                 header: Text("Import"),
-                footer: Text("Restoring from a backup allows you to completely replace your current library, or merge missing items into it.")
+                footer: Text("Restore a backup by merging it into your current library, or by replacing your library with it.")
             ) {
                 Button(action: requestImport) {
                     HStack {
@@ -97,7 +97,7 @@ struct BackupSettingsView: View {
                 viewModel.cancelRestoreStrategy()
             }
         } message: {
-            Text("Merging keeps your existing library items and only adds missing ones. Wiping completely deletes your current library and replaces it with the backup.")
+            Text("Merging adds missing items and lets you choose which version to keep when an item differs. Wiping deletes your current library and replaces it with the backup.")
         }
         .alert(
             "Wipe and Replace Library?",
