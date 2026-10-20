@@ -42,28 +42,47 @@ struct ItoApp: App {
     }
 
     private static func handleAppRefresh(task: BGAppRefreshTask) {
+        let completion = BackgroundTaskCompletion(task: task)
         let taskWrapper = Task { @MainActor in
             let bootstrap = DurableStateBootstrap.shared
             guard await bootstrap.prepare() else {
-                task.setTaskCompleted(success: false)
+                completion.finish(success: false)
                 return
             }
 
             await scheduleAppRefresh(bootstrap: bootstrap)
             guard let updateManager = bootstrap.updateManager else {
-                task.setTaskCompleted(success: false)
+                completion.finish(success: false)
                 return
             }
             let updatedItems = await updateManager.checkForUpdatesInBackground()
             if !updatedItems.isEmpty, let notificationManager = bootstrap.notificationManager {
                 await notificationManager.dispatchUpdateSummary(updatedItems: updatedItems)
             }
-            task.setTaskCompleted(success: true)
+            completion.finish(success: true)
         }
 
+        // iOS expects the task to finish right away once it expires; a check still in a plugin
+        // call cannot be waited for. Work saved so far stays saved.
         task.expirationHandler = {
             taskWrapper.cancel()
+            completion.finish(success: false)
         }
+    }
+}
+
+/// Reports a background task's end to iOS exactly once, whichever path ends it first.
+private nonisolated final class BackgroundTaskCompletion: @unchecked Sendable {
+    private let task: BGTask
+    private let once = OnceFlag()
+
+    init(task: BGTask) {
+        self.task = task
+    }
+
+    func finish(success: Bool) {
+        guard once.claim() else { return }
+        task.setTaskCompleted(success: success)
     }
 }
 
