@@ -172,7 +172,6 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.updateNotifications)
         XCTAssertEqual(viewModel.updateInterval, .fourHours)
         XCTAssertFalse(viewModel.skipCompleted)
-        XCTAssertFalse(viewModel.wifiOnlyUpdates)
         XCTAssertFalse(viewModel.showsUpdateOptions)
         XCTAssertEqual(
             viewModel.updateIntervals,
@@ -183,7 +182,7 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.showsUpdateOptions)
     }
 
-    func testLibraryWritesEachOfSixPreferenceKeysExactlyOnce() async throws {
+    func testLibraryWritesEachOfFivePreferenceKeysExactlyOnce() async throws {
         let (store, persistence, notification, opener) = try await makeLibrarySettingsStore()
         let viewModel = LibrarySettingsViewModel(
             settingsStore: store,
@@ -196,10 +195,9 @@ final class SettingsViewModelTests: XCTestCase {
         await viewModel.setUpdateNotifications(false)
         await viewModel.setUpdateInterval(.daily)
         await viewModel.setSkipCompleted(true)
-        await viewModel.setWifiOnlyUpdates(true)
 
         let history = await persistence.writeHistory
-        XCTAssertEqual(history.count, 6)
+        XCTAssertEqual(history.count, 5)
         XCTAssertEqual(
             history.compactMap(\.first).map(\.key),
             [
@@ -207,8 +205,7 @@ final class SettingsViewModelTests: XCTestCase {
                 AppPreferenceKeys.backgroundUpdatesEnabled,
                 AppPreferenceKeys.updateNotifications,
                 AppPreferenceKeys.updateInterval,
-                AppPreferenceKeys.skipCompleted,
-                AppPreferenceKeys.wifiOnlyUpdates
+                AppPreferenceKeys.skipCompleted
             ]
         )
         XCTAssertEqual(notification.requestCallCount, 0)
@@ -217,7 +214,6 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.updateNotifications)
         XCTAssertEqual(viewModel.updateInterval, .daily)
         XCTAssertTrue(viewModel.skipCompleted)
-        XCTAssertTrue(viewModel.wifiOnlyUpdates)
     }
 
     func testLibraryWriteFailureKeepsCommittedValueAndRetryClearsAlert() async throws {
@@ -273,21 +269,14 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.skipCompleted)
         XCTAssertEqual(viewModel.alert, .saveFailed)
 
-        await persistence.failNextWriteAttempt()
-        await viewModel.setWifiOnlyUpdates(true)
-        XCTAssertFalse(store.wifiOnlyUpdates)
-        XCTAssertFalse(viewModel.wifiOnlyUpdates)
-        XCTAssertEqual(viewModel.alert, .saveFailed)
-
         let history = await persistence.writeHistory
-        XCTAssertEqual(history.count, 4)
+        XCTAssertEqual(history.count, 3)
         XCTAssertEqual(
             history.compactMap(\.first).map(\.key),
             [
                 AppPreferenceKeys.backgroundUpdatesEnabled,
                 AppPreferenceKeys.updateInterval,
-                AppPreferenceKeys.skipCompleted,
-                AppPreferenceKeys.wifiOnlyUpdates
+                AppPreferenceKeys.skipCompleted
             ]
         )
     }

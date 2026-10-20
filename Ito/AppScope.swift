@@ -218,6 +218,7 @@ final class RootModelStore {
     private let makeLibrarySettingsViewModel: () -> LibrarySettingsViewModel
     private let makePrivacySettingsViewModel: () -> PrivacySettingsViewModel
     private let makeStorageSettingsViewModel: () -> StorageSettingsViewModel
+    private let makeNetworkSettingsViewModel: () -> NetworkSettingsViewModel
     private let makeDebugLogViewModel: () -> DebugLogViewModel
     private var storedSearchViewModel: SearchViewModel?
     private var storedLibraryViewModel: LibraryViewModel?
@@ -227,6 +228,7 @@ final class RootModelStore {
     private var storedLibrarySettingsViewModel: LibrarySettingsViewModel?
     private var storedPrivacySettingsViewModel: PrivacySettingsViewModel?
     private var storedStorageSettingsViewModel: StorageSettingsViewModel?
+    private var storedNetworkSettingsViewModel: NetworkSettingsViewModel?
     private var storedDebugLogViewModel: DebugLogViewModel?
 
     init(
@@ -290,6 +292,12 @@ final class RootModelStore {
             StorageSettingsViewModel(
                 settingsStore: preparedDependencies.settings.settingsStore,
                 storageAccess: preparedDependencies.settings.storageAccess
+            )
+        }
+        makeNetworkSettingsViewModel = {
+            NetworkSettingsViewModel(
+                settingsStore: preparedDependencies.settings.settingsStore,
+                siteDataClearer: preparedDependencies.settings.siteDataClearer
             )
         }
         makeDebugLogViewModel = {
@@ -387,6 +395,17 @@ final class RootModelStore {
 
     var hasLoadedStorageSettingsViewModel: Bool {
         storedStorageSettingsViewModel != nil
+    }
+
+    var networkSettingsViewModel: NetworkSettingsViewModel {
+        if let storedNetworkSettingsViewModel { return storedNetworkSettingsViewModel }
+        let viewModel = makeNetworkSettingsViewModel()
+        storedNetworkSettingsViewModel = viewModel
+        return viewModel
+    }
+
+    var hasLoadedNetworkSettingsViewModel: Bool {
+        storedNetworkSettingsViewModel != nil
     }
 
     var debugLogViewModel: DebugLogViewModel {

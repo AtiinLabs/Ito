@@ -352,8 +352,8 @@ struct AppViewFactory {
             Text("Reader Settings View")
         case .storage:
             makeStorageSettingsView()
-        case .networkUnavailable:
-            Text("Network Settings View")
+        case .network:
+            makeNetworkSettingsView()
         case .extensionsUnavailable:
             Text("Manage Extensions View")
         case .debugLogs:
@@ -375,6 +375,10 @@ struct AppViewFactory {
 
     func makeStorageSettingsView() -> StorageSettingsView {
         StorageSettingsView(viewModel: rootModels.storageSettingsViewModel)
+    }
+
+    func makeNetworkSettingsView() -> NetworkSettingsView {
+        NetworkSettingsView(viewModel: rootModels.networkSettingsViewModel)
     }
 
     func makeTrackerSettingsView() -> TrackerSettingsView {

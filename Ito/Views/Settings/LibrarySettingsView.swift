@@ -71,19 +71,6 @@ struct LibrarySettingsView: View {
             } footer: {
                 Text("Background checks run approximately at the chosen interval. Actual timing is managed by iOS.")
             }
-
-            Section {
-                Toggle("Wi-Fi Only", isOn: Binding(
-                    get: { viewModel.wifiOnlyUpdates },
-                    set: { value in
-                        Task { await viewModel.setWifiOnlyUpdates(value) }
-                    }
-                ))
-            } header: {
-                Text("Restrictions")
-            } footer: {
-                Text("Only check for updates when connected to Wi-Fi.")
-            }
         }
         .navigationTitle("Library")
         .navigationBarTitleDisplayMode(.inline)

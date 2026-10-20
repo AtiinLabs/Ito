@@ -7,7 +7,6 @@ final class LibrarySettingsViewModel: ObservableObject {
     @Published private(set) var updateNotifications: Bool
     @Published private(set) var updateInterval: UpdateIntervalPreference
     @Published private(set) var skipCompleted: Bool
-    @Published private(set) var wifiOnlyUpdates: Bool
     @Published private(set) var alert: SettingsAlert?
 
     let updateIntervals = UpdateIntervalPreference.allCases
@@ -35,7 +34,6 @@ final class LibrarySettingsViewModel: ObservableObject {
         updateNotifications = settingsStore.updateNotifications
         updateInterval = settingsStore.updateInterval
         skipCompleted = settingsStore.skipCompleted
-        wifiOnlyUpdates = settingsStore.wifiOnlyUpdates
 
         settingsStore.$alwaysShowCategoryPicker
             .sink { [weak self] value in
@@ -60,11 +58,6 @@ final class LibrarySettingsViewModel: ObservableObject {
         settingsStore.$skipCompleted
             .sink { [weak self] value in
                 self?.skipCompleted = value
-            }
-            .store(in: &cancellables)
-        settingsStore.$wifiOnlyUpdates
-            .sink { [weak self] value in
-                self?.wifiOnlyUpdates = value
             }
             .store(in: &cancellables)
     }
@@ -151,17 +144,6 @@ final class LibrarySettingsViewModel: ObservableObject {
             alert = nil
         } catch {
             skipCompleted = settingsStore.skipCompleted
-            alert = .saveFailed
-        }
-    }
-
-    func setWifiOnlyUpdates(_ value: Bool) async {
-        do {
-            try await settingsStore.set(value, for: AppPreferenceCatalog.wifiOnlyUpdates)
-            wifiOnlyUpdates = settingsStore.wifiOnlyUpdates
-            alert = nil
-        } catch {
-            wifiOnlyUpdates = settingsStore.wifiOnlyUpdates
             alert = .saveFailed
         }
     }

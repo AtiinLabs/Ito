@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import WebKit
 
 @MainActor
 protocol NotificationAuthorizationRequesting: AnyObject {
@@ -76,6 +77,31 @@ final class AppMessageDebugLogMessagePresenter: DebugLogMessagePresenting {
 }
 
 @MainActor
+protocol SiteDataClearing: AnyObject {
+    func clearSiteData() async throws
+}
+
+@MainActor
+final class SystemSiteDataClearer: SiteDataClearing {
+    func clearSiteData() async throws {
+        if let cookies = HTTPCookieStorage.shared.cookies {
+            for cookie in cookies {
+                HTTPCookieStorage.shared.deleteCookie(cookie)
+            }
+        }
+        await withCheckedContinuation { continuation in
+            WKWebsiteDataStore.default().removeData(
+                ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+                modifiedSince: .distantPast
+            ) {
+                continuation.resume()
+            }
+        }
+        CloudflareManager.shared.clearCachedUserAgents()
+    }
+}
+
+@MainActor
 struct PreparedSettingsDependencies {
     let settingsStore: AppSettingsStore
     let notificationAuthorization: any NotificationAuthorizationRequesting
@@ -84,4 +110,25 @@ struct PreparedSettingsDependencies {
     let discordRPCManager: DiscordRPCManager
     let logReader: any DebugLogReading
     let clipboardWriter: any ClipboardWriting
+    let siteDataClearer: any SiteDataClearing
+
+    init(
+        settingsStore: AppSettingsStore,
+        notificationAuthorization: any NotificationAuthorizationRequesting,
+        applicationSettingsOpener: any ApplicationSettingsOpening,
+        storageAccess: any SettingsStorageAccessing,
+        discordRPCManager: DiscordRPCManager,
+        logReader: any DebugLogReading,
+        clipboardWriter: any ClipboardWriting,
+        siteDataClearer: any SiteDataClearing = SystemSiteDataClearer()
+    ) {
+        self.settingsStore = settingsStore
+        self.notificationAuthorization = notificationAuthorization
+        self.applicationSettingsOpener = applicationSettingsOpener
+        self.storageAccess = storageAccess
+        self.discordRPCManager = discordRPCManager
+        self.logReader = logReader
+        self.clipboardWriter = clipboardWriter
+        self.siteDataClearer = siteDataClearer
+    }
 }

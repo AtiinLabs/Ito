@@ -186,6 +186,19 @@ final class TestClipboardWriter: ClipboardWriting {
 }
 
 @MainActor
+final class TestSiteDataClearer: SiteDataClearing {
+    private(set) var clearCallCount = 0
+    var shouldThrow = false
+
+    func clearSiteData() async throws {
+        clearCallCount += 1
+        if shouldThrow {
+            throw URLError(.cannotRemoveFile)
+        }
+    }
+}
+
+@MainActor
 struct TestPreparedSettingsDependencyBundle {
     let settingsStore: AppSettingsStore
     let notificationAuthorization: TestNotificationAuthorization
@@ -194,6 +207,7 @@ struct TestPreparedSettingsDependencyBundle {
     let discordRPCManager: DiscordRPCManager
     let logReader: TestDebugLogReader
     let clipboardWriter: TestClipboardWriter
+    let siteDataClearer: TestSiteDataClearer
 
     init(
         settingsStore: AppSettingsStore = AppSettingsStore(
@@ -204,7 +218,8 @@ struct TestPreparedSettingsDependencyBundle {
         storageAccess: TestSettingsStorageAccess = TestSettingsStorageAccess(),
         discordRPCManager: DiscordRPCManager = SharedSettingsTestRuntime.discordRPCManager,
         logReader: TestDebugLogReader = TestDebugLogReader(),
-        clipboardWriter: TestClipboardWriter = TestClipboardWriter()
+        clipboardWriter: TestClipboardWriter = TestClipboardWriter(),
+        siteDataClearer: TestSiteDataClearer = TestSiteDataClearer()
     ) {
         self.settingsStore = settingsStore
         self.notificationAuthorization = notificationAuthorization
@@ -213,6 +228,7 @@ struct TestPreparedSettingsDependencyBundle {
         self.discordRPCManager = discordRPCManager
         self.logReader = logReader
         self.clipboardWriter = clipboardWriter
+        self.siteDataClearer = siteDataClearer
     }
 
     var dependencies: PreparedSettingsDependencies {
@@ -223,7 +239,8 @@ struct TestPreparedSettingsDependencyBundle {
             storageAccess: storageAccess,
             discordRPCManager: discordRPCManager,
             logReader: logReader,
-            clipboardWriter: clipboardWriter
+            clipboardWriter: clipboardWriter,
+            siteDataClearer: siteDataClearer
         )
     }
 }
@@ -274,21 +291,23 @@ func verifyLiveSettingsRestorePropagation(
     let library = scope.rootModels.librarySettingsViewModel
     let privacy = scope.rootModels.privacySettingsViewModel
     let storageViewModel = scope.rootModels.storageSettingsViewModel
+    let network = scope.rootModels.networkSettingsViewModel
 
     XCTAssertTrue(scope.rootModels.appearanceSettingsViewModel === appearance)
     XCTAssertTrue(scope.rootModels.librarySettingsViewModel === library)
     XCTAssertTrue(scope.rootModels.privacySettingsViewModel === privacy)
     XCTAssertTrue(scope.rootModels.storageSettingsViewModel === storageViewModel)
+    XCTAssertTrue(scope.rootModels.networkSettingsViewModel === network)
     XCTAssertEqual(appearance.currentTheme, .system)
     XCTAssertFalse(library.alwaysShowCategoryPicker)
     XCTAssertFalse(library.backgroundUpdatesEnabled)
     XCTAssertFalse(library.updateNotifications)
     XCTAssertEqual(library.updateInterval, .fourHours)
     XCTAssertFalse(library.skipCompleted)
-    XCTAssertFalse(library.wifiOnlyUpdates)
     XCTAssertFalse(privacy.incognitoMode)
     XCTAssertFalse(privacy.discordRPCEnabled)
     XCTAssertEqual(privacy.discordRPCURL, "ws://127.0.0.1:3000")
+    XCTAssertFalse(network.wifiOnlyUpdates)
     XCTAssertEqual(storageViewModel.diskCacheLimitGB, 10)
 
     await persistence.replacePreferencesForRestore([
@@ -312,10 +331,9 @@ func verifyLiveSettingsRestorePropagation(
     XCTAssertTrue(library.backgroundUpdatesEnabled)
     XCTAssertTrue(library.updateNotifications)
     XCTAssertEqual(library.updateInterval, .daily)
-    XCTAssertTrue(library.skipCompleted)
-    XCTAssertTrue(library.wifiOnlyUpdates)
     XCTAssertTrue(privacy.incognitoMode)
     XCTAssertTrue(privacy.discordRPCEnabled)
+    XCTAssertTrue(network.wifiOnlyUpdates)
     XCTAssertEqual(privacy.discordRPCURL, "wss://restore.example/socket")
     XCTAssertEqual(storageViewModel.diskCacheLimitGB, 25)
 
@@ -333,6 +351,7 @@ func verifyLiveSettingsRestorePropagation(
     XCTAssertNil(appearance.alert)
     XCTAssertNil(library.alert)
     XCTAssertNil(privacy.alert)
+    XCTAssertNil(network.alert)
     XCTAssertNil(storageViewModel.alert)
 }
 

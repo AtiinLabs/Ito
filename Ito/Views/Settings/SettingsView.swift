@@ -8,7 +8,7 @@ enum SettingsDestination: CaseIterable {
     case backup
     case readerUnavailable
     case storage
-    case networkUnavailable
+    case network
     case extensionsUnavailable
     case debugLogs
 }
@@ -38,7 +38,7 @@ struct SettingsView: View {
                     NavigationLink(destination: viewFactory.makeSettingsDestination(for: .storage)) {
                         Label("Storage", systemImage: "internaldrive")
                     }
-                    NavigationLink(destination: viewFactory.makeSettingsDestination(for: .networkUnavailable)) {
+                    NavigationLink(destination: viewFactory.makeSettingsDestination(for: .network)) {
                         Label("Network", systemImage: "wifi")
                     }
                     NavigationLink(destination: viewFactory.makeSettingsDestination(for: .trackers)) {

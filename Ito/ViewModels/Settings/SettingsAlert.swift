@@ -5,6 +5,8 @@ enum SettingsAlert: Identifiable, Equatable {
     case notificationsDisabled
     case notificationRollbackFailed
     case applicationSettingsOpenFailed
+    case siteDataCleared
+    case siteDataClearFailed
 
     var id: Self { self }
 
@@ -18,6 +20,10 @@ enum SettingsAlert: Identifiable, Equatable {
             return "Unable to Disable Notifications"
         case .applicationSettingsOpenFailed:
             return "Unable to Open Settings"
+        case .siteDataCleared:
+            return "Site Data Cleared"
+        case .siteDataClearFailed:
+            return "Unable to Clear Site Data"
         }
     }
 
@@ -31,6 +37,10 @@ enum SettingsAlert: Identifiable, Equatable {
             return "Notification permission was denied, but the preference could not be disabled. Please try again."
         case .applicationSettingsOpenFailed:
             return "Ito could not open the device Settings app. Please try again."
+        case .siteDataCleared:
+            return "Cookies, website data and Cloudflare clearance were removed."
+        case .siteDataClearFailed:
+            return "Some website data could not be removed. Try again."
         }
     }
 }

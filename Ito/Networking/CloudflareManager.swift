@@ -32,6 +32,10 @@ class CloudflareManager: NSObject, ObservableObject {
         return cachedUserAgents[host] ?? cachedUserAgents[host.replacingOccurrences(of: "www.", with: "")] ?? Self.defaultUserAgent
     }
 
+    func clearCachedUserAgents() {
+        cachedUserAgents.removeAll()
+    }
+
     /// Resolves the Cloudflare challenge for the given URL and returns the solved User-Agent and Cookies.
     func resolveChallenge(for url: URL) async throws -> (userAgent: String, cookies: [HTTPCookie]) {
         // If an existing challenge is being solved, cancel it and start new one

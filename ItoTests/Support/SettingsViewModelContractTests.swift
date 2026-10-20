@@ -14,12 +14,14 @@ extension SettingsViewModelTests {
             "Ito/ViewModels/Settings/LibrarySettingsViewModel.swift",
             "Ito/ViewModels/Settings/PrivacySettingsViewModel.swift",
             "Ito/ViewModels/Settings/StorageSettingsViewModel.swift",
+            "Ito/ViewModels/Settings/NetworkSettingsViewModel.swift",
             "Ito/ViewModels/Settings/DebugLogViewModel.swift",
             "Ito/Views/Settings/BackupSettingsView.swift",
             "Ito/Views/Settings/AppearanceSettingsView.swift",
             "Ito/Views/Settings/LibrarySettingsView.swift",
             "Ito/Views/Settings/PrivacySettingsView.swift",
             "Ito/Views/Settings/StorageSettingsView.swift",
+            "Ito/Views/Settings/NetworkSettingsView.swift",
             "Ito/Views/Settings/DebugLogView.swift"
         ]
         var migratedSources = try migratedPaths.map { try source(at: $0) }
@@ -83,9 +85,6 @@ extension SettingsViewModelTests {
         XCTAssertTrue(conditionalBlock.contains("Picker(\"Update Frequency\""))
         XCTAssertTrue(conditionalBlock.contains("Toggle(\"Skip Completed Series\""))
         XCTAssertFalse(conditionalBlock.contains("Toggle(\"Wi-Fi Only\""))
-        XCTAssertTrue(source.contains(
-            "Text(\"Restrictions\")\n            } footer: {\n                Text(\"Only check for updates when connected to Wi-Fi.\")"
-        ))
         XCTAssertTrue(source.contains(
             "primaryButton: .cancel(Text(\"Cancel\")) {\n                    viewModel.dismissAlert()"
         ))
@@ -182,7 +181,7 @@ extension SettingsViewModelTests {
                 "backup",
                 "readerUnavailable",
                 "storage",
-                "networkUnavailable",
+                "network",
                 "extensionsUnavailable",
                 "debugLogs"
             ]
@@ -208,13 +207,13 @@ extension SettingsViewModelTests {
             "case .trackers:\n            makeTrackerSettingsView()",
             "case .backup:\n            makeBackupSettingsView()",
             "case .storage:\n            makeStorageSettingsView()",
+            "case .network:\n            makeNetworkSettingsView()",
             "case .debugLogs:\n            makeDebugLogView()"
         ] {
             XCTAssertTrue(appFactorySource.contains(mapping), "Missing mapping: \(mapping)")
         }
         for placeholder in [
             "Text(\"Reader Settings View\")",
-            "Text(\"Network Settings View\")",
             "Text(\"Manage Extensions View\")"
         ] {
             XCTAssertTrue(appFactorySource.contains(placeholder))
@@ -245,7 +244,6 @@ extension SettingsViewModelTests {
         XCTAssertFalse(settingsSource.contains("NavigationStack"))
         XCTAssertFalse(appFactorySource.contains("AnyView"))
         XCTAssertFalse(appFactorySource.contains("ReaderSettingsView("))
-        XCTAssertFalse(appFactorySource.contains("NetworkSettingsView("))
         XCTAssertFalse(appFactorySource.contains("ManageExtensionsView("))
 
         for excludedCase in [
