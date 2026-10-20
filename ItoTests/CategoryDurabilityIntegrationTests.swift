@@ -227,7 +227,7 @@ final class CategoryDurabilityIntegrationTests: XCTestCase {
         XCTAssertEqual(linkPairs(after.links), linkPairs(before.links))
         XCTAssertEqual(manager.categories, before.categories)
         XCTAssertEqual(linkPairs(manager.links), linkPairs(before.links))
-        XCTAssertEqual(viewModel.categoryPendingDeletionID, fixture.alpha.id)
+        XCTAssertNil(viewModel.categoryPendingDeletionID)
         XCTAssertEqual(viewModel.failure, .categoryDeleteFailed)
         XCTAssertEqual(messages.messages, [.categoryDeleteFailed])
     }

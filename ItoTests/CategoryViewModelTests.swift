@@ -179,15 +179,19 @@ final class CategoryViewModelTests: XCTestCase {
         XCTAssertTrue(service.deleteRequests.isEmpty)
     }
 
-    func testSettingsDeleteSuccessClearsConfirmationOnlyAfterPublication() async {
+    func testSettingsDeleteConfirmationClearsOnConfirmAndCategoryRemainsUntilPublication() async {
         let (viewModel, service, _, _) = makeSettings()
         service.deleteResponses = [.suspended]
         viewModel.requestDelete(categoryID: "alpha")
         viewModel.confirmDelete()
 
         await waitUntil { service.pendingDeleteCount == 1 }
-        XCTAssertEqual(viewModel.categoryPendingDeletionID, "alpha")
+        XCTAssertNil(viewModel.categoryPendingDeletionID)
+        XCTAssertTrue(viewModel.isDeleting)
         XCTAssertTrue(viewModel.categories.contains { $0.id == "alpha" })
+
+        viewModel.cancelDelete()
+        XCTAssertTrue(viewModel.isDeleting)
 
         service.resolveDelete(at: 0, result: .success(()))
         await waitUntil { !viewModel.isDeleting }
@@ -197,7 +201,7 @@ final class CategoryViewModelTests: XCTestCase {
         XCTAssertEqual(service.deleteRequests, ["alpha"])
     }
 
-    func testSettingsDeleteFailureKeepsTruthfulConfirmationAndSuppressesDuplicate() async {
+    func testSettingsDeleteFailureLeavesNoPendingDeletionAndCanBeRequestedAgain() async {
         let (viewModel, service, messages, _) = makeSettings()
         service.deleteResponses = [.suspended]
         viewModel.requestDelete(categoryID: "alpha")
@@ -212,10 +216,14 @@ final class CategoryViewModelTests: XCTestCase {
         )
         await waitUntil { !viewModel.isDeleting }
 
-        XCTAssertEqual(viewModel.categoryPendingDeletionID, "alpha")
+        XCTAssertNil(viewModel.categoryPendingDeletionID)
         XCTAssertTrue(viewModel.categories.contains { $0.id == "alpha" })
         XCTAssertEqual(viewModel.failure, .categoryDeleteFailed)
         XCTAssertEqual(messages.messages, [.categoryDeleteFailed])
+
+        viewModel.requestDelete(categoryID: "alpha")
+        XCTAssertEqual(viewModel.categoryPendingDeletionID, "alpha")
+        XCTAssertNil(viewModel.failure)
     }
 
     func testSettingsReorderPinsSystemAndPublishesRequestedRelativeOrder() async {
