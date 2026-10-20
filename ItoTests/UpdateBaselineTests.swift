@@ -6,7 +6,7 @@ import ito_runner
 
 @MainActor
 struct UpdateBaselineTests {
-    @Test func existingBaselineAdvancesAndRepeatedCountClearsBadge() async throws {
+    @Test func newChaptersAddUpUntilTheSeriesIsOpened() async throws {
         let (database, manager, item) = try await makeSubject(knownCount: 10)
         defer { database.cleanup() }
         let checkedAt = Date(timeIntervalSince1970: 1_700_000_100)
@@ -25,10 +25,20 @@ struct UpdateBaselineTests {
         #expect(firstPersisted.lastCheckedAt == checkedAt)
         #expect(firstPersisted.lastUpdatedAt == checkedAt)
 
-        let secondDelta = await successfulUpdate(manager, item: item, freshCount: 12)
-        #expect(secondDelta == 0)
+        // A later check with nothing new keeps the unread badge.
+        #expect(await successfulUpdate(manager, item: item, freshCount: 12) == 0)
+        #expect(manager.badgeCount(for: identity(for: item)) == 2)
+
+        // More new chapters add to it.
+        #expect(await successfulUpdate(manager, item: item, freshCount: 13) == 1)
+        #expect(manager.badgeCount(for: identity(for: item)) == 3)
+
+        // Opening the series clears it.
+        try await manager.advanceBaseline(for: item.id, media: identity(for: item), knownChapterCount: 13)
         #expect(manager.badgeCount(for: identity(for: item)) == 0)
-        #expect(try await persistedItem(database, id: item.id).knownChapterCount == 12)
+        let reloaded = UpdateManager(dbPool: database.dbPool)
+        try await reloaded.reload()
+        #expect(reloaded.badgeCount(for: identity(for: item)) == 0)
     }
 
     @Test func latestPersistedBaselineWinsOverStaleInput() async throws {
@@ -195,7 +205,7 @@ struct UpdateBaselineTests {
         try await database.dbPool.read { db in
             let records = try UpdateBadgeRecord.fetchAll(db)
             #expect(records.count == 1)
-            #expect(records.single?.count == 2)
+            #expect(records.single?.count == 4)
         }
     }
 

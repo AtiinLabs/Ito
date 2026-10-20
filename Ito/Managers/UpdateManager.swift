@@ -232,7 +232,9 @@ public class UpdateManager: ObservableObject {
         let status: String?
     }
 
-    /// Persists a fetched update and derives badge state only from committed database state.
+    /// Persists a fetched update and derives badge state only from committed database state. New
+    /// chapters add to the series' unread badge, which stays until the series is opened or cleared.
+    /// - Returns: The chapters new in this check, or `nil` when nothing was recorded.
     internal func processUpdate(
         for item: LibraryItem,
         checkedAt: Date = Date(),
@@ -244,15 +246,16 @@ public class UpdateManager: ObservableObject {
             let committed = try await dbPool.write { db -> (
                 oldCount: Int?,
                 delta: Int,
+                unread: Int,
                 itemWasMissing: Bool
             ) in
+                let badge = UpdateBadgeRecord
+                    .filter(Column("pluginId") == media.pluginId)
+                    .filter(Column("canonicalMediaId") == media.canonicalMediaId)
                 guard var dbItem = try LibraryItem.fetchOne(db, key: item.id) else {
                     _ = try LibraryItem.deleteOne(db, key: item.id)
-                    try UpdateBadgeRecord
-                        .filter(Column("pluginId") == media.pluginId)
-                        .filter(Column("canonicalMediaId") == media.canonicalMediaId)
-                        .deleteAll(db)
-                    return (nil, 0, true)
+                    try badge.deleteAll(db)
+                    return (nil, 0, 0, true)
                 }
 
                 let oldCount = dbItem.knownChapterCount
@@ -266,21 +269,18 @@ public class UpdateManager: ObservableObject {
                     dbItem.status = status
                 }
                 try dbItem.update(db)
+                var unread = try badge.fetchOne(db)?.count ?? 0
                 if delta > 0 {
+                    unread += delta
                     try UpdateBadgeRecord(
                         pluginId: media.pluginId,
                         canonicalMediaId: media.canonicalMediaId,
-                        count: delta,
+                        count: unread,
                         updatedAt: checkedAt,
                         provenance: .runtime
                     ).save(db)
-                } else {
-                    try UpdateBadgeRecord
-                        .filter(Column("pluginId") == media.pluginId)
-                        .filter(Column("canonicalMediaId") == media.canonicalMediaId)
-                        .deleteAll(db)
                 }
-                return (oldCount, delta, false)
+                return (oldCount, delta, unread, false)
             }
 
             if committed.itemWasMissing {
@@ -289,10 +289,10 @@ public class UpdateManager: ObservableObject {
             }
 
             AppLogger.update.debug(
-                "🔄 [UpdateManager] \(item.title): \(String(describing: committed.oldCount)) known, \(update.freshCount) fresh/persisted -> \(committed.delta) new"
+                "🔄 [UpdateManager] \(item.title): \(String(describing: committed.oldCount)) known, \(update.freshCount) fresh/persisted -> \(committed.delta) new, \(committed.unread) unread"
             )
-            if committed.delta > 0 {
-                newChapterCounts[media] = committed.delta
+            if committed.unread > 0 {
+                newChapterCounts[media] = committed.unread
             } else {
                 newChapterCounts.removeValue(forKey: media)
             }
