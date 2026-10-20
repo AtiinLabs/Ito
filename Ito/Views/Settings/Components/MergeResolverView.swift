@@ -92,13 +92,16 @@ struct ConflictDetailCard: View {
                         .fontWeight(.semibold)
                         .foregroundColor(isSelected ? .itoOnAccent : .secondary)
                     Spacer()
-                    if isSelected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.itoOnAccent)
-                    } else {
-                        Image(systemName: "circle")
-                            .foregroundColor(.secondary)
+                    Group {
+                        if isSelected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.itoOnAccent)
+                        } else {
+                            Image(systemName: "circle")
+                                .foregroundColor(.secondary)
+                        }
                     }
+                    .accessibilityHidden(true)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -106,7 +109,7 @@ struct ConflictDetailCard: View {
                         .font(.caption2)
                         .foregroundColor(isSelected ? .itoOnAccent : .primary)
 
-                    Label("\(history) chapters read", systemImage: "text.book.closed")
+                    Label(history == 1 ? "1 history entry" : "\(history) history entries", systemImage: "text.book.closed")
                         .font(.caption2)
                         .foregroundColor(isSelected ? .itoOnAccent : .primary)
                 }
@@ -122,5 +125,7 @@ struct ConflictDetailCard: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
