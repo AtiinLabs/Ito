@@ -92,6 +92,14 @@ final class PluginLibraryUpdateSource: LibraryUpdateSource {
     }
 }
 
+/// Why a library update check did not run.
+public enum UpdateRunError: Error, Equatable {
+    case alreadyRunning
+    case notReady
+    case noSources
+    case libraryUnreadable
+}
+
 @MainActor
 public class UpdateManager: ObservableObject {
     @Published private var newChapterCounts: [MediaIdentity: Int] = [:]
@@ -152,31 +160,32 @@ public class UpdateManager: ObservableObject {
     // MARK: - Core Refresh Flow
 
     /// Checks every eligible series, for a refresh the user asked for. Runs on any network.
-    public func checkForUpdates() async {
-        _ = await runSmartUpdate(isBackground: false, budget: nil)
+    /// - Throws: ``UpdateRunError`` when the check cannot run.
+    public func checkForUpdates() async throws {
+        _ = try await runSmartUpdate(isBackground: false, budget: nil)
     }
 
-    /// Entry point for BGAppRefreshTask: checks the series most likely to have new chapters. With
-    /// "Wi-Fi only" on, it does nothing on cellular or other expensive networks.
-    /// - Parameter budget: Seconds after which no new series are started; iOS gives an app
-    ///   refresh task about 30 seconds in all.
+    /// Checks the series most likely to have new chapters, within `budget` seconds, for a
+    /// background refresh. With Wi-Fi only on, it does nothing on cellular or expensive networks.
+    ///
     /// - Returns: The series with new chapters and how many are new.
     public func checkForUpdatesInBackground(budget: TimeInterval = 20) async -> [(LibraryItem, Int)] {
-        await runSmartUpdate(isBackground: true, budget: budget)
+        // A background run that cannot start has nothing to report; the reason is logged.
+        (try? await runSmartUpdate(isBackground: true, budget: budget)) ?? []
     }
 
-    private func runSmartUpdate(isBackground: Bool, budget: TimeInterval?) async -> [(LibraryItem, Int)] {
+    private func runSmartUpdate(isBackground: Bool, budget: TimeInterval?) async throws -> [(LibraryItem, Int)] {
         guard !isRefreshing else {
             AppLogger.update.debug("🔄 [UpdateManager] Already refreshing, skipping.")
-            return []
+            throw UpdateRunError.alreadyRunning
         }
         guard let settingsStore else {
             AppLogger.update.error("🔄 [UpdateManager] Settings unavailable before durable bootstrap.")
-            return []
+            throw UpdateRunError.notReady
         }
         guard let updateSource, case let installed = updateSource.installedPluginIDs, !installed.isEmpty else {
             AppLogger.update.debug("🔄 [UpdateManager] No plugins installed, nothing to check.")
-            return []
+            throw UpdateRunError.noSources
         }
         isRefreshing = true
         let started = now()
@@ -195,7 +204,7 @@ public class UpdateManager: ObservableObject {
             items = try await dbPool.read { db in try LibraryItem.fetchAll(db) }
         } catch {
             AppLogger.update.error("🔄 [UpdateManager] Failed to load library: \(error)")
-            return []
+            throw UpdateRunError.libraryUnreadable
         }
 
         let batch = plannedBatch(

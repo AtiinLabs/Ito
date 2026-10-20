@@ -35,6 +35,7 @@ enum AppMessageKind: Equatable {
     case libraryLayoutPersistenceFailed
     case libraryItemRemovalFailed
     case libraryUpdateFailed
+    case libraryNoUpdateSources
     case categoryCreateFailed
     case categoryRenameFailed
     case categoryDeleteFailed
@@ -275,6 +276,12 @@ extension AppMessageKind {
                 style: .error,
                 title: "Update check failed",
                 detail: "The library update check could not finish. Please try again."
+            )
+        case .libraryNoUpdateSources:
+            return .init(
+                style: .info,
+                title: "No sources installed",
+                detail: "Install a source in Browse to check your library for updates."
             )
         case .categoryCreateFailed:
             return .init(

@@ -215,7 +215,8 @@ final class AppMessageCenterTests: XCTestCase {
         let expected: [(LibraryMessage, AppMessageKind)] = [
             (.layoutPersistenceFailed, .libraryLayoutPersistenceFailed),
             (.itemRemovalFailed, .libraryItemRemovalFailed),
-            (.updateFailed, .libraryUpdateFailed)
+            (.updateFailed, .libraryUpdateFailed),
+            (.noUpdateSources, .libraryNoUpdateSources)
         ]
 
         for (message, kind) in expected {

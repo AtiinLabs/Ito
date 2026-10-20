@@ -343,9 +343,9 @@ final class LibraryViewModel: ObservableObject {
         let task = Task { @MainActor [weak self, updates] in
             do {
                 try await updates.checkLibraryForUpdates()
-                self?.publishUpdateCompletion(operationID: operationID, succeeded: true)
+                self?.publishUpdateCompletion(operationID: operationID, failure: nil)
             } catch {
-                self?.publishUpdateCompletion(operationID: operationID, succeeded: false)
+                self?.publishUpdateCompletion(operationID: operationID, failure: error)
             }
         }
         updateTask = task
@@ -550,7 +550,7 @@ final class LibraryViewModel: ObservableObject {
         )
     }
 
-    private func publishUpdateCompletion(operationID: UUID, succeeded: Bool) {
+    private func publishUpdateCompletion(operationID: UUID, failure: Error?) {
         guard updateOperationID == operationID else {
             logFinished(
                 kind: .remoteUpdate,
@@ -561,20 +561,21 @@ final class LibraryViewModel: ObservableObject {
         }
         updateOperationID = nil
         updateTask = nil
-        if succeeded {
-            logFinished(
-                kind: .remoteUpdate,
-                operationID: operationID,
-                outcome: .succeeded
-            )
-        } else {
+        let outcome: PresentationEventOutcome
+        switch failure {
+        case nil:
+            outcome = .succeeded
+        case UpdateRunError.alreadyRunning?:
+            // The running check already shows its progress banner.
+            outcome = .cancelled
+        case UpdateRunError.noSources?:
+            messagePresenter.present(.noUpdateSources)
+            outcome = .failed(.pluginUnavailable)
+        default:
             messagePresenter.present(.updateFailed)
-            logFinished(
-                kind: .remoteUpdate,
-                operationID: operationID,
-                outcome: .failed(.unknown)
-            )
+            outcome = .failed(.unknown)
         }
+        logFinished(kind: .remoteUpdate, operationID: operationID, outcome: outcome)
     }
 
     private func publishExportCompletion(

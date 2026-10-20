@@ -291,6 +291,19 @@ final class LibraryViewModelTests: XCTestCase {
         await waitUntil { subject.updates.checkCallCount == 3 }
         subject.updates.resolveCheck(at: 0, result: .success(()))
         await final.value
+
+        let noSources = Task { await subject.viewModel.requestUpdate() }
+        await waitUntil { subject.updates.checkCallCount == 4 }
+        subject.updates.resolveCheck(at: 0, result: .failure(UpdateRunError.noSources))
+        await noSources.value
+        XCTAssertEqual(subject.messages.messages, [.updateFailed, .noUpdateSources])
+
+        // A check already running shows its own progress, so joining it says nothing.
+        let alreadyRunning = Task { await subject.viewModel.requestUpdate() }
+        await waitUntil { subject.updates.checkCallCount == 5 }
+        subject.updates.resolveCheck(at: 0, result: .failure(UpdateRunError.alreadyRunning))
+        await alreadyRunning.value
+        XCTAssertEqual(subject.messages.messages, [.updateFailed, .noUpdateSources])
     }
 
     func testExportSuccessFailureDuplicateCallbacksAndStaleCancellationAreSanitized() async {

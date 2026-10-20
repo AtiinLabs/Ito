@@ -65,12 +65,12 @@ struct UpdateRunTests {
         )
         defer { database.cleanup() }
 
-        await manager.checkForUpdates()
+        await #expect(throws: UpdateRunError.notReady) { try await manager.checkForUpdates() }
         #expect(source.checkedItemIDs.isEmpty)
         #expect(!manager.isRefreshing)
 
         manager.configure(settingsStore: settings)
-        await manager.checkForUpdates()
+        try await manager.checkForUpdates()
         #expect(source.checkedItemIDs == ["a"])
         #expect(!manager.isRefreshing)
     }
@@ -105,7 +105,7 @@ struct UpdateRunTests {
         )
         defer { database.cleanup() }
 
-        await manager.checkForUpdates()
+        try await manager.checkForUpdates()
 
         #expect(source.checkedItemIDs == ["kept"])
         let stored = try await database.dbPool.read { db in try LibraryItem.fetchOne(db, key: removed.id) }
@@ -140,7 +140,7 @@ struct UpdateRunTests {
         let (database, manager, _) = try await makeManager(items: items, source: source, clock: TestClock(start))
         defer { database.cleanup() }
 
-        let run = Task { await manager.checkForUpdates() }
+        let run = Task { try await manager.checkForUpdates() }
         await gate.waitForAdmissions(UpdateManager.maxConcurrentSources)
 
         // Three sources are in flight, each with its first series; the fourth waits for a free slot.
@@ -149,7 +149,7 @@ struct UpdateRunTests {
         #expect(source.checkedItemIDs.allSatisfy { $0.hasSuffix("1") })
 
         await gate.open()
-        await run.value
+        try await run.value
         #expect(Set(source.checkedItemIDs) == Set(items.map(\.id)))
         for plugin in plugins {
             #expect(source.checkedItemIDs.filter { $0.hasPrefix(plugin) } == ["\(plugin)1", "\(plugin)2"])
@@ -191,7 +191,7 @@ struct UpdateRunTests {
         #expect(source.checkedItemIDs.isEmpty)
         #expect(!manager.isRefreshing)
 
-        await manager.checkForUpdates()
+        try await manager.checkForUpdates()
         #expect(source.checkedItemIDs == ["a"])
     }
 
@@ -209,6 +209,19 @@ struct UpdateRunTests {
         _ = await manager.checkForUpdatesInBackground()
 
         #expect(source.checkedItemIDs == ["a"])
+    }
+
+    @Test func aManualCheckSaysWhyItCannotRun() async throws {
+        let source = FakeLibraryUpdateSource(installedPluginIDs: [])
+        let (database, manager, _) = try await makeManager(
+            items: [Self.item("a", plugin: "p")],
+            source: source,
+            clock: TestClock(start)
+        )
+        defer { database.cleanup() }
+
+        await #expect(throws: UpdateRunError.noSources) { try await manager.checkForUpdates() }
+        #expect(!manager.isRefreshing)
     }
 
     // MARK: Helpers

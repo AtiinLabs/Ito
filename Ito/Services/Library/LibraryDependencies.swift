@@ -115,7 +115,7 @@ extension UpdateManager: LibraryUpdateServing {
     }
 
     func checkLibraryForUpdates() async throws {
-        await checkForUpdates()
+        try await checkForUpdates()
     }
 
     func clearLibraryBadge(for media: MediaIdentity) async throws {
@@ -319,6 +319,7 @@ enum LibraryMessage: Equatable {
     case layoutPersistenceFailed
     case itemRemovalFailed
     case updateFailed
+    case noUpdateSources
 }
 
 @MainActor
@@ -342,6 +343,8 @@ final class AppMessageLibraryPresenter: LibraryMessagePresenting {
             messageCenter.publish(.libraryItemRemovalFailed)
         case .updateFailed:
             messageCenter.publish(.libraryUpdateFailed)
+        case .noUpdateSources:
+            messageCenter.publish(.libraryNoUpdateSources)
         }
     }
 }
