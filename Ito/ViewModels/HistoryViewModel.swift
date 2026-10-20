@@ -11,6 +11,7 @@ final class HistoryViewModel: ObservableObject {
     @Published private(set) var history: [HistoryEntry]
     @Published private(set) var deletingEntryIDs = Set<String>()
     @Published private(set) var isClearing = false
+    @Published private(set) var isClearConfirmationPresented = false
     @Published private(set) var failure: CategoryHistoryMessage?
 
     private let historyService: any HistoryServing
@@ -42,6 +43,20 @@ final class HistoryViewModel: ObservableObject {
 
     var isClearVisible: Bool {
         !history.isEmpty
+    }
+
+    func requestClear() {
+        guard !history.isEmpty, !isClearing else { return }
+        isClearConfirmationPresented = true
+    }
+
+    func cancelClear() {
+        isClearConfirmationPresented = false
+    }
+
+    func confirmClear() async {
+        isClearConfirmationPresented = false
+        await clearHistory()
     }
 
     func deleteEntry(id: String) async {

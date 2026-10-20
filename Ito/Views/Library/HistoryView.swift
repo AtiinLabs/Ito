@@ -51,13 +51,27 @@ struct HistoryView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if viewModel.isClearVisible {
                     Button(role: .destructive) {
-                        Task { await viewModel.clearHistory() }
+                        viewModel.requestClear()
                     } label: {
                         Text("Clear")
                     }
                     .disabled(viewModel.isClearing)
                 }
             }
+        }
+        .confirmationDialog(
+            "Clear All History?",
+            isPresented: clearConfirmationBinding,
+            titleVisibility: .visible
+        ) {
+            Button("Clear History", role: .destructive) {
+                Task { await viewModel.confirmClear() }
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.cancelClear()
+            }
+        } message: {
+            Text("This removes all reading and watch history.")
         }
         .alert(
             viewModel.failure?.alertTitle ?? "History Change Failed",
@@ -69,6 +83,13 @@ struct HistoryView: View {
         } message: {
             Text(viewModel.failure?.alertMessage ?? "Please try again.")
         }
+    }
+
+    private var clearConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.isClearConfirmationPresented },
+            set: { if !$0 { viewModel.cancelClear() } }
+        )
     }
 
     private var failureBinding: Binding<Bool> {

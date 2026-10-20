@@ -122,6 +122,34 @@ final class HistoryViewModelTests: XCTestCase {
         XCTAssertFalse(harness.viewModel.isClearVisible)
     }
 
+    func testClearRequiresConfirmationBeforeWriting() async {
+        let harness = makeViewModel(history: [pr11bHistoryEntry(id: "one", readAt: 1)])
+
+        harness.viewModel.requestClear()
+        XCTAssertTrue(harness.viewModel.isClearConfirmationPresented)
+        XCTAssertEqual(harness.service.clearRequestCount, 0)
+
+        harness.viewModel.cancelClear()
+        XCTAssertFalse(harness.viewModel.isClearConfirmationPresented)
+        XCTAssertEqual(harness.service.clearRequestCount, 0)
+        XCTAssertEqual(harness.viewModel.phase, .content)
+
+        harness.viewModel.requestClear()
+        await harness.viewModel.confirmClear()
+
+        XCTAssertFalse(harness.viewModel.isClearConfirmationPresented)
+        XCTAssertEqual(harness.service.clearRequestCount, 1)
+        XCTAssertEqual(harness.viewModel.phase, .empty)
+    }
+
+    func testRequestClearIsIgnoredWithoutHistory() {
+        let harness = makeViewModel()
+
+        harness.viewModel.requestClear()
+
+        XCTAssertFalse(harness.viewModel.isClearConfirmationPresented)
+    }
+
     func testClearFailureRetainsHistoryIsRetryableAndSuppressesDuplicate() async {
         let entry = pr11bHistoryEntry(id: "one", readAt: 1)
         let harness = makeViewModel(history: [entry])
