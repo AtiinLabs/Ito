@@ -79,16 +79,27 @@ final class ReaderChapterOrderingTests: XCTestCase {
         XCTAssertEqual(mangaAfter(current, in: [current, second, first])?.key, "second")
     }
 
-    func testMangaNilNumberUsesSentinelBehaviorAndHasNoPreviousChapter() {
+    func testMangaUnnumberedChapterMovesByListPositionNewestFirst() {
+        let newer = mangaChapter("newer", number: nil)
         let current = mangaChapter("current", number: nil)
-        let chapters = [
-            mangaChapter("nil-peer", number: nil),
-            mangaChapter("two", number: 2),
-            mangaChapter("one", number: 1),
-            current
-        ]
-        XCTAssertEqual(mangaAfter(current, in: chapters)?.key, "one")
-        XCTAssertNil(mangaBefore(current, in: chapters))
+        let older = mangaChapter("older", number: nil)
+        let chapters = [newer, current, older]
+
+        XCTAssertEqual(mangaAfter(current, in: chapters)?.key, "newer")
+        XCTAssertEqual(mangaBefore(current, in: chapters)?.key, "older")
+        XCTAssertNil(mangaAfter(newer, in: chapters))
+        XCTAssertNil(mangaBefore(older, in: chapters))
+    }
+
+    func testMangaNumberedChapterSkipsUnnumberedExtras() {
+        let two = mangaChapter("two", number: 2)
+        let extra = mangaChapter("extra", number: nil)
+        let one = mangaChapter("one", number: 1)
+        let chapters = [two, extra, one]
+
+        XCTAssertNil(mangaBefore(one, in: chapters))
+        XCTAssertEqual(mangaAfter(one, in: chapters)?.key, "two")
+        XCTAssertNil(mangaAfter(two, in: chapters))
     }
 
     func testMangaMissingCurrentStillNavigatesNumericallyAndBoundariesReturnNil() {

@@ -5,18 +5,20 @@ nonisolated enum ReaderChapterOrdering {
     static let chapterNumberEpsilon: Float32 = 0.0001
     private static let missingChapterNumber: Float32 = -10000
 
+    /// The next chapter: the closest higher-numbered one, or for an unnumbered chapter the one
+    /// listed above it (lists are newest first). Nil at the end.
     static func mangaChapter(
         after chapter: Manga.Chapter,
         in chapters: [Manga.Chapter]?,
         preferredScanlator: String?
     ) -> Manga.Chapter? {
         guard let chapters else { return nil }
-        let currentNumber = chapter.chapter ?? missingChapterNumber
-        let candidates = chapters.filter {
-            ($0.chapter ?? missingChapterNumber) > currentNumber + chapterNumberEpsilon
+        guard let currentNumber = chapter.chapter else {
+            return listNeighbor(of: chapter.key, in: chapters, offset: -1, key: \.key)
         }
-        guard let nextNumber = candidates.map({
-            $0.chapter ?? missingChapterNumber
+        // Unnumbered chapters are left out: their place among numbered ones is unknown.
+        guard let nextNumber = chapters.compactMap(\.chapter).filter({
+            $0 > currentNumber + chapterNumberEpsilon
         }).min() else {
             return nil
         }
@@ -27,18 +29,18 @@ nonisolated enum ReaderChapterOrdering {
         )
     }
 
+    /// The previous chapter, mirroring `mangaChapter(after:)`.
     static func mangaChapter(
         before chapter: Manga.Chapter,
         in chapters: [Manga.Chapter]?,
         preferredScanlator: String?
     ) -> Manga.Chapter? {
         guard let chapters else { return nil }
-        let currentNumber = chapter.chapter ?? missingChapterNumber
-        let candidates = chapters.filter {
-            ($0.chapter ?? missingChapterNumber) < currentNumber - chapterNumberEpsilon
+        guard let currentNumber = chapter.chapter else {
+            return listNeighbor(of: chapter.key, in: chapters, offset: 1, key: \.key)
         }
-        guard let previousNumber = candidates.map({
-            $0.chapter ?? missingChapterNumber
+        guard let previousNumber = chapters.compactMap(\.chapter).filter({
+            $0 < currentNumber - chapterNumberEpsilon
         }).max() else {
             return nil
         }
@@ -47,6 +49,18 @@ nonisolated enum ReaderChapterOrdering {
             in: chapters,
             preferredScanlator: preferredScanlator
         )
+    }
+
+    /// The chapter `offset` places from `key` in the list, or nil past either end.
+    private static func listNeighbor<Chapter>(
+        of key: String,
+        in chapters: [Chapter],
+        offset: Int,
+        key chapterKey: (Chapter) -> String
+    ) -> Chapter? {
+        guard let index = chapters.firstIndex(where: { chapterKey($0) == key }) else { return nil }
+        let neighbor = index + offset
+        return chapters.indices.contains(neighbor) ? chapters[neighbor] : nil
     }
 
     static func novelChapter(
