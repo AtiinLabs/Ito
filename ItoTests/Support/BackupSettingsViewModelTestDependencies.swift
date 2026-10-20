@@ -281,12 +281,14 @@ final class BackupSettingsServiceFake: BackupSettingsServing {
 func backupSettingsTestReport(
     id: String,
     mode: BackupRestoreMode = .merge,
-    createdAt: TimeInterval = 1
+    createdAt: TimeInterval = 1,
+    migrationReport: MigrationReport? = nil
 ) throws -> BackupRestoreReport {
     try BackupRestoreReport(
         operationId: id,
         mode: mode,
         outcomes: [],
+        migrationReport: migrationReport,
         createdAt: Date(timeIntervalSince1970: createdAt)
     )
 }

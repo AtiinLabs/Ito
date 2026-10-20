@@ -56,9 +56,6 @@ final class BackupSettingsDependencyBoundaryTests: XCTestCase {
 
         XCTAssertTrue(factorySource.contains("func makeBackupSettingsViewModel()"))
         XCTAssertTrue(factorySource.contains("BackupSettingsViewModel("))
-        XCTAssertTrue(factorySource.contains(
-            "BackupSettingsView(viewModel: makeBackupSettingsViewModel())"
-        ))
         XCTAssertTrue(factorySource.contains("case .backup:"))
         XCTAssertTrue(settingsSource.contains(
             "makeSettingsDestination(for: .backup)"

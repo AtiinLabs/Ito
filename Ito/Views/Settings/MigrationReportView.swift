@@ -124,7 +124,7 @@ struct MigrationReportView: View {
             if viewModel.isRemediationAllowed {
                 Text("Install missing extensions, remap them to an existing Ito plugin, or skip to handle later from your library.")
             } else {
-                Text("Remediation is unavailable until the restore report has been acknowledged.")
+                Text("Series from these sources stay in your library. Install their sources from Browse to read them again.")
             }
         }
     }

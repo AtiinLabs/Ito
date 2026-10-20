@@ -389,7 +389,10 @@ struct AppViewFactory {
     }
 
     func makeBackupSettingsView() -> BackupSettingsView {
-        BackupSettingsView(viewModel: makeBackupSettingsViewModel())
+        BackupSettingsView(
+            viewModel: makeBackupSettingsViewModel(),
+            makeMigrationReportViewModel: { makeMigrationReportViewModel(report: $0) }
+        )
     }
 
     func makeMigrationReportViewModel(report: MigrationReport) -> MigrationReportViewModel {

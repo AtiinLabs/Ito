@@ -455,6 +455,23 @@ final class BackupSettingsViewModelTests: XCTestCase {
         XCTAssertFalse(subject.viewModel.showsRestoreReport)
     }
 
+    func testAcknowledgedUnresolvedSourcesAreOfferedAfterReportSheetCloses() async throws {
+        let migration = migrationReport([migrationUnresolved(foreignId: "foreign", resolvedId: "local")])
+        let report = try backupSettingsTestReport(id: "unresolved", migrationReport: migration)
+        let subject = reportSubject(report)
+        subject.service.reportsAfterAcknowledgment = [nil]
+
+        await subject.viewModel.acknowledgeRestoreReport()?.value
+        XCTAssertNil(subject.viewModel.migrationReportToResolve)
+
+        subject.viewModel.restoreReportDidDismiss()
+        XCTAssertEqual(subject.viewModel.migrationReportToResolve, migration)
+
+        subject.viewModel.dismissMigrationReport()
+        subject.viewModel.restoreReportDidDismiss()
+        XCTAssertNil(subject.viewModel.migrationReportToResolve)
+    }
+
     func testAcknowledgmentFailureKeepsUnacknowledgedReportVisible() async throws {
         let report = try backupSettingsTestReport(id: "unacknowledged")
         let subject = reportSubject(report)

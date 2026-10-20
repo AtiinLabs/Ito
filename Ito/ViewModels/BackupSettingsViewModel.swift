@@ -73,6 +73,8 @@ final class BackupSettingsViewModel: ObservableObject {
     @Published private(set) var exportDefaultFilename = "ItoBackup"
     @Published private(set) var isFileExporterPresented = false
     @Published private(set) var activeRestoreReport: BackupRestoreReport?
+    /// Unresolved sources from an acknowledged restore, offered for fixing after the report closes.
+    @Published private(set) var migrationReportToResolve: MigrationReport?
     @Published private(set) var showsRefreshPending = false
     @Published private(set) var alert: BackupSettingsAlert?
     @Published private(set) var operationKind: BackupSettingsOperationKind?
@@ -97,6 +99,7 @@ final class BackupSettingsViewModel: ObservableObject {
     private let claimCommittedRefreshRetry: @MainActor () -> Bool
     private let releaseCommittedRefreshRetry: @MainActor () -> Void
     private var activeOperation: Operation?
+    private var pendingMigrationReport: MigrationReport?
     /// An export whose save sheet closed before `onCompletion` reported a result. On iOS 15/16 a
     /// cancelled exporter never calls `onCompletion`, so the screen is released at dismissal and
     /// the outcome is logged when a late completion arrives, or as cancelled once the next
@@ -487,13 +490,14 @@ final class BackupSettingsViewModel: ObservableObject {
 
     @discardableResult
     func acknowledgeRestoreReport() -> Task<Void, Never>? {
-        guard activeRestoreReport != nil,
+        guard let acknowledgedReport = activeRestoreReport,
               let operation = claimOperation(.reportAcknowledgment) else { return nil }
+        let migrationReport = acknowledgedReport.migrationReport
         let task = Task { @MainActor [weak self, service] in
             do {
                 _ = try await service.acknowledgeRestoreReport()
                 self?.publishAcknowledgmentSuccess(
-                    nextReport: service.backupSettingsSnapshot.lastRestoreReport,
+                    migrationReport: migrationReport,
                     operation: operation
                 )
             } catch {
@@ -510,6 +514,18 @@ final class BackupSettingsViewModel: ObservableObject {
 
     func setRestoreReportPresented(_ isPresented: Bool) {
         guard !isPresented, activeRestoreReport == nil else { return }
+    }
+
+    /// Called once the restore report sheet has finished dismissing, so the source fix-up
+    /// sheet is not presented while another presentation is still in flight.
+    func restoreReportDidDismiss() {
+        guard isPresentationActive, let report = pendingMigrationReport else { return }
+        pendingMigrationReport = nil
+        migrationReportToResolve = report
+    }
+
+    func dismissMigrationReport() {
+        migrationReportToResolve = nil
     }
 
     func dismissAlert() {
@@ -722,13 +738,16 @@ final class BackupSettingsViewModel: ObservableObject {
     }
 
     private func publishAcknowledgmentSuccess(
-        nextReport: BackupRestoreReport?,
+        migrationReport: MigrationReport?,
         operation: Operation
     ) {
-        _ = nextReport
         guard activeOperation == operation else {
             finishStaleOperation(operation)
             return
+        }
+        if let migrationReport, !migrationReport.unresolvedPlugins.isEmpty,
+           canPublishTransient(operation) {
+            pendingMigrationReport = migrationReport
         }
         finishDurableOperation(operation, outcome: .succeeded)
     }

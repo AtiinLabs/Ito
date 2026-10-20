@@ -3,12 +3,17 @@ import UniformTypeIdentifiers
 
 struct BackupSettingsView: View {
     @StateObject private var viewModel: BackupSettingsViewModel
+    private let makeMigrationReportViewModel: (MigrationReport) -> MigrationReportViewModel
     #if DEBUG
     @ObservedObject private var uiTestFixtures = UITestLaunchFixtureCoordinator.shared
     #endif
 
-    init(viewModel: BackupSettingsViewModel) {
+    init(
+        viewModel: BackupSettingsViewModel,
+        makeMigrationReportViewModel: @escaping (MigrationReport) -> MigrationReportViewModel
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        self.makeMigrationReportViewModel = makeMigrationReportViewModel
     }
 
     var body: some View {
@@ -140,7 +145,8 @@ struct BackupSettingsView: View {
             isPresented: Binding(
                 get: { viewModel.showsRestoreReport },
                 set: { viewModel.setRestoreReportPresented($0) }
-            )
+            ),
+            onDismiss: viewModel.restoreReportDidDismiss
         ) {
             if let report = viewModel.activeRestoreReport {
                 BackupRestoreReportView(
@@ -148,6 +154,19 @@ struct BackupSettingsView: View {
                     onAcknowledge: { _ = viewModel.acknowledgeRestoreReport() }
                 )
                 .interactiveDismissDisabled()
+            }
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { viewModel.migrationReportToResolve != nil },
+                set: { if !$0 { viewModel.dismissMigrationReport() } }
+            )
+        ) {
+            if let report = viewModel.migrationReportToResolve {
+                MigrationReportView(
+                    viewModel: makeMigrationReportViewModel(report),
+                    onDismiss: viewModel.dismissMigrationReport
+                )
             }
         }
         .alert(
@@ -203,7 +222,8 @@ struct BackupSettingsView_Previews: PreviewProvider {
                 viewModel: BackupSettingsViewModel(
                     dependencies: .unavailable(),
                     presentationLogger: OSLogPresentationEventLogger()
-                )
+                ),
+                makeMigrationReportViewModel: { MigrationReportViewModel(readOnlyReport: $0) }
             )
         }
     }
