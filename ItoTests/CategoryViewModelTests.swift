@@ -44,7 +44,7 @@ final class CategoryViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.newCategoryName, "")
     }
 
-    func testSettingsCreateAwaitsPublicationThenDismissesAndPreservesExactName() async {
+    func testSettingsCreateAwaitsPublicationThenDismissesAndTrimsName() async {
         let (viewModel, service, _, logger) = makeSettings()
         service.createResponses = [.immediate(.success("new"))]
         viewModel.presentAddCategory()
@@ -52,7 +52,7 @@ final class CategoryViewModelTests: XCTestCase {
 
         await viewModel.createCategory()
 
-        XCTAssertEqual(service.createdNames, ["  New List  "])
+        XCTAssertEqual(service.createdNames, ["New List"])
         XCTAssertEqual(viewModel.categories.last?.id, "new")
         XCTAssertFalse(viewModel.isAddCategoryPresented)
         XCTAssertEqual(viewModel.newCategoryName, "")
@@ -102,7 +102,7 @@ final class CategoryViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.isAddCategoryPresented)
     }
 
-    func testSettingsRenameInitializesExactIdentityAndAwaitsDurableSuccess() async {
+    func testSettingsRenameInitializesExactIdentityAndSavesTrimmedName() async {
         let (viewModel, service, _, _) = makeSettings()
 
         viewModel.beginRename(categoryID: "alpha")
@@ -113,8 +113,8 @@ final class CategoryViewModelTests: XCTestCase {
         await viewModel.saveRename()
 
         XCTAssertEqual(service.renameRequests.first?.id, "alpha")
-        XCTAssertEqual(service.renameRequests.first?.name, " Renamed ")
-        XCTAssertEqual(viewModel.categories.first { $0.id == "alpha" }?.name, " Renamed ")
+        XCTAssertEqual(service.renameRequests.first?.name, "Renamed")
+        XCTAssertEqual(viewModel.categories.first { $0.id == "alpha" }?.name, "Renamed")
         XCTAssertEqual(viewModel.renameDismissalID, "alpha")
         viewModel.consumeRenameDismissal(categoryID: "alpha")
         XCTAssertNil(viewModel.editingCategoryID)
@@ -411,7 +411,7 @@ final class CategoryViewModelTests: XCTestCase {
 
         await viewModel.createAndAssignCategory()
 
-        XCTAssertEqual(service.createAndAssignRequests.first?.name, " New ")
+        XCTAssertEqual(service.createAndAssignRequests.first?.name, "New")
         XCTAssertEqual(service.createAndAssignRequests.first?.itemID, "item")
         XCTAssertTrue(viewModel.userCategories.contains { $0.id == "new" })
         XCTAssertEqual(viewModel.activeCategoryIDs, ["new"])

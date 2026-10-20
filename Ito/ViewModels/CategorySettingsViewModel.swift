@@ -96,7 +96,7 @@ final class CategorySettingsViewModel: ObservableObject {
               isAddCategoryPresented,
               let sessionID = addSessionID,
               Self.isValid(name: newCategoryName) else { return }
-        let name = newCategoryName
+        let name = newCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
         let operationID = UUID()
         createOperationID = operationID
         isCreating = true
@@ -145,7 +145,7 @@ final class CategorySettingsViewModel: ObservableObject {
               let categoryID = editingCategoryID,
               let sessionID = renameSessionID,
               Self.isValid(name: editedCategoryName) else { return }
-        let name = editedCategoryName
+        let name = editedCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
         let operationID = UUID()
         renameOperationID = operationID
         isRenaming = true

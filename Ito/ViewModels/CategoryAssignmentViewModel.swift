@@ -111,7 +111,7 @@ final class CategoryAssignmentViewModel: ObservableObject {
               isAddCategoryPresented,
               let sessionID = addSessionID,
               canCreateAndAssign else { return }
-        let name = newCategoryName
+        let name = newCategoryName.trimmingCharacters(in: .whitespacesAndNewlines)
         let operationID = UUID()
         createOperationID = operationID
         isCreatingAndAssigning = true
