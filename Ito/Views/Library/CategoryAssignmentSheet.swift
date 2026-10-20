@@ -173,33 +173,37 @@ struct CategoryAssignmentSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .accessibilityLabel(category.name)
-                .accessibilityHint(
-                    isLinked
-                        ? "Double tap to remove from this list"
-                        : "Double tap to add to this list"
-                )
 
                 Spacer()
 
                 if isAssigning {
                     ProgressView()
+                        .accessibilityLabel("Saving")
                 } else if isLinked {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.title3)
                         .foregroundColor(.accentColor)
                         .transition(.scale.combined(with: .opacity))
+                        .accessibilityHidden(true)
                 } else {
                     Image(systemName: "circle")
                         .font(.title3)
                         .foregroundColor(Color(.tertiaryLabel))
                         .transition(.scale.combined(with: .opacity))
+                        .accessibilityHidden(true)
                 }
             }
             .frame(minHeight: 44)
             .contentShape(Rectangle())
             .animation(.easeInOut(duration: 0.15), value: isLinked)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(category.name)
+        .accessibilityValue(isAssigning ? "Saving" : "")
+        .accessibilityAddTraits(isLinked ? .isSelected : [])
+        .accessibilityHint(
+            isLinked ? "Removes this series from the list" : "Adds this series to the list"
+        )
         .disabled(isAssigning)
     }
 

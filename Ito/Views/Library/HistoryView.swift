@@ -119,11 +119,13 @@ struct HistoryItemRow: View {
                 .frame(width: 50, height: 75)
                 .cornerRadius(6)
                 .clipped()
+                .accessibilityHidden(true)
             } else {
                 Color.itoCardBackground
                     .frame(width: 50, height: 75)
                     .cornerRadius(6)
                     .overlay(Image(systemName: "photo.on.rectangle.angled").foregroundStyle(.tertiary))
+                    .accessibilityHidden(true)
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -150,6 +152,7 @@ struct HistoryItemRow: View {
             Spacer()
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
     }
 
     private func timeAgo(from date: Date) -> String {
