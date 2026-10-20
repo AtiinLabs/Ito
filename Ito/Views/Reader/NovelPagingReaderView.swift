@@ -36,7 +36,7 @@ struct NovelPagingReaderView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     PageViewController(
-                        pages: flattenedPages.map { $0.string },
+                        pages: flattenedPages,
                         currentPage: $currentPageIndex,
                         maxWidth: max(0, size.width - 32),
                         onPageChanged: { newIndex in
@@ -202,7 +202,7 @@ struct NovelPagingReaderView: View {
 // MARK: - UIPageViewController Wrapper
 
 struct PageViewController: UIViewControllerRepresentable {
-    let pages: [NSAttributedString]
+    let pages: [NovelPaginationPage]
     @Binding var currentPage: Int
     let maxWidth: CGFloat
     let onPageChanged: (Int) -> Void
@@ -231,26 +231,15 @@ struct PageViewController: UIViewControllerRepresentable {
     func updateUIViewController(_ pvc: UIPageViewController, context: Context) {
         let coordinator = context.coordinator
         let oldPages = coordinator.parent.pages
-
-        AppLogger.ui.debug("[PageViewController] updateUIViewController called. oldPages count: \(oldPages.count), new pages count: \(pages.count)")
-
-        // Update the coordinator's reference to the latest data
         coordinator.parent = self
 
-        // Check if pages content actually changed (not just a re-render)
+        // Re-show only when the pages themselves changed, not on every re-render.
         let contentChanged = oldPages.count != pages.count ||
-            zip(oldPages, pages).contains(where: { $0.0 !== $0.1 })
-
-        if contentChanged {
-            AppLogger.ui.debug("[PageViewController] Content changed, refreshing. Setting vc for index \(currentPage)")
-            let targetIndex = min(currentPage, max(0, pages.count - 1))
-            if let vc = coordinator.makePageContentVC(index: targetIndex) {
-                pvc.setViewControllers([vc], direction: .forward, animated: false)
-            } else {
-                AppLogger.ui.debug("[PageViewController] Failed to create VC for index \(targetIndex)")
-            }
-        } else {
-            AppLogger.ui.debug("[PageViewController] Content did not change.")
+            zip(oldPages, pages).contains(where: { $0.0.string !== $0.1.string })
+        guard contentChanged else { return }
+        let targetIndex = min(currentPage, max(0, pages.count - 1))
+        if let vc = coordinator.makePageContentVC(index: targetIndex) {
+            pvc.setViewControllers([vc], direction: .forward, animated: false)
         }
     }
 
@@ -265,9 +254,8 @@ struct PageViewController: UIViewControllerRepresentable {
             guard index >= 0 && index < parent.pages.count else { return nil }
             let vc = PageContentViewController()
             vc.index = index
-            vc.attributedString = parent.pages[index]
+            vc.page = parent.pages[index]
             vc.maxWidth = parent.maxWidth
-            AppLogger.ui.debug("[PageViewController Coordinator] Created VC for index \(index) with string length \(vc.attributedString?.length ?? 0)")
             return vc
         }
 
@@ -298,15 +286,19 @@ struct PageViewController: UIViewControllerRepresentable {
 
 class PageContentViewController: UIViewController {
     var index: Int = 0
-    var attributedString: NSAttributedString?
+    var page: NovelPaginationPage?
     var maxWidth: CGFloat = 0
 
     private let textView = UITextView()
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        AppLogger.ui.debug("[PageContentViewController] viewDidLoad for index \(self.index)")
         view.backgroundColor = .clear
+
+        if let image = page?.image {
+            showImage(image)
+            return
+        }
 
         textView.isEditable = false
         textView.isSelectable = true
@@ -326,8 +318,7 @@ class PageContentViewController: UIViewController {
             textView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20)
         ])
 
-        textView.attributedText = attributedString
-        AppLogger.ui.debug("[PageContentViewController] set attributedText for index \(self.index)")
+        textView.attributedText = page?.string
 
         // Disable UITextView's built-in double tap to remove selection conflicts,
         // users can still long-press to select text.
@@ -336,6 +327,22 @@ class PageContentViewController: UIViewController {
                 tapRecognizer.isEnabled = false
             }
         }
+    }
+
+    /// An illustration fills the page, loaded the same way as in continuous mode.
+    private func showImage(_ image: NovelPageImage) {
+        let host = UIHostingController(rootView: MangaImage(urlStr: image.url, headers: image.headers))
+        host.view.backgroundColor = .clear
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        addChild(host)
+        view.addSubview(host.view)
+        NSLayoutConstraint.activate([
+            host.view.topAnchor.constraint(equalTo: view.topAnchor, constant: 20),
+            host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20)
+        ])
+        host.didMove(toParent: self)
     }
 }
 

@@ -15,14 +15,22 @@ nonisolated struct NovelPaginationConfiguration: Sendable {
     let textColor: UIColor
 }
 
+/// An illustration shown as a page of its own.
+nonisolated struct NovelPageImage: Sendable, Equatable {
+    let url: String
+    let headers: [String: String]?
+}
+
 /// One laid-out page. Sendable because `string` is built once and never mutated afterwards.
 nonisolated struct NovelPaginationPage: @unchecked Sendable {
     let chapterID: UUID
     let chapter: Novel.Chapter
+    /// The page's text; empty for an image page.
     let string: NSAttributedString
     /// Offset of the page's first body character; see `NovelTextOffsets`.
     let startOffset: Int
-    let isLastInChapter: Bool
+    var isLastInChapter: Bool
+    var image: NovelPageImage?
 
     /// The same page in another text colour; colour does not change where pages break.
     func recolored(_ color: UIColor) -> NovelPaginationPage {
@@ -33,7 +41,8 @@ nonisolated struct NovelPaginationPage: @unchecked Sendable {
             chapter: chapter,
             string: copy,
             startOffset: startOffset,
-            isLastInChapter: isLastInChapter
+            isLastInChapter: isLastInChapter,
+            image: image
         )
     }
 }
@@ -89,28 +98,73 @@ nonisolated enum NovelPaginationEngine {
         return chapter.title ?? "Unknown Chapter"
     }
 
+    /// Lays out one chapter. Text between images flows across pages; each image is a page of
+    /// its own at the offset where it appears, so text after it starts on a new page.
     private static func paginate(
         chapter: NovelPaginationChapter,
         usableSize: CGSize,
         titleAttributes: [NSAttributedString.Key: Any],
         bodyAttributes: [NSAttributedString.Key: Any]
     ) -> [NovelPaginationPage] {
-        let fullString = NSMutableAttributedString()
+        var pages: [NovelPaginationPage] = []
         let title = formattedTitle(for: chapter.chapter) + "\n\n"
-        fullString.append(NSAttributedString(string: title, attributes: titleAttributes))
-        let titleLength = (title as NSString).length
+        var run = NSMutableAttributedString(string: title, attributes: titleAttributes)
+        var runTitleLength = (title as NSString).length
+        var runStart = 0
+        var offset = 0
         for page in chapter.pages {
-            if case .text(let text) = page.content {
-                fullString.append(
-                    NSAttributedString(
-                        string: text + NovelTextOffsets.blockSeparator,
-                        attributes: bodyAttributes
+            switch page.content {
+            case .text(let text):
+                let block = text + NovelTextOffsets.blockSeparator
+                run.append(NSAttributedString(string: block, attributes: bodyAttributes))
+                offset += (block as NSString).length
+            case .url(let url):
+                pages += layOut(
+                    run,
+                    titleLength: runTitleLength,
+                    bodyStart: runStart,
+                    chapter: chapter,
+                    usableSize: usableSize
+                )
+                pages.append(
+                    NovelPaginationPage(
+                        chapterID: chapter.id,
+                        chapter: chapter.chapter,
+                        string: NSAttributedString(),
+                        startOffset: offset,
+                        isLastInChapter: false,
+                        image: NovelPageImage(url: url, headers: page.headers)
                     )
                 )
+                run = NSMutableAttributedString()
+                runTitleLength = 0
+                runStart = offset
             }
         }
+        pages += layOut(
+            run,
+            titleLength: runTitleLength,
+            bodyStart: runStart,
+            chapter: chapter,
+            usableSize: usableSize
+        )
+        if let last = pages.indices.last {
+            pages[last].isLastInChapter = true
+        }
+        return pages
+    }
 
-        let storage = NSTextStorage(attributedString: fullString)
+    /// Breaks one run of text into pages. `bodyStart` is the body offset where the run starts;
+    /// the first `titleLength` characters are the chapter title, which has no body offset.
+    private static func layOut(
+        _ run: NSAttributedString,
+        titleLength: Int,
+        bodyStart: Int,
+        chapter: NovelPaginationChapter,
+        usableSize: CGSize
+    ) -> [NovelPaginationPage] {
+        guard run.length > 0 else { return [] }
+        let storage = NSTextStorage(attributedString: run)
         let manager = NSLayoutManager()
         storage.addLayoutManager(manager)
         var containers: [NSTextContainer] = []
@@ -127,20 +181,18 @@ nonisolated enum NovelPaginationEngine {
             }
         } while NSMaxRange(glyphRange) < manager.numberOfGlyphs
 
-        let ranges = containers.compactMap { container -> NSRange? in
+        return containers.compactMap { container -> NovelPaginationPage? in
             let characterRange = manager.characterRange(
                 forGlyphRange: manager.glyphRange(for: container),
                 actualGlyphRange: nil
             )
-            return characterRange.length > 0 ? characterRange : nil
-        }
-        return ranges.enumerated().map { index, characterRange in
-            NovelPaginationPage(
+            guard characterRange.length > 0 else { return nil }
+            return NovelPaginationPage(
                 chapterID: chapter.id,
                 chapter: chapter.chapter,
                 string: storage.attributedSubstring(from: characterRange),
-                startOffset: max(0, characterRange.location - titleLength),
-                isLastInChapter: index == ranges.count - 1
+                startOffset: bodyStart + max(0, characterRange.location - titleLength),
+                isLastInChapter: false
             )
         }
     }

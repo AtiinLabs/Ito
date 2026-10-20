@@ -33,12 +33,16 @@ final class NovelPaginationTests: XCTestCase {
         }
     }
 
-    func testShortChapterFormatsTitleAndBodyAndIgnoresURLPages() throws {
+    func testShortChapterKeepsImagesAsPagesAtTheirPlaceInTheText() throws {
         let loaded = NovelLoadedChapter(
             chapter: Novel.Chapter(key: "one", title: "Opening", chapter: 1),
             pages: [
                 Page(index: 0, content: .text("First paragraph.")),
-                Page(index: 1, content: .url("https://example.com/image")),
+                Page(
+                    index: 1,
+                    content: .url("https://example.com/image"),
+                    headers: ["Referer": "https://example.com"]
+                ),
                 Page(index: 2, content: .text("Second paragraph."))
             ]
         )
@@ -47,12 +51,20 @@ final class NovelPaginationTests: XCTestCase {
             enginePaginate([loaded], size: CGSize(width: 320, height: 480))
         )
 
-        XCTAssertEqual(pages.count, 1)
-        XCTAssertEqual(pages.map(\.chapter.key), ["one"])
+        XCTAssertEqual(pages.count, 3)
+        XCTAssertEqual(pages.map(\.string.string), [
+            "Chapter 1 - Opening\n\nFirst paragraph.\n\n",
+            "",
+            "Second paragraph.\n\n"
+        ])
         XCTAssertEqual(
-            pages.map(\.string.string).joined(),
-            "Chapter 1 - Opening\n\nFirst paragraph.\n\nSecond paragraph.\n\n"
+            pages[1].image,
+            NovelPageImage(url: "https://example.com/image", headers: ["Referer": "https://example.com"])
         )
+        // Offsets match the continuous reader's: the image sits where the second block starts.
+        let starts = NovelTextOffsets.blockStarts(loaded.pages)
+        XCTAssertEqual(pages.map(\.startOffset), [0, starts[2], starts[2]])
+        XCTAssertEqual(pages.map(\.isLastInChapter), [false, false, true])
     }
 
     func testLongChapterSpansPagesWithoutTextLossOrDuplication() throws {
