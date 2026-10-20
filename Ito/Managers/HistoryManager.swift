@@ -9,14 +9,6 @@ import ito_runner
 public struct HistoryEntry: Identifiable, Hashable, Sendable {
     public var id: String { record.id }
     public let record: ReadingHistoryRecord
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-
-    public static func == (lhs: HistoryEntry, rhs: HistoryEntry) -> Bool {
-        lhs.id == rhs.id
-    }
 }
 
 nonisolated private struct HistoryPublication: Sendable {
