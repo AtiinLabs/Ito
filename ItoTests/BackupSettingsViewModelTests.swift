@@ -89,6 +89,40 @@ final class BackupSettingsViewModelTests: XCTestCase {
         XCTAssertNotNil(subject.viewModel.beginExport())
     }
 
+    func testCancellingSaveSheetWithoutCompletionFreesScreenAndLogsCancelled() async {
+        let subject = makeSubject()
+        await subject.viewModel.beginExport()?.value
+
+        // iOS 15/16 only flips isPresented on cancel and never calls onCompletion.
+        subject.viewModel.setFileExporterPresented(false)
+
+        XCTAssertNil(subject.viewModel.exportFileURL)
+        XCTAssertFalse(subject.viewModel.isOperationRunning)
+        XCTAssertFalse(subject.viewModel.isExportDisabled)
+        XCTAssertFalse(subject.viewModel.isImportDisabled)
+        XCTAssertEqual(subject.logger.events.map(\.phase), [.started])
+
+        XCTAssertNotNil(subject.viewModel.beginExport())
+        XCTAssertEqual(subject.logger.events.map(\.phase), [.started, .finished, .started])
+        XCTAssertEqual(subject.logger.events[1].outcome, .cancelled)
+    }
+
+    func testCompletionAfterSheetDismissalStillReportsOutcome() async {
+        let subject = makeSubject()
+        await subject.viewModel.beginExport()?.value
+
+        subject.viewModel.setFileExporterPresented(false)
+        subject.viewModel.fileExporterDidComplete(
+            .failure(BackupSettingsTestError.expected("exporter rejected destination"))
+        )
+
+        XCTAssertEqual(subject.viewModel.alert, .exportFailed("exporter rejected destination"))
+        XCTAssertEqual(subject.logger.events.last?.outcome, .failed(.persistence))
+
+        subject.viewModel.screenDidDisappear()
+        XCTAssertEqual(subject.logger.events.map(\.phase), [.started, .finished])
+    }
+
     func testImporterSuccessSelectsExactURLAndPresentsStrategy() {
         let subject = makeSubject()
         let selectedURL = url("selected.itobackup")

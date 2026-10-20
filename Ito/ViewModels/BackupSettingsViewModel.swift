@@ -97,6 +97,11 @@ final class BackupSettingsViewModel: ObservableObject {
     private let claimCommittedRefreshRetry: @MainActor () -> Bool
     private let releaseCommittedRefreshRetry: @MainActor () -> Void
     private var activeOperation: Operation?
+    /// An export whose save sheet closed before `onCompletion` reported a result. On iOS 15/16 a
+    /// cancelled exporter never calls `onCompletion`, so the screen is released at dismissal and
+    /// the outcome is logged when a late completion arrives, or as cancelled once the next
+    /// operation starts or the screen goes away.
+    private var dismissedExportOperation: Operation?
     private var operationTask: Task<Void, Never>?
     private var presentationGeneration: UInt64 = 0
     private var isPresentationActive = true
@@ -252,21 +257,44 @@ final class BackupSettingsViewModel: ObservableObject {
     }
 
     func setFileExporterPresented(_ isPresented: Bool) {
-        guard isCurrentExportOperation else { return }
+        guard let operation = activeOperation, operation.kind == .export else { return }
         isFileExporterPresented = isPresented
+        guard !isPresented else { return }
+        exportFileURL = nil
+        dismissedExportOperation = operation
+        activeOperation = nil
+        operationKind = nil
+        operationTask = nil
     }
 
     func fileExporterDidComplete(_ result: Result<URL, Error>) {
-        guard let operation = activeOperation, operation.kind == .export else { return }
-        exportFileURL = nil
-        isFileExporterPresented = false
+        let operation: Operation
+        if let active = activeOperation, active.kind == .export {
+            operation = active
+            exportFileURL = nil
+            isFileExporterPresented = false
+            activeOperation = nil
+            operationKind = nil
+            operationTask = nil
+        } else if let dismissed = dismissedExportOperation {
+            operation = dismissed
+        } else {
+            return
+        }
+        dismissedExportOperation = nil
         switch result {
         case .success:
-            finishOperation(operation, outcome: .succeeded)
+            logFinishedOnce(operation, outcome: .succeeded)
         case .failure(let error):
             alert = .exportFailed(error.localizedDescription)
-            finishOperation(operation, outcome: .failed(.persistence))
+            logFinishedOnce(operation, outcome: .failed(.persistence))
         }
+    }
+
+    private func finishDismissedExportAsCancelled() {
+        guard let operation = dismissedExportOperation else { return }
+        dismissedExportOperation = nil
+        logFinishedOnce(operation, outcome: .cancelled)
     }
 
     @discardableResult
@@ -497,6 +525,7 @@ final class BackupSettingsViewModel: ObservableObject {
     func screenDidDisappear() {
         isPresentationActive = false
         presentationGeneration &+= 1
+        finishDismissedExportAsCancelled()
         guard let operation = activeOperation else { return }
         switch operation.kind {
         case .export:
@@ -522,10 +551,6 @@ final class BackupSettingsViewModel: ObservableObject {
             && !isFileExporterPresented
     }
 
-    private var isCurrentExportOperation: Bool {
-        activeOperation?.kind == .export
-    }
-
     private func claimOperation(
         _ kind: BackupSettingsOperationKind,
         admissionClaim: (@MainActor () -> Bool)? = nil
@@ -535,6 +560,7 @@ final class BackupSettingsViewModel: ObservableObject {
               !managerSnapshot.isExporting,
               !managerSnapshot.isRestoring,
               admissionClaim?() ?? true else { return nil }
+        finishDismissedExportAsCancelled()
         let operation = Operation(
             id: UUID(),
             kind: kind,
