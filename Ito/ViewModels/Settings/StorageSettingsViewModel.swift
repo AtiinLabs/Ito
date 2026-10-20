@@ -4,6 +4,7 @@ import Combine
 final class StorageSettingsViewModel: ObservableObject {
     @Published private(set) var diskCacheLimitGB: Double
     @Published private(set) var formattedCurrentUsage: String
+    @Published private(set) var isClearingCache = false
     @Published private(set) var alert: SettingsAlert?
 
     let cacheLimitChoices = (1...50).map(Double.init)
@@ -19,7 +20,7 @@ final class StorageSettingsViewModel: ObservableObject {
         self.settingsStore = settingsStore
         self.storageAccess = storageAccess
         diskCacheLimitGB = settingsStore.diskCacheLimitGB
-        formattedCurrentUsage = storageAccess.formatBytes(storageAccess.currentCacheSizeBytes)
+        formattedCurrentUsage = Self.formattedUsage(storageAccess)
 
         settingsStore.$diskCacheLimitGB
             .sink { [weak self] limit in
@@ -39,14 +40,17 @@ final class StorageSettingsViewModel: ObservableObject {
         }
     }
 
-    func refreshCacheUsage() {
-        storageAccess.refreshCacheSize()
+    func refreshCacheUsage() async {
+        await storageAccess.refreshCacheSize()
         updateFormattedCurrentUsage()
     }
 
-    func clearCache() {
-        storageAccess.clearCache()
+    func clearCache() async {
+        guard !isClearingCache else { return }
+        isClearingCache = true
+        await storageAccess.clearCache()
         updateFormattedCurrentUsage()
+        isClearingCache = false
     }
 
     func dismissAlert() {
@@ -54,6 +58,10 @@ final class StorageSettingsViewModel: ObservableObject {
     }
 
     private func updateFormattedCurrentUsage() {
-        formattedCurrentUsage = storageAccess.formatBytes(storageAccess.currentCacheSizeBytes)
+        formattedCurrentUsage = Self.formattedUsage(storageAccess)
+    }
+
+    private static func formattedUsage(_ storageAccess: any SettingsStorageAccessing) -> String {
+        storageAccess.currentCacheSizeBytes.map { storageAccess.formatBytes($0) } ?? "Calculating…"
     }
 }

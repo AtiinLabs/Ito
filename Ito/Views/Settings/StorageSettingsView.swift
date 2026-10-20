@@ -2,6 +2,7 @@ import SwiftUI
 
 struct StorageSettingsView: View {
     @StateObject private var viewModel: StorageSettingsViewModel
+    @State private var isConfirmingClearCache = false
 
     init(viewModel: StorageSettingsViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -32,15 +33,34 @@ struct StorageSettingsView: View {
                         .foregroundColor(.secondary)
                 }
 
-                Button(action: viewModel.clearCache) {
-                    Text("Clear Cache")
-                        .foregroundColor(.red)
+                Button(role: .destructive) {
+                    isConfirmingClearCache = true
+                } label: {
+                    HStack {
+                        Text("Clear Cache")
+                        if viewModel.isClearingCache {
+                            Spacer()
+                            ProgressView()
+                        }
+                    }
                 }
+                .disabled(viewModel.isClearingCache)
             }
         }
         .navigationTitle("Storage")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear(perform: viewModel.refreshCacheUsage)
+        .task { await viewModel.refreshCacheUsage() }
+        .confirmationDialog(
+            "Clear Cache?",
+            isPresented: $isConfirmingClearCache,
+            titleVisibility: .visible
+        ) {
+            Button("Clear Cache", role: .destructive) {
+                Task { await viewModel.clearCache() }
+            }
+        } message: {
+            Text("Cached images and pages are removed and downloaded again when needed.")
+        }
         .alert(item: Binding(
             get: { viewModel.alert },
             set: { alert in

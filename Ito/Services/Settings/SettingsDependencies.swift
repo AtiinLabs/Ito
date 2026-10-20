@@ -30,10 +30,10 @@ final class SystemApplicationSettingsOpener: ApplicationSettingsOpening {
 
 @MainActor
 protocol SettingsStorageAccessing: AnyObject {
-    var currentCacheSizeBytes: Int { get }
+    var currentCacheSizeBytes: Int? { get }
 
-    func refreshCacheSize()
-    func clearCache()
+    func refreshCacheSize() async
+    func clearCache() async
     func formatBytes(_ bytes: Int) -> String
 }
 

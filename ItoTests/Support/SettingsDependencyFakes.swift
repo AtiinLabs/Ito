@@ -132,21 +132,21 @@ final class TestApplicationSettingsOpener: ApplicationSettingsOpening {
 
 @MainActor
 final class TestSettingsStorageAccess: SettingsStorageAccessing {
-    var currentCacheSizeBytes = 0
+    var currentCacheSizeBytes: Int?
     var cacheSizeAfterRefresh: Int?
     var cacheSizeAfterClear: Int?
     private(set) var refreshCallCount = 0
     private(set) var clearCallCount = 0
     private(set) var formattedBytes: [Int] = []
 
-    func refreshCacheSize() {
+    func refreshCacheSize() async {
         refreshCallCount += 1
         if let cacheSizeAfterRefresh {
             currentCacheSizeBytes = cacheSizeAfterRefresh
         }
     }
 
-    func clearCache() {
+    func clearCache() async {
         clearCallCount += 1
         if let cacheSizeAfterClear {
             currentCacheSizeBytes = cacheSizeAfterClear

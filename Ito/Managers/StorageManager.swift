@@ -7,18 +7,20 @@ import Nuke
 public class StorageManager: ObservableObject {
     @Published public private(set) var diskCacheLimitGB = AppPreferenceCatalog.diskCacheLimitGB.defaultValue
 
-    @Published public private(set) var currentCacheSizeBytes: Int = 0
+    /// Disk cache size from the last measurement; `nil` until first measured.
+    @Published public private(set) var currentCacheSizeBytes: Int?
 
     // Maintain a reference to our custom data cache
     private var dataCache: DataCache?
     private var settingsCancellable: AnyCancellable?
     private let pluginManager: PluginManager
+    /// Bumped by every measurement so an older, slower one cannot overwrite a newer result.
+    private var cacheSizeGeneration = 0
     private var settingsStore: AppSettingsStore?
 
     public init(pluginManager: PluginManager) {
         self.pluginManager = pluginManager
         setupNukePipeline()
-        refreshCacheSize()
     }
 
     func configure(settingsStore: AppSettingsStore) {
@@ -39,7 +41,6 @@ public class StorageManager: ObservableObject {
         }
         diskCacheLimitGB = settingsStore.diskCacheLimitGB
         updateCacheLimit()
-        refreshCacheSize()
     }
 
     private func setupNukePipeline() {
@@ -82,22 +83,32 @@ public class StorageManager: ObservableObject {
         dataCache?.sizeLimit = capacityBytes
     }
 
-    public func refreshCacheSize() {
-        if let dataCache = dataCache {
-            self.currentCacheSizeBytes = dataCache.totalSize
-        }
+    /// Measures the disk cache off the main actor; walking the cache directory is disk IO.
+    public func refreshCacheSize() async {
+        guard let dataCache else { return }
+        cacheSizeGeneration += 1
+        let generation = cacheSizeGeneration
+        let size = await Task.detached(priority: .utility) {
+            dataCache.totalSize
+        }.value
+        guard generation == cacheSizeGeneration else { return }
+        currentCacheSizeBytes = size
     }
 
-    public func clearCache() {
-        // Clear memory cache
+    public func clearCache() async {
         ImageCache.shared.removeAll()
-        // Clear disk cache
-        dataCache?.removeAll()
-
-        // Also clear URLCache just in case anything else used it
         URLCache.shared.removeAllCachedResponses()
-
-        refreshCacheSize()
+        guard let dataCache else { return }
+        cacheSizeGeneration += 1
+        let generation = cacheSizeGeneration
+        // `removeAll()` only stages the deletion; `flush()` waits for it to reach disk.
+        let size = await Task.detached(priority: .userInitiated) {
+            dataCache.removeAll()
+            dataCache.flush()
+            return dataCache.totalSize
+        }.value
+        guard generation == cacheSizeGeneration else { return }
+        currentCacheSizeBytes = size
     }
 
     public func formatBytes(_ bytes: Int) -> String {

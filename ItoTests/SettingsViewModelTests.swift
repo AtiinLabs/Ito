@@ -859,20 +859,20 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.alert, .saveFailed)
     }
 
-    func testStorageAppearanceRefreshesOnceAndPublishesFormattedUsage() async throws {
+    func testStorageShowsCalculatingUntilFirstMeasurementThenFormattedUsage() async throws {
         let (store, _, storageAccess) = try await makeStorageSettingsStore()
-        storageAccess.currentCacheSizeBytes = 256
         storageAccess.cacheSizeAfterRefresh = 2_048
         let viewModel = StorageSettingsViewModel(
             settingsStore: store,
             storageAccess: storageAccess
         )
+        XCTAssertEqual(viewModel.formattedCurrentUsage, "Calculating…")
 
-        viewModel.refreshCacheUsage()
+        await viewModel.refreshCacheUsage()
 
         XCTAssertEqual(storageAccess.refreshCallCount, 1)
         XCTAssertEqual(storageAccess.clearCallCount, 0)
-        XCTAssertEqual(storageAccess.formattedBytes, [256, 2_048])
+        XCTAssertEqual(storageAccess.formattedBytes, [2_048])
         XCTAssertEqual(viewModel.formattedCurrentUsage, "bytes:2048")
     }
 
@@ -885,7 +885,7 @@ final class SettingsViewModelTests: XCTestCase {
             storageAccess: storageAccess
         )
 
-        viewModel.clearCache()
+        await viewModel.clearCache()
 
         XCTAssertEqual(storageAccess.clearCallCount, 1)
         XCTAssertEqual(storageAccess.refreshCallCount, 0)
@@ -939,8 +939,6 @@ final class SettingsViewModelTests: XCTestCase {
             XCTAssertFalse(source.contains(forbidden), "Forbidden Storage access: \(forbidden)")
         }
         XCTAssertTrue(source.contains("@StateObject private var viewModel"))
-        XCTAssertTrue(source.contains("Text(\"Clear Cache\")"))
-        XCTAssertTrue(source.contains(".foregroundColor(.red)"))
     }
 
     private func makeSettingsStore(
