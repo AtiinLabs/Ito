@@ -133,9 +133,9 @@ struct ReaderView: View {
                     .tag(-1)
             }
 
-            ForEach(viewModel.pagedPages, id: \.index) { page in
+            ForEach(Array(viewModel.pagedPages.enumerated()), id: \.offset) { position, page in
                 pageImage(for: page)
-                    .tag(Int(page.index))
+                    .tag(position)
             }
 
             if let next = viewModel.chapterAfter(viewModel.currentChapter) {
@@ -174,7 +174,7 @@ struct ReaderView: View {
 
                     ForEach(allPages) { flatPage in
                         VStack(spacing: 0) {
-                            if flatPage.page.index == 0 && flatPage.segmentIndex > 0 {
+                            if flatPage.chapterPosition == 0 && flatPage.segmentIndex > 0 {
                                 chapterDivider(for: flatPage.chapter)
                             }
 

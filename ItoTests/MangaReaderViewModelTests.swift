@@ -502,7 +502,7 @@ final class MangaReaderViewModelTests: XCTestCase {
 
         XCTAssertTrue(subject.viewModel.isPaged)
         XCTAssertEqual(subject.viewModel.pagedPages.map(\.index), [4, 9])
-        XCTAssertEqual(subject.viewModel.pagedIndex, 9)
+        XCTAssertEqual(subject.viewModel.pagedIndex, 1)
     }
 
     func testContinuousToPagedProjectionDoesNotStartAdjacentRunnerWork() async {
@@ -521,7 +521,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertTrue(subject.viewModel.prefetchedChapters.isEmpty)
     }
 
-    func testContinuousToPagedMismatchedFlatPageFallsBackToFirstPageIndex() {
+    func testContinuousToPagedMismatchedFlatPageFallsBackToFirstPage() {
         let current = makeChapter("a", number: 1)
         let other = makeChapter("b", number: 2)
         let currentPages = [page(4), page(9)]
@@ -541,10 +541,10 @@ final class MangaReaderViewModelTests: XCTestCase {
         )
 
         XCTAssertEqual(projection?.pages.map(\.index), [4, 9])
-        XCTAssertEqual(projection?.index, 4)
+        XCTAssertEqual(projection?.index, 0)
     }
 
-    func testContinuousToPagedOutOfRangeFallsBackToFirstPageIndex() {
+    func testContinuousToPagedOutOfRangeFallsBackToFirstPage() {
         let current = makeChapter("a", number: 1)
         let currentPages = [page(4), page(9)]
         let projection = MangaReaderViewModel.pagedProjection(
@@ -555,7 +555,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         )
 
         XCTAssertEqual(projection?.pages.map(\.index), [4, 9])
-        XCTAssertEqual(projection?.index, 4)
+        XCTAssertEqual(projection?.index, 0)
     }
 
     func testContinuousToPagedMissingSegmentStartsPagedReload() async {

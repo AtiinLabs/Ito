@@ -25,6 +25,8 @@ struct FlatPage: Identifiable {
     let chapter: Manga.Chapter
     let page: Page
     let globalIndex: Int
+    /// Position of the page inside its chapter (array position, not `Page.index`).
+    var chapterPosition = 0
 }
 
 @MainActor
@@ -108,14 +110,15 @@ final class MangaReaderViewModel: ObservableObject {
         var result: [FlatPage] = []
         var globalIndex = 0
         for (segmentIndex, segment) in segments.enumerated() {
-            for page in segment.pages {
+            for (position, page) in segment.pages.enumerated() {
                 result.append(
                     FlatPage(
-                        id: "\(segment.chapter.key)_\(page.index)",
+                        id: "\(segment.chapter.key)#\(position)",
                         segmentIndex: segmentIndex,
                         chapter: segment.chapter,
                         page: page,
-                        globalIndex: globalIndex
+                        globalIndex: globalIndex,
+                        chapterPosition: position
                     )
                 )
                 globalIndex += 1
@@ -791,25 +794,29 @@ final class MangaReaderViewModel: ObservableObject {
         loadPhase = .content
     }
 
+    /// Pages and position for paged mode, taken from the continuous position. Positions are
+    /// array positions; `Page.index` is plugin-supplied and need not start at 0 or be contiguous.
     static func pagedProjection(
         currentChapter: Manga.Chapter,
         segments: [ChapterSegment],
         flatPages: [FlatPage],
         continuousPageIndex: Int
     ) -> PagedProjection? {
-        guard let segment = segments.first(where: {
+        guard let segmentIndex = segments.firstIndex(where: {
             $0.chapter.key == currentChapter.key
         }) else { return nil }
+        let segment = segments[segmentIndex]
 
-        let fallbackIndex = Int(segment.pages.first?.index ?? 0)
-        guard flatPages.indices.contains(continuousPageIndex) else {
-            return PagedProjection(pages: segment.pages, index: fallbackIndex)
+        guard flatPages.indices.contains(continuousPageIndex),
+              flatPages[continuousPageIndex].segmentIndex == segmentIndex else {
+            return PagedProjection(pages: segment.pages, index: 0)
         }
-        let flatPage = flatPages[continuousPageIndex]
-        let index = flatPage.chapter.key == currentChapter.key
-            ? Int(flatPage.page.index)
-            : fallbackIndex
-        return PagedProjection(pages: segment.pages, index: index)
+        let segmentStart = segments[..<segmentIndex].reduce(0) { $0 + $1.pages.count }
+        let index = flatPages[continuousPageIndex].globalIndex - segmentStart
+        return PagedProjection(
+            pages: segment.pages,
+            index: segment.pages.indices.contains(index) ? index : 0
+        )
     }
 
     private func convertPagedToContinuousOrReload() {
@@ -820,15 +827,9 @@ final class MangaReaderViewModel: ObservableObject {
         }
 
         segments = [ChapterSegment(chapter: currentChapter, pages: pagedPages)]
-        if let arrayIndex = pagedPages.firstIndex(where: {
-            Int($0.index) == pagedIndex
-        }) {
-            continuousPageIndex = arrayIndex
-            scrollTarget = arrayIndex
-        } else {
-            continuousPageIndex = 0
-            scrollTarget = 0
-        }
+        let position = pagedPages.indices.contains(pagedIndex) ? pagedIndex : 0
+        continuousPageIndex = position
+        scrollTarget = position
         loadPhase = .content
     }
 
