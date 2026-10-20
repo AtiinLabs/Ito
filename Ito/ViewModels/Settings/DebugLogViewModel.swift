@@ -77,8 +77,9 @@ final class DebugLogViewModel: ObservableObject {
         }
     }
 
-    func copyAllLogs() {
-        let text = logs.map {
+    /// Copies the logs currently shown, so an active search narrows what is copied.
+    func copyLogs() {
+        let text = filteredLogs.map {
             "[\($0.date)] [\($0.category)] \($0.message)"
         }.joined(separator: "\n")
 

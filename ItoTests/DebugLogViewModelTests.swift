@@ -115,7 +115,7 @@ final class DebugLogViewModelTests: XCTestCase {
         let viewModel = makeViewModel(dependencies: dependencies)
         await viewModel.fetchLogs()
 
-        viewModel.copyAllLogs()
+        viewModel.copyLogs()
 
         XCTAssertEqual(
             dependencies.writer.writtenTexts,
@@ -125,7 +125,7 @@ final class DebugLogViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.alert)
     }
 
-    func testCopyUsesAllLoadedLogsDespiteActiveSearch() async {
+    func testCopyUsesOnlyLogsMatchingActiveSearch() async {
         let first = entry(id: 1, category: "ui", message: "visible")
         let second = entry(id: 2, category: "network", message: "hidden")
         let reader = ImmediateDebugLogReader(responses: [.success([second, first])])
@@ -135,11 +135,11 @@ final class DebugLogViewModelTests: XCTestCase {
         viewModel.searchText = "visible"
         XCTAssertEqual(viewModel.filteredLogs, [first])
 
-        viewModel.copyAllLogs()
+        viewModel.copyLogs()
 
         XCTAssertEqual(
             dependencies.writer.writtenTexts,
-            ["[\(first.date)] [ui] visible\n[\(second.date)] [network] hidden"]
+            ["[\(first.date)] [ui] visible"]
         )
     }
 
@@ -151,7 +151,7 @@ final class DebugLogViewModelTests: XCTestCase {
         let viewModel = makeViewModel(dependencies: dependencies)
         await viewModel.fetchLogs()
 
-        viewModel.copyAllLogs()
+        viewModel.copyLogs()
 
         XCTAssertEqual(
             recorder.events,
@@ -168,7 +168,7 @@ final class DebugLogViewModelTests: XCTestCase {
         let viewModel = makeViewModel(dependencies: dependencies)
         await viewModel.fetchLogs()
 
-        viewModel.copyAllLogs()
+        viewModel.copyLogs()
 
         XCTAssertEqual(dependencies.writer.writeCallCount, 1)
         XCTAssertTrue(dependencies.writer.writtenTexts.isEmpty)
@@ -177,7 +177,7 @@ final class DebugLogViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.alert, .copyFailed)
 
         dependencies.writer.shouldFail = false
-        viewModel.copyAllLogs()
+        viewModel.copyLogs()
 
         XCTAssertEqual(dependencies.writer.writeCallCount, 2)
         XCTAssertEqual(dependencies.presenter.messages, [.copied])

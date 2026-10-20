@@ -12,6 +12,10 @@ struct DebugLogView: View {
             if viewModel.isLoading && viewModel.logs.isEmpty {
                 ProgressView("Fetching Logs...")
                     .frame(maxWidth: .infinity, alignment: .center)
+            } else if viewModel.filteredLogs.isEmpty {
+                Text(viewModel.logs.isEmpty ? "No logs from the last 24 hours." : "No logs match your search.")
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
             } else {
                 ForEach(viewModel.filteredLogs) { log in
                     VStack(alignment: .leading, spacing: 4) {
@@ -49,9 +53,10 @@ struct DebugLogView: View {
                 }
             }
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: viewModel.copyAllLogs) {
+                Button(action: viewModel.copyLogs) {
                     Image(systemName: "doc.on.doc")
                 }
+                .disabled(viewModel.filteredLogs.isEmpty)
             }
         }
         .onAppear {
