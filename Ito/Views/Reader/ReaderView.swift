@@ -95,10 +95,10 @@ struct ReaderView: View {
                     ReaderFooterView(
                         displayIndex: viewModel.isPaged
                             ? viewModel.pagedIndex
-                            : viewModel.continuousPageIndex,
+                            : viewModel.continuousChapterPage.index,
                         displayTotal: viewModel.isPaged
                             ? viewModel.pagedPages.count
-                            : viewModel.flatPages.count,
+                            : viewModel.continuousChapterPage.count,
                         hasPrev: viewModel.chapterBefore(viewModel.currentChapter) != nil,
                         hasNext: viewModel.chapterAfter(viewModel.currentChapter) != nil,
                         overrideViewer: Binding(
@@ -193,6 +193,9 @@ struct ReaderView: View {
                                 .id(flatPage.id)
                                 .onAppear {
                                     viewModel.continuousPageAppeared(flatPage)
+                                }
+                                .onDisappear {
+                                    viewModel.continuousPageDisappeared(flatPage)
                                 }
                         }
                     }

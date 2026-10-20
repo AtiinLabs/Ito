@@ -504,8 +504,12 @@ final class MangaReaderViewModelTests: XCTestCase {
         await waitForReader { subject.viewModel.loadPhase == .content }
 
         for loaded in 1..<5 {
-            // Read to the end of the newest chapter, then load the next one.
-            subject.viewModel.continuousPageAppeared(subject.viewModel.flatPages.last!)
+            // Scroll to the end of the newest chapter, then load the next one.
+            let last = subject.viewModel.flatPages.last!
+            subject.viewModel.continuousPageAppeared(last)
+            for passed in subject.viewModel.flatPages where passed.id != last.id {
+                subject.viewModel.continuousPageDisappeared(passed)
+            }
             subject.viewModel.appendNextChapter()
             await waitForReader { subject.viewModel.flatPages.last?.chapter.key == "c\(loaded + 1)" }
         }
@@ -910,7 +914,7 @@ final class MangaReaderViewModelTests: XCTestCase {
 
     // MARK: - Fixtures
 
-    private func makeSubject(
+    func makeSubject(
         chapters: [Manga.Chapter],
         initial: Manga.Chapter? = nil,
         viewer: Manga.Viewer = .Default,
@@ -931,7 +935,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         )
     }
 
-    private func makeChapter(
+    func makeChapter(
         _ key: String,
         number: Float32?,
         title: String? = nil,
@@ -945,7 +949,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         )
     }
 
-    private func page(
+    func page(
         _ index: Int32,
         text: String? = nil,
         url: String? = nil,
@@ -961,7 +965,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         )
     }
 
-    private func waitForReader(
+    func waitForReader(
         _ condition: @escaping @MainActor () -> Bool
     ) async {
         for _ in 0..<10_000 {
@@ -971,7 +975,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTFail("Timed out waiting for deterministic Reader condition")
     }
 
-    private func yieldReaderTasks() async {
+    func yieldReaderTasks() async {
         for _ in 0..<20 { await Task.yield() }
     }
 }
