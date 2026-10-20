@@ -145,6 +145,9 @@ struct VideoPlayerView: View {
                 .ignoresSafeArea()
                 .overlay(subtitleOverlay)
                 .overlay(controlsOverlay(video: video))
+        } else if viewModel.resumeOffer != nil {
+            // Nothing plays until Continue or Start Over is chosen.
+            Color.clear
         } else {
             Text("No playable streams found.")
                 .foregroundColor(.white)
