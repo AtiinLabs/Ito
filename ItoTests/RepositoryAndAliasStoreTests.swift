@@ -323,7 +323,7 @@ struct RepositoryAndAliasStoreTests {
             .appendingPathComponent("RepositoryInstallPublication-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
         let packageID = "plugin.authoritative"
-        let archiveData = try makePluginArchiveData(id: packageID, version: "2.0")
+        let archiveData = try makeTestPluginArchiveData(id: packageID, version: "2.0")
         let pluginManager = PluginManager(
             pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
             pluginsDirectory: pluginsDirectory
@@ -518,35 +518,6 @@ struct RepositoryAndAliasStoreTests {
 
     private func sha256(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-    }
-
-    private func makePluginArchiveData(id: String, version: String) throws -> Data {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("RepositoryPluginArchive-\(UUID().uuidString)")
-        let archiveURL = directory.appendingPathComponent("fixture.ito")
-        defer { try? FileManager.default.removeItem(at: directory) }
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let archive = try Archive(url: archiveURL, accessMode: .create)
-        let manifest = Data(
-            """
-            {
-              "id": "\(id)",
-              "name": "Fixture",
-              "version": "\(version)",
-              "min_app_version": "1.0",
-              "type": "manga"
-            }
-            """.utf8
-        )
-        try archive.addEntry(
-            with: "manifest.json",
-            type: .file,
-            uncompressedSize: Int64(manifest.count)
-        ) { position, size in
-            let start = Int(position)
-            return manifest.subdata(in: start..<min(start + size, manifest.count))
-        }
-        return try Data(contentsOf: archiveURL)
     }
 }
 

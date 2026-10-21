@@ -387,10 +387,13 @@ public class RepoManager: ObservableObject {
 
     // Checks if the plugin is compatible with this app
     public func isCompatible(minAppVersion: String) -> Bool {
-        return currentAppVersion.compare(minAppVersion, options: .numeric) != .orderedAscending
+        AppVersion.isAtLeast(minAppVersion, current: currentAppVersion)
     }
 
     public func installPackage(_ pkg: RepoPackage, repositoryUrl: String) async throws {
+        guard isCompatible(minAppVersion: pkg.minAppVersion) else {
+            throw PluginRequiresNewerAppError(minimumAppVersion: pkg.minAppVersion)
+        }
         let request = PackageInstallationRequest(
             repositoryURL: repositoryUrl,
             version: pkg.version,

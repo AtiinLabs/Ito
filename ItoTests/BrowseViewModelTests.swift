@@ -56,6 +56,21 @@ final class BrowseViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.availableUpdates.map(\.repoURL), ["https://one.example", "https://two.example"])
     }
 
+    func testAnUpdateNeedingANewerItoIsSkippedForTheNewestOneThatRuns() {
+        let plugins = BrowsePluginManagerSpy(installedPlugins: [
+            "zulu": makePlugin(id: "zulu", name: "Zulu", version: "1.0")
+        ])
+        let repositories = BrowseRepositoryManagerSpy(repositories: [
+            makeRepository(packages: [
+                makePackage(id: "zulu", name: "Zulu", version: "1.5"),
+                makePackage(id: "zulu", name: "Zulu", version: "2.0", minAppVersion: "999.0")
+            ])
+        ])
+        let viewModel = makeViewModel(plugins: plugins, repositories: repositories)
+
+        XCTAssertEqual(viewModel.availableUpdates.map(\.pkg.version), ["1.5"])
+    }
+
     func testStartingUpdateInvokesDependencyExactlyOnce() async throws {
         let plugins = BrowsePluginManagerSpy(installedPlugins: [
             "plugin": makePlugin(id: "plugin", name: "Plugin")
@@ -284,7 +299,8 @@ final class BrowseViewModelTests: XCTestCase {
         let fixture = try BrowseFileFixture()
         defer { fixture.cleanup() }
         let sourceURL = fixture.root.appendingPathComponent("plugin.ito")
-        try Data("new plugin".utf8).write(to: sourceURL)
+        let pluginData = try makeTestPluginArchiveData(id: "plugin", version: "1.0")
+        try pluginData.write(to: sourceURL)
         let files = LocalBrowsePluginFileOperations(
             applicationSupportDirectory: fixture.applicationSupport
         )
@@ -294,11 +310,12 @@ final class BrowseViewModelTests: XCTestCase {
         let installedURL = fixture.applicationSupport
             .appendingPathComponent("Plugins")
             .appendingPathComponent("plugin.ito")
-        XCTAssertEqual(try Data(contentsOf: installedURL), Data("new plugin".utf8))
+        XCTAssertEqual(try Data(contentsOf: installedURL), pluginData)
 
-        try Data("updated plugin".utf8).write(to: sourceURL)
+        let updatedData = try makeTestPluginArchiveData(id: "plugin", version: "2.0")
+        try updatedData.write(to: sourceURL)
         try files.installPluginFile(from: sourceURL)
-        XCTAssertEqual(try Data(contentsOf: installedURL), Data("updated plugin".utf8))
+        XCTAssertEqual(try Data(contentsOf: installedURL), updatedData)
     }
 
     func testProductionFileAdapterReplacesOnlyAfterStagingSucceeds() throws {
@@ -694,12 +711,12 @@ final class BrowseViewModelTests: XCTestCase {
         )
     }
 
-    private func makePackage(id: String, name: String, version: String) -> RepoPackage {
+    private func makePackage(id: String, name: String, version: String, minAppVersion: String = "1.0") -> RepoPackage {
         RepoPackage(
             id: id,
             name: name,
             version: version,
-            minAppVersion: "1.0",
+            minAppVersion: minAppVersion,
             downloadUrl: "\(id).ito",
             iconUrl: nil,
             sha256: "fixture",

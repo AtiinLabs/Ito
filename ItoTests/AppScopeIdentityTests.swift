@@ -531,7 +531,7 @@ final class AppScopeIdentityTests: XCTestCase {
             at: fixtureRoot,
             withIntermediateDirectories: true
         )
-        try Data("fixture".utf8).write(to: sourceURL)
+        try makeTestPluginArchiveData(id: "fixture", version: "1.0").write(to: sourceURL)
         try fileOperations.installPluginFile(from: sourceURL)
         XCTAssertTrue(
             FileManager.default.fileExists(

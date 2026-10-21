@@ -123,6 +123,10 @@ final class LocalBrowsePluginFileOperations: BrowsePluginFileOperating, SourcePl
 
         defer { try? fileManager.removeItem(at: stagingURL) }
         try fileManager.copyItem(at: url, to: stagingURL)
+        let minimumAppVersion = try ItoRunner.extractPluginInfo(from: stagingURL).manifest.info.minAppVersion
+        guard AppVersion.isAtLeast(minimumAppVersion) else {
+            throw PluginRequiresNewerAppError(minimumAppVersion: minimumAppVersion)
+        }
 
         if fileManager.fileExists(atPath: destinationURL.path) {
             _ = try fileManager.replaceItemAt(

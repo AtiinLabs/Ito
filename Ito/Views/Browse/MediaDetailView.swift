@@ -1,3 +1,5 @@
+import Nuke
+import NukeUI
 import SwiftUI
 import ito_runner
 
@@ -488,11 +490,15 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 Task { await viewModel.performRelink(with: result) }
             } label: {
                 HStack(spacing: 12) {
-                    AsyncImage(url: URL(string: result.cover ?? "")) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: {
-                        Rectangle().fill(.quaternary)
+                    // The app's image pipeline, so plugin (`ito://`) covers load too.
+                    LazyImage(url: URL(string: result.cover ?? "")) { state in
+                        if let image = state.image {
+                            image.resizable().scaledToFill()
+                        } else {
+                            Rectangle().fill(.quaternary)
+                        }
                     }
+                    .processors([.resize(width: 96)])
                     .frame(width: 48, height: 68)
                     .cornerRadius(6)
                     .clipped()

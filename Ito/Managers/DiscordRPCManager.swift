@@ -303,8 +303,8 @@ public class DiscordRPCManager: NSObject, ObservableObject, URLSessionWebSocketD
             "type": activityType
         ]
 
-        if let dUrl = detailsUrl { dataPayload["detailsUrl"] = dUrl }
-        if let sUrl = stateUrl { dataPayload["stateUrl"] = sUrl }
+        if let dUrl = Self.shareableURL(detailsUrl) { dataPayload["detailsUrl"] = dUrl }
+        if let sUrl = Self.shareableURL(stateUrl) { dataPayload["stateUrl"] = sUrl }
 
         if let start = startTimestamp {
             dataPayload["timestamps"] = ["start": start]
@@ -312,7 +312,7 @@ public class DiscordRPCManager: NSObject, ObservableObject, URLSessionWebSocketD
 
         var assets: [String: String] = [:]
 
-        if let imgUrl = imageUrl, imgUrl.hasPrefix("https://") {
+        if let imgUrl = Self.shareableURL(imageUrl) {
             assets["large_image"] = imgUrl
             assets["large_text"] = largeImageText ?? details
         } else {
@@ -350,5 +350,19 @@ public class DiscordRPCManager: NSObject, ObservableObject, URLSessionWebSocketD
         } catch {
             AppLogger.general.error("DiscordRPC activity serialization error: \(error)")
         }
+    }
+
+    /// `string` when it is safe to hand to Discord: an https URL with a host and nothing that
+    /// could carry a credential (user info, a query or a fragment). Plugin covers can be signed
+    /// or tokenized URLs, and `ito://` covers only resolve inside the app.
+    nonisolated static func shareableURL(_ string: String?) -> String? {
+        guard let string, let components = URLComponents(string: string),
+              components.scheme?.lowercased() == "https",
+              components.host?.isEmpty == false,
+              components.user == nil, components.password == nil,
+              components.query == nil, components.fragment == nil else {
+            return nil
+        }
+        return string
     }
 }

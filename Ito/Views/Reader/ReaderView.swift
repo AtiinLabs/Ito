@@ -653,19 +653,6 @@ struct MangaImage: View {
     }
 
     func createRequest(url: URL) -> URLRequest {
-        var request = URLRequest(url: url)
-
-        if let customHeaders = headers, !customHeaders.isEmpty {
-            for (key, value) in customHeaders {
-                request.setValue(value, forHTTPHeaderField: key)
-            }
-        } else {
-            request.setValue(
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
-                forHTTPHeaderField: "User-Agent")
-            request.setValue(urlStr, forHTTPHeaderField: "Referer")
-        }
-
-        return request
+        NukeMangaReaderImagePrefetcher.urlRequest(url: url, headers: headers)
     }
 }
