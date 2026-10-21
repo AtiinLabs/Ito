@@ -58,14 +58,34 @@ actor AniListCredentialRepository {
         let id: UUID
         let continuation: CheckedContinuation<BootstrapOutcome, any Error>
         let publication: Publication?
-        var suppressPublication = false
+        let cancellation: WaiterCancellation
     }
 
     private struct VoidWaiter {
         let id: UUID
         let continuation: CheckedContinuation<Void, any Error>
         let publication: Publication?
-        var suppressPublication = false
+        let cancellation: WaiterCancellation
+    }
+
+    /// Set by the caller's cancellation handler before it returns, so the pump sees a
+    /// cancellation however the actor's work is scheduled. `cancel(waiterID:)` still runs
+    /// on the actor to release a queued caller while another operation is in flight.
+    private nonisolated final class WaiterCancellation: @unchecked Sendable {
+        private let lock = NSLock()
+        private var cancelled = false
+
+        var isCancelled: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return cancelled
+        }
+
+        func cancel() {
+            lock.lock()
+            cancelled = true
+            lock.unlock()
+        }
     }
 
     private enum PublicationDecision {
@@ -85,7 +105,6 @@ actor AniListCredentialRepository {
     private var queue: [Operation] = []
     private var pumpRunning = false
     private var activeOperationID: UUID?
-    private var activeLogoutID: UUID?
     private var pendingBootstrapID: UUID?
     private var bootstrapWaiters: [UUID: [BootstrapWaiter]] = [:]
     private var voidWaiters: [UUID: VoidWaiter] = [:]
@@ -119,18 +138,26 @@ actor AniListCredentialRepository {
         }
 
         let waiterID = UUID()
+        let cancellation = WaiterCancellation()
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
             return try await withCheckedThrowingContinuation { continuation in
-                enqueueBootstrap(waiterID: waiterID, continuation: continuation, publication: publication)
+                enqueueBootstrap(
+                    waiterID: waiterID,
+                    continuation: continuation,
+                    publication: publication,
+                    cancellation: cancellation
+                )
             }
         } onCancel: {
+            cancellation.cancel()
             Task { await self.cancel(waiterID: waiterID) }
         }
     }
 
     func persistOAuthToken(_ token: String, publication: Publication? = nil) async throws {
         let waiterID = UUID()
+        let cancellation = WaiterCancellation()
         try await withTaskCancellationHandler {
             try Task.checkCancellation()
             try await withCheckedThrowingContinuation { continuation in
@@ -138,16 +165,19 @@ actor AniListCredentialRepository {
                     operation: .persist(id: UUID(), token: token),
                     waiterID: waiterID,
                     continuation: continuation,
-                    publication: publication
+                    publication: publication,
+                    cancellation: cancellation
                 )
             }
         } onCancel: {
+            cancellation.cancel()
             Task { await self.cancel(waiterID: waiterID) }
         }
     }
 
     func logout(publication: Publication? = nil) async throws {
         let waiterID = UUID()
+        let cancellation = WaiterCancellation()
         try await withTaskCancellationHandler {
             try Task.checkCancellation()
             try await withCheckedThrowingContinuation { continuation in
@@ -155,10 +185,12 @@ actor AniListCredentialRepository {
                     operation: .logout(id: UUID()),
                     waiterID: waiterID,
                     continuation: continuation,
-                    publication: publication
+                    publication: publication,
+                    cancellation: cancellation
                 )
             }
         } onCancel: {
+            cancellation.cancel()
             Task { await self.cancel(waiterID: waiterID) }
         }
     }
@@ -180,29 +212,24 @@ actor AniListCredentialRepository {
     private func enqueueBootstrap(
         waiterID: UUID,
         continuation: CheckedContinuation<BootstrapOutcome, any Error>,
-        publication: Publication?
+        publication: Publication?,
+        cancellation: WaiterCancellation
     ) {
         recordEnqueueInvocation()
+        let waiter = BootstrapWaiter(
+            id: waiterID,
+            continuation: continuation,
+            publication: publication,
+            cancellation: cancellation
+        )
         if let operationID = pendingBootstrapID {
-            bootstrapWaiters[operationID, default: []].append(
-                BootstrapWaiter(
-                    id: waiterID,
-                    continuation: continuation,
-                    publication: publication
-                )
-            )
+            bootstrapWaiters[operationID, default: []].append(waiter)
             return
         }
 
         let operationID = UUID()
         pendingBootstrapID = operationID
-        bootstrapWaiters[operationID] = [
-            BootstrapWaiter(
-                id: waiterID,
-                continuation: continuation,
-                publication: publication
-            )
-        ]
+        bootstrapWaiters[operationID] = [waiter]
         queue.append(.bootstrap(id: operationID))
         startPumpIfNeeded()
     }
@@ -211,13 +238,15 @@ actor AniListCredentialRepository {
         operation: Operation,
         waiterID: UUID,
         continuation: CheckedContinuation<Void, any Error>,
-        publication: Publication?
+        publication: Publication?,
+        cancellation: WaiterCancellation
     ) {
         recordEnqueueInvocation()
         voidWaiters[operation.id] = VoidWaiter(
             id: waiterID,
             continuation: continuation,
-            publication: publication
+            publication: publication,
+            cancellation: cancellation
         )
         queue.append(operation)
         startPumpIfNeeded()
@@ -232,6 +261,7 @@ actor AniListCredentialRepository {
     private func pump() async {
         while !queue.isEmpty {
             let operation = queue.removeFirst()
+            guard releaseCancelledWaiters(of: operation) else { continue }
             activeOperationID = operation.id
             startedOperations += 1
             activeOperations += 1
@@ -254,9 +284,8 @@ actor AniListCredentialRepository {
                 } catch {
                     result = .failure(error)
                 }
-                await finishVoid(id: id, result: result, publicationValue: token)
+                await finishVoid(id: id, result: result, publicationValue: token, isMandatory: false)
             case .logout(let id):
-                activeLogoutID = id
                 let result: Result<Void, any Error>
                 do {
                     try await performLogout()
@@ -264,8 +293,7 @@ actor AniListCredentialRepository {
                 } catch {
                     result = .failure(error)
                 }
-                await finishVoid(id: id, result: result, publicationValue: nil)
-                activeLogoutID = nil
+                await finishVoid(id: id, result: result, publicationValue: nil, isMandatory: true)
             }
 
             activeOperationID = nil
@@ -274,14 +302,48 @@ actor AniListCredentialRepository {
         pumpRunning = false
     }
 
+    /// Resumes the callers of `operation` that were cancelled before it started, and
+    /// returns whether anyone still waits for it.
+    private func releaseCancelledWaiters(of operation: Operation) -> Bool {
+        switch operation {
+        case .bootstrap(let id):
+            var remaining: [BootstrapWaiter] = []
+            for waiter in bootstrapWaiters[id] ?? [] {
+                if waiter.cancellation.isCancelled {
+                    waiter.continuation.resume(throwing: CancellationError())
+                } else {
+                    remaining.append(waiter)
+                }
+            }
+            guard remaining.isEmpty else {
+                bootstrapWaiters[id] = remaining
+                return true
+            }
+            bootstrapWaiters.removeValue(forKey: id)
+            if pendingBootstrapID == id {
+                pendingBootstrapID = nil
+            }
+            return false
+        case .persist(let id, _), .logout(let id):
+            guard let waiter = voidWaiters[id] else { return false }
+            guard waiter.cancellation.isCancelled else { return true }
+            voidWaiters.removeValue(forKey: id)
+            waiter.continuation.resume(throwing: CancellationError())
+            return false
+        }
+    }
+
+    /// A cancelled caller still gets the operation's result, but only a mandatory
+    /// publication (logout clearing) reaches it.
     private func finishVoid(
         id: UUID,
         result: Result<Void, any Error>,
-        publicationValue: String?
+        publicationValue: String?,
+        isMandatory: Bool
     ) async {
         if case .success = result,
            let waiter = voidWaiters[id],
-           !waiter.suppressPublication,
+           isMandatory || !waiter.cancellation.isCancelled,
            let publication = waiter.publication {
             await publication(publicationValue)
         }
@@ -297,7 +359,7 @@ actor AniListCredentialRepository {
         let waiterIDs = bootstrapWaiters[operationID]?.map(\.id) ?? []
         for waiterID in waiterIDs {
             guard let waiter = bootstrapWaiters[operationID]?.first(where: { $0.id == waiterID }),
-                  !waiter.suppressPublication,
+                  !waiter.cancellation.isCancelled,
                   let publication = waiter.publication else { continue }
             await publication(token)
         }
@@ -476,12 +538,8 @@ actor AniListCredentialRepository {
     private func cancel(waiterID: UUID) {
         for (operationID, waiters) in bootstrapWaiters {
             guard let index = waiters.firstIndex(where: { $0.id == waiterID }) else { continue }
-            if activeOperationID == operationID {
-                var updated = waiters
-                updated[index].suppressPublication = true
-                bootstrapWaiters[operationID] = updated
-                return
-            }
+            // An active operation sees the waiter's cancellation flag when it publishes.
+            if activeOperationID == operationID { return }
 
             var remaining = waiters
             let waiter = remaining.remove(at: index)
@@ -499,15 +557,7 @@ actor AniListCredentialRepository {
 
         guard let entry = voidWaiters.first(where: { $0.value.id == waiterID }) else { return }
         let operationID = entry.key
-        if activeOperationID == operationID {
-            if activeLogoutID == operationID {
-                return
-            }
-            var waiter = entry.value
-            waiter.suppressPublication = true
-            voidWaiters[operationID] = waiter
-            return
-        }
+        if activeOperationID == operationID { return }
         queue.removeAll { $0.id == operationID }
         let waiter = voidWaiters.removeValue(forKey: operationID)
         waiter?.continuation.resume(throwing: CancellationError())
