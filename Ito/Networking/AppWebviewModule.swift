@@ -66,6 +66,7 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     /// caller or passing the deadline stops the page and fails the load.
     func loadUrl(request: WebviewRequest) async throws -> WebviewResponse {
         AppLogger.network.debug("WebviewManager: loadUrl requested")
+        try Task.checkCancellation()
         finishLoad(with: .failure(URLError(.cancelled)))
         guard let url = URL(string: request.url) else {
             throw URLError(.badURL)

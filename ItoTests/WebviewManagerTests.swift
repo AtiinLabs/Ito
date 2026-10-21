@@ -13,7 +13,9 @@ private final class SilentServer: @unchecked Sendable {
     private let ready = AsyncStream<UInt16>.makeStream()
 
     init() throws {
-        listener = try NWListener(using: .tcp, on: .any)
+        let parameters = NWParameters.tcp
+        parameters.requiredInterfaceType = .loopback
+        listener = try NWListener(using: parameters, on: .any)
         listener.newConnectionHandler = { [weak self] connection in
             guard let self else { return }
             connections.append(connection)
