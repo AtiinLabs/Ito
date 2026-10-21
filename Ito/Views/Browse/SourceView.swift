@@ -30,7 +30,7 @@ struct SourceView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    if viewModel.settingsDestination != nil {
+                    if viewModel.hasSettings {
                         Button(action: { viewModel.showSettings = true }) {
                             Image(systemName: "gear")
                         }
@@ -42,6 +42,8 @@ struct SourceView: View {
             }) {
                 if let destination = viewModel.settingsDestination {
                     viewFactory.makePluginSettingsView(destination: destination)
+                } else if let reason = viewModel.settingsUnavailableReason {
+                    SourceSettingsUnavailableView(pluginName: viewModel.plugin.info.name, reason: reason)
                 }
             }
             .searchable(
@@ -450,6 +452,30 @@ struct SourceView: View {
             Text(message).foregroundColor(.red)
             Button("Retry", action: retry)
                 .buttonStyle(.bordered)
+        }
+    }
+}
+
+/// Shown in place of a source's settings when the source couldn't describe them.
+private struct SourceSettingsUnavailableView: View {
+    let pluginName: String
+    let reason: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    Label("These settings can't be shown.", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundColor(.red)
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("\(pluginName) Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarItems(trailing: Button("Done") { dismiss() })
         }
     }
 }

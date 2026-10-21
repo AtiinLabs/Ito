@@ -367,40 +367,35 @@ struct PluginSettingsStoreTests {
         #expect(aliasWrites.count == pluginIds.count)
     }
 
-    @Test func malformedRepositoryIndexFailsDiscoveryWithoutReadinessOrRegistryMutation() throws {
+    @Test func aRepositoryIndexThatCantBeReadIsSkippedAndTheRestIsDiscovered() throws {
         let fixture = try StoreFixture()
         defer { fixture.cleanup() }
-        let repositoryURL = "https://malformed.example/index.json"
+        let readable = RepoIndex(
+            repoName: "Readable",
+            repoUrl: "https://readable.example",
+            description: "",
+            packages: [repoPackage(id: "repository-plugin")]
+        )
         try fixture.database.dbPool.write { db in
             try db.execute(
                 sql: "INSERT INTO repository (url, indexPayload) VALUES (?, ?)",
-                arguments: [repositoryURL, Data("not-json".utf8)]
+                arguments: ["https://malformed.example", Data("not-json".utf8)]
+            )
+            try db.execute(
+                sql: "INSERT INTO repository (url, indexPayload) VALUES (?, ?)",
+                arguments: ["https://readable.example", try JSONEncoder().encode(readable)]
             )
         }
         let store = fixture.store()
 
-        #expect(throws: PluginSettingsReadinessError.malformedRepositoryIndex(url: repositoryURL)) {
-            try store.prepareForDurableSnapshot([
-                PluginSettingsDiscovery(pluginId: "must-not-register", source: "test")
-            ])
-        }
+        try store.prepareForDurableSnapshot([
+            PluginSettingsDiscovery(pluginId: "installed-plugin", source: "test")
+        ])
 
-        let counts = try fixture.database.dbPool.read { db in
-            (
-                try PluginIdentityRecord.fetchCount(db),
-                try PluginIdentityAliasRecord.fetchCount(db),
-                try LegacyDefaultsInboxRecord.fetchCount(db),
-                try LegacyStateMigrationRecord.fetchCount(db),
-                try PluginSettingRecord.fetchCount(db)
-            )
+        let registered = try fixture.database.dbPool.read { db in
+            try String.fetchAll(db, sql: "SELECT pluginId FROM pluginIdentityRegistry ORDER BY pluginId")
         }
-        #expect(counts.0 == 0)
-        #expect(counts.1 == 0)
-        #expect(counts.2 == 0)
-        #expect(counts.3 == 0)
-        #expect(counts.4 == 0)
-        #expect(store.revision == 0)
-        #expect(store.lastPersistenceError == nil)
+        #expect(registered == ["installed-plugin", "repository-plugin"])
     }
 
     @Test func readinessRejectsRegisteredSuiteWithoutEvidenceAndFailedPrepare() throws {

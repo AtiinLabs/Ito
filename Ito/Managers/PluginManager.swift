@@ -74,7 +74,10 @@ public class PluginManager: ObservableObject {
         }
         let authority = runnerAuthority(for: plugin)
 
-        try pluginSettingsStore.prepare(pluginId: pluginId)
+        // The installed plugin's identity was registered when the installed list was published,
+        // so rescanning every durable source (and decoding every repository index) per call
+        // only added cost; image loads call this for every image.
+        try pluginSettingsStore.prepare(pluginId: pluginId, discoverSources: false)
         if let cached = runnerCache[pluginId], cached.authority == authority {
             AppLogger.plugin.debug("🔌 [PluginManager] Returning cached runner for \(pluginId)")
             return cached.runner
@@ -99,18 +102,39 @@ public class PluginManager: ObservableObject {
         settingsStore: PluginSettingsStore
     ) async throws -> ItoRunner {
         let runner = ItoRunner()
+        let defaults = AppDefaultsModule(pluginId: pluginID, store: settingsStore)
         await runner.setNetModule(AppNetModule())
         await runner.setStdModule(DefaultStdModule())
-        await runner.setDefaultsModule(
-            AppDefaultsModule(pluginId: pluginID, store: settingsStore)
-        )
+        await runner.setDefaultsModule(defaults)
         await runner.setHtmlModule(DefaultHtmlModule())
         await runner.setJsModule(DefaultJsModule())
         await runner.setWebviewModule(AppWebviewModule())
 
         AppLogger.plugin.debug("\("🔌 [PluginManager] Loading bundle for \(pluginID)")...")
         _ = try await runner.loadBundle(from: pluginURL)
+        try await useSchemaDefaults(of: runner, in: defaults, pluginID: pluginID)
         return runner
+    }
+
+    /// Reads the plugin's settings schema so settings the user never set read as their defaults.
+    /// A crash fails the load, since the runner may be broken; any other failure only leaves
+    /// the plugin without defaults.
+    @MainActor
+    private static func useSchemaDefaults(
+        of runner: ItoRunner,
+        in defaults: AppDefaultsModule,
+        pluginID: String
+    ) async throws {
+        do {
+            guard let schema = try await pluginCall({ try await runner.getSettings() }) else { return }
+            defaults.useSchemaDefaults(schema.storedDefaults)
+        } catch let error as PluginCallError where error.kind == .crashed {
+            throw error
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            AppLogger.plugin.error("PluginManager: no settings defaults for \(pluginID); the schema couldn't be read")
+        }
     }
 
     /// Evicts a cached runner for a plugin so the next getRunner call creates a fresh one.

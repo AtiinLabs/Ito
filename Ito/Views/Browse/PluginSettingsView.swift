@@ -140,8 +140,8 @@ private struct ToggleSettingRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Toggle(name, isOn: Binding(
-                get: { viewModel.storedValue(key: id).map { $0 == "true" } ?? defaultValue },
-                set: { viewModel.persistValue(key: id, value: $0 ? "true" : "false") }
+                get: { viewModel.storedValue(key: id).map { $0 == Setting.storedToggle(true) } ?? defaultValue },
+                set: { viewModel.persistValue(key: id, value: Setting.storedToggle($0)) }
             ))
             if let summary, !summary.isEmpty {
                 Text(summary)
@@ -151,7 +151,7 @@ private struct ToggleSettingRow: View {
         }
         .padding(.vertical, 2)
         .onAppear {
-            viewModel.ensureDefault(key: id, value: defaultValue ? "true" : "false")
+            viewModel.ensureDefault(key: id, value: Setting.storedToggle(defaultValue))
         }
     }
 }

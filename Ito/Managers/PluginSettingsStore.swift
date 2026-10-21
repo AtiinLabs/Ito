@@ -14,7 +14,6 @@ nonisolated public struct PluginSettingsPersistenceError: Equatable, Sendable {
 nonisolated public enum PluginSettingsReadinessError: Error, Equatable {
     case suiteUnavailable(String)
     case unresolvedSuites([String])
-    case malformedRepositoryIndex(url: String)
     case ambiguousSuiteOwnership(suiteDomain: String, existingPluginId: String, claimingPluginId: String)
     case ambiguousPluginIdentity(value: String, candidates: [String])
 }
@@ -204,9 +203,12 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
         }
     }
 
-    public func prepare(pluginId: String) throws {
+    /// Makes the plugin's settings ready to read and write. `discoverSources: false` skips
+    /// rescanning durable sources for identities, for a plugin whose identity is already
+    /// registered (an installed plugin, registered when the installed list was published).
+    public func prepare(pluginId: String, discoverSources: Bool = true) throws {
         try lock.withLock {
-            _ = try prepareLocked(pluginId: pluginId)
+            _ = try prepareLocked(pluginId: pluginId, discoverSources: discoverSources)
         }
     }
 
@@ -408,15 +410,17 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
                     source: "migrationAlias"
                 )
             }
-            let repositories = try Row.fetchAll(
+            // An index that can't be read only hides its packages until a refresh replaces it.
+            // Nothing is lost: legacy settings are only moved out of a suite once it is
+            // registered, so a suite only that index would have named stays where it is.
+            let payloads = try Data.fetchAll(
                 db,
-                sql: "SELECT url, indexPayload FROM repository WHERE indexPayload IS NOT NULL"
+                sql: "SELECT indexPayload FROM repository WHERE indexPayload IS NOT NULL"
             )
-            for repository in repositories {
-                let url: String = repository["url"]
-                let payload: Data = repository["indexPayload"]
+            for payload in payloads {
                 guard let index = try? JSONDecoder().decode(RepoIndex.self, from: payload) else {
-                    throw PluginSettingsReadinessError.malformedRepositoryIndex(url: url)
+                    AppLogger.plugin.error("PluginSettingsStore: skipped a repository index that couldn't be read")
+                    continue
                 }
                 values += index.packages.map {
                     PluginSettingsDiscovery(pluginId: $0.id, source: "repositoryPayload")

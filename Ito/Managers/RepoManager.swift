@@ -209,14 +209,21 @@ public class RepoManager: ObservableObject {
         try await withRepositoryMutation {
             repositories = try await dbPool.read { db in
                 try RepositoryRecord.order(Column("url")).fetchAll(db).map { record in
-                    Repository(
-                        url: record.url,
-                        lastFetched: record.lastFetched,
-                        index: try record.indexPayload.map { try JSONDecoder().decode(RepoIndex.self, from: $0) }
-                    )
+                    Repository(url: record.url, lastFetched: record.lastFetched, index: Self.storedIndex(record))
                 }
             }
         }
+    }
+
+    /// The repository's stored index. One that can't be read is dropped, so that repository
+    /// shows no packages until it is refreshed, and the other repositories still load.
+    nonisolated private static func storedIndex(_ record: RepositoryRecord) -> RepoIndex? {
+        guard let payload = record.indexPayload else { return nil }
+        guard let index = try? JSONDecoder().decode(RepoIndex.self, from: payload) else {
+            AppLogger.plugin.error("RepoManager: a stored repository index couldn't be read; refresh to replace it")
+            return nil
+        }
+        return index
     }
 
     private func normalizedURL(_ rawURL: String) throws -> String {

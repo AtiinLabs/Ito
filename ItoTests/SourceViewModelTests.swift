@@ -213,6 +213,22 @@ final class SourceViewModelTests: XCTestCase {
         XCTAssertEqual(context.homeLoadCount, 0)
     }
 
+    func testSettingsThatCantBeReadStayVisibleWithTheReasonAndTheHomeStillLoads() async {
+        let context = PR7BSourceRunnerContextSpy()
+        context.homeResult = .success(pr7bHome(ids: ["home-a"]))
+        context.settingsResult = .failure(PluginCallError(kind: .incompatible, message: "Needs a newer Ito."))
+        let provider = PR7BSourceRunnerProviderSpy(contexts: [context])
+        let viewModel = makeViewModel(provider: provider)
+
+        await viewModel.loadIfNeeded()
+
+        XCTAssertEqual(viewModel.phase, .content)
+        XCTAssertTrue(viewModel.hasSettings)
+        XCTAssertNil(viewModel.settingsDestination)
+        XCTAssertEqual(viewModel.settingsUnavailableReason, "Needs a newer Ito.")
+        XCTAssertTrue(provider.evictedPluginIDs.isEmpty)
+    }
+
     func testSearchPreservesPageOneEmptyFilterInvocationAndResultOrdering() async {
         let context = PR7BSourceRunnerContextSpy()
         context.searchResult = .success(.manga([

@@ -79,6 +79,28 @@ struct RepositoryAndAliasStoreTests {
         }
     }
 
+    @Test func aStoredIndexThatCantBeReadDoesNotHideTheOtherRepositories() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let index = RepoIndex(repoName: "Good", repoUrl: "https://good.example", description: "", packages: [])
+        try await database.dbPool.write { db in
+            try db.execute(
+                sql: "INSERT INTO repository (url, indexPayload) VALUES (?, ?)",
+                arguments: ["https://bad.example", Data("not-json".utf8)]
+            )
+            try db.execute(
+                sql: "INSERT INTO repository (url, indexPayload) VALUES (?, ?)",
+                arguments: ["https://good.example", try JSONEncoder().encode(index)]
+            )
+        }
+        let manager = RepoManager(dbPool: database.dbPool)
+
+        try await manager.reload()
+
+        #expect(manager.repositories.map(\.url) == ["https://bad.example", "https://good.example"])
+        #expect(manager.repositories.map(\.index) == [nil, index])
+    }
+
     @Test func repositoryRefreshUsesCanonicalFetcherPersistenceAndPublicationPath() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }

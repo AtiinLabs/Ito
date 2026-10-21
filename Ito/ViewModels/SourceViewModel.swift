@@ -40,6 +40,8 @@ final class SourceViewModel: ObservableObject {
     @Published private(set) var searchPhase: SearchPhase = .idle
     @Published private(set) var homeLayout: HomeLayout?
     @Published private(set) var settingsSchema: SettingsSchema?
+    /// Why the plugin's settings can't be shown, when it has settings but they couldn't be read.
+    @Published private(set) var settingsUnavailableReason: String?
     @Published private(set) var searchMangas: [Manga] = []
     @Published private(set) var searchAnimes: [Anime] = []
     @Published private(set) var searchNovels: [Novel] = []
@@ -151,6 +153,11 @@ final class SourceViewModel: ObservableObject {
         return SourceSettingsDestination(plugin: plugin, schema: settingsSchema)
     }
 
+    /// Whether the source offers settings, even ones that can't be shown right now.
+    var hasSettings: Bool {
+        settingsSchema != nil || settingsUnavailableReason != nil
+    }
+
     func destination(for manga: Manga) -> SearchDestination? {
         context.map { .manga(pluginID: plugin.id, context: $0, media: manga) }
     }
@@ -232,6 +239,7 @@ final class SourceViewModel: ObservableObject {
             runnerProvider.evictSourceRunner(for: plugin.id)
             context = nil
             settingsSchema = nil
+            settingsUnavailableReason = nil
         }
 
         let task = Task { @MainActor [weak self] in
@@ -250,14 +258,21 @@ final class SourceViewModel: ObservableObject {
         do {
             let nextContext = try await runnerProvider.sourceRunnerContext(for: plugin.id)
             try Task.checkCancellation()
-            let schema = try await loadSettingsSchema(from: nextContext)
+            let settings = try await loadSettings(from: nextContext)
             try Task.checkCancellation()
             let layout = try await nextContext.loadHome()
             try Task.checkCancellation()
             guard isCurrentLoad(operationID) else { return }
 
             context = nextContext
-            settingsSchema = schema
+            switch settings {
+            case .schema(let schema):
+                settingsSchema = schema
+                settingsUnavailableReason = nil
+            case .unavailable(let reason):
+                settingsSchema = nil
+                settingsUnavailableReason = reason
+            }
             homeLayout = layout
             phase = layout.components.isEmpty ? .empty : .content
             finishLoad(operationID)
@@ -348,17 +363,22 @@ final class SourceViewModel: ObservableObject {
         }
     }
 
-    /// The plugin's settings schema, or nil when it has none or can't provide one. A crash is not
-    /// swallowed: the home would otherwise load on the crashed runner.
-    private func loadSettingsSchema(from context: any SourceRunnerContext) async throws -> SettingsSchema? {
+    private enum SettingsLoad {
+        case schema(SettingsSchema?)
+        case unavailable(reason: String)
+    }
+
+    /// The plugin's settings schema (nil when it has none), or why it couldn't be read. A crash
+    /// is not kept as a reason: the home would otherwise load on the crashed runner.
+    private func loadSettings(from context: any SourceRunnerContext) async throws -> SettingsLoad {
         do {
-            return try await context.loadSettingsSchema()
+            return .schema(try await context.loadSettingsSchema())
         } catch let error as PluginCallError where error.kind == .crashed {
             throw error
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            return nil
+            return .unavailable(reason: error.localizedDescription)
         }
     }
 
