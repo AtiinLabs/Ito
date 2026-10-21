@@ -99,6 +99,9 @@ final class AVPlayerVideoPlaybackCoordinator: VideoPlaybackCoordinating {
     private var observerGeneration: UInt64 = 0
     private var timeUpdate: (@MainActor (Double, Double) -> Void)?
     private var readyObservation: NSKeyValueObservation?
+    /// True from activation until the seek to the start time finishes: until then the player
+    /// reports 0:00, which must not reach (and be saved by) the caller.
+    private var isSeekingToStart = false
 
     func prepare(video: Anime.Video) async -> (any VideoPlaybackPreparation)? {
         guard let url = URL(string: video.url) else { return nil }
@@ -131,8 +134,10 @@ final class AVPlayerVideoPlaybackCoordinator: VideoPlaybackCoordinating {
         }
         installPeriodicObserverIfNeeded()
         if let startTime, startTime > 0 {
+            isSeekingToStart = true
             playWhenReady(preparation.item, from: startTime)
         } else {
+            isSeekingToStart = false
             player?.play()
         }
         return true
@@ -151,6 +156,7 @@ final class AVPlayerVideoPlaybackCoordinator: VideoPlaybackCoordinating {
                 item.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
                     Task { @MainActor [weak self] in
                         guard self?.player?.currentItem === item else { return }
+                        self?.isSeekingToStart = false
                         self?.player?.play()
                     }
                 }
@@ -189,6 +195,7 @@ final class AVPlayerVideoPlaybackCoordinator: VideoPlaybackCoordinating {
                 guard let self,
                       self.periodicObserverToken != nil,
                       self.observerGeneration == generation,
+                      !self.isSeekingToStart,
                       let timeUpdate = self.timeUpdate else { return }
                 let duration = self.player?.currentItem?.duration.seconds ?? .nan
                 timeUpdate(time.seconds, duration)
