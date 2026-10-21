@@ -1,8 +1,13 @@
 import Foundation
 import ZIPFoundation
 
-/// The bytes of a minimal `.ito` plugin bundle: a manifest and nothing else.
-func makeTestPluginArchiveData(id: String, version: String, minAppVersion: String = "1.0") throws -> Data {
+/// The bytes of a minimal `.ito` plugin bundle: a manifest, and `wasm` as its module if given.
+func makeTestPluginArchiveData(
+    id: String,
+    version: String,
+    minAppVersion: String = "1.0",
+    wasm: Data? = nil
+) throws -> Data {
     let directory = FileManager.default.temporaryDirectory
         .appendingPathComponent("TestPluginArchive-\(UUID().uuidString)")
     let archiveURL = directory.appendingPathComponent("fixture.ito")
@@ -27,6 +32,12 @@ func makeTestPluginArchiveData(id: String, version: String, minAppVersion: Strin
     ) { position, size in
         let start = Int(position)
         return manifest.subdata(in: start..<min(start + size, manifest.count))
+    }
+    if let wasm {
+        try archive.addEntry(with: "main.wasm", type: .file, uncompressedSize: Int64(wasm.count)) { position, size in
+            let start = Int(position)
+            return wasm.subdata(in: start..<min(start + size, wasm.count))
+        }
     }
     return try Data(contentsOf: archiveURL)
 }

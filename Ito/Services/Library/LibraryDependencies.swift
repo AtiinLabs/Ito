@@ -234,8 +234,6 @@ struct DeferredPluginPackageCandidate: Equatable {
     /// Why the package can't run here, or nil when it can.
     let incompatibility: PluginRequiresNewerAppError?
 
-    var isCompatible: Bool { incompatibility == nil }
-
     var pluginType: PluginType? {
         PluginType(rawValue: package.pluginType)
     }

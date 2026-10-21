@@ -132,7 +132,12 @@ public class PluginManager: ObservableObject {
         await runner.setWebviewModule(AppWebviewModule())
 
         AppLogger.plugin.debug("\("🔌 [PluginManager] Loading bundle for \(pluginID)")...")
-        _ = try await runner.loadBundle(from: pluginURL)
+        do {
+            _ = try await runner.loadBundle(from: pluginURL)
+        } catch ItoError.requiresNewerHost, ItoError.unsupportedABI {
+            // Plugins whose manifest predates `abi`/`imports` are only found out here.
+            throw PluginRequiresNewerAppError(minimumAppVersion: nil)
+        }
         return (runner, defaults)
     }
 

@@ -77,17 +77,53 @@ struct PluginGatingTests {
                 return ItoRunner()
             }
         )
+        let plugins = [
+            InstalledPlugin(
+                url: URL(fileURLWithPath: "/test/future.ito"),
+                info: PluginInfo(id: "future", name: "Future", version: "1.0", minAppVersion: "999.0", type: .manga),
+                iconData: nil
+            ),
+            InstalledPlugin(
+                url: URL(fileURLWithPath: "/test/newer-abi.ito"),
+                info: PluginInfo(id: "newer-abi", name: "Newer", version: "1.0", minAppVersion: "1.0", type: .manga, abi: 2),
+                iconData: nil
+            )
+        ]
+        manager.publishPreparedInstalledPlugins(Dictionary(uniqueKeysWithValues: plugins.map { ($0.id, $0) }))
+
+        await #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: "999.0")) {
+            try await manager.getRunner(for: "future")
+        }
+        await #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: nil)) {
+            try await manager.getRunner(for: "newer-abi")
+        }
+        #expect(loads == 0)
+    }
+
+    @Test func aPluginWhoseModuleNeedsAMissingHostFunctionIsRefusedWhenItLoads() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let pluginsDirectory = database.databaseURL.deletingLastPathComponent()
+        // A module importing ito:core/net.fetch_v9 (no host has it); its manifest records nothing.
+        let wasm = Data([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
+                         0x02, 0x19, 0x01, 0x0c] + Array("ito:core/net".utf8) + [0x08] + Array("fetch_v9".utf8)
+                        + [0x00, 0x00])
+        let url = pluginsDirectory.appendingPathComponent("future.ito")
+        try makeTestPluginArchiveData(id: "future", version: "1.0", wasm: wasm).write(to: url)
+        let manager = PluginManager(
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginsDirectory: pluginsDirectory
+        )
         let plugin = InstalledPlugin(
-            url: URL(fileURLWithPath: "/test/future.ito"),
-            info: PluginInfo(id: "future", name: "Future", version: "1.0", minAppVersion: "999.0", type: .manga),
+            url: url,
+            info: PluginInfo(id: "future", name: "Future", version: "1.0", minAppVersion: "1.0", type: .manga),
             iconData: nil
         )
         manager.publishPreparedInstalledPlugins([plugin.id: plugin])
 
-        await #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: "999.0")) {
+        await #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: nil)) {
             try await manager.getRunner(for: plugin.id)
         }
-        #expect(loads == 0)
     }
 
     @Test func aRepositoryPackageNeedingANewerItoIsNotDownloaded() async throws {
@@ -102,14 +138,24 @@ struct PluginGatingTests {
                 return Data()
             }
         )
-        let package = RepoPackage(
-            id: "future", name: "Future", version: "1.0", minAppVersion: "999.0",
-            downloadUrl: "future.ito", iconUrl: nil, sha256: "unused", pluginType: "manga",
-            archived: nil, archivedReason: nil, archivedDate: nil
-        )
+        let packages = [
+            RepoPackage(
+                id: "future", name: "Future", version: "1.0", minAppVersion: "999.0",
+                downloadUrl: "future.ito", iconUrl: nil, sha256: "unused", pluginType: "manga",
+                archived: nil, archivedReason: nil, archivedDate: nil
+            ),
+            RepoPackage(
+                id: "newer-abi", name: "Newer", version: "1.0", minAppVersion: "1.0",
+                downloadUrl: "newer.ito", iconUrl: nil, sha256: "unused", pluginType: "manga",
+                archived: nil, archivedReason: nil, archivedDate: nil, abi: 2
+            )
+        ]
 
         await #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: "999.0")) {
-            try await repositories.installPackage(package, repositoryUrl: "https://repo.example")
+            try await repositories.installPackage(packages[0], repositoryUrl: "https://repo.example")
+        }
+        await #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: nil)) {
+            try await repositories.installPackage(packages[1], repositoryUrl: "https://repo.example")
         }
         #expect(await downloads.value == 0)
     }

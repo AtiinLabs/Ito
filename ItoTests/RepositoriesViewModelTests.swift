@@ -693,7 +693,7 @@ private final class RepositoryManagerSpy: RepositoryListManaging, RepositoryDeta
     }
 
     func compatibilityRefusal(for package: RepoPackage) -> PluginRequiresNewerAppError? {
-        compatibility[package.minAppVersion] ?? true ? nil : PluginRequiresNewerAppError(minimumAppVersion: package.minAppVersion)
+        (compatibility[package.minAppVersion] ?? true) ? nil : PluginRequiresNewerAppError(minimumAppVersion: package.minAppVersion)
     }
 
     func resumeAdd(url: String) {
