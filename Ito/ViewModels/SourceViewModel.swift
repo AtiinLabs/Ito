@@ -42,6 +42,9 @@ final class SourceViewModel: ObservableObject {
     @Published private(set) var settingsSchema: SettingsSchema?
     /// Why the plugin's settings can't be shown, when it has settings but they couldn't be read.
     @Published private(set) var settingsUnavailableReason: String?
+    /// Whether the last load failed because the plugin needs settings (missing, or rejected
+    /// credentials), so the failure offers to open them.
+    @Published private(set) var failureNeedsSettings = false
     @Published private(set) var searchMangas: [Manga] = []
     @Published private(set) var searchAnimes: [Anime] = []
     @Published private(set) var searchNovels: [Novel] = []
@@ -237,6 +240,7 @@ final class SourceViewModel: ObservableObject {
         loadOperationID = operationID
         phase = .loading
         homeLayout = nil
+        failureNeedsSettings = false
 
         if invalidateCachedRunner {
             runnerProvider.evictSourceRunner(for: plugin.id)
@@ -263,11 +267,9 @@ final class SourceViewModel: ObservableObject {
             try Task.checkCancellation()
             let settings = try await loadSettings(from: nextContext)
             try Task.checkCancellation()
-            let layout = try await nextContext.loadHome()
-            try Task.checkCancellation()
             guard isCurrentLoad(operationID) else { return }
-
-            context = nextContext
+            // Published before the home loads: a home that fails for want of settings needs the
+            // settings button to recover.
             switch settings {
             case .schema(let schema):
                 settingsSchema = schema
@@ -276,6 +278,11 @@ final class SourceViewModel: ObservableObject {
                 settingsSchema = nil
                 settingsUnavailableReason = reason
             }
+            let layout = try await nextContext.loadHome()
+            try Task.checkCancellation()
+            guard isCurrentLoad(operationID) else { return }
+
+            context = nextContext
             homeLayout = layout
             phase = layout.components.isEmpty ? .empty : .content
             finishLoad(operationID)
@@ -287,6 +294,7 @@ final class SourceViewModel: ObservableObject {
             guard isCurrentLoad(operationID), !Task.isCancelled else { return }
             discardRunnerIfCrashed(error)
             let reason = error.localizedDescription
+            failureNeedsSettings = (error as? PluginCallError)?.kind == .needsSettings
             phase = .failure(reason)
             messagePresenter.present(.loadFailed(pluginName: plugin.info.name, reason: reason))
             finishLoad(operationID)

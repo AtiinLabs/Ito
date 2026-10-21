@@ -24,6 +24,20 @@ struct PluginCallErrorTests {
     }
 
     @Test(arguments: [
+        (PluginErrorCategory.needsSetup, PluginCallError.Kind.needsSettings),
+        (.unauthorized, .needsSettings),
+        (.network, .reported),
+        (.server, .reported),
+        (.notFound, .reported),
+        (.other, .reported)
+    ])
+    func failuresTheSettingsCanFixPointThere(_ category: PluginErrorCategory, _ kind: PluginCallError.Kind) {
+        let error = PluginCallError(.pluginFailed(function: "get_home", reason: "Add your server URL", category: category))
+
+        #expect(error == PluginCallError(kind: kind, message: "Add your server URL"))
+    }
+
+    @Test(arguments: [
         ItoError.wasmTrap("unreachable"),
         .memoryOutOfBounds(offset: 1, length: 2, memorySize: 3),
         .invalidDescriptor(id: 7)

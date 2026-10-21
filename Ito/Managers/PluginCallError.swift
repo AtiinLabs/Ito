@@ -7,6 +7,9 @@ struct PluginCallError: LocalizedError, Equatable {
     enum Kind: Equatable {
         /// The plugin reported the failure; `message` is its own text.
         case reported
+        /// The plugin needs settings it doesn't have, or its credentials were rejected: the way
+        /// out is the plugin's settings. `message` is its own text.
+        case needsSettings
         /// The plugin stopped part-way (a trap or a bad memory access). Reload it before calling
         /// it again: its state may be inconsistent.
         case crashed
@@ -28,10 +31,11 @@ struct PluginCallError: LocalizedError, Equatable {
 
     init(_ error: ItoError) {
         switch error {
-        case .pluginFailed(_, let reason) where reason.map(Self.isSDKDecodingFailure) == true:
+        case .pluginFailed(_, let reason, _) where reason.map(Self.isSDKDecodingFailure) == true:
             self.init(kind: .incompatible, message: Self.incompatibleMessage)
-        case .pluginFailed(_, let reason):
-            self.init(kind: .reported, message: Self.pluginMessage(reason))
+        case .pluginFailed(_, let reason, let category):
+            let kind: Kind = category == .needsSetup || category == .unauthorized ? .needsSettings : .reported
+            self.init(kind: kind, message: Self.pluginMessage(reason))
         case .wasmTrap, .memoryOutOfBounds, .invalidDescriptor:
             self.init(kind: .crashed, message: "The source stopped unexpectedly. Try again.")
         case .postcardDecodingError, .postcardEncodingError:
