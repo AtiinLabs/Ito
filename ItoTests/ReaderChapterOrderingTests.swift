@@ -4,6 +4,13 @@ import ito_runner
 
 @MainActor
 final class ReaderChapterOrderingTests: XCTestCase {
+    func testChapterTitlePrefersTitleThenNumberWithoutTrailingZero() {
+        XCTAssertEqual(ReaderChapterTitle.text(title: "Prologue", number: 3), "Prologue")
+        XCTAssertEqual(ReaderChapterTitle.text(title: "", number: 12), "Chapter 12")
+        XCTAssertEqual(ReaderChapterTitle.text(title: nil, number: 12.5), "Chapter 12.5")
+        XCTAssertEqual(ReaderChapterTitle.text(title: nil, number: nil), "Unknown Chapter")
+    }
+
     func testMangaNextAndPreviousUseClosestNumericChapterIndependentOfInputOrder() {
         let current = mangaChapter("current", number: 2, scanlator: "preferred")
         let one = mangaChapter("one", number: 1)
