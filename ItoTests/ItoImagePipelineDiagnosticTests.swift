@@ -187,7 +187,7 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
     func testControlF_PageRequestsCarryPluginHeadersAndNeverGuessAReferer() throws {
         let testURL = "https://cdn.example.com/ch1/001.jpg"
 
-        // The plugin's headers are sent as given, and the default User-Agent fills in.
+        // The plugin's headers are sent as given; the image session supplies the User-Agent.
         let customHeaders = [
             "Referer": "https://source.example.com/manga/123",
             "Authorization": "Bearer test-token"
@@ -197,7 +197,7 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
         )?.urlRequest
         XCTAssertEqual(withHeaders?.value(forHTTPHeaderField: "Referer"), "https://source.example.com/manga/123")
         XCTAssertEqual(withHeaders?.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
-        XCTAssertTrue(withHeaders?.value(forHTTPHeaderField: "User-Agent")?.contains("iPhone OS 16_0") == true)
+        XCTAssertNil(withHeaders?.value(forHTTPHeaderField: "User-Agent"))
 
         // A plugin's own User-Agent wins.
         let ownAgent = NukeMangaReaderImagePrefetcher.request(
@@ -210,7 +210,7 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
             for: Page(index: 2, content: .url(testURL), headers: nil)
         )?.urlRequest
         XCTAssertNil(defaults?.value(forHTTPHeaderField: "Referer"))
-        XCTAssertTrue(defaults?.value(forHTTPHeaderField: "User-Agent")?.contains("iPhone OS 16_0") == true)
+        XCTAssertNil(defaults?.value(forHTTPHeaderField: "User-Agent"))
     }
 
     // MARK: - Test G: Custom ito:// scheme routing via PluginDataLoader

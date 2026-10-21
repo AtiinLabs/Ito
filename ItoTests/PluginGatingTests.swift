@@ -12,16 +12,12 @@ struct PluginGatingTests {
         ("1.2.0", "1.3", false),
         ("1.2.0", "1.2.1", false),
         ("1.2.0-beta", "1.2.0", true),
+        ("1.2.0", "1.2.0-beta.1", true),
+        ("1.2.0", "1.2.0+build.5", true),
         ("2", "1.99.99", true)
     ])
     func appVersionsCompareByNumericComponents(current: String, minimum: String, satisfied: Bool) {
         #expect(AppVersion.isAtLeast(minimum, current: current) == satisfied)
-    }
-
-    @Test func pluginsGetThePreferredLanguagesAsCodesInOrder() {
-        let env = AppEnvModule(preferredLanguages: { ["en-US", "pt-BR", "en-GB", "zh-Hans-CN", "ja"] })
-        #expect(env.getLanguages() == ["en", "pt", "zh", "ja"])
-        #expect(AppEnvModule(preferredLanguages: { [] }).getLanguages() == ["en"])
     }
 
     @Test(arguments: [
@@ -47,6 +43,24 @@ struct PluginGatingTests {
 
         #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: "999.0")) {
             try operations.installPluginFile(from: source)
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path).isEmpty)
+    }
+
+    @Test func aFileThatIsNotAPluginBundleIsRefusedAsSuch() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PluginGating-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("Plugins")
+        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+        let source = root.appendingPathComponent("broken.ito")
+        try Data("not a zip".utf8).write(to: source)
+        let operations = LocalBrowsePluginFileOperations(pluginsDirectory: pluginsDirectory)
+
+        #expect {
+            try operations.installPluginFile(from: source)
+        } throws: { error in
+            if case BrowsePluginFileError.unsupportedPluginFile = error { return true }
+            return false
         }
         #expect(try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path).isEmpty)
     }

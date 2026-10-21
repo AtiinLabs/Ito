@@ -14,8 +14,8 @@ nonisolated enum AppVersion {
     }
 
     /// Whether `current` is at least `minimum`. Versions compare by their numeric components,
-    /// missing ones counting as 0 ("1.2" is "1.2.0"); text after a component's digits, such as
-    /// "-beta", is ignored.
+    /// missing ones counting as 0 ("1.2" is "1.2.0"); a pre-release or build suffix ("-beta.1",
+    /// "+5") is ignored.
     static func isAtLeast(_ minimum: String, current: String = marketing) -> Bool {
         let have = numericComponents(current)
         let need = numericComponents(minimum)
@@ -28,7 +28,9 @@ nonisolated enum AppVersion {
     }
 
     private static func numericComponents(_ version: String) -> [Int] {
-        version.split(separator: ".").map { Int($0.prefix(while: \.isNumber)) ?? 0 }
+        version.prefix { $0 != "-" && $0 != "+" }
+            .split(separator: ".")
+            .map { Int($0.prefix(while: \.isNumber)) ?? 0 }
     }
 }
 
