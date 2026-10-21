@@ -178,8 +178,10 @@ final class NovelReaderViewModel: ObservableObject {
         contentGeneration &+= 1
         cancelContentOperations(finishingAs: .cancelled)
 
-        for (operationID, task) in effectTasks {
-            task.cancel()
+        // The local read mark is durable progress and must finish even if the reader closes
+        // right after the end, so effect tasks are not cancelled; their tracker step checks
+        // that this presentation is still current.
+        for operationID in effectTasks.keys {
             logFinishedOnce(
                 kind: .chapterEffects,
                 operationID: operationID,
@@ -678,10 +680,6 @@ final class NovelReaderViewModel: ObservableObject {
             defer { self?.finishTestingOperation(operationID) }
             do {
                 for effect in plan.effects {
-                    guard let self,
-                          self.isCurrentEffect(operationID: operationID, session: session) else {
-                        return
-                    }
                     switch effect {
                     case .markLocalProgress:
                         try await progress.markNovelChapterRead(
@@ -690,10 +688,9 @@ final class NovelReaderViewModel: ObservableObject {
                             chapterNumber: chapter.chapter
                         )
                     case .updateTracker(let progressValue):
-                        guard self.isCurrentEffect(
-                            operationID: operationID,
-                            session: session
-                        ) else { return }
+                        guard let self,
+                              self.isCurrentEffect(operationID: operationID, session: session)
+                        else { return }
                         await tracker.updateNovelProgress(
                             media: identity,
                             progress: progressValue

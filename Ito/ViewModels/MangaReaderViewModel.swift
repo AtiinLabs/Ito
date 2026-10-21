@@ -179,7 +179,8 @@ final class MangaReaderViewModel: ObservableObject {
         sessionID = UUID()
         contentGeneration &+= 1
         cancelContentOperations()
-        for task in effectTasks.values { task.cancel() }
+        // Not cancelled: a chapter's local read mark is durable progress and must finish even
+        // if the reader closes right after the last page. The tracker step checks `isActive`.
         effectTasks.removeAll()
         settingsWriteTask?.cancel()
         settingsWriteTask = nil
@@ -1010,10 +1011,6 @@ final class MangaReaderViewModel: ObservableObject {
         let task = Task { @MainActor [weak self, progress, tracker] in
             do {
                 for effect in plan.effects {
-                    guard let self,
-                          self.isActive,
-                          self.sessionID == session,
-                          !Task.isCancelled else { return }
                     switch effect {
                     case .markLocalProgress:
                         try await progress.markChapterRead(
@@ -1022,7 +1019,8 @@ final class MangaReaderViewModel: ObservableObject {
                             chapterNumber: chapter.chapter
                         )
                     case .updateTracker(let progressValue):
-                        guard self.isActive,
+                        guard let self,
+                              self.isActive,
                               self.sessionID == session,
                               !Task.isCancelled else { return }
                         await tracker.updateMangaProgress(

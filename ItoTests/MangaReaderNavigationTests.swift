@@ -99,4 +99,19 @@ extension MangaReaderViewModelTests {
 
         XCTAssertEqual(subject.history.requests.map(\.chapterKey), ["a", "b"])
     }
+
+    func testClosingRightAfterTheLastPageStillMarksTheChapterRead() async {
+        let subject = makeSubject(chapters: [makeChapter("a", number: 1)])
+        subject.loader.enqueue(.pages([page(0), page(1)]), for: "a")
+        subject.viewModel.start()
+        await waitForReader { subject.viewModel.loadPhase == .content }
+
+        subject.viewModel.setPagedIndex(1)
+        subject.viewModel.disappear()
+
+        await waitForReader { subject.progress.requests.map(\.chapterID) == ["a"] }
+        await yieldReaderTasks()
+        // The tracker belongs to the closed reader and is left alone.
+        XCTAssertTrue(subject.tracker.requests.isEmpty)
+    }
 }
