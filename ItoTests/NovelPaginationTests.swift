@@ -77,9 +77,13 @@ final class NovelPaginationTests: XCTestCase {
             pages[1].image,
             NovelPageImage(url: "https://example.com/image", headers: ["Referer": "https://example.com"])
         )
-        // Offsets match the continuous reader's: the image sits where the second block starts.
+        // Offsets match the continuous reader's, and the image has its own: a place saved on it
+        // reopens on it, not on the text after it.
         let starts = NovelTextOffsets.blockStarts(loaded.pages)
-        XCTAssertEqual(pages.map(\.startOffset), [0, starts[2], starts[2]])
+        XCTAssertEqual(pages.map(\.startOffset), [starts[0], starts[1], starts[2]])
+        XCTAssertLessThan(starts[1], starts[2])
+        let onImage = NovelReadingAnchor(chapterID: loaded.id, offset: starts[1])
+        XCTAssertEqual(NovelPagingReaderView.pageIndex(for: onImage, in: pages), 1)
         XCTAssertEqual(pages.map(\.isLastInChapter), [false, false, true])
     }
 

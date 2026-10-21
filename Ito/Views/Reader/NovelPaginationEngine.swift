@@ -138,6 +138,8 @@ nonisolated enum NovelPaginationEngine {
                 )
                 run = NSMutableAttributedString()
                 runTitleLength = 0
+                // The image takes one offset unit, matching `NovelTextOffsets`.
+                offset += 1
                 runStart = offset
             }
         }

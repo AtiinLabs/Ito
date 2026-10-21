@@ -173,8 +173,9 @@ nonisolated struct ReaderSessionEffectPlan: Equatable, Sendable {
 }
 
 /// Positions inside a novel chapter, as UTF-16 offsets into its body text: each text block
-/// followed by the two-character separator the paginator puts between blocks. The same offsets
-/// work in the paged and continuous readers and survive repagination.
+/// followed by the two-character separator the paginator puts between blocks, and one unit
+/// for each image. The same offsets work in the paged and continuous readers and survive
+/// repagination.
 nonisolated enum NovelTextOffsets {
     static let blockSeparator = "\n\n"
 
@@ -200,7 +201,8 @@ nonisolated enum NovelTextOffsets {
     }
 
     private static func length(of page: Page) -> Int {
-        guard case .text(let text) = page.content else { return 0 }
+        // An image takes one unit, so a position can point at it rather than the text after it.
+        guard case .text(let text) = page.content else { return 1 }
         return (text as NSString).length + (blockSeparator as NSString).length
     }
 }
