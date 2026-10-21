@@ -692,8 +692,8 @@ private final class RepositoryManagerSpy: RepositoryListManaging, RepositoryDeta
         onRefresh?()
     }
 
-    func isCompatible(minAppVersion: String) -> Bool {
-        compatibility[minAppVersion] ?? true
+    func compatibilityRefusal(for package: RepoPackage) -> PluginRequiresNewerAppError? {
+        compatibility[package.minAppVersion] ?? true ? nil : PluginRequiresNewerAppError(minimumAppVersion: package.minAppVersion)
     }
 
     func resumeAdd(url: String) {

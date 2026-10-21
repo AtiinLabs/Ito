@@ -329,7 +329,7 @@ struct PackageRowView: View {
         } else {
             switch installState {
             case .incompatible(let minVersion):
-                Text("Requires v\(minVersion)")
+                Text(minVersion.map { "Requires v\($0)" } ?? "Requires a newer Ito")
                     .font(.caption2)
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.trailing)

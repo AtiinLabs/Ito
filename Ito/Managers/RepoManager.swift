@@ -16,6 +16,12 @@ nonisolated public struct RepoPackage: Codable, Identifiable, Hashable, Sendable
     public let archived: Bool?
     public let archivedReason: String?
     public let archivedDate: String?
+    /// The ABI the plugin was built for, as its packager recorded it. Absent in older indexes.
+    public let abi: Int?
+    /// The SDK the plugin was built with, such as "ito-rs 0.1.1". Absent in older indexes.
+    public let sdk: String?
+    /// The host functions the plugin imports, as "module.name". Absent in older indexes.
+    public let imports: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id, name, version, minAppVersion = "min_app_version"
@@ -26,11 +32,44 @@ nonisolated public struct RepoPackage: Codable, Identifiable, Hashable, Sendable
         case archived
         case archivedReason = "archived_reason"
         case archivedDate = "archived_date"
+        case abi, sdk, imports
+    }
+
+    public init(
+        id: String, name: String, version: String, minAppVersion: String, downloadUrl: String,
+        iconUrl: String?, sha256: String, pluginType: String, archived: Bool?,
+        archivedReason: String?, archivedDate: String?,
+        abi: Int? = nil, sdk: String? = nil, imports: [String]? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.version = version
+        self.minAppVersion = minAppVersion
+        self.downloadUrl = downloadUrl
+        self.iconUrl = iconUrl
+        self.sha256 = sha256
+        self.pluginType = pluginType
+        self.archived = archived
+        self.archivedReason = archivedReason
+        self.archivedDate = archivedDate
+        self.abi = abi
+        self.sdk = sdk
+        self.imports = imports
     }
 }
 
 extension RepoPackage {
     public var isArchived: Bool { archived ?? false }
+
+    /// Why this package can't run in an Ito at `currentAppVersion`, or nil when it can.
+    func compatibilityRefusal(currentAppVersion: String = AppVersion.marketing) -> PluginRequiresNewerAppError? {
+        PluginRequiresNewerAppError.refusal(
+            minAppVersion: minAppVersion,
+            abi: abi,
+            imports: imports,
+            currentAppVersion: currentAppVersion
+        )
+    }
 }
 
 nonisolated public struct RepoIndex: Codable, Equatable, Sendable {
@@ -385,14 +424,14 @@ public class RepoManager: ObservableObject {
         }
     }
 
-    // Checks if the plugin is compatible with this app
-    public func isCompatible(minAppVersion: String) -> Bool {
-        AppVersion.isAtLeast(minAppVersion, current: currentAppVersion)
+    /// Why `package` can't run in this app, or nil when it can.
+    func compatibilityRefusal(for package: RepoPackage) -> PluginRequiresNewerAppError? {
+        package.compatibilityRefusal(currentAppVersion: currentAppVersion)
     }
 
     public func installPackage(_ pkg: RepoPackage, repositoryUrl: String) async throws {
-        guard isCompatible(minAppVersion: pkg.minAppVersion) else {
-            throw PluginRequiresNewerAppError(minimumAppVersion: pkg.minAppVersion)
+        if let refusal = compatibilityRefusal(for: pkg) {
+            throw refusal
         }
         let request = PackageInstallationRequest(
             repositoryURL: repositoryUrl,
@@ -435,7 +474,7 @@ public class RepoManager: ObservableObject {
             // can name a download that is gone. Install what the repository lists now.
             guard let current = try await currentPackage(id: pkg.id, repositoryUrl: repositoryUrl),
                   current.downloadUrl != pkg.downloadUrl || current.sha256 != pkg.sha256,
-                  isCompatible(minAppVersion: current.minAppVersion) else {
+                  compatibilityRefusal(for: current) == nil else {
                 throw RepositoryPackageInstallationError.packageUnavailable
             }
             try await downloadAndInstall(current, repositoryUrl: repositoryUrl)

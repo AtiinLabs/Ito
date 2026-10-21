@@ -39,7 +39,7 @@ private final class TestRepositoryManagementManager: RepositoryListManaging, Rep
         throw TestRepositoryManagementError.unavailable
     }
 
-    func isCompatible(minAppVersion: String) -> Bool {
-        false
+    func compatibilityRefusal(for package: RepoPackage) -> PluginRequiresNewerAppError? {
+        PluginRequiresNewerAppError(minimumAppVersion: package.minAppVersion)
     }
 }

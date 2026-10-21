@@ -113,6 +113,38 @@ struct PluginGatingTests {
         }
         #expect(await downloads.value == 0)
     }
+
+    @Test func aPackageBuiltForANewerABIOrNeedingAMissingFunctionIsRefusedWithoutNamingAVersion() {
+        func package(abi: Int?, imports: [String]?) -> RepoPackage {
+            RepoPackage(
+                id: "p", name: "P", version: "1.0", minAppVersion: "1.0", downloadUrl: "p.ito",
+                iconUrl: nil, sha256: "x", pluginType: "manga", archived: nil, archivedReason: nil,
+                archivedDate: nil, abi: abi, imports: imports
+            )
+        }
+        let refused = PluginRequiresNewerAppError(minimumAppVersion: nil)
+
+        #expect(package(abi: 2, imports: nil).compatibilityRefusal() == refused)
+        #expect(package(abi: 1, imports: ["ito:core/net.fetch_v9"]).compatibilityRefusal() == refused)
+        #expect(package(abi: 1, imports: ["ito:core/net.fetch_v2", "ito:core/std.print"]).compatibilityRefusal() == nil)
+        #expect(package(abi: nil, imports: nil).compatibilityRefusal() == nil)
+        #expect(refused.localizedDescription == "This source needs a newer version of Ito. Update Ito to use it.")
+    }
+
+    @Test func indexesWithAndWithoutTheRecordedInterfaceDecode() throws {
+        let entry = """
+            "id": "p", "name": "P", "version": "1.0", "min_app_version": "1.0",
+            "download_url": "packages/p.ito", "sha256": "x", "type": "manga"
+            """
+        let newer = try JSONDecoder().decode(RepoPackage.self, from: Data("""
+            {\(entry), "abi": 1, "sdk": "ito-rs 0.1.1 (39749ae)", "imports": ["ito:core/net.fetch_v2"]}
+            """.utf8))
+        let older = try JSONDecoder().decode(RepoPackage.self, from: Data("{\(entry)}".utf8))
+
+        #expect(newer.abi == 1)
+        #expect(newer.imports == ["ito:core/net.fetch_v2"])
+        #expect(older.abi == nil && older.imports == nil)
+    }
 }
 
 private actor Counter {

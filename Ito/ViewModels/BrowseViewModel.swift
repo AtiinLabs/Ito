@@ -108,7 +108,7 @@ public final class BrowseViewModel: ObservableObject {
                         package.version,
                         options: .numeric
                       ) == .orderedAscending,
-                      AppVersion.isAtLeast(package.minAppVersion) else {
+                      package.compatibilityRefusal() == nil else {
                     continue
                 }
 

@@ -1,4 +1,5 @@
 import Foundation
+import ito_runner
 
 /// The running app's version, read from Info.plist.
 /// The values come from Configuration/Version.xcconfig; CI sets the build number.
@@ -34,11 +35,42 @@ nonisolated enum AppVersion {
     }
 }
 
-/// A plugin that needs a newer version of Ito than this one.
+/// A plugin that needs a newer version of Ito than this one. `minimumAppVersion` is the version it
+/// names, or nil when it needs something this version lacks (its ABI or a host function).
 nonisolated struct PluginRequiresNewerAppError: LocalizedError, Equatable {
-    let minimumAppVersion: String
+    let minimumAppVersion: String?
+
+    static let unnamedVersionMessage = "This source needs a newer version of Ito. Update Ito to use it."
 
     var errorDescription: String? {
-        "This source needs Ito \(minimumAppVersion) or later. Update Ito to use it."
+        guard let minimumAppVersion else { return Self.unnamedVersionMessage }
+        return "This source needs Ito \(minimumAppVersion) or later. Update Ito to use it."
+    }
+
+    /// Why a plugin with these requirements can't run in this Ito, or nil when it can. `abi` and
+    /// `imports` come from the plugin's manifest or repository entry; older ones don't have them.
+    static func refusal(
+        minAppVersion: String,
+        abi: Int?,
+        imports: [String]?,
+        currentAppVersion: String = AppVersion.marketing
+    ) -> PluginRequiresNewerAppError? {
+        if !AppVersion.isAtLeast(minAppVersion, current: currentAppVersion) {
+            return PluginRequiresNewerAppError(minimumAppVersion: minAppVersion)
+        }
+        if let abi, !ItoRunner.supportedABIVersions.contains(abi) {
+            return PluginRequiresNewerAppError(minimumAppVersion: nil)
+        }
+        if let imports, !ItoRunner.unsupportedImports(imports).isEmpty {
+            return PluginRequiresNewerAppError(minimumAppVersion: nil)
+        }
+        return nil
+    }
+}
+
+extension PluginInfo {
+    /// Why this installed or imported plugin can't run in this Ito, or nil when it can.
+    nonisolated var compatibilityRefusal: PluginRequiresNewerAppError? {
+        PluginRequiresNewerAppError.refusal(minAppVersion: minAppVersion, abi: abi, imports: imports)
     }
 }

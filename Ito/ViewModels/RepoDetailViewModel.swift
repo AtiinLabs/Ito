@@ -5,7 +5,8 @@ import ito_runner
 @MainActor
 final class RepoDetailViewModel: ObservableObject {
     enum InstallState: Equatable {
-        case incompatible(minVersion: String)
+        /// The package can't run here; `minVersion` is the Ito version it names, if any.
+        case incompatible(minVersion: String?)
         case updateAvailable
         case installed
         case notInstalled
@@ -62,8 +63,8 @@ final class RepoDetailViewModel: ObservableObject {
     }
 
     func installState(for package: RepoPackage) -> InstallState {
-        guard repositoryManager.isCompatible(minAppVersion: package.minAppVersion) else {
-            return .incompatible(minVersion: package.minAppVersion)
+        if let refusal = repositoryManager.compatibilityRefusal(for: package) {
+            return .incompatible(minVersion: refusal.minimumAppVersion)
         }
         guard let installedPlugin = installedPlugins[package.id] else {
             return .notInstalled

@@ -578,7 +578,7 @@ final class DeferredPluginViewModelTests: XCTestCase {
                 archivedDate: nil
             ),
             repositoryURL: "https://invalid.example/repository",
-            isCompatible: isCompatible
+            incompatibility: isCompatible ? nil : PluginRequiresNewerAppError(minimumAppVersion: minimumVersion)
         )
     }
 

@@ -45,6 +45,16 @@ struct PluginCallErrorTests {
         #expect(PluginCallError(.postcardDecodingError("Unexpected end of data")).kind == .incompatible)
     }
 
+    @Test(arguments: [
+        ItoError.requiresNewerHost(missingImports: ["ito:core/net.fetch_v9"]),
+        ItoError.unsupportedABI(version: 2, supported: 1...1)
+    ])
+    func aPluginBuiltForANewerItoSaysToUpdateIto(_ runnerError: ItoError) {
+        let error = PluginCallError(runnerError)
+        #expect(error.kind == .incompatible)
+        #expect(error.message == "This source needs a newer version of Ito. Update Ito to use it.")
+    }
+
     @Test func aWebViewFailureSaysSo() {
         let error = PluginCallError(.hostModuleError(domain: "webview", message: "Timed out"))
 

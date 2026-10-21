@@ -123,14 +123,14 @@ final class LocalBrowsePluginFileOperations: BrowsePluginFileOperating, SourcePl
 
         defer { try? fileManager.removeItem(at: stagingURL) }
         try fileManager.copyItem(at: url, to: stagingURL)
-        let minimumAppVersion: String
+        let info: PluginInfo
         do {
-            minimumAppVersion = try ItoRunner.extractPluginInfo(from: stagingURL).manifest.info.minAppVersion
+            info = try ItoRunner.extractPluginInfo(from: stagingURL).manifest.info
         } catch {
             throw BrowsePluginFileError.unsupportedPluginFile
         }
-        guard AppVersion.isAtLeast(minimumAppVersion) else {
-            throw PluginRequiresNewerAppError(minimumAppVersion: minimumAppVersion)
+        if let refusal = info.compatibilityRefusal {
+            throw refusal
         }
 
         if fileManager.fileExists(atPath: destinationURL.path) {

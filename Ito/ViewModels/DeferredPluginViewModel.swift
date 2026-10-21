@@ -56,7 +56,7 @@ enum DeferredPluginPhase {
     case pluginMissing
     case checkingPackage
     case packageUnavailable
-    case incompatible(minimumVersion: String)
+    case incompatible(minimumVersion: String?)
     case installing
     case ready(DeferredPluginRoute)
     case failure(DeferredPluginFailure)
@@ -220,8 +220,8 @@ final class DeferredPluginViewModel: ObservableObject {
                     )
                     return
                 }
-                guard candidate.isCompatible else {
-                    self.phase = .incompatible(minimumVersion: candidate.package.minAppVersion)
+                if let refusal = candidate.incompatibility {
+                    self.phase = .incompatible(minimumVersion: refusal.minimumAppVersion)
                     self.logFinished(
                         kind: .remoteLoad,
                         operationID: operationID,

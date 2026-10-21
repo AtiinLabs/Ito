@@ -73,8 +73,8 @@ public class PluginManager: ObservableObject {
             throw URLError(.fileDoesNotExist) // Plugin not installed
         }
         // A plugin built for a newer Ito may call what this version doesn't provide.
-        guard AppVersion.isAtLeast(plugin.info.minAppVersion) else {
-            throw PluginRequiresNewerAppError(minimumAppVersion: plugin.info.minAppVersion)
+        if let refusal = plugin.info.compatibilityRefusal {
+            throw refusal
         }
         let authority = runnerAuthority(for: plugin)
 

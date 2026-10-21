@@ -608,7 +608,8 @@ struct DeferredPluginView: View {
         case .incompatible(let minimumVersion):
             failureView(
                 title: "Extension Incompatible",
-                message: "This extension requires Ito \(minimumVersion) or later.",
+                message: minimumVersion.map { "This extension requires Ito \($0) or later." }
+                    ?? "This extension requires a newer version of Ito.",
                 retryTitle: nil,
                 retry: nil
             )
