@@ -150,6 +150,11 @@ final class VideoPlayerViewModel: ObservableObject {
               deferred.generation == preparationGeneration else { return }
         resumeOffer = nil
         deferredActivation = nil
+        if !continueWatching {
+            // Saved now, so closing before the next periodic save does not ask again.
+            lastKnownTime = 0
+            saveTime(0)
+        }
         _ = activate(
             deferred.preparation,
             startTime: continueWatching ? offer : nil,
@@ -347,9 +352,10 @@ final class VideoPlayerViewModel: ObservableObject {
                 resumeOffer = saved
                 activated = true
             } else {
+                // A new quality or source carries on from the current time.
                 activated = activate(
                     preparation,
-                    startTime: nil,
+                    startTime: completesInitialLoad ? nil : lastKnownTime,
                     session: session,
                     generation: generation
                 )
@@ -555,6 +561,9 @@ final class VideoPlayerViewModel: ObservableObject {
               sessionID == session,
               activePlaybackGeneration == preparationGeneration else { return }
 
+        if currentTime.isFinite, currentTime >= 0 {
+            lastKnownTime = currentTime
+        }
         if !hasTrackedProgress,
            currentTime.isFinite,
            duration.isFinite,
@@ -564,11 +573,9 @@ final class VideoPlayerViewModel: ObservableObject {
             beginProgressEffects()
             // Watched: reopening the episode starts over, and Resume moves to the next one.
             saveTime(0)
-        } else if !hasTrackedProgress, currentTime.isFinite, currentTime >= 0 {
-            lastKnownTime = currentTime
-            if abs(currentTime - (lastSavedTime ?? 0)) >= Self.timeSaveInterval {
-                saveTime(currentTime)
-            }
+        } else if !hasTrackedProgress, currentTime.isFinite, currentTime >= 0,
+                  abs(currentTime - (lastSavedTime ?? 0)) >= Self.timeSaveInterval {
+            saveTime(currentTime)
         }
 
         let activeCue = parsedSubtitles.first {

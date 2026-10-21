@@ -109,6 +109,35 @@ final class VideoPlayerViewModelTests: XCTestCase {
         XCTAssertEqual(subject.progress.savedTimeWrites, [6, 9])
     }
 
+    func testStartOverIsSavedRightAway() async {
+        let episode = Anime.Episode(key: "ep", title: nil, episode: 3)
+        let subject = makeVideoPlayerSubject(episode: episode)
+        subject.streamLoader.responses = [.success([video("first")])]
+        subject.progress.savedTimes["ep"] = 754
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        subject.viewModel.resolveResumeOffer(continueWatching: false)
+        // Closing before any playback time arrives must not bring the prompt back.
+        subject.viewModel.disappear()
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        XCTAssertEqual(subject.progress.savedTimes["ep"], 0)
+    }
+
+    func testChangingQualityCarriesOnFromTheCurrentTime() async {
+        let subject = makeVideoPlayerSubject()
+        subject.streamLoader.responses = [.success([video("first"), video("second", quality: "720p")])]
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+        subject.viewModel.playbackTimeDidChange(currentTime: 930, duration: 1400)
+
+        subject.viewModel.selectVideo(subject.viewModel.videos[1])
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        XCTAssertEqual(subject.playback.activatedStartTimes, [nil, 930])
+    }
+
     func testInitialLoadFailureKeepsHistoryAndPublishesExistingErrorText() async {
         let subject = makeVideoPlayerSubject()
         subject.streamLoader.responses = [.failure(VideoPlayerTestError.expected)]
