@@ -78,14 +78,18 @@ nonisolated enum NovelPaginationEngine {
             .paragraphStyle: paragraphStyle
         ]
 
-        return chapters.flatMap { chapter in
-            paginate(
+        var pages: [NovelPaginationPage] = []
+        for chapter in chapters {
+            // A newer layout request replaced this one; stop rather than finish unused work.
+            if Task.isCancelled { return nil }
+            pages += paginate(
                 chapter: chapter,
                 usableSize: usableSize,
                 titleAttributes: titleAttributes,
                 bodyAttributes: bodyAttributes
             )
         }
+        return pages
     }
 
     static func formattedTitle(for chapter: Novel.Chapter) -> String {

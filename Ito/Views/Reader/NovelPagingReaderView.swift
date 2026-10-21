@@ -1,6 +1,5 @@
 import SwiftUI
 import UIKit
-import os
 import ito_runner
 
 struct NovelPagingReaderView: View {
@@ -25,6 +24,8 @@ struct NovelPagingReaderView: View {
     /// Bumped for each pagination request; a result from an older request is dropped.
     @State private var paginationGeneration = 0
     @State private var paginationTask: Task<Void, Never>?
+    /// The off-main layout itself; cancelled when a newer request replaces it.
+    @State private var layoutTask: Task<[NovelPaginationPage]?, Never>?
 
     var body: some View {
         GeometryReader { geo in
@@ -107,6 +108,10 @@ struct NovelPagingReaderView: View {
                 paginatedCache = paginatedCache.mapValues { $0.map { $0.recolored(color) } }
                 repaginate(configuration(theme: newTheme))
             }
+            .onDisappear {
+                paginationTask?.cancel()
+                layoutTask?.cancel()
+            }
         }
     }
 
@@ -144,14 +149,17 @@ struct NovelPagingReaderView: View {
         paginationGeneration += 1
         let generation = paginationGeneration
         paginationTask?.cancel()
+        layoutTask?.cancel()
         guard !missing.isEmpty else {
             showPages(of: chapters)
             return
         }
+        let layout = Task.detached(priority: .userInitiated) {
+            NovelPaginationEngine.paginate(chapters: missing, configuration: configuration)
+        }
+        layoutTask = layout
         paginationTask = Task { @MainActor in
-            let pages = await Task.detached(priority: .userInitiated) {
-                NovelPaginationEngine.paginate(chapters: missing, configuration: configuration)
-            }.value
+            let pages = await layout.value
             guard generation == paginationGeneration, let pages else { return }
             let byChapter = Dictionary(grouping: pages, by: \.chapterID)
             for chapter in missing {
@@ -186,6 +194,10 @@ struct NovelPagingReaderView: View {
         flattenedPages = pages
         currentPageIndex = newIndex
         reportPosition(of: pages, at: newIndex)
+        // Opening or restoring near the end loads the next chapter, as a swipe there would.
+        if prefetchChapters && newIndex >= pages.count - 3 {
+            onLoadNextChapter()
+        }
     }
 
     /// "3/12": the page's place within its own chapter, as the manga reader counts.
