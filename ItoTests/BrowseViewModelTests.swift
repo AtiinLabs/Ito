@@ -534,6 +534,12 @@ final class BrowseViewModelTests: XCTestCase {
         repositories.repositories[0].lastFetched = nil
         await viewModel.refreshStaleRepositories(now: now, maxAge: 600)
         XCTAssertEqual(repositories.refreshCallCount, 2)
+
+        // A recent fetch whose stored index couldn't be read still needs refreshing.
+        repositories.repositories[0].lastFetched = now.addingTimeInterval(-10)
+        repositories.repositories[0].index = nil
+        await viewModel.refreshStaleRepositories(now: now, maxAge: 600)
+        XCTAssertEqual(repositories.refreshCallCount, 3)
         XCTAssertFalse(viewModel.isRefreshing)
     }
 

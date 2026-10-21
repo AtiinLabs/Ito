@@ -74,10 +74,7 @@ public class PluginManager: ObservableObject {
         }
         let authority = runnerAuthority(for: plugin)
 
-        // The installed plugin's identity was registered when the installed list was published,
-        // so rescanning every durable source (and decoding every repository index) per call
-        // only added cost; image loads call this for every image.
-        try pluginSettingsStore.prepare(pluginId: pluginId, discoverSources: false)
+        try pluginSettingsStore.prepare(pluginId: pluginId)
         if let cached = runnerCache[pluginId], cached.authority == authority {
             AppLogger.plugin.debug("🔌 [PluginManager] Returning cached runner for \(pluginId)")
             return cached.runner
@@ -95,12 +92,32 @@ public class PluginManager: ObservableObject {
         return runner
     }
 
+    /// Loads the plugin and gives it its settings defaults. A plugin that crashes while describing
+    /// its settings is loaded again without them: that runner may be broken, but the plugin can
+    /// still read, search and update.
     @MainActor
     private static func loadRunner(
         pluginID: String,
         pluginURL: URL,
         settingsStore: PluginSettingsStore
     ) async throws -> ItoRunner {
+        let (runner, defaults) = try await makeRunner(pluginID: pluginID, pluginURL: pluginURL, settingsStore: settingsStore)
+        let usable = try await applySchemaDefaults(
+            from: { try await runner.getSettings() },
+            to: defaults,
+            pluginID: pluginID
+        )
+        if usable { return runner }
+        AppLogger.plugin.error("PluginManager: \(pluginID) crashed describing its settings; loading it again without defaults")
+        return try await makeRunner(pluginID: pluginID, pluginURL: pluginURL, settingsStore: settingsStore).runner
+    }
+
+    @MainActor
+    private static func makeRunner(
+        pluginID: String,
+        pluginURL: URL,
+        settingsStore: PluginSettingsStore
+    ) async throws -> (runner: ItoRunner, defaults: AppDefaultsModule) {
         let runner = ItoRunner()
         let defaults = AppDefaultsModule(pluginId: pluginID, store: settingsStore)
         await runner.setNetModule(AppNetModule())
@@ -112,28 +129,30 @@ public class PluginManager: ObservableObject {
 
         AppLogger.plugin.debug("\("🔌 [PluginManager] Loading bundle for \(pluginID)")...")
         _ = try await runner.loadBundle(from: pluginURL)
-        try await useSchemaDefaults(of: runner, in: defaults, pluginID: pluginID)
-        return runner
+        return (runner, defaults)
     }
 
     /// Reads the plugin's settings schema so settings the user never set read as their defaults.
-    /// A crash fails the load, since the runner may be broken; any other failure only leaves
-    /// the plugin without defaults.
+    /// Returns false when reading it crashed the plugin, so that runner must not be used. Any
+    /// other failure only leaves the plugin without defaults.
     @MainActor
-    private static func useSchemaDefaults(
-        of runner: ItoRunner,
-        in defaults: AppDefaultsModule,
+    static func applySchemaDefaults(
+        from readSchema: () async throws -> SettingsSchema?,
+        to defaults: AppDefaultsModule,
         pluginID: String
-    ) async throws {
+    ) async throws -> Bool {
         do {
-            guard let schema = try await pluginCall({ try await runner.getSettings() }) else { return }
-            defaults.useSchemaDefaults(schema.storedDefaults)
+            if let schema = try await pluginCall(readSchema) {
+                defaults.useSchemaDefaults(schema.storedDefaults)
+            }
+            return true
         } catch let error as PluginCallError where error.kind == .crashed {
-            throw error
+            return false
         } catch is CancellationError {
             throw CancellationError()
         } catch {
             AppLogger.plugin.error("PluginManager: no settings defaults for \(pluginID); the schema couldn't be read")
+            return true
         }
     }
 

@@ -67,6 +67,7 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
     private let clock: @Sendable () -> Date
     private let lock = NSRecursiveLock()
     private var failedSuites: Set<String> = []
+    private let discoverySources = DiscoverySourceChanges()
 
     public init(
         dbPool: DatabasePool,
@@ -92,6 +93,7 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
         self.operationFault = operationFault
         self.clock = clock
         self.secrets = secrets
+        dbPool.add(transactionObserver: discoverySources, extent: .observerLifetime)
     }
 
     @discardableResult
@@ -203,12 +205,9 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
         }
     }
 
-    /// Makes the plugin's settings ready to read and write. `discoverSources: false` skips
-    /// rescanning durable sources for identities, for a plugin whose identity is already
-    /// registered (an installed plugin, registered when the installed list was published).
-    public func prepare(pluginId: String, discoverSources: Bool = true) throws {
+    public func prepare(pluginId: String) throws {
         try lock.withLock {
-            _ = try prepareLocked(pluginId: pluginId, discoverSources: discoverSources)
+            _ = try prepareLocked(pluginId: pluginId)
         }
     }
 
@@ -384,7 +383,20 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
         )
     }
 
+    /// Registers identities found in durable rows and repository indexes. The scan decodes every
+    /// repository index and runs before every settings read, so it only runs again after a commit
+    /// changed something it reads (see `DiscoverySourceChanges`).
     private func discoverDatabaseSources() throws {
+        guard discoverySources.consumeChange() else { return }
+        do {
+            try rescanDatabaseSources()
+        } catch {
+            discoverySources.markChanged()
+            throw error
+        }
+    }
+
+    private func rescanDatabaseSources() throws {
         let discoveries = try dbPool.read { db -> [PluginSettingsDiscovery] in
             var values: [PluginSettingsDiscovery] = []
             let rowPluginIds = try String.fetchAll(
@@ -1135,5 +1147,52 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
 
     private static func suiteDomain(_ pluginId: String) -> String {
         suitePrefix + pluginId
+    }
+}
+
+/// Notes commits that change what identity discovery reads, so it runs again only after one.
+/// Discovery only adds and updates identity rows, so their deletion (a restore) counts as well.
+nonisolated private final class DiscoverySourceChanges: TransactionObserver, @unchecked Sendable {
+    private static let sourceTables: Set<String> = [
+        "pluginSetting", "libraryItem", "readingHistory", "pluginMigrationAlias", "repository"
+    ]
+    private static let identityTables: Set<String> = ["pluginIdentityRegistry", "pluginIdentityAlias"]
+
+    private let lock = NSLock()
+    private var changed = true
+    /// Whether the open transaction changed a source. Only touched on the database writer.
+    private var transactionChanged = false
+
+    func consumeChange() -> Bool {
+        lock.withLock {
+            defer { changed = false }
+            return changed
+        }
+    }
+
+    func markChanged() {
+        lock.withLock { changed = true }
+    }
+
+    func observes(eventsOfKind eventKind: DatabaseEventKind) -> Bool {
+        if case .delete(let tableName) = eventKind, Self.identityTables.contains(tableName) {
+            return true
+        }
+        return Self.sourceTables.contains(eventKind.tableName)
+    }
+
+    func databaseDidChange(with event: DatabaseEvent) {
+        transactionChanged = true
+        stopObservingDatabaseChangesUntilNextTransaction()
+    }
+
+    func databaseDidCommit(_ db: Database) {
+        guard transactionChanged else { return }
+        transactionChanged = false
+        markChanged()
+    }
+
+    func databaseDidRollback(_ db: Database) {
+        transactionChanged = false
     }
 }

@@ -60,6 +60,40 @@ struct AppDefaultsModuleTests {
         #expect(schema.storedDefaults == ["nsfw": "false", "server": "https://example.com", "quality": "high"])
     }
 
+    @Test func aLoadedPluginGetsItsSchemaDefaultsAndAFailedReadLeavesItUsable() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let store = PluginSettingsStore(dbPool: database.dbPool, domainFactory: { EmptyPluginDomain(name: $0) })
+        let schema = try pr7bSettingsSchema(settings: [
+            .text(id: "server", name: "Server", summary: nil, defaultValue: "https://example.com")
+        ])
+
+        let applied = AppDefaultsModule(pluginId: "plugin", store: store)
+        #expect(try await PluginManager.applySchemaDefaults(from: { schema }, to: applied, pluginID: "plugin"))
+        #expect(applied.get(key: "server") == "https://example.com")
+
+        let failed = AppDefaultsModule(pluginId: "plugin", store: store)
+        let reported: () async throws -> SettingsSchema? = {
+            throw ItoError.pluginFailed(function: "get_settings", reason: "Bad schema")
+        }
+        #expect(try await PluginManager.applySchemaDefaults(from: reported, to: failed, pluginID: "plugin"))
+        #expect(failed.get(key: "server") == nil)
+    }
+
+    @Test func aPluginThatCrashesDescribingItsSettingsIsNotUsed() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let store = PluginSettingsStore(dbPool: database.dbPool, domainFactory: { EmptyPluginDomain(name: $0) })
+        let defaults = AppDefaultsModule(pluginId: "plugin", store: store)
+        let crashing: () async throws -> SettingsSchema? = { throw ItoError.wasmTrap("unreachable") }
+        let cancelled: () async throws -> SettingsSchema? = { throw CancellationError() }
+
+        #expect(try await !PluginManager.applySchemaDefaults(from: crashing, to: defaults, pluginID: "plugin"))
+        await #expect(throws: CancellationError.self) {
+            try await PluginManager.applySchemaDefaults(from: cancelled, to: defaults, pluginID: "plugin")
+        }
+    }
+
     @Test func failedVoidABIWriteCannotExposeFalseHostSuccess() throws {
         let database = try TestDatabase()
         defer { database.cleanup() }

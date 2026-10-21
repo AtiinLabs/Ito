@@ -130,6 +130,22 @@ final class SourceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.homeLayout?.components.first?.title, "reloaded")
     }
 
+    func testClosingSettingsThatCouldNotBeShownKeepsTheSourceAndSearch() async {
+        let context = PR7BSourceRunnerContextSpy()
+        context.homeResult = .success(pr7bHome(ids: ["initial"]))
+        context.settingsResult = .failure(PluginCallError(kind: .incompatible, message: "Needs a newer Ito."))
+        let provider = PR7BSourceRunnerProviderSpy(contexts: [context])
+        let viewModel = makeViewModel(provider: provider)
+
+        await viewModel.loadIfNeeded()
+        viewModel.searchQuery = "kept"
+        await viewModel.reloadAfterSettingsChange()
+
+        XCTAssertEqual(viewModel.searchQuery, "kept")
+        XCTAssertTrue(provider.evictedPluginIDs.isEmpty)
+        XCTAssertEqual(provider.requestedPluginIDs.count, 1)
+    }
+
     func testSettingsTriggeredReloadFailureIsTerminalAndVisible() async {
         let initial = PR7BSourceRunnerContextSpy()
         initial.homeResult = .success(pr7bHome(ids: ["initial"]))

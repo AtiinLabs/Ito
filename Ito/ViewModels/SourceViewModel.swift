@@ -95,7 +95,10 @@ final class SourceViewModel: ObservableObject {
         await load(invalidateCachedRunner: false)
     }
 
+    /// Reloads the source after its settings sheet closes. When the settings couldn't be shown
+    /// nothing could have changed, so the search and home are kept.
     func reloadAfterSettingsChange() async {
+        guard settingsUnavailableReason == nil else { return }
         cancelSearch(publishCancelledState: false)
         clearSearchResults()
         searchQuery = ""

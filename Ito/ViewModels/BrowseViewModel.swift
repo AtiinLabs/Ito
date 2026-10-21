@@ -134,11 +134,11 @@ public final class BrowseViewModel: ObservableObject {
         await repositoryManager.refreshAll()
     }
 
-    /// Refreshes indexes older than `maxAge` so new plugin versions show under
-    /// Updates without a manual pull to refresh. Leaves the list on screen.
+    /// Refreshes indexes older than `maxAge`, or missing (never fetched or unreadable), so new
+    /// plugin versions show under Updates without a manual pull to refresh. Leaves the list on screen.
     public func refreshStaleRepositories(now: Date = Date(), maxAge: TimeInterval = 600) async {
         let hasStaleRepository = repositories.contains { repository in
-            guard let lastFetched = repository.lastFetched else { return true }
+            guard let lastFetched = repository.lastFetched, repository.index != nil else { return true }
             return now.timeIntervalSince(lastFetched) >= maxAge
         }
         guard hasStaleRepository else { return }

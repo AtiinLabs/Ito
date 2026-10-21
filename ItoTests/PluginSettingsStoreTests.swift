@@ -367,6 +367,54 @@ struct PluginSettingsStoreTests {
         #expect(aliasWrites.count == pluginIds.count)
     }
 
+    @Test func settingsReadsRescanOnlyAfterSomethingDiscoveryReadsChanged() throws {
+        let fixture = try StoreFixture()
+        defer { fixture.cleanup() }
+        let repo = RepoIndex(
+            repoName: "Test",
+            repoUrl: "https://example.com",
+            description: "",
+            packages: [repoPackage(id: "repository-plugin")]
+        )
+        try fixture.database.dbPool.write { db in
+            try db.execute(
+                sql: "INSERT INTO repository (url, indexPayload) VALUES (?, ?)",
+                arguments: ["https://example.com", try JSONEncoder().encode(repo)]
+            )
+        }
+        let store = fixture.store()
+        try store.prepare(pluginId: "installed")
+        let aliasWrites = AliasWriteCounter()
+        fixture.database.dbPool.add(transactionObserver: aliasWrites)
+        func registered() throws -> Set<String> {
+            try fixture.database.dbPool.read { db in
+                Set(try String.fetchAll(db, sql: "SELECT pluginId FROM pluginIdentityRegistry"))
+            }
+        }
+
+        _ = store.get(pluginId: "installed", key: "mode")
+        _ = store.get(pluginId: "installed", key: "mode")
+        #expect(aliasWrites.count == 0)
+
+        // A library item naming another plugin is discovered by the next read.
+        try fixture.database.dbPool.write { db in
+            try db.execute(sql: """
+                INSERT INTO libraryItem (id, title, pluginId, isAnime, rawPayload)
+                VALUES ('library-item', 'Library', 'library-plugin', 0, X'7B7D')
+                """)
+        }
+        _ = store.get(pluginId: "installed", key: "mode")
+        #expect(try registered().contains("library-plugin"))
+
+        // A restore that drops every identity has them registered again.
+        try fixture.database.dbPool.write { db in
+            try PluginIdentityAliasRecord.deleteAll(db)
+            try PluginIdentityRecord.deleteAll(db)
+        }
+        _ = store.get(pluginId: "installed", key: "mode")
+        #expect(try registered().isSuperset(of: ["installed", "library-plugin", "repository-plugin"]))
+    }
+
     @Test func aRepositoryIndexThatCantBeReadIsSkippedAndTheRestIsDiscovered() throws {
         let fixture = try StoreFixture()
         defer { fixture.cleanup() }
