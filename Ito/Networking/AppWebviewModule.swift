@@ -19,10 +19,21 @@ actor AppWebviewModule: WebviewModule {
 class WebviewManager: NSObject, WKNavigationDelegate {
     static let shared = WebviewManager()
 
+    /// How long a page may take to load before the plugin gets a timeout.
+    private let pageLoadDeadline: TimeInterval
     private var webView: WKWebView?
-    private var resolveContinuation: CheckedContinuation<WebviewResponse, Error>?
+    /// The load in flight: its continuation, the navigation it started, and the deadline that
+    /// fails it.
+    private struct PendingLoad {
+        let id: UUID
+        let continuation: CheckedContinuation<WebviewResponse, Error>
+        let deadline: Task<Void, Never>
+        var navigation: WKNavigation?
+    }
+    private var pendingLoad: PendingLoad?
 
-    private override init() {
+    init(pageLoadDeadline: TimeInterval = 45) {
+        self.pageLoadDeadline = pageLoadDeadline
         super.init()
     }
 
@@ -50,28 +61,45 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         }
     }
 
+    /// Loads `request.url` in the shared web view and returns the page once it finishes loading.
+    /// A newer load replaces this one (it fails with `URLError(.cancelled)`); cancelling the
+    /// caller or passing the deadline stops the page and fails the load.
     func loadUrl(request: WebviewRequest) async throws -> WebviewResponse {
-        AppLogger.network.debug("WebviewManager: loadUrl requested for \(request.url)")
-        if resolveContinuation != nil {
-            AppLogger.network.debug("WebviewManager: cancelling previous continuation")
-            resolveContinuation?.resume(throwing: URLError(.cancelled))
-            resolveContinuation = nil
+        AppLogger.network.debug("WebviewManager: loadUrl requested")
+        finishLoad(with: .failure(URLError(.cancelled)))
+        guard let url = URL(string: request.url) else {
+            throw URLError(.badURL)
         }
+        setupWebView()
 
-        return try await withCheckedThrowingContinuation { continuation in
-            self.resolveContinuation = continuation
-            self.setupWebView()
-
-            guard let url = URL(string: request.url) else {
-                AppLogger.network.debug("WebviewManager: bad url \(request.url)")
-                continuation.resume(throwing: URLError(.badURL))
-                self.resolveContinuation = nil
-                return
+        let id = UUID()
+        let deadlineNanoseconds = UInt64(pageLoadDeadline * 1_000_000_000)
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let deadline = Task { [weak self] in
+                    guard (try? await Task.sleep(nanoseconds: deadlineNanoseconds)) != nil else { return }
+                    self?.finishLoad(id, with: .failure(URLError(.timedOut)))
+                }
+                pendingLoad = PendingLoad(id: id, continuation: continuation, deadline: deadline)
+                pendingLoad?.navigation = webView?.load(URLRequest(url: url))
             }
-
-            AppLogger.network.debug("WebviewManager: loading url request")
-            self.webView?.load(URLRequest(url: url))
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.finishLoad(id, with: .failure(CancellationError()))
+            }
         }
+    }
+
+    /// Resolves the pending load, if it is `id` (or any load when `id` is nil). A failed load
+    /// stops the page so it doesn't keep running in the background.
+    private func finishLoad(_ id: UUID? = nil, with result: Result<WebviewResponse, Error>) {
+        guard let load = pendingLoad, id == nil || id == load.id else { return }
+        pendingLoad = nil
+        load.deadline.cancel()
+        if case .failure = result {
+            webView?.stopLoading()
+        }
+        load.continuation.resume(with: result)
     }
 
     func executeJs(script: String) async throws -> String {
@@ -95,26 +123,31 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         }
     }
 
+    /// The pending load `navigation` belongs to. Callbacks for a navigation that was replaced or
+    /// already resolved are ignored.
+    private func loadID(for navigation: WKNavigation?) -> UUID? {
+        guard let load = pendingLoad, let navigation, load.navigation === navigation else { return nil }
+        return load.id
+    }
+
     // MARK: - WKNavigationDelegate
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        AppLogger.network.debug("WebviewManager: didFinish navigation")
+        guard let id = loadID(for: navigation) else { return }
         webView.evaluateJavaScript("document.documentElement.outerHTML") { [weak self] htmlResult, _ in
             let html = (htmlResult as? String) ?? ""
-            AppLogger.network.debug("WebviewManager: didFinish grabbed html of length \(html.count)")
             let response = WebviewResponse(url: webView.url?.absoluteString ?? "", html: html)
-            self?.resolveContinuation?.resume(returning: response)
-            self?.resolveContinuation = nil
+            self?.finishLoad(id, with: .success(response))
         }
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        AppLogger.network.error("WebviewManager: didFail navigation error: \(error)")
-        self.resolveContinuation?.resume(throwing: error)
-        self.resolveContinuation = nil
+        guard let id = loadID(for: navigation) else { return }
+        AppLogger.network.error("WebviewManager: navigation failed: \(error.localizedDescription)")
+        finishLoad(id, with: .failure(error))
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        self.resolveContinuation?.resume(throwing: error)
-        self.resolveContinuation = nil
+        guard let id = loadID(for: navigation) else { return }
+        finishLoad(id, with: .failure(error))
     }
 }

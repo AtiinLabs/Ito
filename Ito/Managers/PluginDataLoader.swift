@@ -69,6 +69,8 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                         throw URLError(.badURL)
                     }
                 }
+            } catch is CancellationError {
+                completion(URLError(.cancelled))
             } catch {
                 completion(error)
             }
