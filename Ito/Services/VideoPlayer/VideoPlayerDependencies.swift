@@ -16,7 +16,7 @@ final class ItoRunnerVideoStreamLoader: VideoStreamLoading {
     }
 
     func videos(for anime: Anime, episode: Anime.Episode) async throws -> [Anime.Video] {
-        try await runner.getVideoList(anime: anime, episode: episode)
+        try await pluginCall { try await runner.getVideoList(anime: anime, episode: episode) }
     }
 }
 

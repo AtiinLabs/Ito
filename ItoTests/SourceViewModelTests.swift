@@ -148,6 +148,36 @@ final class SourceViewModelTests: XCTestCase {
         ))
     }
 
+    func testAPluginThatCrashesWhileLoadingIsReplacedOnRetry() async {
+        let crashed = PR7BSourceRunnerContextSpy()
+        crashed.homeResult = .failure(PluginCallError(kind: .crashed, message: "The source stopped unexpectedly."))
+        let fresh = PR7BSourceRunnerContextSpy()
+        fresh.homeResult = .success(pr7bHome(ids: ["fresh"]))
+        let provider = PR7BSourceRunnerProviderSpy(contexts: [crashed, fresh])
+        let viewModel = makeViewModel(provider: provider)
+
+        await viewModel.loadIfNeeded()
+
+        XCTAssertEqual(viewModel.phase, .failure("The source stopped unexpectedly."))
+        XCTAssertEqual(provider.evictedPluginIDs, ["plugin.manga"])
+
+        await viewModel.retry()
+
+        XCTAssertEqual(viewModel.homeLayout?.components.first?.title, "fresh")
+    }
+
+    func testAFailureThePluginReportedKeepsItsRunner() async {
+        let context = PR7BSourceRunnerContextSpy()
+        context.homeResult = .failure(PluginCallError(kind: .reported, message: "Add your server URL"))
+        let provider = PR7BSourceRunnerProviderSpy(contexts: [context])
+        let viewModel = makeViewModel(provider: provider)
+
+        await viewModel.loadIfNeeded()
+
+        XCTAssertEqual(viewModel.phase, .failure("Add your server URL"))
+        XCTAssertTrue(provider.evictedPluginIDs.isEmpty)
+    }
+
     func testSearchPreservesPageOneEmptyFilterInvocationAndResultOrdering() async {
         let context = PR7BSourceRunnerContextSpy()
         context.searchResult = .success(.manga([

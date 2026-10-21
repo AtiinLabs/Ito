@@ -136,11 +136,9 @@ struct MediaDetailViewFactory {
         let context = MediaDetailRouteContext<Manga>(
             loadDetails: loader,
             searchForRelink: { query in
-                try await runner.getSearchMangaList(
-                    query: query,
-                    page: 1,
-                    filters: nil
-                ).entries
+                try await pluginCall {
+                    try await runner.getSearchMangaList(query: query, page: 1, filters: nil).entries
+                }
             },
             makeReaderDestination: { media, chapter in
                 .manga(
@@ -164,11 +162,9 @@ struct MediaDetailViewFactory {
         let context = MediaDetailRouteContext<Anime>(
             loadDetails: loader,
             searchForRelink: { query in
-                try await runner.getSearchAnimeList(
-                    query: query,
-                    page: 1,
-                    filters: nil
-                ).entries
+                try await pluginCall {
+                    try await runner.getSearchAnimeList(query: query, page: 1, filters: nil).entries
+                }
             },
             makeReaderDestination: { media, episode in
                 .anime(
@@ -192,11 +188,9 @@ struct MediaDetailViewFactory {
         let context = MediaDetailRouteContext<Novel>(
             loadDetails: loader,
             searchForRelink: { query in
-                try await runner.getSearchNovelList(
-                    query: query,
-                    page: 1,
-                    filters: nil
-                ).entries
+                try await pluginCall {
+                    try await runner.getSearchNovelList(query: query, page: 1, filters: nil).entries
+                }
             },
             makeReaderDestination: { media, chapter in
                 .novel(

@@ -502,7 +502,7 @@ struct SourceDestinationHost: View {
                 media: manga,
                 pluginID: route.pluginID
             ) { updated in
-                try await route.runner.getMangaUpdate(manga: updated)
+                try await pluginCall { try await route.runner.getMangaUpdate(manga: updated) }
             }
         case .anime(let anime):
             viewFactory.makeAnimeDetailView(
@@ -510,11 +510,9 @@ struct SourceDestinationHost: View {
                 media: anime,
                 pluginID: route.pluginID
             ) { updated in
-                try await route.runner.getAnimeUpdate(
-                    anime: updated,
-                    needsDetails: true,
-                    needsEpisodes: true
-                )
+                try await pluginCall {
+                    try await route.runner.getAnimeUpdate(anime: updated, needsDetails: true, needsEpisodes: true)
+                }
             }
         }
     }

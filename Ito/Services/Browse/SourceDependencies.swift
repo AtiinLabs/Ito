@@ -39,11 +39,11 @@ final class ItoRunnerSourceContext: SourceRunnerContext {
     }
 
     func loadHome() async throws -> HomeLayout {
-        try await runner.getHome()
+        try await pluginCall { try await runner.getHome() }
     }
 
     func loadSettingsSchema() async throws -> SettingsSchema? {
-        try await runner.getSettings()
+        try await pluginCall { try await runner.getSettings() }
     }
 
     func search(
@@ -52,30 +52,20 @@ final class ItoRunnerSourceContext: SourceRunnerContext {
         page: Int32,
         filters: [FilterItem]?
     ) async throws -> SourceSearchPage {
-        switch pluginType {
-        case .manga:
-            let result = try await runner.getSearchMangaList(
-                query: query,
-                page: page,
-                filters: filters
-            )
-            return .manga(result.entries)
-        case .anime:
-            let result = try await runner.getSearchAnimeList(
-                query: query,
-                page: page,
-                filters: filters
-            )
-            return .anime(result.entries)
-        case .novel:
-            let result = try await runner.getSearchNovelList(
-                query: query,
-                page: page,
-                filters: filters
-            )
-            return .novel(result.entries)
-        @unknown default:
-            return .manga([])
+        try await pluginCall {
+            switch pluginType {
+            case .manga:
+                let result = try await runner.getSearchMangaList(query: query, page: page, filters: filters)
+                return .manga(result.entries)
+            case .anime:
+                let result = try await runner.getSearchAnimeList(query: query, page: page, filters: filters)
+                return .anime(result.entries)
+            case .novel:
+                let result = try await runner.getSearchNovelList(query: query, page: page, filters: filters)
+                return .novel(result.entries)
+            @unknown default:
+                return .manga([])
+            }
         }
     }
 
@@ -84,35 +74,35 @@ final class ItoRunnerSourceContext: SourceRunnerContext {
         listing: Listing,
         page: Int32
     ) async throws -> ListingContentPage {
-        switch pluginType {
-        case .manga:
-            let result = try await runner.getMangaList(listing: listing, page: page)
-            return .manga(entries: result.entries, hasNextPage: result.hasNextPage)
-        case .anime:
-            let result = try await runner.getAnimeList(listing: listing, page: page)
-            return .anime(entries: result.entries, hasNextPage: result.hasNextPage)
-        case .novel:
-            let result = try await runner.getNovelList(listing: listing, page: page)
-            return .novel(entries: result.entries, hasNextPage: result.hasNextPage)
-        @unknown default:
-            return .manga(entries: [], hasNextPage: false)
+        try await pluginCall {
+            switch pluginType {
+            case .manga:
+                let result = try await runner.getMangaList(listing: listing, page: page)
+                return .manga(entries: result.entries, hasNextPage: result.hasNextPage)
+            case .anime:
+                let result = try await runner.getAnimeList(listing: listing, page: page)
+                return .anime(entries: result.entries, hasNextPage: result.hasNextPage)
+            case .novel:
+                let result = try await runner.getNovelList(listing: listing, page: page)
+                return .novel(entries: result.entries, hasNextPage: result.hasNextPage)
+            @unknown default:
+                return .manga(entries: [], hasNextPage: false)
+            }
         }
     }
 
     func loadManga(_ manga: Manga) async throws -> Manga {
-        try await runner.getMangaUpdate(manga: manga)
+        try await pluginCall { try await runner.getMangaUpdate(manga: manga) }
     }
 
     func loadAnime(_ anime: Anime) async throws -> Anime {
-        try await runner.getAnimeUpdate(
-            anime: anime,
-            needsDetails: true,
-            needsEpisodes: true
-        )
+        try await pluginCall {
+            try await runner.getAnimeUpdate(anime: anime, needsDetails: true, needsEpisodes: true)
+        }
     }
 
     func loadNovel(_ novel: Novel) async throws -> Novel {
-        try await runner.getNovelUpdate(novel: novel)
+        try await pluginCall { try await runner.getNovelUpdate(novel: novel) }
     }
 }
 

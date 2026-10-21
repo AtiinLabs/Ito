@@ -47,12 +47,18 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                     throw URLError(.fileDoesNotExist)
                 }
 
-                if let data = try await runner.handleImage(realUrlString) {
-                    let response = URLResponse(url: url, mimeType: "image/jpeg", expectedContentLength: data.count, textEncodingName: nil)
+                if let data = try await pluginCall({ try await runner.handleImage(realUrlString) }) {
+                    let response = URLResponse(
+                        url: url,
+                        mimeType: Self.imageMIMEType(of: data),
+                        expectedContentLength: data.count,
+                        textEncodingName: nil
+                    )
                     didReceiveData(data, response)
                     completion(nil)
                 } else {
-                    // Fallback to fetching the real URL directly if plugin doesn't intercept
+                    // The plugin doesn't handle images: fetch the URL directly. A plugin that
+                    // handles images but refused this one throws instead, and nothing is fetched.
                     if let realUrl = URL(string: realUrlString) {
                         var realRequest = request
                         realRequest.url = realUrl
@@ -72,6 +78,25 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
             task.cancel()
             cancellationLatch.cancel()
         }
+    }
+
+    /// The image type of plugin-provided bytes, read from their signature. Plugins return raw
+    /// bytes, so the response would otherwise have to guess.
+    static func imageMIMEType(of data: Data) -> String? {
+        let bytes = [UInt8](data.prefix(12))
+        func starts(_ signature: [UInt8], at offset: Int = 0) -> Bool {
+            bytes.count >= offset + signature.count && Array(bytes[offset..<offset + signature.count]) == signature
+        }
+        if starts([0xFF, 0xD8, 0xFF]) { return "image/jpeg" }
+        if starts([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) { return "image/png" }
+        if starts(Array("GIF8".utf8)) { return "image/gif" }
+        if starts(Array("RIFF".utf8)), starts(Array("WEBP".utf8), at: 8) { return "image/webp" }
+        if starts(Array("ftyp".utf8), at: 4) {
+            let brand = bytes.count >= 12 ? String(decoding: bytes[8..<12], as: UTF8.self) : ""
+            if brand.hasPrefix("avi") { return "image/avif" }
+            if ["heic", "heix", "mif1", "msf1"].contains(brand) { return "image/heic" }
+        }
+        return nil
     }
 }
 nonisolated

@@ -16,7 +16,7 @@ final class ItoRunnerNovelChapterLoader: NovelChapterLoading {
     }
 
     func content(for novel: Novel, chapter: Novel.Chapter) async throws -> [Page] {
-        try await runner.getChapterContent(novel: novel, chapter: chapter)
+        try await pluginCall { try await runner.getChapterContent(novel: novel, chapter: chapter) }
     }
 }
 

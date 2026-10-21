@@ -16,7 +16,7 @@ final class ItoRunnerMangaPageLoader: MangaPageLoading {
     }
 
     func pages(for manga: Manga, chapter: Manga.Chapter) async throws -> [Page] {
-        try await runner.getPageList(manga: manga, chapter: chapter)
+        try await pluginCall { try await runner.getPageList(manga: manga, chapter: chapter) }
     }
 }
 

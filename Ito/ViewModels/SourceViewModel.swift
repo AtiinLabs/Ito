@@ -267,6 +267,7 @@ final class SourceViewModel: ObservableObject {
             finishLoad(operationID)
         } catch {
             guard isCurrentLoad(operationID), !Task.isCancelled else { return }
+            discardRunnerIfCrashed(error)
             let reason = error.localizedDescription
             phase = .failure(reason)
             messagePresenter.present(.loadFailed(pluginName: plugin.info.name, reason: reason))
@@ -341,6 +342,19 @@ final class SourceViewModel: ObservableObject {
         searchPhase = .failure(reason)
         messagePresenter.present(.searchFailed(pluginName: plugin.info.name, reason: reason))
         finishSearch(operationID)
+        if discardRunnerIfCrashed(error) {
+            // The current context holds the crashed runner: load the source again with a new one.
+            Task { await self.load(invalidateCachedRunner: false) }
+        }
+    }
+
+    /// A plugin that crashed may be left in a broken state, so its cached runner is dropped and the
+    /// next call starts a new one.
+    @discardableResult
+    private func discardRunnerIfCrashed(_ error: any Error) -> Bool {
+        guard (error as? PluginCallError)?.kind == .crashed else { return false }
+        runnerProvider.evictSourceRunner(for: plugin.id)
+        return true
     }
 
     private func restoreAfterFailedDeletion(

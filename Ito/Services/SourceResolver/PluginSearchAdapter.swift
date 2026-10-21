@@ -16,20 +16,15 @@ public actor PluginSearchAdapter: PluginSearching {
     }
 
     public func search(query: String) async throws -> [ResolvedPluginMedia] {
-        var results: [ResolvedPluginMedia] = []
-
-        switch mediaType {
-        case .manga:
-            let res = try await runner.getSearchMangaList(query: query, page: 1, filters: nil)
-            for m in res.entries {
-                results.append(.manga(m))
-            }
-        case .anime:
-            let res = try await runner.getSearchAnimeList(query: query, page: 1, filters: nil)
-            for a in res.entries {
-                results.append(.anime(a))
+        try await pluginCall {
+            switch mediaType {
+            case .manga:
+                let res = try await runner.getSearchMangaList(query: query, page: 1, filters: nil)
+                return res.entries.map { .manga($0) }
+            case .anime:
+                let res = try await runner.getSearchAnimeList(query: query, page: 1, filters: nil)
+                return res.entries.map { .anime($0) }
             }
         }
-        return results
     }
 }

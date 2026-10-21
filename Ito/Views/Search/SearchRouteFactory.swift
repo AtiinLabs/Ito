@@ -137,28 +137,26 @@ struct AppViewFactory {
                 runner: runner,
                 media: media,
                 pluginID: pluginID
-            ) {
-                try await runner.getMangaUpdate(manga: $0)
+            ) { manga in
+                try await pluginCall { try await runner.getMangaUpdate(manga: manga) }
             }
         case .anime(let pluginID, let runner, let media):
             makeAnimeDetailView(
                 runner: runner,
                 media: media,
                 pluginID: pluginID
-            ) {
-                try await runner.getAnimeUpdate(
-                    anime: $0,
-                    needsDetails: true,
-                    needsEpisodes: true
-                )
+            ) { anime in
+                try await pluginCall {
+                    try await runner.getAnimeUpdate(anime: anime, needsDetails: true, needsEpisodes: true)
+                }
             }
         case .novel(let pluginID, let runner, let media):
             makeNovelDetailView(
                 runner: runner,
                 media: media,
                 pluginID: pluginID
-            ) {
-                try await runner.getNovelUpdate(novel: $0)
+            ) { novel in
+                try await pluginCall { try await runner.getNovelUpdate(novel: novel) }
             }
         }
     }

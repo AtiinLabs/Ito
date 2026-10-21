@@ -65,29 +65,35 @@ final class PluginLibraryUpdateSource: LibraryUpdateSource {
 
     func fetchUpdate(for item: LibraryItem) async throws -> UpdateManager.SuccessfulUpdate {
         let runner = try await pluginManager.getRunner(for: item.pluginId)
-        switch item.effectiveType {
-        case .manga:
-            let manga = try await runner.getMangaUpdate(manga: try JSONDecoder().decode(Manga.self, from: item.rawPayload))
-            return UpdateManager.SuccessfulUpdate(
-                freshCount: manga.chapters?.distinctChapterCount ?? 0,
-                status: String(describing: manga.status)
-            )
-        case .anime:
-            let anime = try await runner.getAnimeUpdate(
-                anime: try JSONDecoder().decode(Anime.self, from: item.rawPayload),
-                needsDetails: false,
-                needsEpisodes: true
-            )
-            return UpdateManager.SuccessfulUpdate(
-                freshCount: anime.episodes?.distinctChapterCount ?? 0,
-                status: String(describing: anime.status)
-            )
-        case .novel:
-            let novel = try await runner.getNovelUpdate(novel: try JSONDecoder().decode(Novel.self, from: item.rawPayload))
-            return UpdateManager.SuccessfulUpdate(
-                freshCount: novel.chapters?.distinctChapterCount ?? 0,
-                status: String(describing: novel.status)
-            )
+        return try await pluginCall {
+            switch item.effectiveType {
+            case .manga:
+                let manga = try await runner.getMangaUpdate(
+                    manga: try JSONDecoder().decode(Manga.self, from: item.rawPayload)
+                )
+                return UpdateManager.SuccessfulUpdate(
+                    freshCount: manga.chapters?.distinctChapterCount ?? 0,
+                    status: String(describing: manga.status)
+                )
+            case .anime:
+                let anime = try await runner.getAnimeUpdate(
+                    anime: try JSONDecoder().decode(Anime.self, from: item.rawPayload),
+                    needsDetails: false,
+                    needsEpisodes: true
+                )
+                return UpdateManager.SuccessfulUpdate(
+                    freshCount: anime.episodes?.distinctChapterCount ?? 0,
+                    status: String(describing: anime.status)
+                )
+            case .novel:
+                let novel = try await runner.getNovelUpdate(
+                    novel: try JSONDecoder().decode(Novel.self, from: item.rawPayload)
+                )
+                return UpdateManager.SuccessfulUpdate(
+                    freshCount: novel.chapters?.distinctChapterCount ?? 0,
+                    status: String(describing: novel.status)
+                )
+            }
         }
     }
 }
