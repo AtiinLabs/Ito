@@ -322,10 +322,12 @@ struct ReaderView: View {
     private func pageImage(for page: Page, number: Int) -> some View {
         switch page.content {
         case .url(let urlString):
-            ZoomablePage(onTap: toggleUI) {
-                MangaImage(urlStr: urlString, headers: page.headers)
-            }
-            .accessibilityLabel("Page \(number)")
+            MangaImage(
+                urlStr: urlString,
+                headers: page.headers,
+                onImageTap: toggleUI,
+                imageLabel: "Page \(number)"
+            )
         case .text(let text):
             Text(text)
                 .foregroundColor(.white)
@@ -584,6 +586,11 @@ struct MangaImage: View {
     /// Colour of the loading, error and placeholder content: white on the manga reader's black,
     /// the reading theme's text colour in the novel reader.
     var foreground: Color = .white
+    /// When set, the loaded image can be pinched and double-tapped to zoom, and a single tap
+    /// calls this. Loading and error states are never zoomable, so Try Again stays tappable.
+    var onImageTap: (() -> Void)?
+    /// What VoiceOver reads for the loaded image.
+    var imageLabel = "Illustration"
 
     /// Bumped by Try Again so `LazyImage` starts a fresh request.
     @State private var attempt = 0
@@ -592,9 +599,7 @@ struct MangaImage: View {
         if let url = URL(string: urlStr) {
             LazyImage(request: ImageRequest(urlRequest: createRequest(url: url))) { state in
                 if let image = state.image {
-                    image
-                        .resizable()
-                        .scaledToFit()
+                    loadedImage(image)
                 } else if state.error != nil {
                     VStack(spacing: 12) {
                         Image(systemName: "exclamationmark.triangle")
@@ -629,6 +634,21 @@ struct MangaImage: View {
             }
             .frame(maxWidth: .infinity, minHeight: 400, alignment: .center)
             .padding(40)
+        }
+    }
+
+    @ViewBuilder
+    private func loadedImage(_ image: Image) -> some View {
+        if let onImageTap {
+            ZoomablePage(onTap: onImageTap) {
+                image.resizable().scaledToFit()
+            }
+            .accessibilityLabel(imageLabel)
+        } else {
+            image
+                .resizable()
+                .scaledToFit()
+                .accessibilityLabel(imageLabel)
         }
     }
 
