@@ -10,6 +10,9 @@ struct NovelPagingReaderView: View {
     let theme: NovelTheme
     let prefetchChapters: Bool
     let onLoadNextChapter: () -> Void
+    /// The next chapter failed to load; `onRetryNextChapter` tries again.
+    let appendFailed: Bool
+    let onRetryNextChapter: () -> Void
     @Binding var currentChapter: Novel.Chapter
     /// A place to open at once pages exist; reported back through `onRestoreAnchorApplied`.
     let restoreAnchor: NovelReadingAnchor?
@@ -76,6 +79,24 @@ struct NovelPagingReaderView: View {
                         .padding(.bottom, 8)
                     }
                     .allowsHitTesting(false)
+
+                    if appendFailed && currentPageIndex >= flattenedPages.count - 3 {
+                        VStack {
+                            Spacer()
+                            HStack(spacing: 12) {
+                                Text("Couldn't load the next chapter")
+                                    .font(.footnote)
+                                Button("Try Again", action: onRetryNextChapter)
+                                    .font(.footnote.weight(.semibold))
+                            }
+                            .foregroundColor(theme.textColor)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(theme.backgroundColor.opacity(0.95), in: Capsule())
+                            .overlay(Capsule().stroke(theme.textColor.opacity(0.2), lineWidth: 1))
+                            .padding(.bottom, 32)
+                        }
+                    }
                 }
             }
             .onAppear {

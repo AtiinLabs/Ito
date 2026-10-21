@@ -114,6 +114,8 @@ struct NovelReaderView: View {
                 theme: viewModel.theme,
                 prefetchChapters: viewModel.prefetchChapters,
                 onLoadNextChapter: { viewModel.loadNextChapter() },
+                appendFailed: viewModel.appendFailed,
+                onRetryNextChapter: { viewModel.retryNextChapter() },
                 currentChapter: Binding(
                     get: { viewModel.currentChapter },
                     set: { viewModel.pagedChapterChanged($0) }
