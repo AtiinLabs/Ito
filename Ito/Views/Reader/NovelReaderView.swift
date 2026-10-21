@@ -325,7 +325,7 @@ struct NovelReaderView: View {
             .padding(.horizontal)
             .padding(.vertical, 4)
         case .url(let urlString):
-            MangaImage(urlStr: urlString, headers: page.headers)
+            MangaImage(urlStr: urlString, headers: page.headers, foreground: viewModel.theme.textColor)
                 .padding(.horizontal)
         }
     }

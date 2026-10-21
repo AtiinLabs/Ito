@@ -41,6 +41,7 @@ struct NovelPagingReaderView: View {
                         pages: flattenedPages,
                         currentPage: $currentPageIndex,
                         maxWidth: max(0, size.width - 32),
+                        textColor: theme.textColor,
                         onPageChanged: { newIndex in
                             if newIndex >= 0 && newIndex < flattenedPages.count {
                                 let newChap = flattenedPages[newIndex].chapter
@@ -216,6 +217,8 @@ struct PageViewController: UIViewControllerRepresentable {
     let pages: [NovelPaginationPage]
     @Binding var currentPage: Int
     let maxWidth: CGFloat
+    /// For image pages' loading and error content.
+    let textColor: Color
     let onPageChanged: (Int) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -281,6 +284,7 @@ struct PageViewController: UIViewControllerRepresentable {
             vc.index = index
             vc.page = parent.pages[index]
             vc.maxWidth = parent.maxWidth
+            vc.foreground = parent.textColor
             return vc
         }
 
@@ -322,6 +326,7 @@ class PageContentViewController: UIViewController {
     var index: Int = 0
     var page: NovelPaginationPage?
     var maxWidth: CGFloat = 0
+    var foreground: Color = .primary
 
     private let textView = UITextView()
 
@@ -365,7 +370,9 @@ class PageContentViewController: UIViewController {
 
     /// An illustration fills the page, loaded the same way as in continuous mode.
     private func showImage(_ image: NovelPageImage) {
-        let host = UIHostingController(rootView: MangaImage(urlStr: image.url, headers: image.headers))
+        let host = UIHostingController(
+            rootView: MangaImage(urlStr: image.url, headers: image.headers, foreground: foreground)
+        )
         host.view.backgroundColor = .clear
         host.view.translatesAutoresizingMaskIntoConstraints = false
         addChild(host)

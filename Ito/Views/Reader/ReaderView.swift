@@ -581,6 +581,9 @@ private struct ReaderFooterView: View {
 struct MangaImage: View {
     let urlStr: String
     let headers: [String: String]?
+    /// Colour of the loading, error and placeholder content: white on the manga reader's black,
+    /// the reading theme's text colour in the novel reader.
+    var foreground: Color = .white
 
     /// Bumped by Try Again so `LazyImage` starts a fresh request.
     @State private var attempt = 0
@@ -595,20 +598,20 @@ struct MangaImage: View {
                 } else if state.error != nil {
                     VStack(spacing: 12) {
                         Image(systemName: "exclamationmark.triangle")
-                            .foregroundColor(.white.opacity(0.7))
+                            .foregroundColor(foreground.opacity(0.7))
                             .font(.largeTitle)
                         Text("Couldn't load this page")
                             .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.8))
+                            .foregroundColor(foreground.opacity(0.8))
                         Button("Try Again") { attempt += 1 }
                             .buttonStyle(.bordered)
-                            .tint(.white)
+                            .tint(foreground)
                     }
                     .frame(maxWidth: .infinity, minHeight: 400, alignment: .center)
                     .padding(40)
                 } else {
                     ProgressView()
-                        .tint(.white)
+                        .tint(foreground)
                         .frame(maxWidth: .infinity, minHeight: 400, alignment: .center)
                         .padding(40)
                 }
@@ -617,11 +620,11 @@ struct MangaImage: View {
         } else {
             VStack(spacing: 12) {
                 Image(systemName: "photo")
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundColor(foreground.opacity(0.5))
                     .font(.largeTitle)
                 Text("This page has no valid image address")
                     .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(foreground.opacity(0.7))
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity, minHeight: 400, alignment: .center)
