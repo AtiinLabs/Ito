@@ -247,17 +247,21 @@ struct PageViewController: UIViewControllerRepresentable {
         let oldPages = coordinator.parent.pages
         coordinator.parent = self
 
-        // Pages added after the existing ones need nothing: the data source serves them. Only
-        // changed pages, or a different current page, need the shown page replaced.
+        // Pages added after the existing ones are served by the data source, except when the
+        // last page is showing: the page controller may already have been told there is no
+        // next page, so the shown page is set again. Changed pages, or a different current
+        // page, also need the shown page replaced.
         let existingChanged = pages.count < oldPages.count
             || zip(oldPages, pages).contains(where: { $0.0.string !== $0.1.string })
         let shownIndex = (pvc.viewControllers?.first as? PageContentViewController)?.index
-        guard existingChanged || shownIndex != currentPage else { return }
+        let appendedAfterShownLastPage = pages.count > oldPages.count
+            && shownIndex == oldPages.count - 1
+        guard existingChanged || appendedAfterShownLastPage || shownIndex != currentPage else { return }
         if coordinator.isTransitioning {
             // Replacing pages in the middle of a swipe confuses the page controller.
             coordinator.needsRefresh = true
         } else {
-            coordinator.showCurrentPage(in: pvc)
+            coordinator.showPage(in: pvc, at: currentPage)
         }
     }
 
@@ -270,9 +274,9 @@ struct PageViewController: UIViewControllerRepresentable {
             self.parent = parent
         }
 
-        func showCurrentPage(in pvc: UIPageViewController) {
+        func showPage(in pvc: UIPageViewController, at index: Int) {
             needsRefresh = false
-            let target = min(parent.currentPage, max(0, parent.pages.count - 1))
+            let target = min(index, max(0, parent.pages.count - 1))
             if let vc = makePageContentVC(index: target) {
                 pvc.setViewControllers([vc], direction: .forward, animated: false)
             }
@@ -310,14 +314,27 @@ struct PageViewController: UIViewControllerRepresentable {
                                 previousViewControllers: [UIViewController],
                                 transitionCompleted completed: Bool) {
             isTransitioning = false
+            var shown = parent.currentPage
             if completed,
                let vc = pageViewController.viewControllers?.first as? PageContentViewController {
-                parent.currentPage = vc.index
-                parent.onPageChanged(vc.index)
+                // After a relayout during the swipe, the page swiped to belongs to the old
+                // layout: find its text in the new one instead of trusting its old index.
+                shown = needsRefresh ? index(ofTextOn: vc) : vc.index
+                parent.currentPage = shown
+                parent.onPageChanged(shown)
             }
             if needsRefresh {
-                showCurrentPage(in: pageViewController)
+                showPage(in: pageViewController, at: shown)
             }
+        }
+
+        private func index(ofTextOn vc: PageContentViewController) -> Int {
+            guard let page = vc.page,
+                  let index = NovelPagingReaderView.pageIndex(
+                      for: NovelReadingAnchor(chapterID: page.chapterID, offset: page.startOffset),
+                      in: parent.pages
+                  ) else { return min(vc.index, max(0, parent.pages.count - 1)) }
+            return index
         }
     }
 }
