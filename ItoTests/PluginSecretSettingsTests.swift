@@ -46,6 +46,19 @@ struct PluginSecretSettingsTests {
         #expect(module.get(key: "api_key") == nil)
     }
 
+    @Test func aPluginRemovingASettingAlsoForgetsTheSecret() throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let store = makeStore(database)
+        let module = AppDefaultsModule(pluginId: "komga", store: store)
+        store.setSecret(pluginId: "komga", key: "api_key", value: "secret")
+
+        module.remove(key: "api_key")
+
+        #expect(module.get(key: "api_key") == nil)
+        #expect(store.secrets.value(pluginID: "komga", key: "api_key") == nil)
+    }
+
     @Test func removingAPluginsSecretsKeepsEveryOtherPlugin() throws {
         let secrets = PluginSecretStore(keychain: InMemoryPluginSecretKeychain())
         try secrets.setValue("a", pluginID: "com.atiinlabs.komga", key: "api_key")
