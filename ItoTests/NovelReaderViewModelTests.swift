@@ -175,6 +175,45 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.history.requests.map(\.chapterKey), ["a", "b"])
     }
 
+    func testSwitchingModesReopensAtTheSamePlace() async {
+        let a = makeChapter("a", number: 1)
+        let subject = makeSubject(chapters: [a], initial: a)
+        subject.loader.enqueue(.pages([page(1), page(2), page(3)]), for: "a")
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+        let chapter = subject.viewModel.loadedChapters[0]
+        let third = NovelTextOffsets.blockStarts(chapter.pages)[2]
+
+        subject.viewModel.continuousPageAppeared(chapterID: chapter.id, pageIndex: 2)
+        subject.viewModel.setIsPaging(true)
+        XCTAssertEqual(subject.viewModel.restoreAnchor, NovelReadingAnchor(chapterID: chapter.id, offset: third))
+
+        // The scroll view leaving the screen while paging does not move the place.
+        subject.viewModel.continuousPageDisappeared(chapterID: chapter.id, pageIndex: 2)
+        subject.viewModel.continuousPageAppeared(chapterID: chapter.id, pageIndex: 0)
+        await subject.viewModel.waitForAllOperationsForTesting()
+        XCTAssertEqual(subject.progress.savedOffsets["a"], third)
+    }
+
+    func testFinishedChapterStaysFinishedWhileItsEndIsOnScreen() async {
+        let a = makeChapter("a", number: 1)
+        let subject = makeSubject(chapters: [a], initial: a)
+        subject.loader.enqueue(.pages([page(1), page(2)]), for: "a")
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+        let chapter = subject.viewModel.loadedChapters[0]
+        let end = NovelTextOffsets.bodyLength(chapter.pages)
+
+        subject.viewModel.continuousPageAppeared(chapterID: chapter.id, pageIndex: 1)
+        subject.viewModel.continuousChapterEndAppeared(chapterID: chapter.id)
+        // Scrolling into the space below the end pushes the last paragraph off the top.
+        subject.viewModel.continuousPageDisappeared(chapterID: chapter.id, pageIndex: 1)
+        subject.viewModel.continuousPageAppeared(chapterID: chapter.id, pageIndex: 1)
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        XCTAssertEqual(subject.progress.savedOffsets["a"], end)
+    }
+
     func testDirectNavigationReloadsAlreadyAppendedChapterInsteadOfReusingIt() async {
         let a = makeChapter("a", number: 1)
         let b = makeChapter("b", number: 2)

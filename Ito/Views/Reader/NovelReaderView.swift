@@ -123,6 +123,8 @@ struct NovelReaderView: View {
                 restoreAnchor: viewModel.restoreAnchor,
                 onRestoreAnchorApplied: { viewModel.consumeRestoreAnchor($0) },
                 onPositionChanged: { chapterID, offset, isLast in
+                    // A layout finishing after a switch to scrolling must not move the place.
+                    guard viewModel.isPaging else { return }
                     viewModel.readingPositionChanged(
                         chapterID: chapterID,
                         offset: offset,
@@ -177,7 +179,12 @@ struct NovelReaderView: View {
                                 .onAppear {
                                     viewModel.continuousChapterEndAppeared(chapterID: loadedChapter.id)
                                 }
+                                .onDisappear {
+                                    viewModel.continuousChapterEndDisappeared(chapterID: loadedChapter.id)
+                                }
                         }
+                        // On the text only, so tapping the end row's buttons leaves the controls.
+                        .simultaneousGesture(toggleUIGesture)
 
                         endOfListRow
 
@@ -187,7 +194,6 @@ struct NovelReaderView: View {
                 .onAppear { applyRestoreAnchor(with: proxy) }
                 .onChange(of: viewModel.restoreAnchor) { _ in applyRestoreAnchor(with: proxy) }
             }
-            .simultaneousGesture(toggleUIGesture)
         }
     }
 

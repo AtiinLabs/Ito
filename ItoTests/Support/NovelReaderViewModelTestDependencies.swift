@@ -142,7 +142,8 @@ final class NovelReaderProgressFake: NovelReaderProgressTracking {
     let events: NovelReaderEventRecorder
     var responses: [Response] = []
     private(set) var requests: [Request] = []
-    /// Offsets the reader starts at, keyed by chapter.
+    /// The series' saved position, keyed by its chapter. Like the real store it holds at most
+    /// one chapter: saving another replaces it, and finishing another chapter clears it.
     var savedOffsets: [String: Int] = [:]
     private(set) var savedOffsetWrites: [(chapterID: String, offset: Int)] = []
     private var pending: [CheckedContinuation<Void, any Error>] = []
@@ -164,6 +165,9 @@ final class NovelReaderProgressFake: NovelReaderProgressTracking {
                 chapterNumber: chapterNumber
             )
         )
+        if savedOffsets[chapterID] == nil {
+            savedOffsets.removeAll()
+        }
         let response = responses.isEmpty ? .success : responses.removeFirst()
         switch response {
         case .success:
@@ -190,7 +194,7 @@ final class NovelReaderProgressFake: NovelReaderProgressTracking {
     func saveNovelOffset(_ offset: Int, media: MediaIdentity, chapterID: String) async throws {
         _ = media
         savedOffsetWrites.append((chapterID, offset))
-        savedOffsets[chapterID] = offset
+        savedOffsets = [chapterID: offset]
     }
 
     var pendingCount: Int { pending.count }
