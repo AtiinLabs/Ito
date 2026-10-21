@@ -7,8 +7,10 @@ public final class ReadProgressManager: ObservableObject {
     @Published private var readChapters: [MediaIdentity: Set<String>] = [:]
     @Published private var readChapterNumbers: [MediaIdentity: Set<Float>] = [:]
     @Published private var lastReadChapter: [MediaIdentity: String] = [:]
-    @Published private var lastReadPosition: [MediaIdentity: Double] = [:]
-    @Published private var readerViewer: [MediaIdentity: Int] = [:]
+    // Not published: they change on every page turn and are only read when a reader opens, so
+    // publishing them would re-render every screen watching read progress.
+    private var lastReadPosition: [MediaIdentity: Double] = [:]
+    private var readerViewer: [MediaIdentity: Int] = [:]
 
     private let dbPool: DatabasePool
     private weak var updateManager: UpdateManager?
@@ -88,7 +90,9 @@ public final class ReadProgressManager: ObservableObject {
                 readerViewer: existing?.readerViewer
             ).save(db)
         }
-        lastReadChapter[media] = chapterKey
+        if lastReadChapter[media] != chapterKey {
+            lastReadChapter[media] = chapterKey
+        }
         lastReadPosition[media] = position
     }
 
@@ -131,7 +135,9 @@ public final class ReadProgressManager: ObservableObject {
             ).insert(db)
             return chapterKey
         }
-        lastReadChapter[media] = chapter
+        if lastReadChapter[media] != chapter {
+            lastReadChapter[media] = chapter
+        }
         readerViewer[media] = viewer
     }
 
@@ -183,7 +189,9 @@ public final class ReadProgressManager: ObservableObject {
         if lastReadChapter[media] != chapterId {
             lastReadPosition[media] = nil
         }
-        lastReadChapter[media] = chapterId
+        if lastReadChapter[media] != chapterId {
+            lastReadChapter[media] = chapterId
+        }
     }
 
     public func markAsWatched(
