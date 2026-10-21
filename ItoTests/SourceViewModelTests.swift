@@ -178,6 +178,41 @@ final class SourceViewModelTests: XCTestCase {
         XCTAssertTrue(provider.evictedPluginIDs.isEmpty)
     }
 
+    func testAPluginThatCrashesWhileSearchingIsReplacedBeforeTheNextSearch() async {
+        let crashed = PR7BSourceRunnerContextSpy()
+        crashed.searchResult = .failure(PluginCallError(kind: .crashed, message: "The source stopped unexpectedly."))
+        let fresh = PR7BSourceRunnerContextSpy()
+        fresh.searchResult = .success(.manga([Manga(key: "fresh", title: "Fresh")]))
+        let provider = PR7BSourceRunnerProviderSpy(contexts: [crashed, fresh])
+        let viewModel = makeViewModel(provider: provider, debounce: nil)
+        await viewModel.loadIfNeeded()
+
+        viewModel.performSearch(query: "query")
+        await pr7bWaitUntil { provider.requestedPluginIDs.count == 2 && viewModel.phase != .loading }
+
+        XCTAssertEqual(viewModel.searchPhase, .failure("The source stopped unexpectedly."))
+        XCTAssertEqual(provider.evictedPluginIDs, ["plugin.manga"])
+
+        viewModel.performSearch(query: "again")
+        await pr7bWaitUntil { viewModel.searchPhase == .content }
+
+        XCTAssertEqual(crashed.searchInvocations.map(\.query), ["query"])
+        XCTAssertEqual(fresh.searchInvocations.map(\.query), ["again"])
+    }
+
+    func testAPluginThatCrashesWhileReadingItsSettingsIsReplaced() async {
+        let context = PR7BSourceRunnerContextSpy()
+        context.settingsResult = .failure(PluginCallError(kind: .crashed, message: "The source stopped unexpectedly."))
+        let provider = PR7BSourceRunnerProviderSpy(contexts: [context])
+        let viewModel = makeViewModel(provider: provider)
+
+        await viewModel.loadIfNeeded()
+
+        XCTAssertEqual(viewModel.phase, .failure("The source stopped unexpectedly."))
+        XCTAssertEqual(provider.evictedPluginIDs, ["plugin.manga"])
+        XCTAssertEqual(context.homeLoadCount, 0)
+    }
+
     func testSearchPreservesPageOneEmptyFilterInvocationAndResultOrdering() async {
         let context = PR7BSourceRunnerContextSpy()
         context.searchResult = .success(.manga([

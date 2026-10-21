@@ -28,15 +28,14 @@ struct PluginCallError: LocalizedError, Equatable {
 
     init(_ error: ItoError) {
         switch error {
+        case .pluginFailed(_, let reason) where reason.map(Self.isSDKDecodingFailure) == true:
+            self.init(kind: .incompatible, message: Self.incompatibleMessage)
         case .pluginFailed(_, let reason):
             self.init(kind: .reported, message: Self.pluginMessage(reason))
         case .wasmTrap, .memoryOutOfBounds, .invalidDescriptor:
             self.init(kind: .crashed, message: "The source stopped unexpectedly. Try again.")
         case .postcardDecodingError, .postcardEncodingError:
-            self.init(
-                kind: .incompatible,
-                message: "The source sent something this version of Ito can't read. Update the source or Ito."
-            )
+            self.init(kind: .incompatible, message: Self.incompatibleMessage)
         case .hostModuleError(let domain, let message):
             self.init(kind: .host, message: domain == "webview" ? "The source's web page failed: \(message)" : message)
         }
@@ -47,6 +46,17 @@ struct PluginCallError: LocalizedError, Equatable {
     static func wrapping(_ error: any Error) -> any Error {
         guard let error = error as? ItoError else { return error }
         return PluginCallError(error)
+    }
+
+    private static let incompatibleMessage =
+        "The source sent something this version of Ito can't read. Update the source or Ito."
+
+    /// The plugin couldn't read what Ito sent or encode its answer: the plugin and Ito disagree on
+    /// the data format, so it's a version mismatch rather than something the plugin said.
+    private static func isSDKDecodingFailure(_ reason: String) -> Bool {
+        reason.hasPrefix("Deserialization error: ")
+            || reason.hasPrefix("Serialization error: ")
+            || reason.hasPrefix("Postcard decoding error in ")
     }
 
     /// The SDK formats a plugin's own message as "Host error: <message>"; other reasons

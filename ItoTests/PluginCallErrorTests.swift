@@ -32,6 +32,15 @@ struct PluginCallErrorTests {
         #expect(PluginCallError(runnerError).kind == .crashed)
     }
 
+    @Test(arguments: [
+        "Deserialization error: unexpected end of input",
+        "Serialization error: value too large",
+        "Postcard decoding error in get_manga_update: bad varint"
+    ])
+    func aPluginThatCannotReadOrWriteTheDataIsAnIncompatibility(_ reason: String) {
+        #expect(PluginCallError(.pluginFailed(function: "get_manga_update", reason: reason)).kind == .incompatible)
+    }
+
     @Test func undecodableDataIsAnIncompatibility() {
         #expect(PluginCallError(.postcardDecodingError("Unexpected end of data")).kind == .incompatible)
     }
