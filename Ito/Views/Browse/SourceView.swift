@@ -83,7 +83,7 @@ struct SourceView: View {
         case .failure(let error):
             failureView(
                 message: "Error: \(error)",
-                opensSettings: viewModel.failureNeedsSettings && viewModel.hasSettings
+                opensSettings: viewModel.failureOffersSettings
             ) {
                 Task { await viewModel.retry() }
             }
@@ -385,7 +385,7 @@ struct SourceView: View {
         case .idle, .loading:
             ProgressView("Searching source...")
         case .failure(let error):
-            failureView(message: "Search error: \(error)") {
+            failureView(message: "Search error: \(error)", opensSettings: viewModel.searchFailureOffersSettings) {
                 viewModel.performSearch(query: viewModel.searchQuery)
             }
         case .cancelled:

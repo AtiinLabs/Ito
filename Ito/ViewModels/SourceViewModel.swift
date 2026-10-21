@@ -45,6 +45,8 @@ final class SourceViewModel: ObservableObject {
     /// Whether the last load failed because the plugin needs settings (missing, or rejected
     /// credentials), so the failure offers to open them.
     @Published private(set) var failureNeedsSettings = false
+    /// The same for the last search.
+    @Published private(set) var searchFailureNeedsSettings = false
     @Published private(set) var searchMangas: [Manga] = []
     @Published private(set) var searchAnimes: [Anime] = []
     @Published private(set) var searchNovels: [Novel] = []
@@ -120,6 +122,7 @@ final class SourceViewModel: ObservableObject {
         let operationID = UUID()
         searchOperationID = operationID
         searchPhase = .loading
+        searchFailureNeedsSettings = false
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             if let searchDebounceNanoseconds {
@@ -162,6 +165,16 @@ final class SourceViewModel: ObservableObject {
     /// Whether the source offers settings, even ones that can't be shown right now.
     var hasSettings: Bool {
         settingsSchema != nil || settingsUnavailableReason != nil
+    }
+
+    /// Whether the load failure should offer the settings: it needs them and they can be edited.
+    var failureOffersSettings: Bool {
+        failureNeedsSettings && settingsDestination != nil
+    }
+
+    /// Whether the search failure should offer the settings, as for a load failure.
+    var searchFailureOffersSettings: Bool {
+        searchFailureNeedsSettings && settingsDestination != nil
     }
 
     func destination(for manga: Manga) -> SearchDestination? {
@@ -365,6 +378,7 @@ final class SourceViewModel: ObservableObject {
     private func publishSearchFailure(_ error: any Error, operationID: UUID) {
         guard isCurrentSearch(operationID), !Task.isCancelled else { return }
         let reason = error.localizedDescription
+        searchFailureNeedsSettings = (error as? PluginCallError)?.kind == .needsSettings
         searchPhase = .failure(reason)
         messagePresenter.present(.searchFailed(pluginName: plugin.info.name, reason: reason))
         finishSearch(operationID)

@@ -37,6 +37,18 @@ struct PluginCallErrorTests {
         #expect(error == PluginCallError(kind: kind, message: "Add your server URL"))
     }
 
+    @Test func aDataFormatFailureIsAnIncompatibilityWhateverItsCategory() {
+        let error = PluginCallError(.pluginFailed(
+            function: "get_home", reason: "Serialization error: value too large", category: .needsSetup
+        ))
+        #expect(error.kind == .incompatible)
+    }
+
+    @Test func aSettingsFailureWithoutAReasonGetsTheGenericMessage() {
+        let error = PluginCallError(.pluginFailed(function: "get_home", reason: nil, category: .needsSetup))
+        #expect(error == PluginCallError(kind: .needsSettings, message: "The source couldn't complete this request."))
+    }
+
     @Test(arguments: [
         ItoError.wasmTrap("unreachable"),
         .memoryOutOfBounds(offset: 1, length: 2, memorySize: 3),
