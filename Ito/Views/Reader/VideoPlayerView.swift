@@ -65,7 +65,11 @@ struct VideoPlayerView: View {
             "Continue Watching?",
             isPresented: Binding(
                 get: { viewModel.resumeOffer != nil },
-                set: { _ in }
+                // Dismissed without an answer (Cancel, escape gesture, keyboard): nothing is
+                // playing and the player has no controls yet, so close it.
+                set: { isPresented in
+                    if !isPresented, viewModel.resumeOffer != nil { dismiss() }
+                }
             )
         ) {
             Button("Continue from \(Self.formattedTime(viewModel.resumeOffer ?? 0))") {
@@ -74,6 +78,7 @@ struct VideoPlayerView: View {
             Button("Start Over") {
                 viewModel.resolveResumeOffer(continueWatching: false)
             }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text("You stopped this episode at \(Self.formattedTime(viewModel.resumeOffer ?? 0)).")
         }
