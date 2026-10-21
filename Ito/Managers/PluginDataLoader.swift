@@ -92,7 +92,7 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
         if starts(Array("GIF8".utf8)) { return "image/gif" }
         if starts(Array("RIFF".utf8)), starts(Array("WEBP".utf8), at: 8) { return "image/webp" }
         if starts(Array("ftyp".utf8), at: 4) {
-            let brand = bytes.count >= 12 ? String(decoding: bytes[8..<12], as: UTF8.self) : ""
+            let brand = bytes.count >= 12 ? String(bytes: bytes[8..<12], encoding: .ascii) ?? "" : ""
             if brand.hasPrefix("avi") { return "image/avif" }
             if ["heic", "heix", "mif1", "msf1"].contains(brand) { return "image/heic" }
         }
