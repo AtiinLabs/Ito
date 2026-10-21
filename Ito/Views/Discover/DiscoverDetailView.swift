@@ -71,7 +71,7 @@ struct DiscoverDetailView: View {
                         coverURL: media.coverImage,
                         authorOrStudio: media.titleRomaji != media.title ? media.titleRomaji : nil,
                         statusLabel: media.status?.replacingOccurrences(of: "_", with: " ").capitalized,
-                        pluginId: media.averageScore != nil ? "★ \(media.averageScore!)%" : (media.format?.replacingOccurrences(of: "_", with: " ") ?? "Discover"),
+                        sourceLabel: media.averageScore != nil ? "★ \(media.averageScore!)%" : (media.format?.replacingOccurrences(of: "_", with: " ") ?? "Discover"),
                         onImageLoaded: { uiImage in
                             viewModel.heroImageLoaded(uiImage)
                         }

@@ -44,7 +44,11 @@ struct SourceView: View {
                     viewFactory.makePluginSettingsView(destination: destination)
                 }
             }
-            .searchable(text: $viewModel.searchQuery, prompt: "Search source...")
+            .searchable(
+                text: $viewModel.searchQuery,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search source..."
+            )
             .onChange(of: viewModel.searchQuery) { query in
                 viewModel.performSearch(query: query)
             }

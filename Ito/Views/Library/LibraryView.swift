@@ -10,7 +10,8 @@ struct LibraryView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private let columns = [
-        GridItem(.adaptive(minimum: 100, maximum: 140), spacing: 12)
+        // Top-aligned so a two-line title doesn't push its cover up the row.
+        GridItem(.adaptive(minimum: 100, maximum: 140), spacing: 12, alignment: .top)
     ]
 
     var body: some View {

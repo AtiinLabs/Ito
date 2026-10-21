@@ -171,6 +171,50 @@ final class SourceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.searchPhase, .content)
     }
 
+    func testSearchTypedWhileSourceLoadsRunsOnceTheLoadFinishes() async {
+        let context = PR7BSourceRunnerContextSpy()
+        context.suspendsHome = true
+        context.searchResult = .success(.manga([Manga(key: "a", title: "A")]))
+        let viewModel = makeViewModel(
+            provider: PR7BSourceRunnerProviderSpy(contexts: [context]),
+            debounce: nil
+        )
+        let load = Task { await viewModel.loadIfNeeded() }
+        await pr7bWaitUntil { context.homeLoadCount == 1 }
+
+        viewModel.performSearch(query: "query")
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(viewModel.searchPhase, .loading)
+        XCTAssertTrue(context.searchInvocations.isEmpty)
+
+        context.completeHome(with: .success(HomeLayout(components: [])))
+        await load.value
+        await pr7bWaitUntil { viewModel.searchPhase != .loading }
+
+        XCTAssertEqual(context.searchInvocations.map(\.query), ["query"])
+        XCTAssertEqual(viewModel.searchMangas.map(\.key), ["a"])
+        XCTAssertEqual(viewModel.searchPhase, .content)
+    }
+
+    func testSearchWaitingOnAFailedLoadShowsTheLoadFailure() async {
+        let context = PR7BSourceRunnerContextSpy()
+        context.suspendsHome = true
+        let viewModel = makeViewModel(
+            provider: PR7BSourceRunnerProviderSpy(contexts: [context]),
+            debounce: nil
+        )
+        let load = Task { await viewModel.loadIfNeeded() }
+        await pr7bWaitUntil { context.homeLoadCount == 1 }
+
+        viewModel.performSearch(query: "query")
+        context.completeHome(with: .failure(PR7BTestFailure.failed))
+        await load.value
+        await pr7bWaitUntil { viewModel.searchPhase != .loading }
+
+        XCTAssertTrue(context.searchInvocations.isEmpty)
+        XCTAssertEqual(viewModel.searchPhase, .failure("fixture failure"))
+    }
+
     func testNewSearchSuppressesOlderNonCooperativeCompletion() async {
         let context = PR7BSourceRunnerContextSpy()
         context.suspendsSearch = true

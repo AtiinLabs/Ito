@@ -274,11 +274,21 @@ final class SourceViewModel: ObservableObject {
     }
 
     private func executeSearch(query: String, operationID: UUID) async {
-        guard let context else {
-            publishSearchFailure(
-                SourceDependencyUnavailableErrorForPresentation.runnerUnavailable,
-                operationID: operationID
-            )
+        guard let context = await loadedContext() else {
+            guard isCurrentSearch(operationID), !Task.isCancelled else {
+                finishCancelledSearch(operationID)
+                return
+            }
+            let failure: any Error = if case .failure(let reason) = phase {
+                SourceDependencyUnavailableErrorForPresentation.loadFailed(reason)
+            } else {
+                SourceDependencyUnavailableErrorForPresentation.runnerUnavailable
+            }
+            publishSearchFailure(failure, operationID: operationID)
+            return
+        }
+        guard isCurrentSearch(operationID), !Task.isCancelled else {
+            finishCancelledSearch(operationID)
             return
         }
 
@@ -298,6 +308,15 @@ final class SourceViewModel: ObservableObject {
         } catch {
             publishSearchFailure(error, operationID: operationID)
         }
+    }
+
+    /// The runner context, once the home load that creates it has finished. A search typed
+    /// while the source is still loading waits for that load instead of failing.
+    private func loadedContext() async -> (any SourceRunnerContext)? {
+        if context == nil, phase == .loading, let loadTask {
+            await loadTask.value
+        }
+        return context
     }
 
     private func publishSearchPage(_ page: SourceSearchPage) {
@@ -414,8 +433,14 @@ final class SourceViewModel: ObservableObject {
 
 private enum SourceDependencyUnavailableErrorForPresentation: LocalizedError {
     case runnerUnavailable
+    case loadFailed(String)
 
     var errorDescription: String? {
-        "The source is not ready."
+        switch self {
+        case .runnerUnavailable:
+            "The source is not ready."
+        case .loadFailed(let reason):
+            reason
+        }
     }
 }

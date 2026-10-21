@@ -111,7 +111,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             authorOrStudio: viewModel.media.studios?.joined(separator: ", ")
                 ?? viewModel.media.authors?.joined(separator: ", "),
             statusLabel: viewModel.media.displayStatus,
-            pluginId: viewModel.pluginID,
+            sourceLabel: viewModel.sourceName,
             onImageLoaded: viewModel.heroImageLoaded
         )
         .background(

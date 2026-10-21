@@ -9,16 +9,17 @@ public struct SharedHeroHeader: View {
     public let coverURL: String?
     public let authorOrStudio: String?
     public let statusLabel: String?
-    public let pluginId: String
+    /// Shown as given next to the status badge: the plugin's name, or a Discover label.
+    public let sourceLabel: String
     public var onImageLoaded: ((UIImage) -> Void)?
 
-    public init(title: String, backdropURL: String? = nil, coverURL: String?, authorOrStudio: String?, statusLabel: String?, pluginId: String, onImageLoaded: ((UIImage) -> Void)? = nil) {
+    public init(title: String, backdropURL: String? = nil, coverURL: String?, authorOrStudio: String?, statusLabel: String?, sourceLabel: String, onImageLoaded: ((UIImage) -> Void)? = nil) {
         self.title = title
         self.backdropURL = backdropURL
         self.coverURL = coverURL
         self.authorOrStudio = authorOrStudio
         self.statusLabel = statusLabel
-        self.pluginId = pluginId
+        self.sourceLabel = sourceLabel
         self.onImageLoaded = onImageLoaded
     }
 
@@ -133,7 +134,7 @@ public struct SharedHeroHeader: View {
                 if let label = statusLabel {
                     HeroBadge(label: label)
                 }
-                HeroBadge(label: pluginId.capitalized)
+                HeroBadge(label: sourceLabel)
             }
         }
     }

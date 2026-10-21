@@ -145,6 +145,11 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
 
     let pluginID: String
 
+    /// The installed plugin's name, or its id once the plugin is gone.
+    var sourceName: String {
+        dependencies.pluginMetadata.displayName(for: pluginID) ?? pluginID
+    }
+
     private let routeContext: MediaDetailRouteContext<M>
     private let dependencies: PreparedMediaDetailDependencies
     private let messagePresenter: any MediaDetailMessagePresenting
