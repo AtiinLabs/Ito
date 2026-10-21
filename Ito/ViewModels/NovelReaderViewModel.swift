@@ -88,6 +88,7 @@ final class NovelReaderViewModel: ObservableObject {
     private var lastPosition: NovelReadingAnchor?
     /// Chapters whose end marker is on screen: the reader is at their end.
     private var visibleChapterEnds: Set<UUID> = []
+    private var historyChapterKeys: Set<String> = []
     /// Offset writes run one after another so an older write cannot land after a newer one.
     private var offsetWriteTask: Task<Void, Never>?
     private var lastSavedOffset: (chapterKey: String, offset: Int)?
@@ -623,8 +624,10 @@ final class NovelReaderViewModel: ObservableObject {
 
     // MARK: - Chapter effects
 
+    /// Records the chapter in history once per reader session; crossing back and forth over a
+    /// chapter boundary does not add a row each time.
     private func chapterOpened(_ chapter: Novel.Chapter) {
-        guard isActive else { return }
+        guard isActive, historyChapterKeys.insert(chapter.key).inserted else { return }
         dependencies.history.recordNovel(
             novel,
             chapterKey: chapter.key,

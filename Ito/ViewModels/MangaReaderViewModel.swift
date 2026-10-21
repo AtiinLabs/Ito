@@ -56,6 +56,7 @@ final class MangaReaderViewModel: ObservableObject {
     private var lastSavedPage: (chapterKey: String, page: Int)?
     private var settingsWriteTask: Task<Void, Never>?
     private var viewerWriteTask: Task<Void, Never>?
+    private var historyChapterKeys: Set<String> = []
     private var flatPageIndexByID: [String: Int] = [:]
     /// Continuous pages on screen; the topmost is the current page.
     private var visiblePageIDs: Set<String> = []
@@ -956,7 +957,10 @@ final class MangaReaderViewModel: ObservableObject {
         return saved
     }
 
+    /// Records the chapter in history once per reader session; crossing back and forth over a
+    /// chapter boundary does not add a row each time.
     private func chapterOpened(_ chapter: Manga.Chapter) {
+        guard historyChapterKeys.insert(chapter.key).inserted else { return }
         dependencies.history.recordManga(
             manga,
             chapterKey: chapter.key,

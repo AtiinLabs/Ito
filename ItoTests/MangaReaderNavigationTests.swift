@@ -81,4 +81,22 @@ extension MangaReaderViewModelTests {
         reopened.setViewerOverride(.Ltr)
         await waitForReader { subject.progress.savedViewerWrites == [.Ltr] }
     }
+
+    func testCrossingBackAndForthRecordsEachChapterInHistoryOnce() async {
+        let a = makeChapter("a", number: 1)
+        let b = makeChapter("b", number: 2)
+        let subject = makeSubject(chapters: [a, b], initial: a)
+        subject.loader.enqueue(.pages([page(0)]), for: "a")
+        subject.loader.enqueue(.pages([page(0)]), for: "b")
+        subject.viewModel.start()
+        await waitForReader { subject.viewModel.prefetchedChapters["b"] != nil }
+
+        subject.viewModel.goToNextChapter()
+        await waitForReader { subject.viewModel.prefetchedChapters["a"] != nil }
+        subject.viewModel.goToPreviousChapter()
+        await waitForReader { subject.viewModel.prefetchedChapters["b"] != nil }
+        subject.viewModel.goToNextChapter()
+
+        XCTAssertEqual(subject.history.requests.map(\.chapterKey), ["a", "b"])
+    }
 }
