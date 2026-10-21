@@ -332,6 +332,7 @@ private final class MessagePluginManager: BrowsePluginManaging {
     }
 
     func reloadInstalledPlugins() async {}
+    func removeSecrets(for pluginID: String) {}
 }
 
 @MainActor

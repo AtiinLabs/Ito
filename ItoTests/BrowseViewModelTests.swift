@@ -154,6 +154,7 @@ final class BrowseViewModelTests: XCTestCase {
 
         XCTAssertEqual(files.deleteInvocations, [plugin.url])
         XCTAssertEqual(plugins.reloadCallCount, 1)
+        XCTAssertEqual(plugins.removedSecretsPluginIDs, [plugin.id])
     }
 
     func testFailedDeletePreservesVisiblePluginAndSurfacesError() async {
@@ -169,6 +170,7 @@ final class BrowseViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.sortedPlugins.map(\.id), [plugin.id])
         XCTAssertEqual(plugins.reloadCallCount, 0)
+        XCTAssertTrue(plugins.removedSecretsPluginIDs.isEmpty)
         XCTAssertEqual(messages.messages, [.deleteFailed(pluginName: "Plugin", reason: "fixture failure")])
     }
 
@@ -769,6 +771,7 @@ private struct BrowseFileFixture {
 private final class BrowsePluginManagerSpy: BrowsePluginManaging {
     @Published var installedPlugins: [String: InstalledPlugin]
     private(set) var reloadCallCount = 0
+    private(set) var removedSecretsPluginIDs: [String] = []
     var onReload: (() -> Void)?
     var suspendReload = false
     private var reloadContinuation: CheckedContinuation<Void, Never>?
@@ -787,6 +790,10 @@ private final class BrowsePluginManagerSpy: BrowsePluginManaging {
             await withCheckedContinuation { reloadContinuation = $0 }
         }
         onReload?()
+    }
+
+    func removeSecrets(for pluginID: String) {
+        removedSecretsPluginIDs.append(pluginID)
     }
 
     func resumeReload() {

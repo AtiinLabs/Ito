@@ -247,6 +247,7 @@ private final class RouterPluginManager: BrowsePluginManaging {
     }
 
     func reloadInstalledPlugins() async {}
+    func removeSecrets(for pluginID: String) {}
 }
 
 @MainActor

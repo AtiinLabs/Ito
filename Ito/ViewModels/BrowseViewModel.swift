@@ -186,6 +186,7 @@ public final class BrowseViewModel: ObservableObject {
 
         do {
             try fileOperations.deletePluginFile(at: plugin.url)
+            pluginManager.removeSecrets(for: plugin.id)
             await pluginManager.reloadInstalledPlugins()
         } catch {
             messagePresenter.present(

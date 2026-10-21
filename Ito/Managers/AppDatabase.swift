@@ -476,6 +476,15 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // MARK: - v12: First-run setup marker
+        // One row once this database's one-time setup has run (see FirstRunSetupBootstrapExtension).
+        migrator.registerMigration("v12") { db in
+            try db.create(table: "firstRunSetup") { t in
+                t.column("id", .integer).notNull().primaryKey().check { $0 == 1 }
+                t.column("completedAt", .datetime).notNull()
+            }
+        }
+
         return migrator
     }
 

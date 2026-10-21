@@ -58,6 +58,8 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
     private static let suitePrefix = "moe.ito.runners."
     private static let suiteEvidenceKey = "__ito_internal_plugin_suite_evidence__"
 
+    /// Values of the plugins' secret settings, kept in the Keychain rather than this database.
+    public let secrets: PluginSecretStore
     private let dbPool: DatabasePool
     private let standardApplicationDomain: String
     private let domainFactory: DomainFactory
@@ -81,7 +83,8 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
         },
         faultHandler: @escaping FaultHandler = { _, _ in },
         operationFault: @escaping OperationFault = { _ in },
-        clock: @escaping @Sendable () -> Date = Date.init
+        clock: @escaping @Sendable () -> Date = Date.init,
+        secrets: PluginSecretStore = PluginSecretStore()
     ) {
         self.dbPool = dbPool
         self.standardApplicationDomain = standardApplicationDomain
@@ -89,6 +92,7 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
         self.faultHandler = faultHandler
         self.operationFault = operationFault
         self.clock = clock
+        self.secrets = secrets
     }
 
     @discardableResult
@@ -152,6 +156,30 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
                 return false
             }
         }
+    }
+
+    /// Saves a secret setting in the Keychain and drops any plain value stored under the same key,
+    /// so it can't be read back from the database or exported in a backup.
+    @discardableResult
+    public func setSecret(pluginId: String, key: String, value: String) -> Bool {
+        do {
+            try secrets.setValue(value, pluginID: pluginId, key: key)
+        } catch {
+            publishFailure(operation: "setSecret", pluginId: pluginId)
+            return false
+        }
+        return remove(pluginId: pluginId, key: key)
+    }
+
+    @discardableResult
+    public func removeSecret(pluginId: String, key: String) -> Bool {
+        do {
+            try secrets.removeValue(pluginID: pluginId, key: key)
+        } catch {
+            publishFailure(operation: "removeSecret", pluginId: pluginId)
+            return false
+        }
+        return remove(pluginId: pluginId, key: key)
     }
 
     public func registerInstalledPlugin(manifestId: String, filenameId: String) throws {

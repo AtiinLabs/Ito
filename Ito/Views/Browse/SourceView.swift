@@ -168,28 +168,36 @@ struct SourceView: View {
 
     @ViewBuilder
     private func sectionHeader(_ component: HomeComponent) -> some View {
-        HStack {
-            if let listing = component.value.listing,
-               let destination = viewModel.listingDestination(
-                listing: listing,
-                title: component.title ?? listing.name
-               ) {
-                NavigationLink(destination: viewFactory.makeListingView(destination: destination)) {
-                    HStack {
-                        Text(component.title ?? "")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.primary)
-                        Image(systemName: "chevron.right")
-                            .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                if let listing = component.value.listing,
+                   let destination = viewModel.listingDestination(
+                    listing: listing,
+                    title: component.title ?? listing.name
+                   ) {
+                    NavigationLink(destination: viewFactory.makeListingView(destination: destination)) {
+                        HStack {
+                            Text(component.title ?? "")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.primary)
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(.secondary)
+                        }
                     }
+                } else {
+                    Text(component.title ?? "")
+                        .font(.title2)
+                        .fontWeight(.bold)
                 }
-            } else {
-                Text(component.title ?? "")
-                    .font(.title2)
-                    .fontWeight(.bold)
+                Spacer()
             }
-            Spacer()
+            if let subtitle = component.subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(.horizontal)
     }

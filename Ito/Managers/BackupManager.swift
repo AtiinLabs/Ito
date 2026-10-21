@@ -408,6 +408,7 @@ public class BackupManager: ObservableObject {
     private let sourceDatabaseURL: URL
     private let exportReadiness: BackupExportOperation.ReadinessGate
     private let restoreRefresher: BackupRestoreRefresher
+    private let pluginSecrets: PluginSecretStore
     private let onAllReportsAcknowledged: @MainActor @Sendable () async throws -> Void
     private var acknowledgmentInFlight = false
     private var registeredImporters: [BackupImporter] = [ItoNativeImporter()]
@@ -417,12 +418,14 @@ public class BackupManager: ObservableObject {
         sourceDatabaseURL: URL,
         exportReadiness: @escaping BackupExportOperation.ReadinessGate,
         restoreRefresher: BackupRestoreRefresher,
+        pluginSecrets: PluginSecretStore,
         onAllReportsAcknowledged: @escaping @MainActor @Sendable () async throws -> Void = {}
     ) {
         self.dbPool = dbPool
         self.sourceDatabaseURL = sourceDatabaseURL
         self.exportReadiness = exportReadiness
         self.restoreRefresher = restoreRefresher
+        self.pluginSecrets = pluginSecrets
         self.onAllReportsAcknowledged = onAllReportsAcknowledged
     }
 
@@ -491,6 +494,15 @@ public class BackupManager: ObservableObject {
             mode: mode,
             resolvedConflicts: resolvedConflicts
         )
+        if mode == .wipe {
+            // Backups never carry plugin secrets, so a restore that replaces everything replaces
+            // them with nothing too. The restore is already committed, so a failure here is logged.
+            do {
+                try pluginSecrets.removeAll()
+            } catch {
+                AppLogger.plugin.error("Plugin secrets could not be cleared after a wipe restore.")
+            }
+        }
         do {
             let report = try await restoreRefresher.refreshCommittedRestore(
                 operationId: committedReport.operationId

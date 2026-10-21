@@ -1116,6 +1116,7 @@ private final class SettingsTestPluginManager: BrowsePluginManaging {
     }
 
     func reloadInstalledPlugins() async {}
+    func removeSecrets(for pluginID: String) {}
 }
 
 @MainActor

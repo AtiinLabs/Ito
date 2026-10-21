@@ -219,6 +219,7 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
 final class PR7BSettingsStoreSpy: PluginSettingsPersisting {
     @Published var revision = 0
     var values: [String: String] = [:]
+    var secrets: [String: String] = [:]
     var prepareError: (any Error)?
     var persistSucceeds = true
     var reloadResults: [Result<Void, any Error>] = [.success(())]
@@ -247,6 +248,25 @@ final class PR7BSettingsStoreSpy: PluginSettingsPersisting {
         writes.append((pluginID, key, value))
         guard persistSucceeds else { return false }
         values[key] = value
+        revision += 1
+        return true
+    }
+
+    func hasSecret(pluginID: String, key: String) -> Bool {
+        secrets[key] != nil
+    }
+
+    func persistSecret(pluginID: String, key: String, value: String) -> Bool {
+        guard persistSucceeds else { return false }
+        secrets[key] = value
+        values[key] = nil
+        revision += 1
+        return true
+    }
+
+    func clearSecret(pluginID: String, key: String) -> Bool {
+        guard persistSucceeds else { return false }
+        secrets[key] = nil
         revision += 1
         return true
     }
@@ -290,10 +310,15 @@ final class PR7BPluginStatePublisherSpy: SourcePluginStatePublishing {
     var onPublish: (() -> Void)?
     private(set) var callCount = 0
     private(set) var publishCount = 0
+    private(set) var removedSecretsPluginIDs: [String] = []
     private var continuations: [CheckedContinuation<Void, any Error>] = []
 
     func currentSourcePlugin(for pluginID: String) -> InstalledPlugin? {
         currentPlugins[pluginID]
+    }
+
+    func removeSecrets(for pluginID: String) {
+        removedSecretsPluginIDs.append(pluginID)
     }
 
     func prepareSourcePluginStatePublication() async throws -> any SourcePluginStatePublication {

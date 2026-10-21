@@ -137,6 +137,10 @@ public class RepoManager: ObservableObject {
     /// The running app's version, compared with each package's `min_app_version`.
     public let currentAppVersion = AppVersion.marketing
 
+    /// The AtiinLabs plugin repository (first-party reading-service plugins), in normalized form.
+    /// New databases start with it; see FirstRunSetupBootstrapExtension.
+    public nonisolated static let defaultRepositoryURL = "https://atiinlabs.github.io/sources"
+
     public convenience init(
         dbPool: DatabasePool,
         pluginManager: PluginManager? = nil,

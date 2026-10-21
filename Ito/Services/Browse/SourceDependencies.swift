@@ -139,6 +139,9 @@ protocol PluginSettingsPersisting: AnyObject {
     func prepareSettings(pluginID: String) throws
     func storedValue(pluginID: String, key: String) -> String?
     func persistValue(pluginID: String, key: String, value: String) -> Bool
+    func hasSecret(pluginID: String, key: String) -> Bool
+    func persistSecret(pluginID: String, key: String, value: String) -> Bool
+    func clearSecret(pluginID: String, key: String) -> Bool
     func reloadPersistedSettings() async throws
 }
 
@@ -159,6 +162,18 @@ extension PluginSettingsStore: PluginSettingsPersisting {
         set(pluginId: pluginID, key: key, value: value)
     }
 
+    func hasSecret(pluginID: String, key: String) -> Bool {
+        secrets.value(pluginID: pluginID, key: key) != nil
+    }
+
+    func persistSecret(pluginID: String, key: String, value: String) -> Bool {
+        setSecret(pluginId: pluginID, key: key, value: value)
+    }
+
+    func clearSecret(pluginID: String, key: String) -> Bool {
+        removeSecret(pluginId: pluginID, key: key)
+    }
+
     func reloadPersistedSettings() async throws {
         try reload()
     }
@@ -168,6 +183,7 @@ extension PluginSettingsStore: PluginSettingsPersisting {
 protocol SourcePluginStatePublishing: AnyObject {
     func currentSourcePlugin(for pluginID: String) -> InstalledPlugin?
     func prepareSourcePluginStatePublication() async throws -> any SourcePluginStatePublication
+    func removeSecrets(for pluginID: String)
 }
 
 @MainActor
@@ -446,6 +462,12 @@ private final class UnavailableSourceDependency: SourceRunnerProviding,
 
     func persistValue(pluginID: String, key: String, value: String) -> Bool { false }
 
+    func hasSecret(pluginID: String, key: String) -> Bool { false }
+
+    func persistSecret(pluginID: String, key: String, value: String) -> Bool { false }
+
+    func clearSecret(pluginID: String, key: String) -> Bool { false }
+
     func reloadPersistedSettings() async throws {
         throw SourceDependencyUnavailableError.unavailable
     }
@@ -455,6 +477,8 @@ private final class UnavailableSourceDependency: SourceRunnerProviding,
     func prepareSourcePluginStatePublication() async throws -> any SourcePluginStatePublication {
         throw SourceDependencyUnavailableError.unavailable
     }
+
+    func removeSecrets(for pluginID: String) {}
 
     func snapshotPluginFile(for plugin: InstalledPlugin) throws -> SourcePluginFileSnapshot {
         throw SourceDependencyUnavailableError.unavailable

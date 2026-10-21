@@ -7,6 +7,7 @@ extension Setting: @retroactive Identifiable {
         case .toggle(let id, _, _, _): return id
         case .text(let id, _, _, _): return id
         case .picker(let id, _, _, _, _): return id
+        case .secret(let id, _, _): return id
         }
     }
 }
@@ -123,6 +124,8 @@ private struct SettingRowView: View {
                 defaultValue: defaultValue,
                 viewModel: viewModel
             )
+        case .secret(let id, let name, let summary):
+            SecretSettingRow(id: id, name: name, summary: summary, viewModel: viewModel)
         }
     }
 }
@@ -210,5 +213,57 @@ private struct PickerSettingRow: View {
         .onAppear {
             viewModel.ensureDefault(key: id, value: defaultValue)
         }
+    }
+}
+
+/// A masked field for API keys and passwords. A saved value is never shown again; entering a new
+/// one replaces it. The field stays on screen after saving (emptied), because iOS offers to save a
+/// secure field's text as a website password when the field leaves the screen still holding it.
+private struct SecretSettingRow: View {
+    let id: String
+    let name: String
+    let summary: String?
+    @ObservedObject var viewModel: PluginSettingsViewModel
+    @State private var draft = ""
+
+    var body: some View {
+        let isSaved = viewModel.hasSecret(key: id)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(name)
+                Spacer()
+                if isSaved {
+                    Label("Saved", systemImage: "lock.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            SecureField(isSaved ? "Enter a new value to replace it" : name, text: $draft)
+                .textContentType(.oneTimeCode)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .onSubmit(save)
+            HStack {
+                if isSaved {
+                    Button("Remove", role: .destructive) { viewModel.clearSecret(key: id) }
+                }
+                Spacer()
+                Button("Save", action: save)
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .buttonStyle(.borderless)
+            if let summary, !summary.isEmpty {
+                Text(summary)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func save() {
+        guard viewModel.persistSecret(key: id, value: draft) else { return }
+        draft = ""
     }
 }

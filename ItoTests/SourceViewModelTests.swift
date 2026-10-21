@@ -319,6 +319,7 @@ final class SourceViewModelTests: XCTestCase {
         XCTAssertEqual(files.stagedSnapshots.map(\.identity.fileURL), [plugin.url])
         XCTAssertEqual(publisher.callCount, 1)
         XCTAssertEqual(publisher.publishCount, 1)
+        XCTAssertEqual(publisher.removedSecretsPluginIDs, [plugin.id])
         XCTAssertEqual(files.transaction.commitCount, 1)
         XCTAssertEqual(commitCountAtPublication, 1)
         XCTAssertEqual(files.transaction.rollbackCount, 0)
@@ -364,6 +365,7 @@ final class SourceViewModelTests: XCTestCase {
         XCTAssertEqual(files.transaction.commitCount, 0)
         XCTAssertEqual(files.transaction.rollbackCount, 1)
         XCTAssertEqual(publisher.publishCount, 0)
+        XCTAssertTrue(publisher.removedSecretsPluginIDs.isEmpty)
         XCTAssertFalse(viewModel.shouldDismiss)
         XCTAssertNotNil(viewModel.archivedPluginDeleteError)
     }

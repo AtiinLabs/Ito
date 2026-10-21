@@ -424,7 +424,8 @@ final class AppScopeIdentityTests: XCTestCase {
                     storage: noOpRefresh,
                     appearance: noOpRefresh
                 )
-            )
+            ),
+            pluginSecrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain())
         )
         let librarySourceRemapper = LibrarySourceRemapper(dbPool: database.dbPool)
         let notificationManager = NotificationManager()
@@ -711,6 +712,7 @@ private final class AppScopeBrowsePluginManager: BrowsePluginManaging {
     }
 
     func reloadInstalledPlugins() async {}
+    func removeSecrets(for pluginID: String) {}
 }
 
 @MainActor

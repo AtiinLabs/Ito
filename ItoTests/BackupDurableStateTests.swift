@@ -81,7 +81,8 @@ struct BackupDurableStateTests {
             dbPool: target.dbPool,
             sourceDatabaseURL: target.databaseURL,
             exportReadiness: {},
-            restoreRefresher: refresher
+            restoreRefresher: refresher,
+            pluginSecrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain())
         )
 
         do {
@@ -99,6 +100,34 @@ struct BackupDurableStateTests {
         }
     }
 
+    @Test(arguments: [BackupRestoreMode.wipe, .merge])
+    func onlyAWipeRestoreClearsPluginSecrets(mode: BackupRestoreMode) async throws {
+        let target = try TestDatabase()
+        defer { target.cleanup() }
+        let source = try TestDatabase()
+        defer { source.cleanup() }
+        let backupURL = source.databaseURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("source.itobackup")
+        let backupQueue = try DatabaseQueue(path: backupURL.path)
+        try source.dbPool.backup(to: backupQueue)
+        try backupQueue.close()
+        let keychain = InMemoryPluginSecretKeychain()
+        let secrets = PluginSecretStore(keychain: keychain)
+        try secrets.setValue("secret", pluginID: "com.atiinlabs.komga", key: "api_key")
+        let manager = BackupManager(
+            dbPool: target.dbPool,
+            sourceDatabaseURL: target.databaseURL,
+            exportReadiness: {},
+            restoreRefresher: makeRefresher(database: target),
+            pluginSecrets: secrets
+        )
+
+        _ = try await manager.restoreBackup(from: backupURL, mode: mode)
+
+        #expect(keychain.storedAccounts.isEmpty == (mode == .wipe))
+    }
+
     @Test func inProcessDiscoveryEpochStartsOnlyAfterFinalAcknowledgment() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
@@ -112,6 +141,7 @@ struct BackupDurableStateTests {
             sourceDatabaseURL: database.databaseURL,
             exportReadiness: {},
             restoreRefresher: makeRefresher(database: database),
+            pluginSecrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain()),
             onAllReportsAcknowledged: {
                 _ = discoveryEpochs.increment()
             }

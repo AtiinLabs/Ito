@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import OSLog
 import ito_runner
 
 @MainActor
@@ -8,6 +9,8 @@ protocol BrowsePluginManaging: AnyObject {
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> { get }
 
     func reloadInstalledPlugins() async
+    /// Forgets a deleted plugin's secret settings.
+    func removeSecrets(for pluginID: String)
 }
 
 @MainActor
@@ -52,6 +55,16 @@ protocol BrowseMessagePresenting: AnyObject {
 extension PluginManager: BrowsePluginManaging {
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> {
         $installedPlugins.eraseToAnyPublisher()
+    }
+
+    /// Deleting a plugin removes its secrets (API keys, passwords) from the Keychain. Its plain
+    /// settings stay, as they always have, so a reinstall keeps them.
+    func removeSecrets(for pluginID: String) {
+        do {
+            try pluginSettingsStore.secrets.removeAll(pluginID: pluginID)
+        } catch {
+            AppLogger.plugin.error("The secrets of a deleted plugin could not be removed.")
+        }
     }
 }
 

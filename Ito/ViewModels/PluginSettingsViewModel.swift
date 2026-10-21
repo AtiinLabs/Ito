@@ -127,7 +127,34 @@ final class PluginSettingsViewModel: ObservableObject {
 
     @discardableResult
     func persistValue(key: String, value: String) -> Bool {
-        guard settingsStore.persistValue(pluginID: plugin.id, key: key, value: value) else {
+        finishPersistence(settingsStore.persistValue(pluginID: plugin.id, key: key, value: value))
+    }
+
+    func ensureDefault(key: String, value: String) {
+        guard storedValue(key: key) == nil else { return }
+        persistValue(key: key, value: value)
+    }
+
+    func hasSecret(key: String) -> Bool {
+        _ = bindingRevision
+        return settingsStore.hasSecret(pluginID: plugin.id, key: key)
+    }
+
+    /// Saves a secret setting. Surrounding whitespace is dropped; an empty value saves nothing.
+    @discardableResult
+    func persistSecret(key: String, value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return finishPersistence(settingsStore.persistSecret(pluginID: plugin.id, key: key, value: trimmed))
+    }
+
+    @discardableResult
+    func clearSecret(key: String) -> Bool {
+        finishPersistence(settingsStore.clearSecret(pluginID: plugin.id, key: key))
+    }
+
+    private func finishPersistence(_ succeeded: Bool) -> Bool {
+        guard succeeded else {
             persistenceError = "The setting could not be saved."
             messagePresenter.present(.settingsPersistenceFailed(pluginName: plugin.info.name))
             return false
@@ -135,11 +162,6 @@ final class PluginSettingsViewModel: ObservableObject {
         persistenceError = nil
         scheduleReload()
         return true
-    }
-
-    func ensureDefault(key: String, value: String) {
-        guard storedValue(key: key) == nil else { return }
-        persistValue(key: key, value: value)
     }
 
     func cancel() {

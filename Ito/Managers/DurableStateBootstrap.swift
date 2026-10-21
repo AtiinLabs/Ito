@@ -81,6 +81,7 @@ public final class DurableStateBootstrap: ObservableObject {
     private let installedPluginsDirectory: URL?
     private let runtimeDefaultsSuiteName: String?
     private let trackerKeychainService: String
+    private let pluginSecrets: PluginSecretStore
     private var preparationTask: Task<Bool, Never>?
     private var sourcesPrepared = false
     private var runtime: Runtime?
@@ -116,7 +117,8 @@ public final class DurableStateBootstrap: ObservableObject {
         sourceDatabaseURL: URL,
         installedPluginsDirectory: URL? = nil,
         runtimeDefaultsSuiteName: String? = nil,
-        trackerKeychainService: String = "moe.itoapp.ito.tracker.oauth-token"
+        trackerKeychainService: String = "moe.itoapp.ito.tracker.oauth-token",
+        pluginSecrets: PluginSecretStore = PluginSecretStore()
     ) {
         self.dbPool = dbPool
         self.migration = migration
@@ -128,6 +130,7 @@ public final class DurableStateBootstrap: ObservableObject {
         self.installedPluginsDirectory = installedPluginsDirectory
         self.runtimeDefaultsSuiteName = runtimeDefaultsSuiteName
         self.trackerKeychainService = trackerKeychainService
+        self.pluginSecrets = pluginSecrets
     }
 
     public func prepare() async -> Bool {
@@ -262,7 +265,7 @@ public final class DurableStateBootstrap: ObservableObject {
 
     private func makeRuntime() -> Runtime {
         let settings = AppSettingsStore(dbPool: dbPool)
-        let pluginSettings = PluginSettingsStore(dbPool: dbPool)
+        let pluginSettings = PluginSettingsStore(dbPool: dbPool, secrets: pluginSecrets)
         let plugins: PluginManager = {
             guard let installedPluginsDirectory else {
                 let plugins = PluginManager(pluginSettingsStore: pluginSettings)
@@ -362,6 +365,7 @@ public final class DurableStateBootstrap: ObservableObject {
                 try await plugins.discoverAndPrepareInstalledPlugins(failOnInvalidPlugin: true)
             },
             restoreRefresher: refresher,
+            pluginSecrets: pluginSecrets,
             onAllReportsAcknowledged: {
                 try await plugins.discoverAndPrepareInstalledPlugins(failOnInvalidPlugin: true)
                 try pluginSettings.reload()
@@ -522,6 +526,7 @@ public final class DurableStateBootstrap: ObservableObject {
         let defaults: UserDefaults
         let launchDefaultsSuiteName: String?
         let trackerKeychainService: String
+        let pluginSecrets: PluginSecretStore
         let installedPluginsDirectory: URL?
         let extensions: [any DurableStateBootstrapExtension]
         #if DEBUG
@@ -530,6 +535,12 @@ public final class DurableStateBootstrap: ObservableObject {
             domainName = UITestLaunchConfiguration.fixtureDefaultsSuiteName
             launchDefaultsSuiteName = domainName
             trackerKeychainService = UITestLaunchConfiguration.fixtureTrackerKeychainService
+            // UI tests run without the first-run setup: no default repository to fetch over the network.
+            pluginSecrets = PluginSecretStore(
+                keychain: SystemPluginSecretKeychain(
+                    service: UITestLaunchConfiguration.fixturePluginSecretKeychainService
+                )
+            )
             guard let fixtureDefaults = UserDefaults(suiteName: domainName) else {
                 fatalError("Failed to create UI test defaults suite.")
             }
@@ -559,16 +570,24 @@ public final class DurableStateBootstrap: ObservableObject {
             defaults = .standard
             launchDefaultsSuiteName = nil
             trackerKeychainService = KeychainTrackerCredentialStore.productionService
+            pluginSecrets = PluginSecretStore()
             installedPluginsDirectory = nil
-            extensions = [InstalledPluginSuiteBootstrapExtension()]
+            extensions = [
+                InstalledPluginSuiteBootstrapExtension(),
+                FirstRunSetupBootstrapExtension(secrets: pluginSecrets)
+            ]
         }
         #else
         domainName = Bundle.main.bundleIdentifier ?? "moe.itoapp.ito"
         defaults = .standard
         launchDefaultsSuiteName = nil
         trackerKeychainService = KeychainTrackerCredentialStore.productionService
+        pluginSecrets = PluginSecretStore()
         installedPluginsDirectory = nil
-        extensions = [InstalledPluginSuiteBootstrapExtension()]
+        extensions = [
+            InstalledPluginSuiteBootstrapExtension(),
+            FirstRunSetupBootstrapExtension(secrets: pluginSecrets)
+        ]
         #endif
         let dbPool = AppDatabase.shared.dbPool
         let domain = UserDefaultsLegacyDomain(defaults: defaults, domainName: domainName)
@@ -583,7 +602,8 @@ public final class DurableStateBootstrap: ObservableObject {
             sourceDatabaseURL: AppDatabase.shared.databaseURL,
             installedPluginsDirectory: installedPluginsDirectory,
             runtimeDefaultsSuiteName: launchDefaultsSuiteName,
-            trackerKeychainService: trackerKeychainService
+            trackerKeychainService: trackerKeychainService,
+            pluginSecrets: pluginSecrets
         )
     }
 }

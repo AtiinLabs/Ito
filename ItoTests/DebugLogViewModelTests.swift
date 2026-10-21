@@ -504,6 +504,7 @@ private final class DebugLogPluginManager: BrowsePluginManaging {
     }
 
     func reloadInstalledPlugins() async {}
+    func removeSecrets(for pluginID: String) {}
 }
 
 @MainActor

@@ -40,7 +40,8 @@ nonisolated public struct BackupExportOperation: Sendable {
         LegacyStateMigrationRecord.databaseTableName,
         PluginSettingMigrationAuthorityRecord.databaseTableName,
         BackupRestoreJournalRecord.databaseTableName,
-        ThemeCacheRecord.databaseTableName
+        ThemeCacheRecord.databaseTableName,
+        FirstRunSetupRecord.databaseTableName
     ]
 
     static let excludedTableReasons: [String: String] = [
@@ -59,7 +60,9 @@ nonisolated public struct BackupExportOperation: Sendable {
         BackupMetadataRecord.databaseTableName:
             "Backup envelope metadata rewritten for every export.",
         BackupCapabilityRecord.databaseTableName:
-            "Backup envelope capabilities recomputed from exported durable rows."
+            "Backup envelope capabilities recomputed from exported durable rows.",
+        FirstRunSetupRecord.databaseTableName:
+            "Installation-local marker that this device's one-time setup has run."
     ]
 
     static let durableTablesByComponent: [BackupComponent: [String]] = [

@@ -207,6 +207,7 @@ final class SourceViewModel: ObservableObject {
             try publication.validateCurrentState()
             try transaction?.commit()
             publication.publish()
+            pluginStatePublisher.removeSecrets(for: plugin.id)
             shouldDismiss = true
             finishDeletion(operationID)
         } catch {

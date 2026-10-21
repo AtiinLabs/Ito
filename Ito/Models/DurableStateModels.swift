@@ -85,6 +85,13 @@ public struct RepositoryRecord: Codable, Identifiable, Hashable, Sendable, Fetch
     public var indexPayload: Data?
 }
 
+/// Marks this database's one-time setup as done. Installation-local; never exported.
+public struct FirstRunSetupRecord: Codable, Hashable, Sendable, FetchableRecord, PersistableRecord {
+    public static let databaseTableName = "firstRunSetup"
+    public var id = 1
+    public let completedAt: Date
+}
+
 public struct PluginMigrationAliasRecord: Codable, Identifiable, Hashable, Sendable, FetchableRecord, PersistableRecord {
     public static let databaseTableName = "pluginMigrationAlias"
     public var id: String { foreignId }
