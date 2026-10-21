@@ -164,32 +164,28 @@ public final class ReadProgressManager: ObservableObject {
                     provenance: .runtime
                 ).save(db)
             }
-            // Keep the saved position when the chapter being finished is the one it belongs to.
-            let existing = try MediaReadProgressRecord.fetchOne(
-                db,
-                key: ["pluginId": media.pluginId, "canonicalMediaId": media.canonicalMediaId]
-            )
+            // Marking a chapter read never moves the series' reading place: readers save that
+            // themselves, and a late mark for an earlier chapter must not undo a newer place.
+            // Only a series with no reading state yet starts one at this chapter.
+            let key: [String: DatabaseValueConvertible] = [
+                "pluginId": media.pluginId,
+                "canonicalMediaId": media.canonicalMediaId
+            ]
+            guard try MediaReadProgressRecord.fetchOne(db, key: key) == nil else { return }
             try MediaReadProgressRecord(
                 pluginId: media.pluginId,
                 canonicalMediaId: media.canonicalMediaId,
                 lastReadChapterKey: chapterId,
                 updatedAt: now,
-                provenance: .runtime,
-                lastReadPosition: existing?.lastReadChapterKey == chapterId
-                    ? existing?.lastReadPosition
-                    : nil,
-                readerViewer: existing?.readerViewer
-            ).save(db)
+                provenance: .runtime
+            ).insert(db)
         }
 
         readChapters[media, default: []].insert(chapterId)
         if let chapterNum {
             readChapterNumbers[media, default: []].insert(chapterNum)
         }
-        if lastReadChapter[media] != chapterId {
-            lastReadPosition[media] = nil
-        }
-        if lastReadChapter[media] != chapterId {
+        if lastReadChapter[media] == nil {
             lastReadChapter[media] = chapterId
         }
     }

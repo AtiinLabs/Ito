@@ -137,22 +137,28 @@ struct ReadProgressStoreTests {
         #expect(reloaded.savedPosition(media: media, chapterKey: "chapter-3") == 12)
     }
 
-    @Test func finishingTheSavedChapterKeepsItsPositionButAnotherChapterClearsIt() async throws {
+    @Test func markingAChapterReadNeverMovesTheReadingPlace() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let manager = ReadProgressManager(dbPool: database.dbPool)
         let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
 
+        // A series with no reading state starts it at the chapter marked read.
+        try await manager.markAsRead(media: media, chapterId: "chapter-1", chapterNum: 1)
+        #expect(manager.lastReadChapter(for: media) == "chapter-1")
+
         try await manager.savePosition(media: media, chapterKey: "chapter-3", position: 19)
         try await manager.markAsRead(media: media, chapterId: "chapter-3", chapterNum: 3)
         #expect(manager.savedPosition(media: media, chapterKey: "chapter-3") == 19)
 
-        try await manager.markAsRead(media: media, chapterId: "chapter-7", chapterNum: 7)
-        #expect(manager.savedPosition(media: media, chapterKey: "chapter-7") == nil)
+        // The reader moved on to chapter 4 before chapter 3's read mark landed.
+        try await manager.savePosition(media: media, chapterKey: "chapter-4", position: 2)
+        try await manager.markAsRead(media: media, chapterId: "chapter-3", chapterNum: 3)
+        #expect(manager.isRead(media: media, chapterId: "chapter-3", chapterNum: 3))
         let reloaded = ReadProgressManager(dbPool: database.dbPool)
         try await reloaded.reload()
-        #expect(reloaded.lastReadChapter(for: media) == "chapter-7")
-        #expect(reloaded.savedPosition(media: media, chapterKey: "chapter-7") == nil)
+        #expect(reloaded.lastReadChapter(for: media) == "chapter-4")
+        #expect(reloaded.savedPosition(media: media, chapterKey: "chapter-4") == 2)
     }
 
     @Test func readingModeSurvivesPositionAndReadWritesAndReload() async throws {
