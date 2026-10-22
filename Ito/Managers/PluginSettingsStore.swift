@@ -93,7 +93,22 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
         self.operationFault = operationFault
         self.clock = clock
         self.secrets = secrets
+        secrets.configureBeforeMutation { [dbPool] in
+            try PluginImageCacheEpoch.rotate(in: dbPool)
+        }
         dbPool.add(transactionObserver: discoverySources, extent: .observerLifetime)
+    }
+
+    internal func observeImageCacheEpoch(
+        _ onChange: @escaping @Sendable (String?) -> Void
+    ) throws -> PluginImageCacheEpochObservation {
+        try dbPool.writeWithoutTransaction { db in
+            let observer = PluginImageCacheEpochObservation(onChange: onChange)
+            db.add(transactionObserver: observer, extent: .observerLifetime)
+            let initialEpoch = try PluginImageCacheEpoch.current(in: db)
+            onChange(initialEpoch)
+            return observer
+        }
     }
 
     @discardableResult

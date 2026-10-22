@@ -84,12 +84,19 @@ nonisolated public final class PluginSecretStore: @unchecked Sendable {
 
     private let keychain: any PluginSecretKeychain
     private let lock = NSLock()
+    private var beforeMutationHook: (@Sendable () throws -> Void)?
     /// Values and known-missing entries by Keychain account. Plugins read settings on every call,
     /// image loads included, so each secret is read from the Keychain once.
     private var cache: [String: String?] = [:]
 
     public init(keychain: any PluginSecretKeychain = SystemPluginSecretKeychain()) {
         self.keychain = keychain
+    }
+
+    internal func configureBeforeMutation(_ hook: @escaping @Sendable () throws -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+        beforeMutationHook = hook
     }
 
     public func value(pluginID: String, key: String) -> String? {
@@ -116,6 +123,7 @@ nonisolated public final class PluginSecretStore: @unchecked Sendable {
         let account = Self.account(pluginID: pluginID, key: key)
         lock.lock()
         defer { lock.unlock() }
+        try beforeMutationHook?()
         let status = keychain.setData(Data(value.utf8), account: account)
         guard status == errSecSuccess else {
             cache.removeValue(forKey: account)
@@ -128,6 +136,7 @@ nonisolated public final class PluginSecretStore: @unchecked Sendable {
         let account = Self.account(pluginID: pluginID, key: key)
         lock.lock()
         defer { lock.unlock() }
+        try beforeMutationHook?()
         let status = keychain.delete(account: account)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             cache.removeValue(forKey: account)
@@ -141,6 +150,7 @@ nonisolated public final class PluginSecretStore: @unchecked Sendable {
         let prefix = Self.account(pluginID: pluginID, key: "")
         lock.lock()
         defer { lock.unlock() }
+        try beforeMutationHook?()
         let (status, accounts) = keychain.accounts()
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw PluginSecretStoreError(status: status)
@@ -160,6 +170,7 @@ nonisolated public final class PluginSecretStore: @unchecked Sendable {
     public func removeAll() throws {
         lock.lock()
         defer { lock.unlock() }
+        try beforeMutationHook?()
         let status = keychain.deleteAll()
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw PluginSecretStoreError(status: status)

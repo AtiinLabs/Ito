@@ -41,7 +41,8 @@ nonisolated public struct BackupExportOperation: Sendable {
         PluginSettingMigrationAuthorityRecord.databaseTableName,
         BackupRestoreJournalRecord.databaseTableName,
         ThemeCacheRecord.databaseTableName,
-        FirstRunSetupRecord.databaseTableName
+        FirstRunSetupRecord.databaseTableName,
+        PluginImageCacheEpoch.tableName
     ]
 
     static let excludedTableReasons: [String: String] = [
@@ -62,7 +63,9 @@ nonisolated public struct BackupExportOperation: Sendable {
         BackupCapabilityRecord.databaseTableName:
             "Backup envelope capabilities recomputed from exported durable rows.",
         FirstRunSetupRecord.databaseTableName:
-            "Installation-local marker that this device's one-time setup has run."
+            "Installation-local marker that this device's one-time setup has run.",
+        PluginImageCacheEpoch.tableName:
+            "Installation-local cache invalidation epoch; never exported in backups."
     ]
 
     static let durableTablesByComponent: [BackupComponent: [String]] = [

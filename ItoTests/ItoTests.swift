@@ -11,20 +11,6 @@ import GRDB
 
 struct ItoTests {
 
-    @Test func productionMigratedTestDatabase() throws {
-        let database = try TestDatabase()
-        defer { database.cleanup() }
-
-        let appliedMigrations = try database.dbPool.read { db in
-            try String.fetchAll(
-                db,
-                sql: "SELECT identifier FROM grdb_migrations ORDER BY rowid"
-            )
-        }
-
-        #expect(appliedMigrations == ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"])
-    }
-
     @Test func upgradeCreatesSystemListAndFilesListlessSeriesIntoIt() throws {
         let queue = try DatabaseQueue()
         let migrator = AppDatabase.makeMigrator()

@@ -2,18 +2,36 @@ import Foundation
 import Nuke
 import ito_runner
 
+/// The optional image exports needed by the loader. The actor keeps WASM resolution serialized;
+/// native HTTP work starts only after these calls return.
+protocol PluginImageRunner: Sendable {
+    func getImageRequest(_ locator: String) async throws -> PluginImageRequest?
+    func getImageOrigins() async throws -> [String]?
+    func handleImage(_ locator: String) async throws -> Data?
+}
+
+extension ItoRunner: PluginImageRunner {}
+
 /// Intercepts requests that have custom schemes or special paths
 /// and routes them through the PluginManager to the appropriate Wasm module.
 public final class PluginDataLoader: DataLoading, @unchecked Sendable {
     private let defaultLoader: DataLoader
-    private let pluginManager: PluginManager
-
-    public init(
+    private let runnerProvider: @Sendable (String) async throws -> any PluginImageRunner
+    private let imageTransport: PluginImageTransport
+    public convenience init(
         configuration: URLSessionConfiguration = .default,
         pluginManager: PluginManager
     ) {
+        self.init(configuration: configuration, runnerProvider: { try await pluginManager.getRunner(for: $0) })
+    }
+
+    init(
+        configuration: URLSessionConfiguration,
+        runnerProvider: @escaping @Sendable (String) async throws -> any PluginImageRunner
+    ) {
         self.defaultLoader = DataLoader(configuration: configuration)
-        self.pluginManager = pluginManager
+        self.runnerProvider = runnerProvider
+        self.imageTransport = PluginImageTransport(configuration: configuration)
     }
 
     public func loadData(with request: URLRequest, didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void, completion: @escaping @Sendable (Error?) -> Void) -> Cancellable {
@@ -43,11 +61,26 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                 realUrlString = realUrlString.replacingOccurrences(of: "http:/", with: "http://")
                 realUrlString = realUrlString.replacingOccurrences(of: "https:///", with: "https://")
 
-                guard let runner = try? await pluginManager.getRunner(for: pluginId) else {
-                    throw URLError(.fileDoesNotExist)
+                let runner = try await runnerProvider(pluginId)
+                try Task.checkCancellation()
+
+                if let resolved = try await pluginCall({ try await runner.getImageRequest(realUrlString) }) {
+                    let origins = try await pluginCall { try await runner.getImageOrigins() } ?? []
+                    guard let target = URL(string: resolved.url) else { throw URLError(.badURL) }
+                    let (data, response) = try await imageTransport.fetch(
+                        url: target,
+                        headers: resolved.headers,
+                        allowedOrigins: origins
+                    )
+                    try Task.checkCancellation()
+                    didReceiveData(data, response)
+                    completion(nil)
+                    return
                 }
 
-                if let data = try await pluginCall({ try await runner.handleImage(realUrlString) }) {
+                let handledData = try await pluginCall { try await runner.handleImage(realUrlString) }
+                try Task.checkCancellation()
+                if let data = handledData {
                     let response = URLResponse(
                         url: url,
                         mimeType: Self.imageMIMEType(of: data),
@@ -59,10 +92,11 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                 } else {
                     // The plugin doesn't handle images: fetch the URL directly. A plugin that
                     // handles images but refused this one throws instead, and nothing is fetched.
-                    if let realUrl = URL(string: realUrlString) {
+                    if let realUrl = URL(string: realUrlString),
+                       let scheme = realUrl.scheme?.lowercased(), scheme == "https" || scheme == "http" {
                         var realRequest = request
                         realRequest.url = realUrl
-                        guard !cancellationLatch.isCancelled && !Task.isCancelled else { return }
+                        guard !cancellationLatch.isCancelled && !Task.isCancelled else { throw CancellationError() }
                         let sub = defaultLoader.loadData(with: realRequest, didReceiveData: didReceiveData, completion: completion)
                         cancellationLatch.setUnderlying(sub)
                     } else {

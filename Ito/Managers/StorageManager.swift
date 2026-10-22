@@ -13,6 +13,7 @@ public class StorageManager: ObservableObject {
     // Maintain a reference to our custom data cache
     private var dataCache: DataCache?
     private var settingsCancellable: AnyCancellable?
+    private var imagePipelineController: PluginImagePipelineController?
     private let pluginManager: PluginManager
     /// Bumped by every measurement so an older, slower one cannot overwrite a newer result.
     private var cacheSizeGeneration = 0
@@ -45,36 +46,31 @@ public class StorageManager: ObservableObject {
 
     private func setupNukePipeline() {
         let capacityBytes = Int(diskCacheLimitGB * 1024 * 1024 * 1024)
-
         do {
-            let dataCache = try DataCache(name: "com.ito.datacache")
-            dataCache.sizeLimit = capacityBytes
-            self.dataCache = dataCache
-
-            // Set up Nuke to use our aggressive data cache instead of URLCache
-            ImagePipeline.shared = ImagePipeline(delegate: NukeDiagnosticDelegate.shared) {
-                $0.dataCache = dataCache
-                $0.makeImageDecoder = ItoImageDecoders.make(for:)
-                let config = URLSessionConfiguration.default
-                config.urlCache = nil
-                config.httpAdditionalHeaders = ["User-Agent": CloudflareManager.defaultUserAgent]
-                $0.dataLoader = PluginDataLoader(
-                    configuration: config,
-                    pluginManager: pluginManager
-                )
-            }
+            let cache = try DataCache(name: "com.ito.datacache")
+            cache.sizeLimit = capacityBytes
+            dataCache = cache
         } catch {
-            AppLogger.general.error("Failed to initialize Nuke DataCache: \(error)")
-            // Fallback preserves PluginDataLoader and diagnostic delegate even if DataCache fails
-            let config = URLSessionConfiguration.default
-            config.httpAdditionalHeaders = ["User-Agent": CloudflareManager.defaultUserAgent]
-            ImagePipeline.shared = ImagePipeline(delegate: NukeDiagnosticDelegate.shared) {
-                $0.makeImageDecoder = ItoImageDecoders.make(for:)
-                $0.dataLoader = PluginDataLoader(
-                    configuration: config,
-                    pluginManager: pluginManager
-                )
-            }
+            AppLogger.general.error("Image disk cache is unavailable.")
+        }
+
+        let config = URLSessionConfiguration.default
+        config.urlCache = nil
+        config.httpAdditionalHeaders = ["User-Agent": CloudflareManager.defaultUserAgent]
+        let loader = PluginDataLoader(configuration: config, pluginManager: pluginManager)
+        let controller = PluginImagePipelineController(
+            dataCache: dataCache,
+            dataLoader: loader,
+            diagnostics: NukeDiagnosticDelegate.shared
+        )
+        imagePipelineController = controller
+        do {
+            try controller.startObserving(pluginManager.pluginSettingsStore)
+        } catch {
+            // HTTP image loading still works, but unknown cache authority never reuses private
+            // plugin images from a previous configuration.
+            AppLogger.general.error("Plugin image cache metadata is unavailable; private caches are disabled.")
+            controller.install(epoch: nil)
         }
     }
 
@@ -97,6 +93,7 @@ public class StorageManager: ObservableObject {
 
     public func clearCache() async {
         ImageCache.shared.removeAll()
+        imagePipelineController?.clearPluginMemoryCache()
         URLCache.shared.removeAllCachedResponses()
         guard let dataCache else { return }
         cacheSizeGeneration += 1

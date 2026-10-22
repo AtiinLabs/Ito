@@ -485,6 +485,49 @@ public final class AppDatabase: Sendable {
             }
         }
 
+        // MARK: - v13: Plugin image cache epoch
+        // App-private singleton epoch row rotated on plugin setting/credential changes.
+        migrator.registerMigration("v13") { db in
+            try db.create(table: "pluginImageCacheEpoch") { t in
+                t.column("id", .integer).notNull().primaryKey().check { $0 == 1 }
+                t.column("epoch", .text).notNull()
+            }
+            try db.execute(sql: """
+                INSERT INTO pluginImageCacheEpoch (id, epoch)
+                VALUES (1, lower(hex(randomblob(16))))
+                """)
+            try db.execute(sql: """
+                CREATE TRIGGER pluginSetting_after_insert_rotate_epoch
+                AFTER INSERT ON pluginSetting
+                BEGIN
+                    INSERT INTO pluginImageCacheEpoch (id, epoch)
+                    VALUES (1, lower(hex(randomblob(16))))
+                    ON CONFLICT(id) DO UPDATE SET epoch = lower(hex(randomblob(16)));
+                END
+                """)
+            try db.execute(sql: """
+                CREATE TRIGGER pluginSetting_after_delete_rotate_epoch
+                AFTER DELETE ON pluginSetting
+                BEGIN
+                    INSERT INTO pluginImageCacheEpoch (id, epoch)
+                    VALUES (1, lower(hex(randomblob(16))))
+                    ON CONFLICT(id) DO UPDATE SET epoch = lower(hex(randomblob(16)));
+                END
+                """)
+            try db.execute(sql: """
+                CREATE TRIGGER pluginSetting_after_update_rotate_epoch
+                AFTER UPDATE ON pluginSetting
+                WHEN OLD.value IS NOT NEW.value
+                  OR OLD.pluginId IS NOT NEW.pluginId
+                  OR OLD.key IS NOT NEW.key
+                BEGIN
+                    INSERT INTO pluginImageCacheEpoch (id, epoch)
+                    VALUES (1, lower(hex(randomblob(16))))
+                    ON CONFLICT(id) DO UPDATE SET epoch = lower(hex(randomblob(16)));
+                END
+                """)
+        }
+
         return migrator
     }
 

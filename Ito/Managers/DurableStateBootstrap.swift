@@ -131,6 +131,9 @@ public final class DurableStateBootstrap: ObservableObject {
         self.runtimeDefaultsSuiteName = runtimeDefaultsSuiteName
         self.trackerKeychainService = trackerKeychainService
         self.pluginSecrets = pluginSecrets
+        pluginSecrets.configureBeforeMutation { [dbPool] in
+            try PluginImageCacheEpoch.rotate(in: dbPool)
+        }
     }
 
     public func prepare() async -> Bool {

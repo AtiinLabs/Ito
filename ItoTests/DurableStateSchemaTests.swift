@@ -86,7 +86,8 @@ struct DurableStateSchemaTests {
             "backupMetadata": .init(columns: ["id", "formatVersion", "createdAt"], primaryKey: ["id"], nullable: []),
             "backupCapability": .init(columns: ["component", "representation"], primaryKey: ["component"], nullable: []),
             "backupRestoreJournal": .init(columns: ["operationId", "status", "reportPayload", "updatedAt"], primaryKey: ["operationId"], nullable: []),
-            "firstRunSetup": .init(columns: ["id", "completedAt"], primaryKey: ["id"], nullable: [])
+            "firstRunSetup": .init(columns: ["id", "completedAt"], primaryKey: ["id"], nullable: []),
+            "pluginImageCacheEpoch": .init(columns: ["id", "epoch"], primaryKey: ["id"], nullable: [])
         ]
         let preexistingTables: Set<String> = [
             "libraryCategory", "libraryItem", "itemCategoryLink", "readingHistory", "themeCache",
