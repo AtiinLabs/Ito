@@ -125,6 +125,9 @@ public class UpdateManager: ObservableObject {
     @Published public private(set) var totalItemsToCheck: Int = 0
     @Published public private(set) var itemsCheckedCurrentRun: Int = 0
 
+    /// User-facing source failures for this run only; never persisted or logged.
+    @Published private(set) var sourceFailures: [LibraryUpdateFailure] = []
+
     /// Sources checked at the same time. Series of one source are always checked one at a time.
     static let maxConcurrentSources = 3
     /// Background checks look at most this share of the eligible library, at least `minimumBackgroundBatch`.
@@ -185,6 +188,7 @@ public class UpdateManager: ObservableObject {
             AppLogger.update.debug("🔄 [UpdateManager] Already refreshing, skipping.")
             throw UpdateRunError.alreadyRunning
         }
+        sourceFailures = []
         guard let settingsStore else {
             AppLogger.update.error("🔄 [UpdateManager] Settings unavailable before durable bootstrap.")
             throw UpdateRunError.notReady
@@ -332,7 +336,7 @@ public class UpdateManager: ObservableObject {
 
     private func checkSingleItem(_ item: LibraryItem) async -> Int? {
         guard let updateSource else { return nil }
-        AppLogger.update.debug("🔄 [UpdateManager] Checking: \(item.title)")
+        AppLogger.update.debug("🔄 [UpdateManager] Checking a library series.")
         return await processUpdate(for: item, checkedAt: now()) {
             try await updateSource.fetchUpdate(for: item)
         }
@@ -358,7 +362,21 @@ public class UpdateManager: ObservableObject {
         } catch is CancellationError {
             return nil
         } catch {
-            AppLogger.update.error("🔄 [UpdateManager] ❌ Failed for \(item.title): \(error)")
+            guard !Task.isCancelled else { return nil }
+            let failure = LibraryUpdateFailure(
+                pluginID: item.pluginId,
+                reason: error.localizedDescription,
+                needsSettings: (error as? PluginCallError)?.kind == .needsSettings
+            )
+            if let index = sourceFailures.firstIndex(where: { $0.pluginID == item.pluginId }) {
+                // Keep one row per source, preferring an actionable settings failure.
+                if failure.needsSettings && !sourceFailures[index].needsSettings {
+                    sourceFailures[index] = failure
+                }
+            } else {
+                sourceFailures.append(failure)
+            }
+            AppLogger.update.error("🔄 [UpdateManager] A source update fetch failed.")
             await recordFailedAttempt(for: item.id, at: checkedAt)
             return nil
         }
@@ -410,7 +428,7 @@ public class UpdateManager: ObservableObject {
             }
 
             AppLogger.update.debug(
-                "🔄 [UpdateManager] \(item.title): \(String(describing: committed.oldCount)) known, \(update.freshCount) fresh/persisted -> \(committed.delta) new, \(committed.unread) unread"
+                "🔄 [UpdateManager] \(String(describing: committed.oldCount)) known, \(update.freshCount) fresh/persisted -> \(committed.delta) new, \(committed.unread) unread"
             )
             if committed.unread > 0 {
                 newChapterCounts[media] = committed.unread
@@ -419,7 +437,7 @@ public class UpdateManager: ObservableObject {
             }
             return committed.delta
         } catch {
-            AppLogger.update.error("🔄 [UpdateManager] ❌ Failed to save the check for \(item.title): \(error)")
+            AppLogger.update.error("🔄 [UpdateManager] Failed to save an update check.")
             return nil
         }
     }
@@ -432,7 +450,7 @@ public class UpdateManager: ObservableObject {
                 try dbItem.update(db)
             }
         } catch {
-            AppLogger.update.error("🔄 [UpdateManager] ❌ Failed to record a failed check: \(error)")
+            AppLogger.update.error("🔄 [UpdateManager] Failed to record a failed check.")
         }
     }
 

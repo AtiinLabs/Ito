@@ -4,6 +4,188 @@ import ito_runner
 
 @MainActor
 final class SearchViewModelTests: XCTestCase {
+    func testSettingsFailureIsActionableAndRetryClearsPriorFailuresImmediately() async {
+        let executor = SearchViewModelRecordingExecutor(plugins: [.manga()])
+        executor.errorsByPluginID["plugin.manga"] = PluginCallError(
+            kind: .needsSettings, message: "Sign in to search."
+        )
+        let failed = expectation(description: "Settings failure finishes")
+        let retried = expectation(description: "Retry succeeds")
+        let logger = SearchFailureEventLogger { event in
+            guard event.kind == .operation else { return }
+            if event.outcome == .failed(.pluginExecution) { failed.fulfill() }
+            if event.outcome == .succeeded { retried.fulfill() }
+        }
+        let viewModel = makeViewModel(executor: executor, logger: logger)
+
+        viewModel.performSearch(query: "query")
+        await fulfillment(of: [failed], timeout: 1)
+        XCTAssertEqual(viewModel.pluginFailures, [
+            .init(
+                pluginID: "plugin.manga", pluginName: "Manga Plugin",
+                message: "Sign in to search.", canOpenSettings: true
+            )
+        ])
+        guard case .failure(.pluginExecution) = viewModel.state else {
+            return XCTFail("Expected total failure")
+        }
+
+        executor.errorsByPluginID = [:]
+        viewModel.performSearch(query: "query")
+        XCTAssertTrue(viewModel.pluginFailures.isEmpty)
+        await fulfillment(of: [retried], timeout: 1)
+        XCTAssertTrue(viewModel.pluginFailures.isEmpty)
+    }
+
+    func testNonPluginFailureUsesGenericMessageWithoutSettingsAction() async {
+        let executor = SearchViewModelRecordingExecutor(plugins: [.manga()])
+        executor.errorsByPluginID["plugin.manga"] = NSError(
+            domain: "private", code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "sentinel-private-internal-error"]
+        )
+        let finished = expectation(description: "Generic failure finishes")
+        let logger = SearchFailureEventLogger { event in
+            if event.kind == .operation, event.outcome == .failed(.pluginExecution) {
+                finished.fulfill()
+            }
+        }
+        let viewModel = makeViewModel(executor: executor, logger: logger)
+
+        viewModel.performSearch(query: "query")
+        await fulfillment(of: [finished], timeout: 1)
+
+        XCTAssertEqual(viewModel.pluginFailures.first?.message, "This source could not be searched.")
+        XCTAssertEqual(viewModel.pluginFailures.first?.canOpenSettings, false)
+        XCTAssertFalse(logger.messages.joined().contains("sentinel-private-internal-error"))
+    }
+
+    func testExecutorPreservesTypedErrorsAndGenericFallbackCategories() {
+        for kind: PluginCallError.Kind in [.reported, .needsSettings, .crashed, .incompatible, .host] {
+            let error = PluginCallError(kind: kind, message: "Source's own reason")
+            for fallback: SearchPluginExecutionError in [.pluginUnavailable, .pluginExecution] {
+                XCTAssertEqual(
+                    PluginManagerSearchExecutor.classify(error, fallback: fallback) as? PluginCallError,
+                    error
+                )
+                XCTAssertEqual(
+                    PluginManagerSearchExecutor.classify(URLError(.notConnectedToInternet), fallback: fallback)
+                        as? SearchPluginExecutionError,
+                    fallback
+                )
+            }
+        }
+    }
+
+    func testTypedFailuresPreserveMessagesAndSettingsActionsWithPartialSuccess() async {
+        let executor = SearchViewModelRecordingExecutor(plugins: [
+            .init(id: "plugin.a", name: "Alpha", kind: .manga),
+            .init(id: "plugin.b", name: "Beta", kind: .anime),
+            .init(id: "plugin.c", name: "Gamma", kind: .novel)
+        ])
+        let privateReason = "sentinel-private-settings-reason"
+        executor.errorsByPluginID["plugin.a"] = PluginManagerSearchExecutor.classify(
+            PluginCallError(kind: .needsSettings, message: privateReason),
+            fallback: .pluginExecution
+        )
+        executor.errorsByPluginID["plugin.b"] = PluginCallError(kind: .reported, message: "Try another title.")
+        executor.resultsByPluginID["plugin.c"] = [.result(id: "success")]
+        let finished = expectation(description: "Search finishes")
+        let logger = SearchFailureEventLogger { event in
+            if event.kind == .operation, event.outcome == .partiallySucceeded(.pluginExecution) {
+                finished.fulfill()
+            }
+        }
+        let viewModel = makeViewModel(executor: executor, logger: logger)
+
+        viewModel.performSearch(query: "query")
+        await fulfillment(of: [finished], timeout: 1)
+
+        XCTAssertEqual(viewModel.pluginFailures, [
+            .init(pluginID: "plugin.a", pluginName: "Alpha", message: privateReason, canOpenSettings: true),
+            .init(pluginID: "plugin.b", pluginName: "Beta", message: "Try another title.", canOpenSettings: false)
+        ])
+        XCTAssertEqual(viewModel.searchResults["Gamma"]?.map(\.id), ["success"])
+        XCTAssertTrue(executor.evictedPluginIDs.isEmpty)
+        XCTAssertFalse(logger.messages.joined().contains(privateReason))
+
+        viewModel.performSearch(query: "")
+        XCTAssertTrue(viewModel.pluginFailures.isEmpty)
+    }
+
+    func testTypedTotalFailureRetainsMessageAndCrashEviction() async {
+        let executor = SearchViewModelRecordingExecutor(plugins: [.manga()])
+        executor.errorsByPluginID["plugin.manga"] = PluginCallError(
+            kind: .crashed, message: "The source stopped unexpectedly. Try again."
+        )
+        let finished = expectation(description: "Crash finishes")
+        let logger = SearchFailureEventLogger { event in
+            if event.kind == .operation, event.outcome == .failed(.pluginTrap) {
+                finished.fulfill()
+            }
+        }
+        let viewModel = makeViewModel(executor: executor, logger: logger)
+
+        viewModel.performSearch(query: "query")
+        await fulfillment(of: [finished], timeout: 1)
+
+        XCTAssertEqual(viewModel.pluginFailures.first?.message, "The source stopped unexpectedly. Try again.")
+        XCTAssertEqual(viewModel.pluginFailures.first?.canOpenSettings, false)
+        XCTAssertEqual(executor.evictedPluginIDs, ["plugin.manga"])
+        guard case .failure(.pluginTrap) = viewModel.state else {
+            return XCTFail("Expected total crash failure")
+        }
+    }
+
+    func testCancelledAndSupersededTypedFailuresCannotLeakIntoCurrentSearch() async {
+        let executor = SearchViewModelSuspendingExecutor(plugins: [.manga()])
+        let firstStarted = expectation(description: "First search starts")
+        let secondStarted = expectation(description: "Second search starts")
+        let thirdStarted = expectation(description: "Third search starts")
+        executor.onStart = { query in
+            switch query {
+            case "first": firstStarted.fulfill()
+            case "second": secondStarted.fulfill()
+            case "third": thirdStarted.fulfill()
+            default: break
+            }
+        }
+        let staleFirst = expectation(description: "Superseded failure ignored")
+        let staleSecond = expectation(description: "Cancelled failure ignored")
+        let thirdFinished = expectation(description: "Current search finishes")
+        var ignoredCount = 0
+        let logger = SearchFailureEventLogger { event in
+            if event.outcome == .ignoredStale {
+                ignoredCount += 1
+                if ignoredCount == 1 { staleFirst.fulfill() } else { staleSecond.fulfill() }
+            }
+            if event.kind == .operation, event.outcome == .succeeded { thirdFinished.fulfill() }
+        }
+        let viewModel = makeViewModel(executor: executor, logger: logger)
+        let error = PluginCallError(kind: .needsSettings, message: "Stale private reason")
+
+        viewModel.performSearch(query: "first")
+        await fulfillment(of: [firstStarted], timeout: 1)
+        viewModel.performSearch(query: "second")
+        await fulfillment(of: [secondStarted], timeout: 1)
+        executor.fail(query: "first", with: error)
+        await fulfillment(of: [staleFirst], timeout: 1)
+        XCTAssertTrue(viewModel.pluginFailures.isEmpty)
+        XCTAssertTrue(viewModel.isSearching)
+
+        viewModel.cancelSearch()
+        executor.fail(query: "second", with: error)
+        await fulfillment(of: [staleSecond], timeout: 1)
+        XCTAssertTrue(viewModel.pluginFailures.isEmpty)
+        guard case .cancelled = viewModel.state else { return XCTFail("Expected cancellation") }
+
+        viewModel.performSearch(query: "third")
+        await fulfillment(of: [thirdStarted], timeout: 1)
+        executor.complete(query: "third", with: [.result(id: "fresh")])
+        await fulfillment(of: [thirdFinished], timeout: 1)
+        XCTAssertTrue(viewModel.pluginFailures.isEmpty)
+        XCTAssertEqual(viewModel.searchResults["Manga Plugin"]?.map(\.id), ["fresh"])
+    }
+
     func testConstructorInjectionRequiresNoLaterConfigurationCall() async {
         let executor = SearchViewModelRecordingExecutor(plugins: [.manga()])
         let viewModel = makeViewModel(executor: executor)
@@ -271,7 +453,7 @@ final class SearchViewModelTests: XCTestCase {
     private func makeViewModel(
         executor: any SearchPluginExecuting = SearchViewModelRecordingExecutor(plugins: []),
         store: SearchViewModelRecentStore = SearchViewModelRecentStore(),
-        logger: PresentationEventCaptureSpy = PresentationEventCaptureSpy()
+        logger: any PresentationEventLogging = PresentationEventCaptureSpy()
     ) -> SearchViewModel {
         SearchViewModel(
             searchExecutor: executor,
@@ -353,6 +535,7 @@ private final class SearchViewModelSuspendingExecutor: SearchPluginExecuting {
 
     let plugins: [SearchPluginDescriptor]
     private var pending: [PendingSearch] = []
+    var onStart: ((String) -> Void)?
 
     init(plugins: [SearchPluginDescriptor]) {
         self.plugins = plugins
@@ -370,6 +553,7 @@ private final class SearchViewModelSuspendingExecutor: SearchPluginExecuting {
         _ = limit
         return try await withCheckedThrowingContinuation { continuation in
             pending.append(.init(query: query, continuation: continuation))
+            onStart?(query)
         }
     }
 
@@ -381,6 +565,26 @@ private final class SearchViewModelSuspendingExecutor: SearchPluginExecuting {
         guard let index = pending.firstIndex(where: { $0.query == query }) else { return }
         let search = pending.remove(at: index)
         search.continuation.resume(returning: results)
+    }
+
+    func fail(query: String, with error: any Error) {
+        guard let index = pending.firstIndex(where: { $0.query == query }) else { return }
+        let search = pending.remove(at: index)
+        search.continuation.resume(throwing: error)
+    }
+}
+
+private final class SearchFailureEventLogger: PresentationEventLogging {
+    private let onEvent: (PresentationLogEvent) -> Void
+    private(set) var messages: [String] = []
+
+    init(onEvent: @escaping (PresentationLogEvent) -> Void) {
+        self.onEvent = onEvent
+    }
+
+    func log(_ event: PresentationLogEvent) {
+        messages.append(PresentationLogFormatter.format(event))
+        onEvent(event)
     }
 }
 

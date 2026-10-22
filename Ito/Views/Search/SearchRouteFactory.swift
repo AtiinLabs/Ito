@@ -89,7 +89,8 @@ struct AppViewFactory {
     func makeSearchView() -> SearchView {
         SearchView(
             viewModel: rootModels.searchViewModel,
-            routeFactory: searchRouteFactory
+            routeFactory: searchRouteFactory,
+            makePluginSettings: { makePluginSettingsSheet(pluginID: $0) }
         )
     }
 
@@ -212,6 +213,20 @@ struct AppViewFactory {
             settingsStore: sourceDependencies.settingsStore,
             messagePresenter: sourceMessagePresenter
         )
+    }
+
+    func makePluginSettingsSheet(pluginID: String) -> PluginSettingsRecoverySheet {
+        PluginSettingsRecoverySheet(
+            viewModel: PluginSettingsLoaderViewModel(
+                plugin: pluginManager.installedPlugins[pluginID],
+                runnerProvider: sourceDependencies.runnerProvider
+            ),
+            viewFactory: self
+        )
+    }
+
+    func sourceName(pluginID: String) -> String {
+        pluginManager.installedPlugins[pluginID]?.info.name ?? pluginID
     }
 
     func makeRepositoriesView() -> RepositoriesView {

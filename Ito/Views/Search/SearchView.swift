@@ -3,10 +3,21 @@ import SwiftUI
 struct SearchView: View {
     @StateObject private var viewModel: SearchViewModel
     private let routeFactory: SearchRouteFactory
+    private let makePluginSettings: (String) -> PluginSettingsRecoverySheet
+    @State private var settingsPlugin: SettingsPlugin?
 
-    init(viewModel: SearchViewModel, routeFactory: SearchRouteFactory) {
+    private struct SettingsPlugin: Identifiable {
+        let id: String
+    }
+
+    init(
+        viewModel: SearchViewModel,
+        routeFactory: SearchRouteFactory,
+        makePluginSettings: @escaping (String) -> PluginSettingsRecoverySheet
+    ) {
         self._viewModel = StateObject(wrappedValue: viewModel)
         self.routeFactory = routeFactory
+        self.makePluginSettings = makePluginSettings
     }
 
     var body: some View {
@@ -24,6 +35,11 @@ struct SearchView: View {
             .disableAutocorrection(true)
         }
         .navigationViewStyle(.stack)
+        .sheet(item: $settingsPlugin, onDismiss: {
+            viewModel.performSearch(query: viewModel.searchText)
+        }) { plugin in
+            makePluginSettings(plugin.id)
+        }
     }
 
     private var scopePicker: some View {
@@ -192,18 +208,48 @@ struct SearchView: View {
         )
     }
 
+    @ViewBuilder
     private var partialFailureContent: some View {
-        statusContent(
-            systemImage: "exclamationmark.triangle",
-            message: "Some sources could not be searched."
-        )
+        if viewModel.pluginFailures.isEmpty {
+            statusContent(
+                systemImage: "exclamationmark.triangle",
+                message: "Some sources could not be searched."
+            )
+        } else {
+            pluginFailureRows
+        }
     }
 
+    @ViewBuilder
     private var failureContent: some View {
-        statusContent(
-            systemImage: "exclamationmark.triangle",
-            message: "Search could not be completed."
-        )
+        if viewModel.pluginFailures.isEmpty {
+            statusContent(
+                systemImage: "exclamationmark.triangle",
+                message: "Search could not be completed."
+            )
+        } else {
+            pluginFailureRows
+        }
+    }
+
+    private var pluginFailureRows: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            ForEach(viewModel.pluginFailures) { failure in
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(failure.pluginName, systemImage: "exclamationmark.triangle")
+                        .font(.headline)
+                    Text(failure.message)
+                        .foregroundStyle(.secondary)
+                    if failure.canOpenSettings {
+                        Button("Open Settings") {
+                            settingsPlugin = SettingsPlugin(id: failure.pluginID)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(16)
     }
 
     private var cancelledContent: some View {

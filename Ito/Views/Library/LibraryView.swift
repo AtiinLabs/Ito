@@ -6,6 +6,7 @@ import ito_runner
 struct LibraryView: View {
     @ObservedObject var viewModel: LibraryViewModel
     let viewFactory: AppViewFactory
+    @State private var settingsFailure: LibraryUpdateFailure?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -66,6 +67,11 @@ struct LibraryView: View {
             }
         }
         .navigationViewStyle(.stack)
+        .sheet(item: $settingsFailure, onDismiss: {
+            Task { await viewModel.requestUpdate() }
+        }) { failure in
+            viewFactory.makePluginSettingsSheet(pluginID: failure.pluginID)
+        }
         .onAppear { viewModel.appear() }
         .onDisappear { viewModel.disappear() }
     }
@@ -95,6 +101,7 @@ struct LibraryView: View {
                 Divider()
             }
             if viewModel.showsNoResults {
+                updateFailureSection
                 noResultsView
             } else {
                 contentScrollView
@@ -105,6 +112,7 @@ struct LibraryView: View {
     private var contentScrollView: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
+                updateFailureSection
                 if viewModel.layoutStyle == .tabbed && viewModel.selectedCategoryID == nil {
                     Section {
                         libraryGrid(items: viewModel.filteredItems)
@@ -149,6 +157,37 @@ struct LibraryView: View {
             Button("Remove", role: .destructive) { viewModel.confirmRemoval() }
         } message: { item in
             Text("\(item.title) is also removed from your lists. Reading history and progress are kept.")
+        }
+    }
+
+    @ViewBuilder
+    private var updateFailureSection: some View {
+        if !viewModel.updateFailures.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Some sources couldn't update", systemImage: "exclamationmark.triangle")
+                    .font(.subheadline.weight(.semibold))
+                ForEach(viewModel.updateFailures) { failure in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(viewFactory.sourceName(pluginID: failure.pluginID))
+                            .font(.caption.weight(.semibold))
+                        Text(failure.reason)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if failure.needsSettings {
+                            Button("Open Settings") {
+                                settingsFailure = failure
+                            }
+                            .font(.caption.weight(.semibold))
+                            .disabled(viewModel.isRefreshing)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(12)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
         }
     }
 

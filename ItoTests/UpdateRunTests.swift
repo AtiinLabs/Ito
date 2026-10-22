@@ -9,6 +9,9 @@ import ito_runner
 final class FakeLibraryUpdateSource: LibraryUpdateSource {
     var installedPluginIDs: Set<String>
     var failingItemIDs: Set<String> = []
+    var errorsByItemID: [String: PluginCallError] = [:]
+    var cancelledItemIDs: Set<String> = []
+    var freshCounts: [String: Int] = [:]
     /// Every check waits here when set, so a test can look at a run while it is in flight.
     var gate: AsyncTestGate?
     /// Runs at the start of every check, for example to move a test clock.
@@ -23,10 +26,15 @@ final class FakeLibraryUpdateSource: LibraryUpdateSource {
         checkedItemIDs.append(item.id)
         onCheck?()
         await gate?.enter()
+        if cancelledItemIDs.contains(item.id) { throw CancellationError() }
+        if let error = errorsByItemID[item.id] { throw error }
         if failingItemIDs.contains(item.id) {
             throw FakeUpdateError.sourceFailed
         }
-        return UpdateManager.SuccessfulUpdate(freshCount: item.knownChapterCount ?? 0, status: nil)
+        return UpdateManager.SuccessfulUpdate(
+            freshCount: freshCounts[item.id] ?? item.knownChapterCount ?? 0,
+            status: nil
+        )
     }
 }
 
@@ -222,6 +230,90 @@ struct UpdateRunTests {
 
         await #expect(throws: UpdateRunError.noSources) { try await manager.checkForUpdates() }
         #expect(!manager.isRefreshing)
+    }
+
+    @Test func sourceFailuresAreDeduplicatedWithoutDiscardingSuccessfulItemsOrBadges() async throws {
+        let source = FakeLibraryUpdateSource(installedPluginIDs: ["p", "q"])
+        let reported = PluginCallError(kind: .reported, message: "Source unavailable")
+        let settings = PluginCallError(kind: .needsSettings, message: "Sign in in source settings")
+        source.errorsByItemID = ["a": reported, "b": settings, "c": settings]
+        source.freshCounts = ["d": 8, "e": 7]
+        let items = ["a", "b", "c", "d"].map { Self.item($0, plugin: "p") }
+            + [Self.item("e", plugin: "q")]
+        let (database, manager, _) = try await makeManager(
+            items: items, source: source, clock: TestClock(start)
+        )
+        defer { database.cleanup() }
+        // A failed fetch must leave a previously committed unread badge intact.
+        let failedItem = try #require(items.first)
+        _ = await manager.processUpdate(for: failedItem) {
+            UpdateManager.SuccessfulUpdate(freshCount: 6, status: nil)
+        }
+
+        try await manager.checkForUpdates()
+
+        #expect(manager.sourceFailures == [
+            LibraryUpdateFailure(pluginID: "p", reason: settings.localizedDescription, needsSettings: true)
+        ])
+        #expect(manager.libraryUpdateSnapshot.sourceFailures == manager.sourceFailures)
+        #expect(manager.itemsCheckedCurrentRun == 5)
+        #expect(manager.badgeCount(for: MediaIdentity(pluginId: "p", itemId: "a")) == 1)
+        #expect(manager.badgeCount(for: MediaIdentity(pluginId: "p", itemId: "d")) == 3)
+        #expect(manager.badgeCount(for: MediaIdentity(pluginId: "q", itemId: "e")) == 2)
+        let stored = try await database.dbPool.read { db in try LibraryItem.fetchAll(db) }
+        #expect(stored.allSatisfy { $0.lastCheckedAt == start })
+        #expect(stored.first { $0.id == "a" }?.knownChapterCount == 6)
+        #expect(stored.first { $0.id == "b" }?.knownChapterCount == 5)
+    }
+
+    @Test func eachRunClearsFailuresAndCancellationDoesNotRecordAFailedAttempt() async throws {
+        let source = FakeLibraryUpdateSource(installedPluginIDs: ["p"])
+        source.errorsByItemID["a"] = PluginCallError(kind: .needsSettings, message: "Configure source")
+        let clock = TestClock(start)
+        let (database, manager, _) = try await makeManager(
+            items: [Self.item("a", plugin: "p")], source: source, clock: clock
+        )
+        defer { database.cleanup() }
+        try await manager.checkForUpdates()
+        #expect(manager.sourceFailures.count == 1)
+
+        source.errorsByItemID = [:]
+        source.cancelledItemIDs = ["a"]
+        clock.date = start.addingTimeInterval(60)
+        try await manager.checkForUpdates()
+        #expect(manager.sourceFailures.isEmpty)
+        let cancelled = try await database.dbPool.read { db in try LibraryItem.fetchOne(db, key: "a") }
+        #expect(cancelled?.lastCheckedAt == start)
+
+        source.cancelledItemIDs = []
+        try await manager.checkForUpdates()
+        #expect(manager.sourceFailures.isEmpty)
+        let successful = try await database.dbPool.read { db in try LibraryItem.fetchOne(db, key: "a") }
+        #expect(successful?.lastCheckedAt == clock.date)
+    }
+
+    @Test func cancellingAnInFlightRunDoesNotPublishItsFetchErrorOrRecordAnAttempt() async throws {
+        let source = FakeLibraryUpdateSource(installedPluginIDs: ["p"])
+        source.errorsByItemID["a"] = PluginCallError(kind: .needsSettings, message: "Configure source")
+        let gate = AsyncTestGate()
+        source.gate = gate
+        let (database, manager, _) = try await makeManager(
+            items: [Self.item("a", plugin: "p")], source: source, clock: TestClock(start)
+        )
+        defer { database.cleanup() }
+
+        let run = Task { try await manager.checkForUpdates() }
+        await gate.waitForAdmissions(1)
+        run.cancel()
+        await gate.open()
+        try await run.value
+
+        #expect(manager.sourceFailures.isEmpty)
+        #expect(!manager.isRefreshing)
+        let stored = try await database.dbPool.read { db in try LibraryItem.fetchOne(db, key: "a") }
+        #expect(stored?.lastCheckedAt == nil)
+        #expect(stored?.knownChapterCount == 5)
+        #expect(manager.totalBadgeCount == 0)
     }
 
     // MARK: Helpers

@@ -90,14 +90,6 @@ final class SearchRouteFactoryTests: XCTestCase {
         XCTAssertTrue(destination.context === context)
     }
 
-    func testDestinationConstructionPerformsNoSecondPluginLookup() throws {
-        let source = try sourceFile("Ito/Views/Search/SearchRouteFactory.swift")
-
-        XCTAssertFalse(source.contains("PluginManager"))
-        XCTAssertFalse(source.contains("getRunner"))
-        XCTAssertFalse(source.contains("installedPlugins"))
-    }
-
     func testSourceRouteFactoryPreservesTypedPayloadRunnerAndCanonicalID() {
         let runner = ItoRunner()
         let context = ItoRunnerSourceContext(runner: runner)

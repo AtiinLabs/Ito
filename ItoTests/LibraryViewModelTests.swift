@@ -266,6 +266,24 @@ final class LibraryViewModelTests: XCTestCase {
         XCTAssertEqual(subject.updates.clearRequests, [firstIdentity])
     }
 
+    func testUpdateFailuresFollowVolatileSnapshotsWithoutOpeningUIOrReportingWholeRunFailure() {
+        let subject = makeSubject()
+        let settingsFailure = LibraryUpdateFailure(
+            pluginID: "z", reason: "Sign in to this source", needsSettings: true
+        )
+        let otherFailure = LibraryUpdateFailure(
+            pluginID: "a", reason: "Source unavailable", needsSettings: false
+        )
+        subject.updates.publish(sourceFailures: [settingsFailure, otherFailure])
+
+        XCTAssertEqual(subject.viewModel.updateFailures, [otherFailure, settingsFailure])
+        XCTAssertTrue(subject.messages.messages.isEmpty)
+        XCTAssertEqual(subject.updates.checkCallCount, 0)
+
+        subject.updates.publish(isRefreshing: true, sourceFailures: [])
+        XCTAssertTrue(subject.viewModel.updateFailures.isEmpty)
+    }
+
     func testUpdateRequestDeduplicationProgressFailureAndRetry() async {
         let subject = makeSubject(snapshot: snapshot(items: [item("one", "One")]))
         let first = Task { await subject.viewModel.requestUpdate() }
@@ -634,14 +652,16 @@ private final class FakeLibraryUpdates: LibraryUpdateServing {
         isRefreshing: Bool = false,
         current: Int = 0,
         total: Int = 0,
-        badges: [MediaIdentity: Int]? = nil
+        badges: [MediaIdentity: Int]? = nil,
+        sourceFailures: [LibraryUpdateFailure]? = nil
     ) {
         subject.send(
             LibraryUpdateSnapshot(
                 isRefreshing: isRefreshing,
                 current: current,
                 total: total,
-                badgeCounts: badges ?? subject.value.badgeCounts
+                badgeCounts: badges ?? subject.value.badgeCounts,
+                sourceFailures: sourceFailures ?? subject.value.sourceFailures
             )
         )
     }

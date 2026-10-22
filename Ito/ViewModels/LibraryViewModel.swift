@@ -192,6 +192,9 @@ final class LibraryViewModel: ObservableObject {
     var updateProgressCurrent: Int { updateSnapshot.current }
     var updateProgressTotal: Int { updateSnapshot.total }
     var isRefreshing: Bool { updateSnapshot.isRefreshing }
+    var updateFailures: [LibraryUpdateFailure] {
+        updateSnapshot.sourceFailures.sorted { $0.pluginID < $1.pluginID }
+    }
     var hasItems: Bool { !snapshot.items.isEmpty }
 
     func isPluginInstalled(for item: LibraryItem) -> Bool {

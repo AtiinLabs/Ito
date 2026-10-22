@@ -111,7 +111,7 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            throw classify(error, fallback: .pluginUnavailable)
+            throw Self.classify(error, fallback: .pluginUnavailable)
         }
 
         guard !Task.isCancelled else { throw CancellationError() }
@@ -166,7 +166,7 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            throw classify(error, fallback: .pluginExecution)
+            throw Self.classify(error, fallback: .pluginExecution)
         }
     }
 
@@ -187,11 +187,13 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
         }
     }
 
-    /// A crashed plugin is reported as a trap so its runner gets reloaded.
-    private func classify(
+    /// Preserve the plugin's user-facing reason; the view model separately classifies telemetry.
+    static func classify(
         _ error: any Error,
         fallback: SearchPluginExecutionError
-    ) -> SearchPluginExecutionError {
-        (error as? PluginCallError)?.kind == .crashed ? .pluginTrap : fallback
+    ) -> any Error {
+        let wrapped = PluginCallError.wrapping(error)
+        if let pluginError = wrapped as? PluginCallError { return pluginError }
+        return fallback
     }
 }

@@ -68,11 +68,21 @@ extension AppSettingsStore: LibraryLayoutPersisting {
     }
 }
 
+/// Volatile presentation state: a source can fail some series while others still update.
+struct LibraryUpdateFailure: Identifiable, Equatable, Sendable {
+    let pluginID: String
+    let reason: String
+    let needsSettings: Bool
+
+    var id: String { pluginID }
+}
+
 struct LibraryUpdateSnapshot: Equatable {
     let isRefreshing: Bool
     let current: Int
     let total: Int
     let badgeCounts: [MediaIdentity: Int]
+    var sourceFailures: [LibraryUpdateFailure] = []
 
     func badgeCount(for media: MediaIdentity) -> Int {
         max(0, badgeCounts[media] ?? 0)
@@ -94,21 +104,24 @@ extension UpdateManager: LibraryUpdateServing {
             isRefreshing: isRefreshing,
             current: itemsCheckedCurrentRun,
             total: totalItemsToCheck,
-            badgeCounts: libraryBadgeCountsSnapshot
+            badgeCounts: libraryBadgeCountsSnapshot,
+            sourceFailures: sourceFailures
         )
     }
 
     var libraryUpdateSnapshotPublisher: AnyPublisher<LibraryUpdateSnapshot, Never> {
-        Publishers.CombineLatest(
+        Publishers.CombineLatest3(
             Publishers.CombineLatest3($isRefreshing, $itemsCheckedCurrentRun, $totalItemsToCheck),
-            libraryBadgeCountsPublisher
+            libraryBadgeCountsPublisher,
+            $sourceFailures
         )
-        .map { values, badgeCounts in
+        .map { values, badgeCounts, sourceFailures in
             LibraryUpdateSnapshot(
                 isRefreshing: values.0,
                 current: values.1,
                 total: values.2,
-                badgeCounts: badgeCounts
+                badgeCounts: badgeCounts,
+                sourceFailures: sourceFailures
             )
         }
         .eraseToAnyPublisher()

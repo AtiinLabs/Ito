@@ -60,6 +60,16 @@ public struct PluginSearchResult: Identifiable {
 
 public typealias SearchResults = [String: [PluginSearchResult]]
 
+/// Volatile search-operation failures. Plugin-provided messages are for presentation only.
+public struct SearchPluginFailure: Identifiable, Equatable {
+    public let pluginID: String
+    public let pluginName: String
+    public let message: String
+    public let canOpenSettings: Bool
+
+    public var id: String { pluginID }
+}
+
 public enum SearchFailure: Equatable {
     case pluginUnavailable
     case pluginExecution

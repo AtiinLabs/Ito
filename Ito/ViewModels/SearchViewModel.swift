@@ -11,6 +11,7 @@ public final class SearchViewModel: ObservableObject {
     @Published public var searchScope: SearchScope = .all
     @Published public private(set) var state: SearchPresentationState = .idle
     @Published public private(set) var recentSearches: [String]
+    @Published public private(set) var pluginFailures: [SearchPluginFailure] = []
 
     public var searchResults: SearchResults { state.results }
     public var isSearching: Bool { state.isLoading }
@@ -160,6 +161,7 @@ public final class SearchViewModel: ObservableObject {
                         outcome: .cancelled
                     )
                 )
+                pluginFailures = []
                 state = .cancelled
                 finishOperation(operationID, outcome: .cancelled)
                 return
@@ -170,6 +172,15 @@ public final class SearchViewModel: ObservableObject {
                 }
                 let failure = classify(error)
                 failures.append(failure)
+                let pluginError = error as? PluginCallError
+                pluginFailures.append(
+                    SearchPluginFailure(
+                        pluginID: plugin.id,
+                        pluginName: plugin.name,
+                        message: pluginError?.message ?? "This source could not be searched.",
+                        canOpenSettings: pluginError?.kind == .needsSettings
+                    )
+                )
                 if failure == .pluginTrap {
                     searchExecutor.evictRunner(for: plugin.id)
                 }
@@ -232,6 +243,7 @@ public final class SearchViewModel: ObservableObject {
     }
 
     private func cancelCurrentOperation(publishCancelledState: Bool) {
+        pluginFailures = []
         guard let operationID = currentOperationID else {
             currentTask?.cancel()
             currentTask = nil
@@ -312,6 +324,9 @@ public final class SearchViewModel: ObservableObject {
     }
 
     private func classify(_ error: any Error) -> SearchFailure {
+        if let error = error as? PluginCallError {
+            return error.kind == .crashed ? .pluginTrap : .pluginExecution
+        }
         guard let error = error as? SearchPluginExecutionError else {
             return .pluginExecution
         }
