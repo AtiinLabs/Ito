@@ -83,8 +83,20 @@ final class MangaContinuousScrollPositionCoordinator {
         let viewportSize: CGSize
     }
 
+    private struct Restoration {
+        let pageID: String
+        let viewportTop: CGFloat
+        let viewportSize: CGSize
+        let mutation: MangaScrollRequest?
+        let referenceContentFrame: CGRect?
+        var direction: CGFloat?
+        var acknowledged = false
+        var request: MangaScrollRequest
+    }
+
     private var previousSample: Sample?
     private var latestGeometry: MangaContinuousGeometry?
+    private var restoration: Restoration?
 
     func update(
         _ geometry: MangaContinuousGeometry,
@@ -99,23 +111,55 @@ final class MangaContinuousScrollPositionCoordinator {
         .sorted { $0.1.minY < $1.1.minY }
         let visiblePageIDs = visiblePages.map(\.0)
         let pendingTarget = viewModel.scrollTarget
-        let targetIsSettled = pendingTarget.map { Self.isSettled($0, in: geometry) } ?? false
-        let maySelectViewportPage = pendingTarget == nil || targetIsSettled
+        if let target = pendingTarget, target.waitsForLayout, restoration?.mutation != target {
+            let reference = previousSample?.geometry.pages[target.pageID] ?? geometry.pages[target.pageID]
+            let top = reference?.viewportFrame.map { $0.minY - viewport.minY }
+                ?? target.alignmentY * (viewport.height - (reference?.contentFrame?.height ?? 0))
+            restoration = Restoration(
+                pageID: target.pageID, viewportTop: top, viewportSize: viewport.size,
+                mutation: target, referenceContentFrame: reference?.contentFrame, request: target
+            )
+        }
 
         let sample = Sample(
             geometry: geometry,
             visiblePageIDs: visiblePageIDs,
             viewportSize: viewport.size
         )
-        defer { previousSample = sample }
 
-        let correction = layoutDriftRequest(
-            previous: previousSample,
-            current: sample,
-            viewport: viewport,
-            hasPendingTarget: pendingTarget != nil
-        )
+        let ongoing = continueRestoration(in: geometry, viewport: viewport, viewModel: viewModel)
+        let targetIsSettled = pendingTarget.map { isSettled($0) } ?? false
+        let maySelectViewportPage = (pendingTarget == nil || targetIsSettled) && !ongoing.blocked
+        let correction: MangaScrollRequest?
+        if ongoing.completed || ongoing.blocked {
+            correction = ongoing.request
+        } else {
+            correction = layoutDriftRequest(
+                previous: previousSample,
+                current: sample,
+                viewport: viewport,
+                hasPendingTarget: pendingTarget != nil
+            )
+        }
+        if let correction, restoration == nil,
+           let oldViewport = previousSample?.geometry.viewport,
+           let oldFrame = previousSample?.geometry.pages[correction.pageID]?.viewportFrame,
+           let currentFrame = geometry.pages[correction.pageID]?.viewportFrame {
+            let desiredTop = oldFrame.minY - oldViewport.minY
+            restoration = Restoration(
+                pageID: correction.pageID,
+                viewportTop: desiredTop,
+                viewportSize: viewport.size,
+                mutation: nil,
+                referenceContentFrame: nil,
+                direction: desiredTop > currentFrame.minY - viewport.minY ? 1 : -1,
+                request: correction
+            )
+        }
         guard correction == nil, maySelectViewportPage else { return correction }
+        // Corrected or suppressed observations are estimates, not a new restoration baseline.
+        // Keep the last accepted viewport until the requested position is actually observed.
+        defer { if !visiblePageIDs.isEmpty { previousSample = sample } }
 
         let alignmentPage = targetIsSettled
             ? visiblePages.first { $0.0 == pendingTarget?.pageID } ?? visiblePages.first
@@ -129,7 +173,7 @@ final class MangaContinuousScrollPositionCoordinator {
                 )
             )
         }
-        if previousSample?.visiblePageIDs != visiblePageIDs || targetIsSettled {
+        if previousSample?.visiblePageIDs != visiblePageIDs || targetIsSettled || ongoing.completed {
             viewModel.continuousViewportChanged(
                 visiblePageIDs,
                 preferredPageID: targetIsSettled ? pendingTarget?.pageID : nil
@@ -138,7 +182,62 @@ final class MangaContinuousScrollPositionCoordinator {
         return nil
     }
 
+    private func continueRestoration(
+        in geometry: MangaContinuousGeometry,
+        viewport: CGRect,
+        viewModel: MangaReaderViewModel
+    ) -> (request: MangaScrollRequest?, completed: Bool, blocked: Bool) {
+        guard var active = restoration else { return (nil, false, false) }
+        if active.acknowledged {
+            if viewModel.scrollTarget == active.mutation { return (nil, true, false) }
+            restoration = nil
+            return (nil, false, false)
+        }
+        guard viewModel.scrollTarget == active.mutation,
+              viewport.size == active.viewportSize,
+              viewModel.flatPages.contains(where: { $0.id == active.pageID }) else {
+            if viewport.size != active.viewportSize, let mutation = active.mutation {
+                viewModel.consumeScrollTarget(mutation)
+            }
+            restoration = nil
+            previousSample = nil
+            return (nil, false, false)
+        }
+        guard let page = geometry.pages[active.pageID], let frame = page.viewportFrame else {
+            return (active.request, false, true)
+        }
+        // A mutation's first preference can still contain the entire pre-mutation layout.
+        // Do not acknowledge it, or force a scroll before the changed layout is observed.
+        if active.direction == nil, let reference = active.referenceContentFrame,
+           page.contentFrame == reference {
+            return (nil, false, true)
+        }
+        let displacement = frame.minY - viewport.minY - active.viewportTop
+        active.request.alignmentY = Self.alignmentY(
+            viewportTop: active.viewportTop,
+            pageHeight: frame.height,
+            viewportHeight: viewport.height
+        )
+        let crossed = active.direction.map { displacement * $0 >= -1 } ?? (abs(displacement) <= 1)
+        if crossed || Self.isSettled(active.request, in: geometry) {
+            active.acknowledged = true
+            restoration = active.mutation == nil ? nil : active
+            return (nil, true, false)
+        }
+        if active.direction == nil { active.direction = displacement > 0 ? -1 : 1 }
+        restoration = active
+        return (active.request, false, true)
+    }
+
+    func cancelRestoration() {
+        restoration = nil
+        previousSample = nil
+    }
+
     func isSettled(_ target: MangaScrollRequest) -> Bool {
+        if target.waitsForLayout {
+            return restoration?.mutation == target && restoration?.acknowledged == true
+        }
         guard let latestGeometry else { return false }
         return Self.isSettled(target, in: latestGeometry)
     }

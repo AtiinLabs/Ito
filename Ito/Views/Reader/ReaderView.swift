@@ -226,10 +226,11 @@ struct ReaderView: View {
                 if let target = viewModel.scrollTarget {
                     if continuousPosition.isSettled(target) {
                         viewModel.consumeScrollTarget(target)
-                    } else if !target.animated {
+                    } else if !target.animated, !target.waitsForLayout || correction != nil {
+                        let request = correction ?? target
                         proxy.scrollTo(
-                            target.pageID,
-                            anchor: UnitPoint(x: 0.5, y: target.alignmentY)
+                            request.pageID,
+                            anchor: UnitPoint(x: 0.5, y: request.alignmentY)
                         )
                     }
                 } else if let correction {
@@ -243,6 +244,7 @@ struct ReaderView: View {
                 guard let target else { return }
                 // The mutation's preference pass decides whether native anchoring needs help.
                 guard !target.waitsForLayout else { return }
+                continuousPosition.cancelRestoration()
                 if target.animated {
                     withAnimation {
                         proxy.scrollTo(
@@ -265,6 +267,8 @@ struct ReaderView: View {
             // changes while it is on screen, so scroll to it once here.
             .onAppear {
                 guard let target = viewModel.scrollTarget else { return }
+                guard !target.waitsForLayout else { return }
+                continuousPosition.cancelRestoration()
                 if target.animated {
                     withAnimation {
                         proxy.scrollTo(
