@@ -468,7 +468,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertFalse(subject.viewModel.loadingNextChapter)
     }
 
-    func testContinuousPrependSortsSuppressesDuplicatesAndCompensatesScrollIndex() async {
+    func testContinuousPrependSortsSuppressesDuplicatesAndPreservesLogicalPage() async {
         let a = makeChapter("a", number: 1)
         let b = makeChapter("b", number: 2)
         let subject = makeSubject(chapters: [a, b], initial: b, viewer: .Vertical)
@@ -476,7 +476,8 @@ final class MangaReaderViewModelTests: XCTestCase {
         subject.loader.enqueue(.suspended, for: "a")
         subject.viewModel.start()
         await waitForReader { subject.viewModel.loadPhase == .content }
-        subject.viewModel.continuousPageAppeared(subject.viewModel.flatPages[1])
+        subject.viewModel.updateContinuousScrollAlignment(0.37)
+        subject.viewModel.continuousViewportChanged([subject.viewModel.flatPages[1].id])
 
         subject.viewModel.prependPreviousChapter()
         subject.viewModel.prependPreviousChapter()
@@ -490,7 +491,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.continuousPageIndex, 3)
         XCTAssertEqual(
             subject.viewModel.scrollTarget,
-            MangaScrollRequest(pageID: "b#1", animated: false)
+            MangaScrollRequest(pageID: "b#1", animated: false, alignmentY: 0.37)
         )
     }
 
@@ -506,10 +507,9 @@ final class MangaReaderViewModelTests: XCTestCase {
         for loaded in 1..<5 {
             // Scroll to the end of the newest chapter, then load the next one.
             let last = subject.viewModel.flatPages.last!
-            subject.viewModel.continuousPageAppeared(last)
-            for passed in subject.viewModel.flatPages where passed.id != last.id {
-                subject.viewModel.continuousPageDisappeared(passed)
-            }
+            subject.viewModel.updateContinuousScrollAlignment(0.62)
+            subject.viewModel.continuousViewportChanged([last.id])
+
             subject.viewModel.appendNextChapter()
             await waitForReader { subject.viewModel.flatPages.last?.chapter.key == "c\(loaded + 1)" }
         }
@@ -522,7 +522,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.flatPages[subject.viewModel.continuousPageIndex].id, "c4#1")
         XCTAssertEqual(
             subject.viewModel.scrollTarget,
-            MangaScrollRequest(pageID: "c4#1", animated: false)
+            MangaScrollRequest(pageID: "c4#1", animated: false, alignmentY: 0.62)
         )
     }
 
@@ -592,7 +592,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         await waitForReader { subject.viewModel.segments.count == 2 }
 
         let firstB = subject.viewModel.flatPages.first { $0.chapter.key == "b" }!
-        subject.viewModel.continuousPageAppeared(firstB)
+        subject.viewModel.continuousViewportChanged([firstB.id])
         await yieldReaderTasks()
 
         XCTAssertEqual(subject.viewModel.currentChapter.key, "b")
@@ -601,7 +601,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.imagePrefetcher.batches.last?.map(\.index), [1, 2])
 
         let lastB = subject.viewModel.flatPages.last { $0.chapter.key == "b" }!
-        subject.viewModel.continuousPageAppeared(lastB)
+        subject.viewModel.continuousViewportChanged([lastB.id])
         await waitForReader { subject.progress.requests.count == 2 }
         XCTAssertEqual(subject.progress.requests.map(\.chapterID), ["a", "b"])
     }
@@ -632,7 +632,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         subject.loader.enqueue(.pages([page(4), page(9)]), for: "a")
         subject.viewModel.start()
         await waitForReader { subject.viewModel.loadPhase == .content }
-        subject.viewModel.continuousPageAppeared(subject.viewModel.flatPages[1])
+        subject.viewModel.continuousViewportChanged([subject.viewModel.flatPages[1].id])
 
         subject.viewModel.setViewerOverride(.Rtl)
 
@@ -879,7 +879,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         subject.viewModel.start()
         await waitForReader { subject.viewModel.loadPhase == .content }
 
-        subject.viewModel.continuousPageAppeared(subject.viewModel.flatPages[0])
+        subject.viewModel.continuousViewportChanged([subject.viewModel.flatPages[0].id])
 
         XCTAssertEqual(subject.imagePrefetcher.batches[0].map(\.index), [1, 3])
     }

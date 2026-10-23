@@ -60,6 +60,8 @@ final class MangaReaderViewModel: ObservableObject {
     private var flatPageIndexByID: [String: Int] = [:]
     /// Continuous pages on screen; the topmost is the current page.
     private var visiblePageIDs: Set<String> = []
+    private var visiblePageOrder: [String] = []
+    private var continuousScrollAlignmentY: CGFloat = 0
 
     nonisolated deinit {}
 
@@ -119,9 +121,14 @@ final class MangaReaderViewModel: ObservableObject {
         flatPages = result
         flatPageIndexByID = indexByID
         visiblePageIDs = visiblePageIDs.filter { indexByID[$0] != nil }
+        visiblePageOrder = visiblePageOrder.filter { indexByID[$0] != nil }
         // Keep pointing at the same page when chapters are added or dropped before it.
         if let currentID, let index = indexByID[currentID] {
             continuousPageIndex = index
+        } else if let fallbackID = visiblePageOrder.first, let fallbackIndex = indexByID[fallbackID] {
+            continuousPageIndex = fallbackIndex
+        } else {
+            continuousPageIndex = min(max(continuousPageIndex, 0), max(result.count - 1, 0))
         }
     }
 
@@ -350,37 +357,43 @@ final class MangaReaderViewModel: ObservableObject {
         scrollTarget = nil
     }
 
-    func continuousPageAppeared(_ appeared: FlatPage) {
-        // Look the page up by id: positions shift when chapters are added or dropped above it.
-        guard isActive, let index = flatPageIndexByID[appeared.id] else { return }
-        visiblePageIDs.insert(appeared.id)
-        let flatPage = flatPages[index]
-        // The last page of the list may never reach the top, so finishing counts once it shows.
-        if segments.indices.contains(flatPage.segmentIndex),
-           flatPage.chapterPosition == segments[flatPage.segmentIndex].pages.count - 1 {
-            markChapterFinished(flatPage.chapter)
-        }
-        updateCurrentContinuousPage()
-        prefetchContinuousImages(around: index, allPages: flatPages)
+    func updateContinuousScrollAlignment(_ alignmentY: CGFloat) {
+        continuousScrollAlignmentY = min(max(alignmentY, 0), 1)
     }
 
-    func continuousPageDisappeared(_ disappeared: FlatPage) {
-        guard isActive, visiblePageIDs.remove(disappeared.id) != nil else { return }
-        updateCurrentContinuousPage()
-    }
+    /// Receives page IDs ordered by their actual image-frame position in the continuous viewport.
+    func continuousViewportChanged(_ pageIDs: [String], preferredPageID: String? = nil) {
+        guard isActive, !isPaged else { return }
+        let validIDs = pageIDs.filter { flatPageIndexByID[$0] != nil }
+        guard !validIDs.isEmpty else { return }
 
-    /// Makes the topmost visible page current, and saves it as the place to come back to.
-    private func updateCurrentContinuousPage() {
-        guard let index = visiblePageIDs.compactMap({ flatPageIndexByID[$0] }).min() else {
-            return
+        let nextVisibleIDs = Set(validIDs)
+        let visibilityChanged = visiblePageIDs != nextVisibleIDs
+        let topPageID = preferredPageID.flatMap { validIDs.contains($0) ? $0 : nil } ?? validIDs[0]
+        guard let topIndex = flatPageIndexByID[topPageID] else { return }
+        visiblePageOrder = validIDs
+
+        visiblePageIDs = nextVisibleIDs
+
+        for pageID in validIDs {
+            guard let index = flatPageIndexByID[pageID] else { continue }
+            let page = flatPages[index]
+            if segments.indices.contains(page.segmentIndex),
+               page.chapterPosition == segments[page.segmentIndex].pages.count - 1 {
+                markChapterFinished(page.chapter)
+            }
         }
-        let flatPage = flatPages[index]
-        continuousPageIndex = index
+
+        let flatPage = flatPages[topIndex]
+        continuousPageIndex = topIndex
         if flatPage.chapter.key != currentChapter.key {
             changeCurrentChapter(to: flatPage.chapter)
             chapterOpened(flatPage.chapter)
         }
         savePage(flatPage.chapterPosition, in: flatPage.chapter)
+        if visibilityChanged {
+            prefetchContinuousImages(around: topIndex, allPages: flatPages)
+        }
     }
 
     private func pagedGoToChapter(_ chapter: Manga.Chapter, opensAtEnd: Bool = false) {
@@ -829,13 +842,14 @@ final class MangaReaderViewModel: ObservableObject {
             logFinished(kind: .chapterPrepend, operationID: operationID, outcome: .ignoredStale)
             return
         }
+
         let sorted = ReaderPageOrdering.ascending(pages)
         segments.insert(ChapterSegment(chapter: chapter, pages: sorted), at: 0)
-        // Content added above the reader pushes it down; jump back to the same page.
         if flatPages.indices.contains(continuousPageIndex) {
             scrollTarget = MangaScrollRequest(
                 pageID: flatPages[continuousPageIndex].id,
-                animated: false
+                animated: false,
+                alignmentY: continuousScrollAlignmentY
             )
         }
         finishPrepend(operationID: operationID, outcome: .succeeded)
@@ -855,9 +869,12 @@ final class MangaReaderViewModel: ObservableObject {
         case .bottom:
             let removable = current.segmentIndex - 1
             guard prependOperationID == nil, removable > 0 else { return }
+            scrollTarget = MangaScrollRequest(
+                pageID: current.id,
+                animated: false,
+                alignmentY: continuousScrollAlignmentY
+            )
             segments.removeFirst(min(excess, removable))
-            // Removing content above the reader moves it up; jump back to the same page.
-            scrollTarget = MangaScrollRequest(pageID: current.id, animated: false)
         case .top:
             let removable = segments.count - 1 - (current.segmentIndex + 1)
             guard appendOperationID == nil, removable > 0 else { return }

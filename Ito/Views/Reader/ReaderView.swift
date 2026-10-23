@@ -7,6 +7,7 @@ import ito_runner
 
 struct ReaderView: View {
     @StateObject private var viewModel: MangaReaderViewModel
+    @State private var continuousPosition = MangaContinuousScrollPositionCoordinator()
     @State private var showSettings = false
     @State private var showUI = true
 
@@ -15,6 +16,7 @@ struct ReaderView: View {
     /// `viewModel` is evaluated once, when SwiftUI first creates this view's state.
     init(viewModel: @autoclosure @escaping () -> MangaReaderViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel())
+
     }
 
     var body: some View {
@@ -193,13 +195,8 @@ struct ReaderView: View {
                             }
 
                             pageImage(for: flatPage.page, number: flatPage.chapterPosition + 1)
+                                .background(MangaContinuousPageGeometryReporter(pageID: flatPage.id))
                                 .id(flatPage.id)
-                                .onAppear {
-                                    viewModel.continuousPageAppeared(flatPage)
-                                }
-                                .onDisappear {
-                                    viewModel.continuousPageDisappeared(flatPage)
-                                }
                         }
                     }
 
@@ -219,23 +216,72 @@ struct ReaderView: View {
                         }
                     }
                 }
+                .coordinateSpace(name: "manga.continuous.content")
+                .background { MangaContinuousContentBoundsReporter() }
+            }
+            .coordinateSpace(name: "manga.continuous.viewport")
+            .overlay { MangaContinuousViewportReporter() }
+            .onPreferenceChange(MangaContinuousGeometryPreferenceKey.self) { geometry in
+                let correction = continuousPosition.update(geometry, viewModel: viewModel)
+                if let target = viewModel.scrollTarget {
+                    if continuousPosition.isSettled(target) {
+                        viewModel.consumeScrollTarget(target)
+                    } else if !target.animated {
+                        proxy.scrollTo(
+                            target.pageID,
+                            anchor: UnitPoint(x: 0.5, y: target.alignmentY)
+                        )
+                    }
+                } else if let correction {
+                    proxy.scrollTo(
+                        correction.pageID,
+                        anchor: UnitPoint(x: 0.5, y: correction.alignmentY)
+                    )
+                }
             }
             .onChange(of: viewModel.scrollTarget) { target in
                 guard let target else { return }
                 if target.animated {
-                    withAnimation { proxy.scrollTo(target.pageID, anchor: .top) }
+                    withAnimation {
+                        proxy.scrollTo(
+                            target.pageID,
+                            anchor: UnitPoint(x: 0.5, y: target.alignmentY)
+                        )
+                    }
+                    viewModel.consumeScrollTarget(target)
                 } else {
-                    proxy.scrollTo(target.pageID, anchor: .top)
+                    proxy.scrollTo(
+                        target.pageID,
+                        anchor: UnitPoint(x: 0.5, y: target.alignmentY)
+                    )
+                    if continuousPosition.isSettled(target) {
+                        viewModel.consumeScrollTarget(target)
+                    }
                 }
-                viewModel.consumeScrollTarget(target)
             }
             // A target set before this view existed (a restored page, a mode switch) never
             // changes while it is on screen, so scroll to it once here.
             .onAppear {
                 guard let target = viewModel.scrollTarget else { return }
-                proxy.scrollTo(target.pageID, anchor: .top)
-                viewModel.consumeScrollTarget(target)
+                if target.animated {
+                    withAnimation {
+                        proxy.scrollTo(
+                            target.pageID,
+                            anchor: UnitPoint(x: 0.5, y: target.alignmentY)
+                        )
+                    }
+                    viewModel.consumeScrollTarget(target)
+                } else {
+                    proxy.scrollTo(
+                        target.pageID,
+                        anchor: UnitPoint(x: 0.5, y: target.alignmentY)
+                    )
+                    if continuousPosition.isSettled(target) {
+                        viewModel.consumeScrollTarget(target)
+                    }
+                }
             }
+
         }
     }
 

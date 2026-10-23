@@ -10,21 +10,202 @@ extension MangaReaderViewModelTests {
         await waitForReader { subject.viewModel.loadPhase == .content }
         let pages = subject.viewModel.flatPages
 
-        // Scrolling down: the page entering at the bottom does not become current.
-        subject.viewModel.continuousPageAppeared(pages[0])
-        subject.viewModel.continuousPageAppeared(pages[1])
+        // The first visible image remains current while another page enters below it.
+        subject.viewModel.continuousViewportChanged([pages[0].id])
+        subject.viewModel.continuousViewportChanged([pages[0].id, pages[1].id])
         XCTAssertEqual(subject.viewModel.continuousPageIndex, 0)
 
-        subject.viewModel.continuousPageDisappeared(pages[0])
+        subject.viewModel.continuousViewportChanged([pages[1].id])
         XCTAssertEqual(subject.viewModel.continuousPageIndex, 1)
         XCTAssertEqual(subject.viewModel.continuousChapterPage.index, 1)
         XCTAssertEqual(subject.viewModel.continuousChapterPage.count, 3)
         await waitForReader { subject.progress.savedPages["a"] == 1 }
 
         // The last page shows without reaching the top: the chapter still counts as finished.
-        subject.viewModel.continuousPageAppeared(pages[2])
+        subject.viewModel.continuousViewportChanged([pages[1].id, pages[2].id])
         await waitForReader { subject.progress.requests.map(\.chapterID) == ["a"] }
         XCTAssertEqual(subject.viewModel.continuousPageIndex, 1)
+    }
+
+    func testContinuousLayoutDriftPreservesVisiblePageViewportPosition() async {
+        let subject = makeSubject(chapters: [makeChapter("a", number: 1)], viewer: .Vertical)
+        subject.loader.enqueue(.pages([page(0), page(1)]), for: "a")
+        subject.viewModel.start()
+        await waitForReader { subject.viewModel.loadPhase == .content }
+
+        let coordinator = MangaContinuousScrollPositionCoordinator()
+        let viewport = CGRect(x: 0, y: 0, width: 390, height: 844)
+        let previous = MangaContinuousGeometry(
+            viewport: viewport,
+            pages: [
+                "a#1": MangaContinuousPageGeometry(
+                    contentFrame: CGRect(x: 0, y: 1_000, width: 390, height: 1_400),
+                    viewportFrame: CGRect(x: 0, y: -350, width: 390, height: 1_400)
+                )
+            ]
+        )
+        XCTAssertNil(coordinator.update(previous, viewModel: subject.viewModel))
+
+        let shifted = MangaContinuousGeometry(
+            viewport: viewport,
+            pages: [
+                "a#1": MangaContinuousPageGeometry(
+                    contentFrame: CGRect(x: 0, y: 1_100, width: 390, height: 1_400),
+                    viewportFrame: CGRect(x: 0, y: -250, width: 390, height: 1_400)
+                )
+            ]
+        )
+        let target = coordinator.update(shifted, viewModel: subject.viewModel)
+
+        XCTAssertEqual(
+            target,
+            MangaScrollRequest(
+                pageID: "a#1",
+                animated: false,
+                alignmentY: MangaContinuousScrollPositionCoordinator.alignmentY(
+                    viewportTop: -350,
+                    pageHeight: 1_400,
+                    viewportHeight: 844
+                )
+            )
+        )
+    }
+
+    func testContinuousViewportScrollWithoutContentDriftDoesNotRequestCorrection() async {
+        let subject = makeSubject(chapters: [makeChapter("a", number: 1)], viewer: .Vertical)
+        subject.loader.enqueue(.pages([page(0), page(1)]), for: "a")
+        subject.viewModel.start()
+        await waitForReader { subject.viewModel.loadPhase == .content }
+
+        let coordinator = MangaContinuousScrollPositionCoordinator()
+        let viewport = CGRect(x: 0, y: 0, width: 390, height: 844)
+        XCTAssertNil(
+            coordinator.update(
+                MangaContinuousGeometry(
+                    viewport: viewport,
+                    pages: [
+                        "a#1": MangaContinuousPageGeometry(
+                            contentFrame: CGRect(x: 0, y: 1_000, width: 390, height: 1_400),
+                            viewportFrame: CGRect(x: 0, y: -350, width: 390, height: 1_400)
+                        )
+                    ]
+                ),
+                viewModel: subject.viewModel
+            )
+        )
+
+        XCTAssertNil(
+            coordinator.update(
+                MangaContinuousGeometry(
+                    viewport: viewport,
+                    pages: [
+                        "a#1": MangaContinuousPageGeometry(
+                            contentFrame: CGRect(x: 0, y: 1_000, width: 390, height: 1_400),
+                            viewportFrame: CGRect(x: 0, y: -450, width: 390, height: 1_400)
+                        )
+                    ]
+                ),
+                viewModel: subject.viewModel
+            )
+        )
+    }
+    func testLayoutDriftDoesNotPersistTheUncorrectedVisiblePage() async {
+        let subject = makeSubject(chapters: [makeChapter("a", number: 1)], viewer: .Vertical)
+        subject.loader.enqueue(.pages([page(0), page(1)]), for: "a")
+        subject.viewModel.start()
+        await waitForReader { subject.viewModel.loadPhase == .content }
+
+        let coordinator = MangaContinuousScrollPositionCoordinator()
+        let viewport = CGRect(x: 0, y: 0, width: 390, height: 844)
+        _ = coordinator.update(
+            MangaContinuousGeometry(
+                viewport: viewport,
+                pages: [
+                    "a#0": MangaContinuousPageGeometry(
+                        contentFrame: CGRect(x: 0, y: 0, width: 390, height: 1_200),
+                        viewportFrame: CGRect(x: 0, y: -300, width: 390, height: 1_200)
+                    ),
+                    "a#1": MangaContinuousPageGeometry(
+                        contentFrame: CGRect(x: 0, y: 1_200, width: 390, height: 600),
+                        viewportFrame: CGRect(x: 0, y: 900, width: 390, height: 600)
+                    )
+                ]
+            ),
+            viewModel: subject.viewModel
+        )
+
+        let correction = coordinator.update(
+            MangaContinuousGeometry(
+                viewport: viewport,
+                pages: [
+                    "a#0": MangaContinuousPageGeometry(
+                        contentFrame: CGRect(x: 0, y: -1_400, width: 390, height: 1_200),
+                        viewportFrame: CGRect(x: 0, y: -1_700, width: 390, height: 1_200)
+                    ),
+                    "a#1": MangaContinuousPageGeometry(
+                        contentFrame: CGRect(x: 0, y: -200, width: 390, height: 600),
+                        viewportFrame: CGRect(x: 0, y: -500, width: 390, height: 600)
+                    )
+                ]
+            ),
+            viewModel: subject.viewModel
+        )
+
+        XCTAssertEqual(correction?.pageID, "a#0")
+        XCTAssertEqual(subject.viewModel.continuousPageIndex, 0)
+    }
+
+    func testPendingRestoreDoesNotSelectInitialViewportBeforeTargetAlignment() async {
+        let subject = makeSubject(chapters: [makeChapter("a", number: 1)], viewer: .Vertical)
+        subject.progress.savedPages["a"] = 1
+        subject.loader.enqueue(.pages([page(0), page(1), page(2)]), for: "a")
+        subject.viewModel.start()
+        await waitForReader { subject.viewModel.loadPhase == .content }
+
+        guard let target = subject.viewModel.scrollTarget else {
+            XCTFail("Expected the saved continuous page to produce a scroll target")
+            return
+        }
+        XCTAssertEqual(target.pageID, "a#1")
+        let coordinator = MangaContinuousScrollPositionCoordinator()
+        let viewport = CGRect(x: 0, y: 0, width: 390, height: 844)
+        _ = coordinator.update(
+            MangaContinuousGeometry(
+                viewport: viewport,
+                pages: [
+                    "a#0": MangaContinuousPageGeometry(
+                        contentFrame: CGRect(x: 0, y: 0, width: 390, height: 500),
+                        viewportFrame: CGRect(x: 0, y: 0, width: 390, height: 500)
+                    ),
+                    "a#1": MangaContinuousPageGeometry(
+                        contentFrame: CGRect(x: 0, y: 500, width: 390, height: 500),
+                        viewportFrame: CGRect(x: 0, y: 500, width: 390, height: 500)
+                    )
+                ]
+            ),
+            viewModel: subject.viewModel
+        )
+        XCTAssertEqual(subject.viewModel.continuousPageIndex, 1)
+        XCTAssertEqual(subject.viewModel.scrollTarget, target)
+
+        _ = coordinator.update(
+            MangaContinuousGeometry(
+                viewport: viewport,
+                pages: [
+                    "a#1": MangaContinuousPageGeometry(
+                        contentFrame: CGRect(x: 0, y: 500, width: 390, height: 500),
+                        viewportFrame: CGRect(x: 0, y: 0, width: 390, height: 500)
+                    )
+                ]
+            ),
+            viewModel: subject.viewModel
+        )
+        XCTAssertEqual(subject.viewModel.continuousPageIndex, 1)
+        XCTAssertTrue(
+            coordinator.isSettled(target)
+        )
+        subject.viewModel.consumeScrollTarget(target)
+        XCTAssertNil(subject.viewModel.scrollTarget)
     }
 
     func testContinuousChapterButtonScrollsToAnAlreadyLoadedChapter() async {
