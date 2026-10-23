@@ -358,7 +358,7 @@ final class MangaReaderViewModel: ObservableObject {
     }
 
     func updateContinuousScrollAlignment(_ alignmentY: CGFloat) {
-        continuousScrollAlignmentY = min(max(alignmentY, 0), 1)
+        continuousScrollAlignmentY = alignmentY
     }
 
     /// Receives page IDs ordered by their actual image-frame position in the continuous viewport.
@@ -849,7 +849,7 @@ final class MangaReaderViewModel: ObservableObject {
             scrollTarget = MangaScrollRequest(
                 pageID: flatPages[continuousPageIndex].id,
                 animated: false,
-                alignmentY: continuousScrollAlignmentY
+                alignmentY: continuousScrollAlignmentY, waitsForLayout: true
             )
         }
         finishPrepend(operationID: operationID, outcome: .succeeded)
@@ -872,7 +872,7 @@ final class MangaReaderViewModel: ObservableObject {
             scrollTarget = MangaScrollRequest(
                 pageID: current.id,
                 animated: false,
-                alignmentY: continuousScrollAlignmentY
+                alignmentY: continuousScrollAlignmentY, waitsForLayout: true
             )
             segments.removeFirst(min(excess, removable))
         case .top:

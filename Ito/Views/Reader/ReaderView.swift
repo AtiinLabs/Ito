@@ -241,6 +241,8 @@ struct ReaderView: View {
             }
             .onChange(of: viewModel.scrollTarget) { target in
                 guard let target else { return }
+                // The mutation's preference pass decides whether native anchoring needs help.
+                guard !target.waitsForLayout else { return }
                 if target.animated {
                     withAnimation {
                         proxy.scrollTo(

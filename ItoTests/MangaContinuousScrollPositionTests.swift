@@ -27,17 +27,6 @@ final class MangaContinuousScrollPositionTests: XCTestCase {
         )
     }
 
-    func testAlignmentClampsWhenRequestedPositionIsOutsidePageTravel() {
-        XCTAssertEqual(
-            MangaContinuousScrollPositionCoordinator.alignmentY(
-                viewportTop: -900,
-                pageHeight: 1_500,
-                viewportHeight: 800
-            ),
-            1
-        )
-    }
-
     func testAlignmentFallsBackToTopWhenPageAndViewportHaveEqualHeight() {
         XCTAssertEqual(
             MangaContinuousScrollPositionCoordinator.alignmentY(

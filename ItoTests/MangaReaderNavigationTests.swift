@@ -71,6 +71,40 @@ extension MangaReaderViewModelTests {
         )
     }
 
+    func testNativeAnchoringDoesNotTriggerASecondScrollCorrection() async {
+        let subject = makeSubject(chapters: [makeChapter("a", number: 1)], viewer: .Vertical)
+        subject.loader.enqueue(.pages([page(0), page(1)]), for: "a")
+        subject.viewModel.start()
+        await waitForReader { subject.viewModel.loadPhase == .content }
+
+        let coordinator = MangaContinuousScrollPositionCoordinator()
+        let viewport = CGRect(x: 0, y: 0, width: 390, height: 844)
+        let frame = CGRect(x: 0, y: -700, width: 390, height: 1_400)
+        _ = coordinator.update(
+            MangaContinuousGeometry(
+                viewport: viewport,
+                pages: ["a#1": MangaContinuousPageGeometry(
+                    contentFrame: CGRect(x: 0, y: 1_000, width: 390, height: 1_400),
+                    viewportFrame: frame
+                )]
+            ),
+            viewModel: subject.viewModel
+        )
+
+        let correction = coordinator.update(
+            MangaContinuousGeometry(
+                viewport: viewport,
+                pages: ["a#1": MangaContinuousPageGeometry(
+                    contentFrame: CGRect(x: 0, y: 1_100, width: 390, height: 1_400),
+                    viewportFrame: frame
+                )]
+            ),
+            viewModel: subject.viewModel
+        )
+
+        XCTAssertNil(correction, "Native anchoring already preserved the viewport")
+    }
+
     func testContinuousViewportScrollWithoutContentDriftDoesNotRequestCorrection() async {
         let subject = makeSubject(chapters: [makeChapter("a", number: 1)], viewer: .Vertical)
         subject.loader.enqueue(.pages([page(0), page(1)]), for: "a")

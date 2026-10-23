@@ -476,7 +476,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         subject.loader.enqueue(.suspended, for: "a")
         subject.viewModel.start()
         await waitForReader { subject.viewModel.loadPhase == .content }
-        subject.viewModel.updateContinuousScrollAlignment(0.37)
+        subject.viewModel.updateContinuousScrollAlignment(1.37)
         subject.viewModel.continuousViewportChanged([subject.viewModel.flatPages[1].id])
 
         subject.viewModel.prependPreviousChapter()
@@ -491,7 +491,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.continuousPageIndex, 3)
         XCTAssertEqual(
             subject.viewModel.scrollTarget,
-            MangaScrollRequest(pageID: "b#1", animated: false, alignmentY: 0.37)
+            MangaScrollRequest(pageID: "b#1", animated: false, alignmentY: 1.37, waitsForLayout: true)
         )
     }
 
@@ -522,7 +522,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.flatPages[subject.viewModel.continuousPageIndex].id, "c4#1")
         XCTAssertEqual(
             subject.viewModel.scrollTarget,
-            MangaScrollRequest(pageID: "c4#1", animated: false, alignmentY: 0.62)
+            MangaScrollRequest(pageID: "c4#1", animated: false, alignmentY: 0.62, waitsForLayout: true)
         )
     }
 

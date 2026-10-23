@@ -177,8 +177,11 @@ final class MangaContinuousScrollPositionCoordinator {
               abs(currentContentFrame.minY - previousContentFrame.minY) > 1,
               let currentViewportFrame = currentPage.viewportFrame,
               let previousViewport = previous.geometry.viewport else { return nil }
+        let previousTop = previousViewportFrame.minY - previousViewport.minY
+        let currentTop = currentViewportFrame.minY - viewport.minY
+        guard abs(currentTop - previousTop) > 1 else { return nil }
 
-        return MangaScrollRequest(
+        let request = MangaScrollRequest(
             pageID: anchorID,
             animated: false,
             alignmentY: Self.alignmentY(
@@ -187,12 +190,16 @@ final class MangaContinuousScrollPositionCoordinator {
                 viewportHeight: viewport.height
             )
         )
+        // LazyVStack can preserve the anchor itself. Reissuing scrollTo in that case
+        // interrupts the reader's momentum without correcting any visible displacement.
+        return Self.isSettled(request, in: current.geometry) ? nil : request
     }
 
     /// Returns the normalized anchor that places the target's top at `viewportTop`.
     static func alignmentY(viewportTop: CGFloat, pageHeight: CGFloat, viewportHeight: CGFloat) -> CGFloat {
         let availableTravel = viewportHeight - pageHeight
         guard abs(availableTravel) > 1 else { return 0 }
-        return min(max(viewportTop / availableTravel, 0), 1)
+        // UnitPoint accepts out-of-bounds fractions. Clamping loses deep-page positions.
+        return viewportTop / availableTravel
     }
 }
