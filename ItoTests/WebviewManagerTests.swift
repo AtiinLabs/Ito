@@ -72,17 +72,24 @@ struct WebviewManagerTests {
 
     @Test func aNewerLoadReplacesThePendingOne() async throws {
         let server = try SilentServer()
+        let replacementServer = try SilentServer()
         let manager = WebviewManager()
         let url = await server.url()
+        let replacementURL = await replacementServer.url()
 
         let first = Task { try await manager.loadUrl(request: WebviewRequest(url: url, script: nil)) }
         await server.connectionArrived()
-        let second = Task { try await manager.loadUrl(request: WebviewRequest(url: url, script: nil)) }
+        let second = Task { try await manager.loadUrl(request: WebviewRequest(url: replacementURL, script: nil)) }
         await #expect(throws: URLError(.cancelled)) { try await first.value }
 
-        // The replaced navigation's failure callback must not end the newer load.
-        await server.connectionArrived()
-        second.cancel()
+        // Distinct endpoints require a new navigation request, not a second connection for
+        // the same URL (which WebKit may reuse). Late old-navigation callbacks must not end it.
+        let cancellation = Task {
+            await replacementServer.connectionArrived()
+            second.cancel()
+        }
         await #expect(throws: CancellationError.self) { try await second.value }
+        cancellation.cancel()
+        await cancellation.value
     }
 }
