@@ -35,7 +35,6 @@ final class AtsuPluginLiveImageIntegrationTests: XCTestCase {
         await runner.setNetModule(AppNetModule())
         await runner.setStdModule(DefaultStdModule())
         await runner.setHtmlModule(DefaultHtmlModule())
-        await runner.setJsModule(DefaultJsModule())
         await runner.setWebviewModule(AppWebviewModule())
         _ = try await runner.loadBundle(from: pluginURL)
         // 3. Request manga update (details + chapters) for user's sample "YMv6"

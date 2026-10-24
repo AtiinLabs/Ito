@@ -36,7 +36,7 @@ struct PluginCallError: LocalizedError, Equatable {
         case .pluginFailed(_, let reason, let category):
             let kind: Kind = category == .needsSetup || category == .unauthorized ? .needsSettings : .reported
             self.init(kind: kind, message: Self.pluginMessage(reason))
-        case .wasmTrap, .memoryOutOfBounds, .invalidDescriptor:
+        case .wasmTrap, .memoryOutOfBounds:
             self.init(kind: .crashed, message: "The source stopped unexpectedly. Try again.")
         case .postcardDecodingError, .postcardEncodingError:
             self.init(kind: .incompatible, message: Self.incompatibleMessage)

@@ -130,7 +130,6 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
         await runner.setStdModule(PluginCompletionStdModule())
         await runner.setDefaultsModule(defaults)
         await runner.setHtmlModule(DefaultHtmlModule())
-        await runner.setJsModule(PluginCompletionJsModule())
         await runner.setWebviewModule(PluginCompletionWebviewModule())
         _ = try await runner.loadBundle(from: pluginURL)
         return runner
@@ -157,7 +156,7 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
 
     private static func isCrash(_ error: ItoError) -> Bool {
         switch error {
-        case .wasmTrap, .memoryOutOfBounds, .invalidDescriptor:
+        case .wasmTrap, .memoryOutOfBounds:
             return true
         default:
             return false
@@ -204,7 +203,7 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
             return domain == "webview" || domain == "js"
                 ? .paused(.incompatible, .incompatible)
                 : .paused(.sourceError, .sourceError)
-        case .wasmTrap, .memoryOutOfBounds, .invalidDescriptor:
+        case .wasmTrap, .memoryOutOfBounds:
             return .paused(.sourceError, .sourceError)
         }
     }

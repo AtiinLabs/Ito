@@ -1,6 +1,5 @@
 import Foundation
 import ito_runner
-import JavaScriptCore
 
 /// Settings a plugin sees while delivering one completion: the values captured with the attempt's
 /// intent, held in memory. A plugin may `set` or `remove` keys, but only inside this sandbox and
@@ -38,30 +37,6 @@ nonisolated final class PluginCompletionDefaults: DefaultsModule, @unchecked Sen
 /// reports.
 nonisolated struct PluginCompletionStdModule: StdModule {
     func print(message: String) {}
-}
-
-/// JavaScript for plugins that compute a request signature or token. Evaluation is real; only the
-/// plugin-controlled text (`console.log` and uncaught exceptions) has nowhere to go.
-nonisolated final class PluginCompletionJsModule: JsModule, @unchecked Sendable {
-    private let lock = NSLock()
-
-    func evaluate(script: String) throws -> String {
-        lock.lock()
-        defer { lock.unlock() }
-        guard let context = JSContext() else {
-            throw ItoError.hostModuleError(domain: "js", message: "JavaScript is unavailable.")
-        }
-        let discardLog: @convention(block) (String) -> Void = { _ in }
-        let console = JSValue(newObjectIn: context)
-        console?.setObject(discardLog, forKeyedSubscript: "log" as NSString)
-        context.setObject(console, forKeyedSubscript: "console" as NSString)
-        context.exceptionHandler = { _, _ in }
-        guard let result = context.evaluateScript(script) else {
-            throw ItoError.hostModuleError(domain: "js", message: "JavaScript evaluation failed.")
-        }
-        if result.isUndefined || result.isNull { return "" }
-        return result.toString() ?? ""
-    }
 }
 
 /// A completion runs headless: it never loads a page, runs a page script, or shows login. A plugin

@@ -223,14 +223,6 @@ struct PluginCompletionSandboxTests {
             #expect(!"\(String(describing: error))".contains("SENTINEL"))
         }
     }
-
-    @Test func javaScriptEvaluatesButItsConsoleAndExceptionsGoNowhere() throws {
-        let module = PluginCompletionJsModule()
-
-        #expect(try module.evaluate(script: "console.log('SENTINEL'); 6 * 7") == "42")
-        #expect(try module.evaluate(script: "undefined").isEmpty)
-        #expect(try module.evaluate(script: "throw new Error('SENTINEL')").isEmpty)
-    }
 }
 
 // MARK: - Failure classification
@@ -258,7 +250,6 @@ struct PluginCompletionOutcomeMappingTests {
             error: ItoError.memoryOutOfBounds(offset: 1, length: 2, memorySize: 3),
             expected: "paused(sourceError,sourceError)"
         ),
-        .init(name: "descriptor", error: ItoError.invalidDescriptor(id: 1), expected: "paused(sourceError,sourceError)"),
         .init(
             name: "newerHost",
             error: ItoError.requiresNewerHost(missingImports: ["a.b"]),

@@ -51,8 +51,7 @@ struct PluginCallErrorTests {
 
     @Test(arguments: [
         ItoError.wasmTrap("unreachable"),
-        .memoryOutOfBounds(offset: 1, length: 2, memorySize: 3),
-        .invalidDescriptor(id: 7)
+        .memoryOutOfBounds(offset: 1, length: 2, memorySize: 3)
     ])
     func aTrapOrBadMemoryAccessIsACrash(_ runnerError: ItoError) {
         #expect(PluginCallError(runnerError).kind == .crashed)

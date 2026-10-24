@@ -156,7 +156,6 @@ public class PluginManager: ObservableObject {
         await runner.setStdModule(DefaultStdModule())
         await runner.setDefaultsModule(defaults)
         await runner.setHtmlModule(DefaultHtmlModule())
-        await runner.setJsModule(DefaultJsModule())
         await runner.setWebviewModule(AppWebviewModule())
 
         AppLogger.plugin.debug("\("🔌 [PluginManager] Loading bundle for \(pluginID)")...")

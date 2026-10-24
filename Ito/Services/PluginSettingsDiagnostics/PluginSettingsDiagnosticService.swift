@@ -142,7 +142,6 @@ final class PluginSettingsDiagnosticService: PluginSettingsDiagnosing {
         await runner.setStdModule(PluginCompletionStdModule())
         await runner.setDefaultsModule(defaults)
         await runner.setHtmlModule(DefaultHtmlModule())
-        await runner.setJsModule(PluginCompletionJsModule())
         await runner.setWebviewModule(PluginDiagnosticWebviewModule())
         _ = try await runner.loadBundle(from: pluginURL)
         return runner
