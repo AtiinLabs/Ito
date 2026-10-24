@@ -20,8 +20,8 @@ final class ListingViewModelTests: XCTestCase {
 
     func testInitialPageSuccessPublishesInRunnerOrderAndAdvancesPage() async {
         let context = PR7BSourceRunnerContextSpy()
-        context.listingResults[1] = .success(.manga(
-            entries: [Manga(key: "b", title: "B"), Manga(key: "a", title: "A")],
+        context.listingResults[1] = .success(MediaPageResult(
+            entries: [.manga(Manga(key: "b", title: "B")), .manga(Manga(key: "a", title: "A"))],
             hasNextPage: true
         ))
         let viewModel = makeViewModel(context: context)
@@ -29,7 +29,7 @@ final class ListingViewModelTests: XCTestCase {
         await viewModel.loadInitialIfNeeded()
 
         XCTAssertEqual(viewModel.phase, .content)
-        XCTAssertEqual(viewModel.mangas.map(\.key), ["b", "a"])
+        XCTAssertEqual(viewModel.entries.map(\.key), ["b", "a"])
         XCTAssertEqual(viewModel.nextPage, 2)
         XCTAssertTrue(viewModel.hasNextPage)
         XCTAssertEqual(context.listingInvocations.map(\.page), [1])
@@ -46,20 +46,20 @@ final class ListingViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.nextPage, 1)
         XCTAssertTrue(viewModel.isEmpty)
 
-        context.listingResults[1] = .success(.manga(
-            entries: [Manga(key: "recovered", title: "Recovered")],
+        context.listingResults[1] = .success(MediaPageResult(
+            entries: [.manga(Manga(key: "recovered", title: "Recovered"))],
             hasNextPage: false
         ))
         await viewModel.retry()
 
         XCTAssertEqual(context.listingInvocations.map(\.page), [1, 1])
-        XCTAssertEqual(viewModel.mangas.map(\.key), ["recovered"])
+        XCTAssertEqual(viewModel.entries.map(\.key), ["recovered"])
         XCTAssertEqual(viewModel.phase, .content)
     }
 
     func testEmptyInitialPageProducesStableEmptyAndExhaustedState() async {
         let context = PR7BSourceRunnerContextSpy()
-        context.listingResults[1] = .success(.manga(entries: [], hasNextPage: false))
+        context.listingResults[1] = .success(MediaPageResult(entries: [], hasNextPage: false))
         let viewModel = makeViewModel(context: context)
 
         await viewModel.loadInitialIfNeeded()
@@ -74,9 +74,9 @@ final class ListingViewModelTests: XCTestCase {
     func testEmptyNonterminalFirstPageCanReachSecondPageContent() async {
         let context = PR7BSourceRunnerContextSpy()
         context.listingResults = [
-            1: .success(.manga(entries: [], hasNextPage: true)),
-            2: .success(.manga(
-                entries: [Manga(key: "later", title: "Later")],
+            1: .success(MediaPageResult(entries: [], hasNextPage: true)),
+            2: .success(MediaPageResult(
+                entries: [.manga(Manga(key: "later", title: "Later"))],
                 hasNextPage: false
             ))
         ]
@@ -90,7 +90,7 @@ final class ListingViewModelTests: XCTestCase {
         await viewModel.loadMore()
 
         XCTAssertEqual(context.listingInvocations.map(\.page), [1, 2])
-        XCTAssertEqual(viewModel.mangas.map(\.key), ["later"])
+        XCTAssertEqual(viewModel.entries.map(\.key), ["later"])
         XCTAssertEqual(viewModel.phase, .content)
         XCTAssertEqual(viewModel.paginationState, .exhausted)
     }
@@ -98,33 +98,33 @@ final class ListingViewModelTests: XCTestCase {
     func testEmptyNonterminalPaginationFailureRetriesSameSecondPage() async {
         let context = PR7BSourceRunnerContextSpy()
         context.listingResults = [
-            1: .success(.manga(entries: [], hasNextPage: true)),
+            1: .success(MediaPageResult(entries: [], hasNextPage: true)),
             2: .failure(PR7BTestFailure.failed)
         ]
         let viewModel = makeViewModel(context: context)
 
         await viewModel.loadInitial()
         await viewModel.loadMore()
-        context.listingResults[2] = .success(.manga(
-            entries: [Manga(key: "recovered", title: "Recovered")],
+        context.listingResults[2] = .success(MediaPageResult(
+            entries: [.manga(Manga(key: "recovered", title: "Recovered"))],
             hasNextPage: false
         ))
         await viewModel.retry()
 
         XCTAssertEqual(context.listingInvocations.map(\.page), [1, 2, 2])
-        XCTAssertEqual(viewModel.mangas.map(\.key), ["recovered"])
+        XCTAssertEqual(viewModel.entries.map(\.key), ["recovered"])
         XCTAssertEqual(viewModel.nextPage, 3)
         XCTAssertEqual(viewModel.paginationState, .exhausted)
     }
 
     func testPaginationAppendsInOrderAndAdvancesOnlyAfterSuccess() async {
         let context = PR7BSourceRunnerContextSpy()
-        context.listingResults[1] = .success(.manga(
-            entries: [Manga(key: "one", title: "One")],
+        context.listingResults[1] = .success(MediaPageResult(
+            entries: [.manga(Manga(key: "one", title: "One"))],
             hasNextPage: true
         ))
-        context.listingResults[2] = .success(.manga(
-            entries: [Manga(key: "two", title: "Two")],
+        context.listingResults[2] = .success(MediaPageResult(
+            entries: [.manga(Manga(key: "two", title: "Two"))],
             hasNextPage: true
         ))
         let viewModel = makeViewModel(context: context)
@@ -132,7 +132,7 @@ final class ListingViewModelTests: XCTestCase {
         await viewModel.loadInitialIfNeeded()
         await viewModel.loadMore()
 
-        XCTAssertEqual(viewModel.mangas.map(\.key), ["one", "two"])
+        XCTAssertEqual(viewModel.entries.map(\.key), ["one", "two"])
         XCTAssertEqual(viewModel.nextPage, 3)
         XCTAssertEqual(viewModel.paginationState, .idle)
         XCTAssertEqual(context.listingInvocations.map(\.page), [1, 2])
@@ -141,13 +141,13 @@ final class ListingViewModelTests: XCTestCase {
     func testEmptyNonterminalLaterPageExposesContinuationAndReachesFollowingContent() async {
         let context = PR7BSourceRunnerContextSpy()
         context.listingResults = [
-            1: .success(.manga(
-                entries: [Manga(key: "one", title: "One")],
+            1: .success(MediaPageResult(
+                entries: [.manga(Manga(key: "one", title: "One"))],
                 hasNextPage: true
             )),
-            2: .success(.manga(entries: [], hasNextPage: true)),
-            3: .success(.manga(
-                entries: [Manga(key: "three", title: "Three")],
+            2: .success(MediaPageResult(entries: [], hasNextPage: true)),
+            3: .success(MediaPageResult(
+                entries: [.manga(Manga(key: "three", title: "Three"))],
                 hasNextPage: false
             ))
         ]
@@ -156,7 +156,7 @@ final class ListingViewModelTests: XCTestCase {
         await viewModel.loadInitialIfNeeded()
         await viewModel.loadMore()
 
-        XCTAssertEqual(viewModel.mangas.map(\.key), ["one"])
+        XCTAssertEqual(viewModel.entries.map(\.key), ["one"])
         XCTAssertEqual(viewModel.nextPage, 3)
         XCTAssertEqual(viewModel.paginationState, .continuationRequired(page: 3))
         XCTAssertEqual(viewModel.phase, .content)
@@ -164,19 +164,19 @@ final class ListingViewModelTests: XCTestCase {
         await viewModel.loadMore()
 
         XCTAssertEqual(context.listingInvocations.map(\.page), [1, 2, 3])
-        XCTAssertEqual(viewModel.mangas.map(\.key), ["one", "three"])
+        XCTAssertEqual(viewModel.entries.map(\.key), ["one", "three"])
         XCTAssertEqual(viewModel.nextPage, 4)
         XCTAssertEqual(viewModel.paginationState, .exhausted)
     }
 
     func testEndOfListRemainsStableAndSuppressesFurtherRequests() async {
         let context = PR7BSourceRunnerContextSpy()
-        context.listingResults[1] = .success(.manga(
-            entries: [Manga(key: "one", title: "One")],
+        context.listingResults[1] = .success(MediaPageResult(
+            entries: [.manga(Manga(key: "one", title: "One"))],
             hasNextPage: true
         ))
-        context.listingResults[2] = .success(.manga(
-            entries: [Manga(key: "two", title: "Two")],
+        context.listingResults[2] = .success(MediaPageResult(
+            entries: [.manga(Manga(key: "two", title: "Two"))],
             hasNextPage: false
         ))
         let viewModel = makeViewModel(context: context)
@@ -193,8 +193,8 @@ final class ListingViewModelTests: XCTestCase {
 
     func testRapidDuplicatePaginationTriggersIssueOneEquivalentRequest() async {
         let context = PR7BSourceRunnerContextSpy()
-        context.listingResults[1] = .success(.manga(
-            entries: [Manga(key: "one", title: "One")],
+        context.listingResults[1] = .success(MediaPageResult(
+            entries: [.manga(Manga(key: "one", title: "One"))],
             hasNextPage: true
         ))
         context.suspendedListingPages = [2]
@@ -208,19 +208,19 @@ final class ListingViewModelTests: XCTestCase {
         XCTAssertEqual(context.listingInvocations.map(\.page), [1, 2])
         context.completeListing(
             page: 2,
-            with: .success(.manga(
-                entries: [Manga(key: "two", title: "Two")],
+            with: .success(MediaPageResult(
+                entries: [.manga(Manga(key: "two", title: "Two"))],
                 hasNextPage: false
             ))
         )
         await first.value
-        XCTAssertEqual(viewModel.mangas.map(\.key), ["one", "two"])
+        XCTAssertEqual(viewModel.entries.map(\.key), ["one", "two"])
     }
 
     func testPaginationFailureDoesNotAdvanceAndRetryUsesSamePage() async {
         let context = PR7BSourceRunnerContextSpy()
-        context.listingResults[1] = .success(.manga(
-            entries: [Manga(key: "one", title: "One")],
+        context.listingResults[1] = .success(MediaPageResult(
+            entries: [.manga(Manga(key: "one", title: "One"))],
             hasNextPage: true
         ))
         context.listingResults[2] = .failure(PR7BTestFailure.failed)
@@ -230,25 +230,24 @@ final class ListingViewModelTests: XCTestCase {
         await viewModel.loadMore()
         XCTAssertEqual(viewModel.paginationState, .failure(page: 2, reason: "fixture failure"))
         XCTAssertEqual(viewModel.nextPage, 2)
-        XCTAssertEqual(viewModel.mangas.map(\.key), ["one"])
+        XCTAssertEqual(viewModel.entries.map(\.key), ["one"])
 
-        context.listingResults[2] = .success(.manga(
-            entries: [Manga(key: "retry", title: "Retry")],
+        context.listingResults[2] = .success(MediaPageResult(
+            entries: [.manga(Manga(key: "retry", title: "Retry"))],
             hasNextPage: false
         ))
         await viewModel.retry()
 
         XCTAssertEqual(context.listingInvocations.map(\.page), [1, 2, 2])
-        XCTAssertEqual(viewModel.mangas.map(\.key), ["one", "retry"])
-        XCTAssertEqual(viewModel.nextPage, 3)
+        XCTAssertEqual(viewModel.entries.map(\.key), ["one", "retry"])
     }
 
     func testReplacingListingSuppressesStaleNonCooperativeFirstPage() async {
         let stale = PR7BSourceRunnerContextSpy()
         stale.suspendedListingPages = [1]
         let fresh = PR7BSourceRunnerContextSpy()
-        fresh.listingResults[1] = .success(.manga(
-            entries: [Manga(key: "fresh", title: "Fresh")],
+        fresh.listingResults[1] = .success(MediaPageResult(
+            entries: [.manga(Manga(key: "fresh", title: "Fresh"))],
             hasNextPage: false
         ))
         let viewModel = makeViewModel(context: stale)
@@ -262,8 +261,8 @@ final class ListingViewModelTests: XCTestCase {
         ))
         stale.completeListing(
             page: 1,
-            with: .success(.manga(
-                entries: [Manga(key: "stale", title: "Stale")],
+            with: .success(MediaPageResult(
+                entries: [.manga(Manga(key: "stale", title: "Stale"))],
                 hasNextPage: true
             ))
         )
@@ -271,20 +270,20 @@ final class ListingViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.identity.listingID, "recent")
         XCTAssertEqual(viewModel.title, "Recent")
-        XCTAssertEqual(viewModel.mangas.map(\.key), ["fresh"])
+        XCTAssertEqual(viewModel.entries.map(\.key), ["fresh"])
         XCTAssertEqual(viewModel.nextPage, 2)
     }
 
     func testReplacingListingSuppressesStaleSubsequentPageAndTokenAdvance() async {
         let stale = PR7BSourceRunnerContextSpy()
-        stale.listingResults[1] = .success(.manga(
-            entries: [Manga(key: "old-one", title: "Old")],
+        stale.listingResults[1] = .success(MediaPageResult(
+            entries: [.manga(Manga(key: "old-one", title: "Old"))],
             hasNextPage: true
         ))
         stale.suspendedListingPages = [2]
         let fresh = PR7BSourceRunnerContextSpy()
-        fresh.listingResults[1] = .success(.manga(
-            entries: [Manga(key: "fresh-one", title: "Fresh")],
+        fresh.listingResults[1] = .success(MediaPageResult(
+            entries: [.manga(Manga(key: "fresh-one", title: "Fresh"))],
             hasNextPage: true
         ))
         let viewModel = makeViewModel(context: stale)
@@ -299,14 +298,14 @@ final class ListingViewModelTests: XCTestCase {
         ))
         stale.completeListing(
             page: 2,
-            with: .success(.manga(
-                entries: [Manga(key: "old-two", title: "Old Two")],
+            with: .success(MediaPageResult(
+                entries: [.manga(Manga(key: "old-two", title: "Old Two"))],
                 hasNextPage: false
             ))
         )
         await oldPage.value
 
-        XCTAssertEqual(viewModel.mangas.map(\.key), ["fresh-one"])
+        XCTAssertEqual(viewModel.entries.map(\.key), ["fresh-one"])
         XCTAssertEqual(viewModel.nextPage, 2)
         XCTAssertEqual(viewModel.paginationState, .idle)
     }
@@ -321,26 +320,26 @@ final class ListingViewModelTests: XCTestCase {
         viewModel.cancel()
         context.completeListing(
             page: 1,
-            with: .success(.manga(
-                entries: [Manga(key: "obsolete", title: "Obsolete")],
+            with: .success(MediaPageResult(
+                entries: [.manga(Manga(key: "obsolete", title: "Obsolete"))],
                 hasNextPage: true
             ))
         )
         await task.value
 
         XCTAssertEqual(viewModel.phase, .cancelled)
-        XCTAssertTrue(viewModel.mangas.isEmpty)
+        XCTAssertTrue(viewModel.entries.isEmpty)
         XCTAssertEqual(viewModel.nextPage, 1)
     }
 
     func testCharacterizedDuplicateItemsRemainUndeduplicatedAcrossPages() async {
         let context = PR7BSourceRunnerContextSpy()
-        context.listingResults[1] = .success(.manga(
-            entries: [Manga(key: "same", title: "First")],
+        context.listingResults[1] = .success(MediaPageResult(
+            entries: [.manga(Manga(key: "same", title: "First"))],
             hasNextPage: true
         ))
-        context.listingResults[2] = .success(.manga(
-            entries: [Manga(key: "same", title: "Second")],
+        context.listingResults[2] = .success(MediaPageResult(
+            entries: [.manga(Manga(key: "same", title: "Second"))],
             hasNextPage: false
         ))
         let viewModel = makeViewModel(context: context)
@@ -348,8 +347,8 @@ final class ListingViewModelTests: XCTestCase {
         await viewModel.loadInitialIfNeeded()
         await viewModel.loadMore()
 
-        XCTAssertEqual(viewModel.mangas.map(\.key), ["same", "same"])
-        XCTAssertEqual(viewModel.mangas.map(\.title), ["First", "Second"])
+        XCTAssertEqual(viewModel.entries.map(\.key), ["same", "same"])
+        XCTAssertEqual(viewModel.entries.map(\.title), ["First", "Second"])
     }
 
     func testTypedMediaRoutePreservesContextPluginAndPayload() async throws {
@@ -376,22 +375,55 @@ final class ListingViewModelTests: XCTestCase {
         XCTAssertEqual(context.mangaDetailLoadCount, 1)
     }
 
-    func testListingResponseTypeMismatchFailsWithoutAdvancingPagination() async {
+    func testMixedListingEntriesPublishInOrderAndRoutePerKind() async throws {
         let context = PR7BSourceRunnerContextSpy()
-        context.listingResults[1] = .success(.anime(
-            entries: [Anime(key: "wrong", title: "Wrong")],
-            hasNextPage: true
+        let manga = Manga(key: "m1", title: "Manga 1")
+        let anime = Anime(key: "a1", title: "Anime 1")
+        let novel = Novel(key: "n1", title: "Novel 1")
+        context.listingResults[1] = .success(MediaPageResult(
+            entries: [.manga(manga), .anime(anime), .novel(novel)],
+            hasNextPage: false
         ))
         let viewModel = makeViewModel(context: context)
 
         await viewModel.loadInitialIfNeeded()
 
-        XCTAssertEqual(
-            viewModel.phase,
-            .failure("The source returned an unexpected listing type.")
+        XCTAssertEqual(viewModel.phase, .content)
+        XCTAssertEqual(viewModel.entries.map(\.key), ["m1", "a1", "n1"])
+        XCTAssertEqual(viewModel.entries.map(\.kind), [.manga, .anime, .novel])
+
+        guard case .manga(let mangaPlugin, _, let mangaPayload) = viewModel.destination(for: .manga(manga)) else {
+            return XCTFail("Expected manga destination")
+        }
+        XCTAssertEqual(mangaPlugin, "plugin.manga")
+        XCTAssertEqual(mangaPayload.key, "m1")
+
+        guard case .anime(let animePlugin, _, let animePayload) = viewModel.destination(for: .anime(anime)) else {
+            return XCTFail("Expected anime destination")
+        }
+        XCTAssertEqual(animePlugin, "plugin.manga")
+        XCTAssertEqual(animePayload.key, "a1")
+
+        guard case .novel(let novelPlugin, _, let novelPayload) = viewModel.destination(for: .novel(novel)) else {
+            return XCTFail("Expected novel destination")
+        }
+        XCTAssertEqual(novelPlugin, "plugin.manga")
+        XCTAssertEqual(novelPayload.key, "n1")
+    }
+
+    func testListingIdentityDoesNotRelyOnPrimaryKind() {
+        let context = PR7BSourceRunnerContextSpy()
+        let mangaDestination = makeDestination(context: context)
+        let animePlugin = pr7bPlugin(id: "plugin.manga", type: .anime)
+        let animeDestination = SourceListingDestination(
+            plugin: animePlugin,
+            context: context,
+            listing: mangaDestination.listing,
+            title: mangaDestination.title
         )
-        XCTAssertEqual(viewModel.nextPage, 1)
-        XCTAssertTrue(viewModel.isEmpty)
+        let mangaVM = ListingViewModel(destination: mangaDestination)
+        let animeVM = ListingViewModel(destination: animeDestination)
+        XCTAssertEqual(mangaVM.identity, animeVM.identity)
     }
 
     func testMigratedListingLayerContainsNoGlobalsAdHocDestinationOrAnyView() throws {

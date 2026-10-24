@@ -1,5 +1,6 @@
 import NukeUI
 import SwiftUI
+import ito_runner
 
 // MARK: - RepositoriesView
 
@@ -282,9 +283,20 @@ struct PackageRowView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(pkg.name)
                     .font(.headline)
-                Text("v\(pkg.version) • \(pkg.pluginType.capitalized)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Text("v\(pkg.version)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if !pkg.supportedKinds.isEmpty {
+                        ForEach(pkg.supportedKinds, id: \.self) { kind in
+                            PluginTypeBadge(type: kind)
+                        }
+                    } else {
+                        Text("• \(pkg.pluginType.capitalized)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 if pkg.isArchived {
                     Label("Archived", systemImage: "archivebox.fill")
                         .font(.caption2)

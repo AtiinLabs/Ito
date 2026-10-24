@@ -6,7 +6,6 @@ import ito_runner
 final class ListingViewModel: ObservableObject {
     struct Identity: Equatable {
         let pluginID: String
-        let pluginType: MediaKind
         let listingID: String
         let listingKind: Int32
         let title: String
@@ -31,9 +30,7 @@ final class ListingViewModel: ObservableObject {
 
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var paginationState: PaginationState = .idle
-    @Published private(set) var mangas: [Manga] = []
-    @Published private(set) var animes: [Anime] = []
-    @Published private(set) var novels: [Novel] = []
+    @Published private(set) var entries: [MediaEntry] = []
     @Published private(set) var hasNextPage = true
     @Published private(set) var nextPage: Int32 = 1
 
@@ -53,8 +50,7 @@ final class ListingViewModel: ObservableObject {
     }
 
     var title: String { destination.title }
-    var pluginType: MediaKind { destination.plugin.info.type }
-    var isEmpty: Bool { mangas.isEmpty && animes.isEmpty && novels.isEmpty }
+    var isEmpty: Bool { entries.isEmpty }
 
     func loadInitialIfNeeded() async {
         guard phase == .idle || phase == .cancelled else { return }
@@ -99,16 +95,27 @@ final class ListingViewModel: ObservableObject {
         cancelActiveRequest(publishCancelledState: true)
     }
 
+    func destination(for entry: MediaEntry) -> SearchDestination {
+        switch entry {
+        case .manga(let manga):
+            return .manga(pluginID: destination.plugin.id, context: destination.context, media: manga)
+        case .anime(let anime):
+            return .anime(pluginID: destination.plugin.id, context: destination.context, media: anime)
+        case .novel(let novel):
+            return .novel(pluginID: destination.plugin.id, context: destination.context, media: novel)
+        }
+    }
+
     func destination(for manga: Manga) -> SearchDestination {
-        .manga(pluginID: destination.plugin.id, context: destination.context, media: manga)
+        destination(for: .manga(manga))
     }
 
     func destination(for anime: Anime) -> SearchDestination {
-        .anime(pluginID: destination.plugin.id, context: destination.context, media: anime)
+        destination(for: .anime(anime))
     }
 
     func destination(for novel: Novel) -> SearchDestination {
-        .novel(pluginID: destination.plugin.id, context: destination.context, media: novel)
+        destination(for: .novel(novel))
     }
 
     private func request(page: Int32, isInitial: Bool) async {
@@ -150,13 +157,12 @@ final class ListingViewModel: ObservableObject {
     ) async {
         do {
             let result = try await destination.context.loadListing(
-                kind: destination.plugin.info.type,
                 listing: destination.listing,
                 page: page
             )
             try Task.checkCancellation()
             guard isCurrent(sessionID: sessionID, requestID: requestID) else { return }
-            let publishedCount = try publish(result, isInitial: isInitial)
+            let publishedCount = publish(result, isInitial: isInitial)
             nextPage = page + 1
             if hasNextPage, !isInitial, publishedCount == 0 {
                 paginationState = .continuationRequired(page: nextPage)
@@ -187,23 +193,10 @@ final class ListingViewModel: ObservableObject {
         }
     }
 
-    private func publish(_ result: ListingContentPage, isInitial: Bool) throws -> Int {
-        switch (pluginType, result) {
-        case (.manga, .manga(let entries, let responseHasNextPage)):
-            mangas = isInitial ? entries : mangas + entries
-            hasNextPage = responseHasNextPage
-            return entries.count
-        case (.anime, .anime(let entries, let responseHasNextPage)):
-            animes = isInitial ? entries : animes + entries
-            hasNextPage = responseHasNextPage
-            return entries.count
-        case (.novel, .novel(let entries, let responseHasNextPage)):
-            novels = isInitial ? entries : novels + entries
-            hasNextPage = responseHasNextPage
-            return entries.count
-        default:
-            throw ListingViewModelError.responseTypeMismatch
-        }
+    private func publish(_ result: MediaPageResult, isInitial: Bool) -> Int {
+        entries = isInitial ? result.entries : entries + result.entries
+        hasNextPage = result.hasNextPage
+        return result.entries.count
     }
 
     private func resetForNewSession() {
@@ -211,9 +204,7 @@ final class ListingViewModel: ObservableObject {
         sessionID = UUID()
         requestID = nil
         requestTask = nil
-        mangas = []
-        animes = []
-        novels = []
+        entries = []
         hasNextPage = true
         nextPage = 1
         paginationState = .idle
@@ -247,18 +238,9 @@ final class ListingViewModel: ObservableObject {
     private static func identity(for destination: SourceListingDestination) -> Identity {
         Identity(
             pluginID: destination.plugin.id,
-            pluginType: destination.plugin.info.type,
             listingID: destination.listing.id,
             listingKind: destination.listing.kind,
             title: destination.title
         )
-    }
-}
-
-private enum ListingViewModelError: LocalizedError {
-    case responseTypeMismatch
-
-    var errorDescription: String? {
-        "The source returned an unexpected listing type."
     }
 }

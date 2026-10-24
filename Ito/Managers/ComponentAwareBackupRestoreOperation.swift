@@ -2145,6 +2145,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         switch mediaType {
         case .manga: "manga"
         case .anime: "anime"
+        case .novel: "novel"
         }
     }
 

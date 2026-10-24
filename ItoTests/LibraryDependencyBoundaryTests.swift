@@ -95,7 +95,7 @@ final class LibraryDependencyBoundaryTests: XCTestCase {
 
         XCTAssertEqual(first.id, installed.id)
         XCTAssertEqual(first.version, "2.0.0")
-        XCTAssertEqual(first.pluginType, .novel)
+        XCTAssertEqual(first.supportedKinds, [.novel])
         XCTAssertEqual(first.fileIdentity, pluginURL.standardizedFileURL)
         XCTAssertEqual(revisions, [0, 1, 2])
         withExtendedLifetime(cancellable) {}

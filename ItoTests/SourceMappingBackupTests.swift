@@ -43,6 +43,43 @@ struct SourceMappingBackupTests {
         #expect(imported.sourceMappings[0].matchMethod == .none)
     }
 
+    @Test func exportImportRoundTripSupportsNovelMediaType() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let expected = mapping(
+            canonicalMediaId: "novel-99",
+            mediaType: .novel,
+            decision: .autoConfirm,
+            matchMethod: .exactPreferred,
+            confidence: 0.95,
+            title: "Novel Mapping",
+            includeOptionalColumns: true
+        )
+        try await database.dbPool.write { db in
+            for entry in AppPreferenceCatalogEntry.allCases {
+                try AppPreference(
+                    key: entry.rawValue,
+                    value: entry.canonicalDefaultJSON
+                ).insert(db)
+            }
+            try expected.insert(db)
+        }
+        let backupURL = database.databaseURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("source-mapping-novel.itobackup")
+
+        try await BackupExportOperation(
+            dbPool: database.dbPool,
+            sourceDatabaseURL: database.databaseURL,
+            readinessGate: {}
+        ).export(to: backupURL)
+        let imported = try await ItoNativeImporter().parse(url: backupURL)
+
+        #expect(imported.representation(of: .sourceMappings) == .representedNonempty)
+        #expect(imported.sourceMappings == [expected])
+        #expect(imported.sourceMappings[0].mediaType == .novel)
+    }
+
     @Test func mergeUsesCompositePrimaryKeyAndPreservesLocalConflicts() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
@@ -247,6 +284,7 @@ struct SourceMappingBackupTests {
 
     private func mapping(
         canonicalMediaId: String,
+        mediaType: PluginMediaType = .manga,
         decision: MatchDecision = .autoConfirm,
         matchMethod: MatchMethod = .exactPreferred,
         confidence: Double = 1,
@@ -256,7 +294,7 @@ struct SourceMappingBackupTests {
         SourceMappingRecord(
             canonicalProvider: "anilist",
             canonicalMediaId: canonicalMediaId,
-            mediaType: .manga,
+            mediaType: mediaType,
             pluginId: "plugin",
             pluginMediaKey: "media-\(canonicalMediaId)",
             decision: decision,
@@ -317,6 +355,7 @@ struct SourceMappingBackupTests {
         switch type {
         case .manga: "manga"
         case .anime: "anime"
+        case .novel: "novel"
         }
     }
 

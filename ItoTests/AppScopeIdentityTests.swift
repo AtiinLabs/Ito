@@ -673,6 +673,7 @@ private final class AppScopeSearchExecutor: SearchPluginExecuting {
 
     func search(
         plugin: SearchPluginDescriptor,
+        kind: MediaKind?,
         query: String,
         limit: Int
     ) async throws -> [PluginSearchResult] {

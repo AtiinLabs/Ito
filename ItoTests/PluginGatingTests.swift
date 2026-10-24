@@ -192,6 +192,47 @@ struct PluginGatingTests {
         #expect(newer.imports == ["ito:core/net.fetch_v2"])
         #expect(older.abi == nil && older.imports == nil)
     }
+
+    @Test func repoPackageDecodesKindsLenientlyWithStableDeduplicatedMediaKinds() throws {
+        let base = """
+            "id": "multi", "name": "Multi", "version": "1.0", "min_app_version": "1.0",
+            "download_url": "packages/multi.ito", "sha256": "x", "type": "manga"
+            """
+        // Declared kinds with duplicates, case differences, and unknown kind strings
+        let declared = try JSONDecoder().decode(RepoPackage.self, from: Data("""
+            {\(base), "kinds": ["manga", "anime", "NOVEL", "manga", "unknown_future_kind", "ANIME"]}
+            """.utf8))
+        #expect(declared.kinds == ["manga", "anime", "NOVEL", "manga", "unknown_future_kind", "ANIME"])
+        #expect(declared.supportedKinds == [.manga, .anime, .novel])
+
+        // Older package without kinds field falls back to type
+        let legacy = try JSONDecoder().decode(RepoPackage.self, from: Data("{\(base)}".utf8))
+        #expect(legacy.kinds == nil)
+        #expect(legacy.supportedKinds == [.manga])
+
+        // Malformed kinds value (e.g. integer or object instead of array of strings) is ignored leniently
+        let malformedKinds = try JSONDecoder().decode(RepoPackage.self, from: Data("""
+            {\(base), "kinds": 12345}
+            """.utf8))
+        #expect(malformedKinds.kinds == nil)
+        #expect(malformedKinds.supportedKinds == [.manga])
+
+        // Unknown kinds only falls back to legacy type if valid
+        let unknownOnly = try JSONDecoder().decode(RepoPackage.self, from: Data("""
+            {\(base), "kinds": ["podcast", "game"]}
+            """.utf8))
+        #expect(unknownOnly.supportedKinds == [.manga])
+
+        // Invalid fallback type with unknown kinds yields empty supportedKinds
+        let invalidBoth = try JSONDecoder().decode(RepoPackage.self, from: Data("""
+            {
+                "id": "x", "name": "X", "version": "1.0", "min_app_version": "1.0",
+                "download_url": "x.ito", "sha256": "x", "type": "unrecognized",
+                "kinds": ["weird_kind"]
+            }
+            """.utf8))
+        #expect(invalidBoth.supportedKinds.isEmpty)
+    }
 }
 
 private actor Counter {

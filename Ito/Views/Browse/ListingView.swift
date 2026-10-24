@@ -50,35 +50,37 @@ struct ListingView: View {
 
     private var resultsList: some View {
         List {
-            switch viewModel.pluginType {
-            case .anime:
-                ForEach(viewModel.animes, id: \.key) { anime in
-                    MediaRowView(media: anime) {
-                        routeFactory.destination(for: viewModel.destination(for: anime))
+            ForEach(viewModel.entries, id: \.catalogIdentity) { entry in
+                entryRow(entry)
+                    .onAppear {
+                        loadMoreIfNeeded(
+                            lastIdentity: viewModel.entries.last?.catalogIdentity,
+                            identity: entry.catalogIdentity
+                        )
                     }
-                    .onAppear { loadMoreIfNeeded(lastKey: viewModel.animes.last?.key, key: anime.key) }
-                }
-            case .manga:
-                ForEach(viewModel.mangas, id: \.key) { manga in
-                    MediaRowView(media: manga) {
-                        routeFactory.destination(for: viewModel.destination(for: manga))
-                    }
-                    .onAppear { loadMoreIfNeeded(lastKey: viewModel.mangas.last?.key, key: manga.key) }
-                }
-            case .novel:
-                ForEach(viewModel.novels, id: \.key) { novel in
-                    MediaRowView(media: novel) {
-                        routeFactory.destination(for: viewModel.destination(for: novel))
-                    }
-                    .onAppear { loadMoreIfNeeded(lastKey: viewModel.novels.last?.key, key: novel.key) }
-                }
-            @unknown default:
-                EmptyView()
             }
 
             paginationFooter
         }
         .listStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func entryRow(_ entry: MediaEntry) -> some View {
+        switch entry {
+        case .manga(let manga):
+            MediaRowView(media: manga) {
+                routeFactory.destination(for: viewModel.destination(for: entry))
+            }
+        case .anime(let anime):
+            MediaRowView(media: anime) {
+                routeFactory.destination(for: viewModel.destination(for: entry))
+            }
+        case .novel(let novel):
+            MediaRowView(media: novel) {
+                routeFactory.destination(for: viewModel.destination(for: entry))
+            }
+        }
     }
 
     @ViewBuilder
@@ -125,8 +127,8 @@ struct ListingView: View {
         }
     }
 
-    private func loadMoreIfNeeded(lastKey: String?, key: String) {
-        guard key == lastKey else { return }
+    private func loadMoreIfNeeded(lastIdentity: MediaEntryIdentity?, identity: MediaEntryIdentity) {
+        guard identity == lastIdentity else { return }
         Task { await viewModel.loadMore() }
     }
 }

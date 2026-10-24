@@ -34,6 +34,32 @@ final class BrowseViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.availableUpdates.map(\.id), ["manga"])
     }
 
+    func testMultiKindPluginAppearsInEverySupportedGroupExactlyOnce() {
+        let multiPlugin = makePlugin(
+            id: "allinone",
+            name: "Omni Source",
+            type: .manga,
+            kinds: [.manga, .anime, .novel]
+        )
+        let mangaOnly = makePlugin(id: "mangaonly", name: "Solo Manga", type: .manga)
+        let plugins = BrowsePluginManagerSpy(installedPlugins: [
+            multiPlugin.id: multiPlugin,
+            mangaOnly.id: mangaOnly
+        ])
+        let viewModel = makeViewModel(plugins: plugins)
+
+        XCTAssertEqual(viewModel.pluginGroups.map(\.type), [.anime, .manga, .novel])
+
+        let animeGroup = try? XCTUnwrap(viewModel.pluginGroups.first { $0.type == .anime })
+        XCTAssertEqual(animeGroup?.plugins.map(\.id), ["allinone"])
+
+        let mangaGroup = try? XCTUnwrap(viewModel.pluginGroups.first { $0.type == .manga })
+        XCTAssertEqual(mangaGroup?.plugins.map(\.id), ["allinone", "mangaonly"])
+
+        let novelGroup = try? XCTUnwrap(viewModel.pluginGroups.first { $0.type == .novel })
+        XCTAssertEqual(novelGroup?.plugins.map(\.id), ["allinone"])
+    }
+
     func testUpdateAvailabilityUsesNewestPackageAndStableNameOrdering() {
         let plugins = BrowsePluginManagerSpy(installedPlugins: [
             "alpha": makePlugin(id: "alpha", name: "Alpha", version: "1.0", type: .anime),
@@ -736,7 +762,8 @@ final class BrowseViewModelTests: XCTestCase {
         id: String,
         name: String,
         version: String = "1.0",
-        type: MediaKind = .manga
+        type: MediaKind = .manga,
+        kinds: [MediaKind]? = nil
     ) -> InstalledPlugin {
         InstalledPlugin(
             url: URL(fileURLWithPath: "/plugins/\(id).ito"),
@@ -745,7 +772,8 @@ final class BrowseViewModelTests: XCTestCase {
                 name: name,
                 version: version,
                 minAppVersion: "1.0",
-                type: type
+                type: type,
+                kinds: kinds
             ),
             iconData: nil
         )
@@ -992,10 +1020,12 @@ private final class BrowseSearchExecutor: SearchPluginExecuting {
 
     func search(
         plugin: SearchPluginDescriptor,
+        kind: MediaKind?,
         query: String,
         limit: Int
     ) async throws -> [PluginSearchResult] {
         _ = plugin
+        _ = kind
         _ = query
         _ = limit
         return []

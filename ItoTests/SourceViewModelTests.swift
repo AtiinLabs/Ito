@@ -12,7 +12,7 @@ final class SourceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.plugin.id, "plugin.manga")
         XCTAssertNil(viewModel.homeLayout)
         XCTAssertNil(viewModel.settingsSchema)
-        XCTAssertTrue(viewModel.searchMangas.isEmpty)
+        XCTAssertTrue(viewModel.searchEntries.isEmpty)
     }
 
     func testSuccessfulHomeLoadPublishesSchemaAndContent() async throws {
@@ -198,7 +198,7 @@ final class SourceViewModelTests: XCTestCase {
         let crashed = PR7BSourceRunnerContextSpy()
         crashed.searchResult = .failure(PluginCallError(kind: .crashed, message: "The source stopped unexpectedly."))
         let fresh = PR7BSourceRunnerContextSpy()
-        fresh.searchResult = .success(.manga([Manga(key: "fresh", title: "Fresh")]))
+        fresh.searchResult = .success(MediaPageResult(entries: [.manga(Manga(key: "fresh", title: "Fresh"))], hasNextPage: false))
         let provider = PR7BSourceRunnerProviderSpy(contexts: [crashed, fresh])
         let viewModel = makeViewModel(provider: provider, debounce: nil)
         await viewModel.loadIfNeeded()
@@ -298,10 +298,10 @@ final class SourceViewModelTests: XCTestCase {
 
     func testSearchPreservesPageOneEmptyFilterInvocationAndResultOrdering() async {
         let context = PR7BSourceRunnerContextSpy()
-        context.searchResult = .success(.manga([
-            Manga(key: "b", title: "B"),
-            Manga(key: "a", title: "A")
-        ]))
+        context.searchResult = .success(MediaPageResult(entries: [
+            .manga(Manga(key: "b", title: "B")),
+            .manga(Manga(key: "a", title: "A"))
+        ], hasNextPage: false))
         let viewModel = makeViewModel(
             provider: PR7BSourceRunnerProviderSpy(contexts: [context]),
             debounce: nil
@@ -315,14 +315,14 @@ final class SourceViewModelTests: XCTestCase {
             context.searchInvocations,
             [.init(pluginType: .manga, query: "query", page: 1, filterCount: 0)]
         )
-        XCTAssertEqual(viewModel.searchMangas.map(\.key), ["b", "a"])
+        XCTAssertEqual(viewModel.searchEntries.map(\.key), ["b", "a"])
         XCTAssertEqual(viewModel.searchPhase, .content)
     }
 
     func testSearchTypedWhileSourceLoadsRunsOnceTheLoadFinishes() async {
         let context = PR7BSourceRunnerContextSpy()
         context.suspendsHome = true
-        context.searchResult = .success(.manga([Manga(key: "a", title: "A")]))
+        context.searchResult = .success(MediaPageResult(entries: [.manga(Manga(key: "a", title: "A"))], hasNextPage: false))
         let viewModel = makeViewModel(
             provider: PR7BSourceRunnerProviderSpy(contexts: [context]),
             debounce: nil
@@ -340,7 +340,7 @@ final class SourceViewModelTests: XCTestCase {
         await pr7bWaitUntil { viewModel.searchPhase != .loading }
 
         XCTAssertEqual(context.searchInvocations.map(\.query), ["query"])
-        XCTAssertEqual(viewModel.searchMangas.map(\.key), ["a"])
+        XCTAssertEqual(viewModel.searchEntries.map(\.key), ["a"])
         XCTAssertEqual(viewModel.searchPhase, .content)
     }
 
@@ -379,17 +379,162 @@ final class SourceViewModelTests: XCTestCase {
 
         context.completeSearch(
             query: "new",
-            with: .success(.manga([Manga(key: "new", title: "New")]))
+            with: .success(MediaPageResult(entries: [.manga(Manga(key: "new", title: "New"))], hasNextPage: false))
         )
-        await pr7bWaitUntil { viewModel.searchMangas.map(\.key) == ["new"] }
+        await pr7bWaitUntil { viewModel.searchEntries.map(\.key) == ["new"] }
         context.completeSearch(
             query: "old",
-            with: .success(.manga([Manga(key: "old", title: "Old")]))
+            with: .success(MediaPageResult(entries: [.manga(Manga(key: "old", title: "Old"))], hasNextPage: false))
         )
         await Task.yield()
 
-        XCTAssertEqual(viewModel.searchMangas.map(\.key), ["new"])
+        XCTAssertEqual(viewModel.searchEntries.map(\.key), ["new"])
         XCTAssertEqual(viewModel.searchPhase, .content)
+    }
+
+    func testMultiKindPluginSearchDefaultsToAllAndScopeChangeReexecutesWithCapturedKind() async {
+        let context = PR7BSourceRunnerContextSpy()
+        let multiKindPlugin = pr7bPlugin(id: "plugin.multi", kinds: [.manga, .anime, .novel])
+        let viewModel = makeViewModel(
+            plugin: multiKindPlugin,
+            provider: PR7BSourceRunnerProviderSpy(contexts: [context]),
+            debounce: nil
+        )
+        await viewModel.loadIfNeeded()
+
+        XCTAssertTrue(viewModel.isMultiKind)
+        XCTAssertNil(viewModel.selectedKind)
+
+        context.searchResult = .success(MediaPageResult(entries: [
+            .manga(Manga(key: "m1", title: "Manga 1")),
+            .anime(Anime(key: "a1", title: "Anime 1"))
+        ], hasNextPage: false))
+        viewModel.searchQuery = "hero"
+        viewModel.performSearch(query: "hero")
+        await pr7bWaitUntil { viewModel.searchPhase == .content }
+
+        XCTAssertEqual(context.searchInvocations.last?.pluginType, nil)
+        XCTAssertEqual(viewModel.searchEntries.map(\.key), ["m1", "a1"])
+
+        context.searchResult = .success(MediaPageResult(entries: [
+            .anime(Anime(key: "a1", title: "Anime 1"))
+        ], hasNextPage: false))
+        viewModel.selectedKind = .anime
+        await pr7bWaitUntil { context.searchInvocations.count == 2 && viewModel.searchPhase == .content }
+
+        XCTAssertEqual(context.searchInvocations.last?.pluginType, .anime)
+        XCTAssertEqual(viewModel.searchEntries.map(\.key), ["a1"])
+
+        context.searchResult = .success(MediaPageResult(entries: [
+            .manga(Manga(key: "m1", title: "Manga 1"))
+        ], hasNextPage: false))
+        viewModel.selectedKind = nil
+        await pr7bWaitUntil { context.searchInvocations.count == 3 && viewModel.searchPhase == .content }
+
+        XCTAssertEqual(context.searchInvocations.last?.pluginType, nil)
+        XCTAssertEqual(viewModel.searchEntries.map(\.key), ["m1"])
+    }
+
+    func testScopeChangeRaceInvalidatesStaleOldScopeResponse() async {
+        let context = PR7BSourceRunnerContextSpy()
+        context.suspendsSearch = true
+        let multiKindPlugin = pr7bPlugin(id: "plugin.multi", kinds: [.manga, .anime])
+        let viewModel = makeViewModel(
+            plugin: multiKindPlugin,
+            provider: PR7BSourceRunnerProviderSpy(contexts: [context]),
+            debounce: nil
+        )
+        await viewModel.loadIfNeeded()
+
+        viewModel.searchQuery = "clash"
+        viewModel.selectedKind = .manga
+        await pr7bWaitUntil { context.pendingSearches.count == 1 }
+
+        viewModel.selectedKind = .anime
+        await pr7bWaitUntil { context.pendingSearches.count == 2 }
+
+        // Complete stale manga search first
+        context.completeSearch(
+            query: "clash",
+            kind: .manga,
+            with: .success(MediaPageResult(entries: [.manga(Manga(key: "stale-manga", title: "Stale"))], hasNextPage: false))
+        )
+        await Task.yield()
+        XCTAssertEqual(viewModel.searchPhase, .loading)
+        XCTAssertTrue(viewModel.searchEntries.isEmpty)
+
+        // Complete fresh anime search
+        context.completeSearch(
+            query: "clash",
+            kind: .anime,
+            with: .success(MediaPageResult(entries: [.anime(Anime(key: "fresh-anime", title: "Fresh"))], hasNextPage: false))
+        )
+        await pr7bWaitUntil { viewModel.searchPhase == .content }
+        XCTAssertEqual(viewModel.searchEntries.map(\.key), ["fresh-anime"])
+    }
+
+    func testMixedSearchResultsPreserveMixedOrderAndRoutePerKind() async throws {
+        let context = PR7BSourceRunnerContextSpy()
+        let multiKindPlugin = pr7bPlugin(id: "plugin.multi", kinds: [.manga, .anime, .novel])
+        let manga = Manga(key: "m1", title: "Manga 1")
+        let anime = Anime(key: "a1", title: "Anime 1")
+        let novel = Novel(key: "n1", title: "Novel 1")
+        context.searchResult = .success(MediaPageResult(entries: [
+            .novel(novel),
+            .manga(manga),
+            .anime(anime)
+        ], hasNextPage: false))
+        let viewModel = makeViewModel(
+            plugin: multiKindPlugin,
+            provider: PR7BSourceRunnerProviderSpy(contexts: [context]),
+            debounce: nil
+        )
+        await viewModel.loadIfNeeded()
+
+        viewModel.performSearch(query: "all")
+        await pr7bWaitUntil { viewModel.searchPhase == .content }
+
+        XCTAssertEqual(viewModel.searchEntries.map(\.key), ["n1", "m1", "a1"])
+        XCTAssertEqual(viewModel.searchEntries.map(\.kind), [.novel, .manga, .anime])
+
+        guard case .novel(let novelPlugin, _, let novelPayload) = viewModel.destination(for: .novel(novel)) else {
+            return XCTFail("Expected novel destination")
+        }
+        XCTAssertEqual(novelPlugin, "plugin.multi")
+        XCTAssertEqual(novelPayload.key, "n1")
+
+        guard case .manga(let mangaPlugin, _, let mangaPayload) = viewModel.destination(for: .manga(manga)) else {
+            return XCTFail("Expected manga destination")
+        }
+        XCTAssertEqual(mangaPlugin, "plugin.multi")
+        XCTAssertEqual(mangaPayload.key, "m1")
+
+        guard case .anime(let animePlugin, _, let animePayload) = viewModel.destination(for: .anime(anime)) else {
+            return XCTFail("Expected anime destination")
+        }
+        XCTAssertEqual(animePlugin, "plugin.multi")
+        XCTAssertEqual(animePayload.key, "a1")
+    }
+
+    func testSingleKindPluginPreservesDefaultScope() async {
+        let context = PR7BSourceRunnerContextSpy()
+        let singleKindPlugin = pr7bPlugin(id: "plugin.single", type: .manga, kinds: nil)
+        let viewModel = makeViewModel(
+            plugin: singleKindPlugin,
+            provider: PR7BSourceRunnerProviderSpy(contexts: [context]),
+            debounce: nil
+        )
+        await viewModel.loadIfNeeded()
+
+        XCTAssertFalse(viewModel.isMultiKind)
+        XCTAssertNil(viewModel.selectedKind)
+
+        context.searchResult = .success(MediaPageResult(entries: [.manga(Manga(key: "m1", title: "M1"))], hasNextPage: false))
+        viewModel.performSearch(query: "test")
+        await pr7bWaitUntil { viewModel.searchPhase == .content }
+
+        XCTAssertEqual(context.searchInvocations.last?.pluginType, .manga)
+        XCTAssertEqual(viewModel.searchEntries.map(\.key), ["m1"])
     }
 
     func testWhitespaceOnlySearchReturnsPresentationToHomeWithoutStartingWork() async {

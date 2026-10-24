@@ -31,6 +31,14 @@ public enum SearchDestination {
             return context
         }
     }
+
+    var mediaKind: MediaKind {
+        switch self {
+        case .manga: return .manga
+        case .anime: return .anime
+        case .novel: return .novel
+        }
+    }
 }
 
 public struct PluginSearchResult: Identifiable {
@@ -40,6 +48,8 @@ public struct PluginSearchResult: Identifiable {
     public let subtitle: String?
     public let pluginName: String?
     public let destination: SearchDestination
+
+    var catalogIdentity: MediaEntryIdentity { MediaEntryIdentity(kind: destination.mediaKind, key: id) }
 
     public init(
         id: String,
@@ -145,4 +155,13 @@ public enum SearchScope: String, CaseIterable, Identifiable {
     case novel = "Novel"
 
     public var id: String { rawValue }
+
+    var mediaKind: MediaKind? {
+        switch self {
+        case .all: return nil
+        case .manga: return .manga
+        case .anime: return .anime
+        case .novel: return .novel
+        }
+    }
 }

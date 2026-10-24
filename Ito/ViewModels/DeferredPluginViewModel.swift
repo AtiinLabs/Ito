@@ -211,7 +211,7 @@ final class DeferredPluginViewModel: ObservableObject {
                     )
                     return
                 }
-                guard candidate.pluginType == self.item.effectiveType else {
+                guard candidate.supportedKinds.contains(self.item.effectiveType) else {
                     self.phase = .failure(.pluginTypeMismatch)
                     self.logFinished(
                         kind: .remoteLoad,
@@ -294,7 +294,7 @@ final class DeferredPluginViewModel: ObservableObject {
                     outcome: .succeeded
                 )
                 if let plugin = self.pluginSnapshot.plugins[item.pluginId] {
-                    guard plugin.pluginType == item.effectiveType else {
+                    guard plugin.supportedKinds.contains(item.effectiveType) else {
                         self.phase = .failure(.pluginTypeMismatch)
                         return
                     }
@@ -358,7 +358,7 @@ final class DeferredPluginViewModel: ObservableObject {
                     outcome: .succeeded
                 )
                 if let plugin = self.pluginSnapshot.plugins[self.item.pluginId],
-                   plugin.pluginType == self.item.effectiveType,
+                   plugin.supportedKinds.contains(self.item.effectiveType),
                    let media = self.decodedMedia {
                     self.beginRunnerLoad(
                         media: media,
@@ -479,7 +479,7 @@ final class DeferredPluginViewModel: ObservableObject {
             return
         }
 
-        guard plugin.pluginType == item.effectiveType else {
+        guard plugin.supportedKinds.contains(item.effectiveType) else {
             beginNewGeneration()
             phase = .failure(.pluginTypeMismatch)
             return

@@ -199,7 +199,7 @@ struct SearchView: View {
 
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
-                                ForEach(pluginResults) { result in
+                                ForEach(pluginResults, id: \.catalogIdentity) { result in
                                     NavigationLink(
                                         destination: routeFactory.destination(
                                             for: result.destination

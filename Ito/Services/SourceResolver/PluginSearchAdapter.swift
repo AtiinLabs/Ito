@@ -26,6 +26,10 @@ public actor PluginSearchAdapter: PluginSearching {
                 return try await runner.search(query: query, page: 1, kind: .anime).entries.compactMap(\.anime).map {
                     .anime($0)
                 }
+            case .novel:
+                return try await runner.search(query: query, page: 1, kind: .novel).entries.compactMap(\.novel).map {
+                    .novel($0)
+                }
             }
         }
     }

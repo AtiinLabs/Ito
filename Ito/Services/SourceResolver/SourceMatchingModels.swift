@@ -1,13 +1,32 @@
 import Foundation
+import ito_runner
 
 public enum PluginMediaType: Equatable, Sendable {
     case manga
     case anime
+    case novel
 
     public nonisolated static func == (lhs: PluginMediaType, rhs: PluginMediaType) -> Bool {
         switch (lhs, rhs) {
-        case (.manga, .manga), (.anime, .anime): return true
+        case (.manga, .manga), (.anime, .anime), (.novel, .novel): return true
         default: return false
+        }
+    }
+
+    public var mediaKind: MediaKind {
+        switch self {
+        case .manga: return .manga
+        case .anime: return .anime
+        case .novel: return .novel
+        }
+    }
+
+    public init?(mediaKind: MediaKind) {
+        switch mediaKind {
+        case .manga: self = .manga
+        case .anime: self = .anime
+        case .novel: self = .novel
+        @unknown default: return nil
         }
     }
 }

@@ -40,32 +40,10 @@ public struct MatchedSource: Sendable, Equatable {
     public nonisolated let decision: MatchDecision
 
     public nonisolated static func == (lhs: MatchedSource, rhs: MatchedSource) -> Bool {
-        let lhsKey: String
-        let lhsType: PluginMediaType
-        switch lhs.media {
-        case .manga(let m):
-            lhsKey = m.key
-            lhsType = .manga
-        case .anime(let a):
-            lhsKey = a.key
-            lhsType = .anime
-        }
-
-        let rhsKey: String
-        let rhsType: PluginMediaType
-        switch rhs.media {
-        case .manga(let m):
-            rhsKey = m.key
-            rhsType = .manga
-        case .anime(let a):
-            rhsKey = a.key
-            rhsType = .anime
-        }
-
-        return lhs.pluginID == rhs.pluginID &&
+        lhs.pluginID == rhs.pluginID &&
             lhs.pluginVersion == rhs.pluginVersion &&
-            lhsType == rhsType &&
-            lhsKey == rhsKey &&
+            lhs.media.mediaType == rhs.media.mediaType &&
+            lhs.media.key() == rhs.media.key() &&
             lhs.matchMethod == rhs.matchMethod &&
             lhs.score == rhs.score &&
             lhs.decision == rhs.decision
@@ -338,24 +316,15 @@ public actor SourceResolver {
     }
 
     private static func pluginMediaKey(for media: ResolvedPluginMedia) -> String {
-        switch media {
-        case .manga(let m): return m.key
-        case .anime(let a): return a.key
-        }
+        media.key()
     }
 
     private static func pluginMediaTitle(for media: ResolvedPluginMedia) -> String {
-        switch media {
-        case .manga(let m): return m.title
-        case .anime(let a): return a.title
-        }
+        media.title()
     }
 
     private static func pluginMediaType(for media: ResolvedPluginMedia) -> PluginMediaType {
-        switch media {
-        case .manga: return .manga
-        case .anime: return .anime
-        }
+        media.mediaType
     }
 
     private enum PluginTaskResult {

@@ -167,8 +167,8 @@ final class SearchCharacterizationTests: XCTestCase {
     func testPluginsExecuteSeriallyInNameOrder() async {
         let executor = SuspendingSearchExecutor(
             plugins: [
-                .init(id: "plugin.z", name: "Zulu", kind: .manga),
-                .init(id: "plugin.a", name: "Alpha", kind: .anime)
+                .init(id: "plugin.z", name: "Zulu", kinds: [.manga]),
+                .init(id: "plugin.a", name: "Alpha", kinds: [.anime])
             ]
         )
         let viewModel = makeViewModel(executor: executor)
@@ -229,8 +229,8 @@ final class SearchCharacterizationTests: XCTestCase {
     func testFailureContinuesToNextPluginAndDoesNotPublishFailedResults() async {
         let executor = RecordingSearchExecutor(
             plugins: [
-                .init(id: "plugin.a", name: "Alpha", kind: .manga),
-                .init(id: "plugin.b", name: "Beta", kind: .anime)
+                .init(id: "plugin.a", name: "Alpha", kinds: [.manga]),
+                .init(id: "plugin.b", name: "Beta", kinds: [.anime])
             ]
         )
         executor.errorsByPluginID["plugin.a"] = SearchStubError.failure
@@ -262,8 +262,8 @@ final class SearchCharacterizationTests: XCTestCase {
     func testCancellationStopsRemainingPluginExecution() async {
         let executor = RecordingSearchExecutor(
             plugins: [
-                .init(id: "plugin.a", name: "Alpha", kind: .manga),
-                .init(id: "plugin.b", name: "Beta", kind: .anime)
+                .init(id: "plugin.a", name: "Alpha", kinds: [.manga]),
+                .init(id: "plugin.b", name: "Beta", kinds: [.anime])
             ]
         )
         executor.errorsByPluginID["plugin.a"] = CancellationError()
@@ -356,6 +356,7 @@ private final class RecordingSearchExecutor: SearchPluginExecuting {
 
     func search(
         plugin: SearchPluginDescriptor,
+        kind: MediaKind?,
         query: String,
         limit: Int
     ) async throws -> [PluginSearchResult] {
@@ -398,6 +399,7 @@ private final class SuspendingSearchExecutor: SearchPluginExecuting {
 
     func search(
         plugin: SearchPluginDescriptor,
+        kind: MediaKind?,
         query: String,
         limit: Int
     ) async throws -> [PluginSearchResult] {
@@ -443,15 +445,15 @@ private enum SearchStubError: Error, CustomStringConvertible {
 
 private extension SearchPluginDescriptor {
     static func manga() -> Self {
-        .init(id: "plugin.manga", name: "Manga Plugin", kind: .manga)
+        .init(id: "plugin.manga", name: "Manga Plugin", kinds: [.manga])
     }
 
     static func anime() -> Self {
-        .init(id: "plugin.anime", name: "Anime Plugin", kind: .anime)
+        .init(id: "plugin.anime", name: "Anime Plugin", kinds: [.anime])
     }
 
     static func novel() -> Self {
-        .init(id: "plugin.novel", name: "Novel Plugin", kind: .novel)
+        .init(id: "plugin.novel", name: "Novel Plugin", kinds: [.novel])
     }
 }
 

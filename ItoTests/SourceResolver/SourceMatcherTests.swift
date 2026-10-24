@@ -81,6 +81,22 @@ struct SourceMatcherTests {
         #expect(result[0].decision == .discard)
     }
 
+    @Test func novelMatchingAndMismatch() async {
+        let canonicalNovel = makeCanonical(preferred: "Overlord", mediaType: .novel)
+        let candidateNovel = makeCandidate(title: "Overlord", mediaType: .novel)
+        let candidateManga = makeCandidate(title: "Overlord", mediaType: .manga)
+
+        let result = SourceMatcher.evaluate(
+            canonical: canonicalNovel,
+            candidates: [candidateNovel, candidateManga],
+            rejectedPluginMediaKeys: []
+        )
+        #expect(result[0].candidate.mediaType == .novel)
+        #expect(result[0].decision == .autoConfirm)
+        #expect(result[1].candidate.mediaType == .manga)
+        #expect(result[1].decision == .discard)
+    }
+
     @Test func emptyNormalizedTitlesNeverMatch() async {
         let canonical = makeCanonical(preferred: "---")
         let candidate = makeCandidate(title: "...")

@@ -172,6 +172,43 @@ final class GRDBSourceMappingRepositoryTests: XCTestCase {
         XCTAssertTrue(fetched.isEmpty)
     }
 
+    func testNovelPersistenceAndRetrieval() async throws {
+        let record = makeRecord(canonicalMediaId: "novel-42", mediaType: .novel, pluginMediaKey: "nkey-1")
+        try await repository.upsert(record)
+
+        let fetched = try await repository.fetchConfirmed(
+            canonicalProvider: "anilist",
+            canonicalMediaId: "novel-42",
+            mediaType: .novel
+        )
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertEqual(fetched.first?.mediaType, .novel)
+        XCTAssertEqual(fetched.first?.pluginMediaKey, "nkey-1")
+
+        try await repository.persistRejection(
+            canonicalProvider: "anilist",
+            canonicalMediaId: "novel-42",
+            mediaType: .novel,
+            pluginId: "pluginA",
+            pluginMediaKey: "nkey-1"
+        )
+
+        let afterRejection = try await repository.fetchConfirmed(
+            canonicalProvider: "anilist",
+            canonicalMediaId: "novel-42",
+            mediaType: .novel
+        )
+        XCTAssertTrue(afterRejection.isEmpty)
+
+        let allAfterRejection = try await repository.fetchAll(
+            canonicalProvider: "anilist",
+            canonicalMediaId: "novel-42",
+            mediaType: .novel
+        )
+        XCTAssertEqual(allAfterRejection.count, 1)
+        XCTAssertEqual(allAfterRejection.first?.decision, .discard)
+    }
+
     // MARK: - Helpers
 
     private func makeRecord(

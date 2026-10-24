@@ -92,7 +92,7 @@ public final class BrowseViewModel: ObservableObject {
     public var pluginGroups: [PluginGroup] {
         let types: [MediaKind] = [.anime, .manga, .novel]
         return types.compactMap { type in
-            let plugins = sortedPlugins.filter { $0.info.type == type }
+            let plugins = sortedPlugins.filter { $0.info.supportedKinds.contains(type) }
             return plugins.isEmpty ? nil : PluginGroup(type: type, plugins: plugins)
         }
     }

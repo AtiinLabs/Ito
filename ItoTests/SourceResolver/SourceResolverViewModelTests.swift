@@ -285,6 +285,81 @@ final class SourceResolverViewModelTests: XCTestCase {
         XCTAssertEqual(savedAnime.seasons?.first?.key, anime.seasons?.first?.key)
     }
 
+    func testSavedSourceStateRetainsCompleteNovelPayload() async throws {
+        let novel = makeCompleteNovel()
+        pluginProvider.installedPlugins["p1"] = makePlugin(type: .novel)
+        try await repository.upsert(
+            makeMappingRecord(mediaType: .novel, payload: .novel(novel))
+        )
+        let vm = SourceResolverViewModel(
+            media: makeDiscoverMedia(type: "MANGA", format: "NOVEL"),
+            repository: repository,
+            pluginProvider: pluginProvider,
+            routeFactory: SourceRouteFactory()
+        )
+
+        await vm.checkAndResolve()
+
+        guard case .savedSource(_, .novel(let savedNovel)) = vm.state else {
+            return XCTFail("Expected saved Novel")
+        }
+        XCTAssertEqual(savedNovel.authors, novel.authors)
+        XCTAssertEqual(savedNovel.chapters?.first?.key, novel.chapters?.first?.key)
+        XCTAssertEqual(savedNovel.chapters?.first?.chapter, 1)
+    }
+
+    func testCanonicalMediaTypeFormatNovelResolvesToNovel() async throws {
+        let novelMedia = makeDiscoverMedia(type: "MANGA", format: "NOVEL")
+        pluginProvider.installedPlugins["p1"] = makePlugin(type: .novel)
+        var novel = makeCompleteNovel()
+        novel.title = novelMedia.title
+        let adapter = FakePluginSearchAdapter(pluginID: "p1", pluginVersion: "1.0", mediaType: .novel)
+        await adapter.setResults([.novel(novel)])
+        pluginProvider.configuredAdapters["p1"] = adapter
+
+        let vm = SourceResolverViewModel(
+            media: novelMedia,
+            repository: repository,
+            pluginProvider: pluginProvider,
+            routeFactory: SourceRouteFactory()
+        )
+
+        await resolveAndWait(vm)
+
+        guard case .completed(let matches) = vm.state else {
+            return XCTFail("Expected completed state, got \(vm.state)")
+        }
+        XCTAssertEqual(matches.count, 1)
+        XCTAssertEqual(matches.first?.media.mediaType, .novel)
+    }
+
+    func testNovelSearchFiltersPluginsBySupportedKinds() async throws {
+        let novelMedia = makeDiscoverMedia(type: "MANGA", format: "NOVEL")
+        pluginProvider.installedPlugins["mangaPlugin"] = makePlugin(id: "mangaPlugin", type: .manga)
+        pluginProvider.installedPlugins["novelPlugin"] = makePlugin(id: "novelPlugin", type: .manga, kinds: [.manga, .novel])
+
+        var novel = makeCompleteNovel()
+        novel.title = novelMedia.title
+        let novelAdapter = FakePluginSearchAdapter(pluginID: "novelPlugin", pluginVersion: "1.0", mediaType: .novel)
+        await novelAdapter.setResults([.novel(novel)])
+        pluginProvider.configuredAdapters["novelPlugin"] = novelAdapter
+
+        let vm = SourceResolverViewModel(
+            media: novelMedia,
+            repository: repository,
+            pluginProvider: pluginProvider,
+            routeFactory: SourceRouteFactory()
+        )
+
+        await resolveAndWait(vm)
+
+        guard case .completed(let matches) = vm.state else {
+            return XCTFail("Expected completed state, got \(vm.state)")
+        }
+        XCTAssertEqual(matches.count, 1)
+        XCTAssertEqual(matches.first?.pluginID, "novelPlugin")
+    }
+
     func testChangeSourcePreservesConfirmedMapping() async throws {
         let mapping = makeMappingRecord()
         pluginProvider.installedPlugins["p1"] = makePlugin()
@@ -847,12 +922,12 @@ final class SourceResolverViewModelTests: XCTestCase {
         XCTAssertTrue(libraryManager.items.contains(where: { $0.id == "a1" }))
     }
     // Helpers
-    func makeDiscoverMedia(type: String = "MANGA") -> DiscoverMedia {
-        DiscoverMedia(id: 1, title: "Test", titleEnglish: nil, titleRomaji: nil, titleNative: nil, synonyms: [], coverImage: nil, bannerImage: nil, format: nil, status: nil, description: nil, cleanDescription: nil, genres: nil, averageScore: nil, episodes: nil, chapters: nil, season: nil, seasonYear: nil, type: type, recommendations: nil)
+    func makeDiscoverMedia(type: String = "MANGA", format: String? = nil) -> DiscoverMedia {
+        DiscoverMedia(id: 1, title: "Test", titleEnglish: nil, titleRomaji: nil, titleNative: nil, synonyms: [], coverImage: nil, bannerImage: nil, format: format, status: nil, description: nil, cleanDescription: nil, genres: nil, averageScore: nil, episodes: nil, chapters: nil, season: nil, seasonYear: nil, type: type, recommendations: nil)
     }
 
-    func makePlugin(id: String = "p1", version: String = "1.0", type: MediaKind = .manga) -> InstalledPlugin {
-        InstalledPlugin(url: URL(fileURLWithPath: "/"), info: PluginInfo(id: id, name: id, version: version, minAppVersion: "1.0", type: type), iconData: nil)
+    func makePlugin(id: String = "p1", version: String = "1.0", type: MediaKind = .manga, kinds: [MediaKind]? = nil) -> InstalledPlugin {
+        InstalledPlugin(url: URL(fileURLWithPath: "/"), info: PluginInfo(id: id, name: id, version: version, minAppVersion: "1.0", type: type, kinds: kinds), iconData: nil)
     }
 
     func openSavedSourceAndWait(
@@ -982,6 +1057,28 @@ final class SourceResolverViewModelTests: XCTestCase {
                 )
             ],
             seasons: [Anime.Season(key: "s1", title: "Season 1", isCurrent: true)]
+        )
+    }
+
+    func makeCompleteNovel() -> Novel {
+        Novel(
+            key: "n1",
+            title: "Complete Novel",
+            authors: ["Author"],
+            description: "Full novel description",
+            tags: ["Fantasy"],
+            cover: "https://example.com/novel.jpg",
+            url: "https://example.com/novel",
+            status: .Ongoing,
+            chapters: [
+                Novel.Chapter(
+                    key: "nc1",
+                    title: "Chapter 1",
+                    chapter: 1,
+                    url: "https://example.com/novel/1",
+                    lang: "en"
+                )
+            ]
         )
     }
 

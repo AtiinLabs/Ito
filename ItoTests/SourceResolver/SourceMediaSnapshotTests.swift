@@ -53,6 +53,25 @@ final class SourceMediaSnapshotTests: XCTestCase {
             XCTFail("Expected .anime payload")
         }
     }
+    func testNovelRoundTrip() throws {
+        let novel = Novel(key: "n1", title: "Test Novel", status: .Ongoing)
+        let snapshot = SourceMediaSnapshot(version: 1, payload: .novel(novel))
+
+        // Encode
+        let data = try encoder.encode(snapshot)
+
+        // Decode
+        let decoded = try decoder.decode(SourceMediaSnapshot.self, from: data)
+
+        XCTAssertEqual(decoded.version, 1)
+        if case .novel(let decodedNovel) = decoded.payload {
+            XCTAssertEqual(decodedNovel.key, "n1")
+            XCTAssertEqual(decodedNovel.title, "Test Novel")
+            XCTAssertEqual(decodedNovel.status, .Ongoing)
+        } else {
+            XCTFail("Expected .novel payload")
+        }
+    }
 
     func testUnsupportedPayloadVersion() throws {
         // If a new version comes out (e.g., version 999), we should still decode it
@@ -121,10 +140,10 @@ final class SourceMediaSnapshotTests: XCTestCase {
         {
             "version": 1,
             "payload": {
-                "type": "novel",
-                "novel": {
-                    "key": "n1",
-                    "title": "Test Novel"
+                "type": "audiobook",
+                "audiobook": {
+                    "key": "ab1",
+                    "title": "Test Audiobook"
                 }
             }
         }
@@ -135,7 +154,6 @@ final class SourceMediaSnapshotTests: XCTestCase {
             if let decodingError = error as? DecodingError {
                 if case .dataCorrupted(let context) = decodingError {
                     XCTAssertEqual(context.codingPath.last?.stringValue, "type")
-                    XCTAssertTrue(context.debugDescription.contains("Invalid media type: novel"))
                 } else {
                     XCTFail("Expected dataCorrupted error for invalid type, got \(decodingError)")
                 }

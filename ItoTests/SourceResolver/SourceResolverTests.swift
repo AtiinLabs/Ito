@@ -216,6 +216,25 @@ final class SourceResolverTests: XCTestCase {
         XCTAssertEqual(queries, ["Naruto"])
     }
 
+    func testOneCompatiblePluginNovel() async {
+        let plugin = FakePlugin(pluginID: "test.novel.plugin", mediaType: .novel)
+        let novel = Novel(key: "n1", title: "Overlord")
+        await plugin.setMockResults([.novel(novel)], forQuery: "Overlord")
+
+        let resolver = SourceResolver(plugins: [plugin])
+        let req = SourceSearchRequest(canonicalProvider: "anilist", canonicalMediaId: "1", mediaType: .novel, preferredTitle: "Overlord", titleEnglish: nil, titleRomaji: nil, titleNative: nil, synonyms: [])
+
+        let result = await resolver.resolve(request: req) { _ in }
+
+        XCTAssertEqual(result.matches.count, 1)
+        XCTAssertEqual(result.matches.first?.pluginID, "test.novel.plugin")
+        if case .novel(let n) = result.matches.first?.media {
+            XCTAssertEqual(n.key, "n1")
+        } else {
+            XCTFail("Expected novel media")
+        }
+    }
+
     func testIncompatibleMediaTypeSkipped() async {
         let plugin = FakePlugin(pluginID: "test.anime.plugin", mediaType: .anime)
         let resolver = SourceResolver(plugins: [plugin])
@@ -571,9 +590,13 @@ final class SourceResolverTests: XCTestCase {
     func testMatchedSourceEqualityDifferentDiscriminatorsAreUnequal() {
         let m1 = Manga(key: "m1", title: "T")
         let a1 = Anime(key: "m1", title: "T")
-        let s1 = MatchedSource(pluginID: "p", pluginVersion: nil, media: .manga(m1), matchMethod: .exactPreferred, score: 1.0, decision: .autoConfirm)
-        let s2 = MatchedSource(pluginID: "p", pluginVersion: nil, media: .anime(a1), matchMethod: .exactPreferred, score: 1.0, decision: .autoConfirm)
-        XCTAssertNotEqual(s1, s2)
+        let n1 = Novel(key: "m1", title: "T")
+        let sm = MatchedSource(pluginID: "p", pluginVersion: nil, media: .manga(m1), matchMethod: .exactPreferred, score: 1.0, decision: .autoConfirm)
+        let sa = MatchedSource(pluginID: "p", pluginVersion: nil, media: .anime(a1), matchMethod: .exactPreferred, score: 1.0, decision: .autoConfirm)
+        let sn = MatchedSource(pluginID: "p", pluginVersion: nil, media: .novel(n1), matchMethod: .exactPreferred, score: 1.0, decision: .autoConfirm)
+        XCTAssertNotEqual(sm, sa)
+        XCTAssertNotEqual(sm, sn)
+        XCTAssertNotEqual(sa, sn)
     }
 
     func testMatchedSourceEqualityIdenticalIdentityAreEqual() {
@@ -582,5 +605,11 @@ final class SourceResolverTests: XCTestCase {
         let s1 = MatchedSource(pluginID: "p", pluginVersion: nil, media: .manga(m1), matchMethod: .exactPreferred, score: 1.0, decision: .autoConfirm)
         let s2 = MatchedSource(pluginID: "p", pluginVersion: nil, media: .manga(m2), matchMethod: .exactPreferred, score: 1.0, decision: .autoConfirm)
         XCTAssertEqual(s1, s2)
+
+        let n1 = Novel(key: "n1", title: "T1")
+        let n2 = Novel(key: "n1", title: "T2")
+        let sn1 = MatchedSource(pluginID: "p", pluginVersion: nil, media: .novel(n1), matchMethod: .exactPreferred, score: 1.0, decision: .autoConfirm)
+        let sn2 = MatchedSource(pluginID: "p", pluginVersion: nil, media: .novel(n2), matchMethod: .exactPreferred, score: 1.0, decision: .autoConfirm)
+        XCTAssertEqual(sn1, sn2)
     }
 }

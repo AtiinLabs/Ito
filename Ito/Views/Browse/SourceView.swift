@@ -399,6 +399,31 @@ struct SourceView: View {
                     }
                     .padding(.horizontal)
                 }
+            case .mediaScroller(let entries, _):
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(entries, id: \.catalogIdentity) { entry in
+                            mediaCard(entry)
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            case .mediaList(_, _, let entries, _):
+                VStack {
+                    ForEach(entries, id: \.catalogIdentity) { entry in
+                        mediaRow(entry)
+                        Divider().padding(.leading, 72)
+                    }
+                }
+            case .mediaBigScroller(let entries, _):
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
+                        ForEach(entries, id: \.catalogIdentity) { entry in
+                            mediaBigCard(entry)
+                        }
+                    }
+                    .padding(.horizontal)
+                }
             default:
                 Text("Unsupported component type.")
                     .foregroundColor(.secondary)
@@ -408,9 +433,41 @@ struct SourceView: View {
 
     @ViewBuilder
     private var searchContent: some View {
+        VStack(spacing: 0) {
+            if viewModel.isMultiKind {
+                scopePicker
+            }
+            searchBody
+        }
+    }
+
+    private var scopePicker: some View {
+        Picker("Scope", selection: $viewModel.selectedKind) {
+            Text("All").tag(MediaKind?.none)
+            ForEach(viewModel.plugin.info.supportedKinds, id: \.self) { kind in
+                Text(kindTitle(kind)).tag(MediaKind?.some(kind))
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
+
+    private func kindTitle(_ kind: MediaKind) -> String {
+        switch kind {
+        case .manga: return "Manga"
+        case .anime: return "Anime"
+        case .novel: return "Novel"
+        }
+    }
+
+    @ViewBuilder
+    private var searchBody: some View {
         switch viewModel.searchPhase {
         case .idle, .loading:
             ProgressView("Searching source...")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failure(let error):
             failureView(
                 message: "Search error: \(error)",
@@ -427,59 +484,77 @@ struct SourceView: View {
         case .empty:
             Text("No results found.")
                 .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .content:
             renderSearchList()
         }
     }
 
-    @ViewBuilder
     private func renderSearchList() -> some View {
-        switch viewModel.plugin.info.type {
-        case .anime:
-            List(viewModel.searchAnimes, id: \.key) { anime in
-                MediaRowView(media: anime) { mediaDestination(anime) }
-            }
-            .listStyle(.plain)
-        case .manga:
-            List(viewModel.searchMangas, id: \.key) { manga in
-                MediaRowView(media: manga) { mediaDestination(manga) }
-            }
-            .listStyle(.plain)
-        case .novel:
-            List(viewModel.searchNovels, id: \.key) { novel in
-                MediaRowView(media: novel) { mediaDestination(novel) }
-            }
-            .listStyle(.plain)
-        @unknown default:
+        List(viewModel.searchEntries, id: \.catalogIdentity) { entry in
+            mediaRow(entry)
+        }
+        .listStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func mediaCard(_ entry: MediaEntry) -> some View {
+        switch entry {
+        case .manga(let manga):
+            MediaCardView(media: manga) { mediaDestination(entry) }
+        case .anime(let anime):
+            MediaCardView(media: anime) { mediaDestination(entry) }
+        case .novel(let novel):
+            MediaCardView(media: novel) { mediaDestination(entry) }
+        }
+    }
+
+    @ViewBuilder
+    private func mediaRow(_ entry: MediaEntry) -> some View {
+        switch entry {
+        case .manga(let manga):
+            MediaRowView(media: manga) { mediaDestination(entry) }
+        case .anime(let anime):
+            MediaRowView(media: anime) { mediaDestination(entry) }
+        case .novel(let novel):
+            MediaRowView(media: novel) { mediaDestination(entry) }
+        }
+    }
+
+    @ViewBuilder
+    private func mediaBigCard(_ entry: MediaEntry) -> some View {
+        switch entry {
+        case .manga(let manga):
+            MediaBigCardView(media: manga) { mediaDestination(entry) }
+        case .anime(let anime):
+            MediaBigCardView(media: anime) { mediaDestination(entry) }
+        case .novel(let novel):
+            MediaBigCardView(media: novel) { mediaDestination(entry) }
+        }
+    }
+
+    @ViewBuilder
+    private func mediaDestination(_ entry: MediaEntry) -> some View {
+        if let destination = viewModel.destination(for: entry) {
+            viewFactory.searchRouteFactory.destination(for: destination)
+        } else {
             EmptyView()
         }
     }
 
     @ViewBuilder
     private func mediaDestination(_ manga: Manga) -> some View {
-        if let destination = viewModel.destination(for: manga) {
-            viewFactory.searchRouteFactory.destination(for: destination)
-        } else {
-            EmptyView()
-        }
+        mediaDestination(.manga(manga))
     }
 
     @ViewBuilder
     private func mediaDestination(_ anime: Anime) -> some View {
-        if let destination = viewModel.destination(for: anime) {
-            viewFactory.searchRouteFactory.destination(for: destination)
-        } else {
-            EmptyView()
-        }
+        mediaDestination(.anime(anime))
     }
 
     @ViewBuilder
     private func mediaDestination(_ novel: Novel) -> some View {
-        if let destination = viewModel.destination(for: novel) {
-            viewFactory.searchRouteFactory.destination(for: destination)
-        } else {
-            EmptyView()
-        }
+        mediaDestination(.novel(novel))
     }
 
     /// The source's website for signing in, when it has one and sign-in is available.
@@ -555,6 +630,8 @@ extension HomeComponentValue {
         case .novelScroller(_, let listing): return listing
         case .novelList(_, _, _, let listing): return listing
         case .novelChapterList(_, _, let listing): return listing
+        case .mediaScroller(_, let listing): return listing
+        case .mediaList(_, _, _, let listing): return listing
         default: return nil
         }
     }

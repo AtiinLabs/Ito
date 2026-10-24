@@ -35,6 +35,61 @@ final class DeferredPluginViewModelTests: XCTestCase {
         }
     }
 
+    func testNovelLibraryItemOpensFromAMultiKindSourceAndInvalidatesIfNovelSupportIsRemoved() async throws {
+        let runner = ItoRunner()
+        let novel = Novel(key: "novel", title: "Novel")
+        let subject = try makeSubject(
+            item: encodedItem(.novel(novel), pluginType: .novel),
+            installedPluginIDs: ["plugin.exact"],
+            installedPluginKinds: [.manga, .novel],
+            runnerResponses: [.immediate(.success(runner))]
+        )
+        let ready = expectation(description: "Novel opened")
+        let subscription = subject.viewModel.$phase.sink { phase in
+            if case .ready = phase { ready.fulfill() }
+        }
+        defer { subscription.cancel() }
+        subject.viewModel.appear()
+        await fulfillment(of: [ready], timeout: 2)
+
+        guard case .novel(let pluginID, let actualRunner, let media) = subject.viewModel.route?.destination else {
+            return XCTFail("Expected the saved novel, not a synthetic manga")
+        }
+        XCTAssertEqual(pluginID, "plugin.exact")
+        XCTAssertTrue(actualRunner === runner)
+        XCTAssertEqual(media.key, novel.key)
+
+        subject.plugins.publish(["plugin.exact"], supportedKinds: [.manga])
+        XCTAssertEqual(subject.viewModel.failure, .pluginTypeMismatch)
+        XCTAssertNil(subject.viewModel.route)
+        XCTAssertEqual(subject.plugins.runnerRequests, ["plugin.exact"])
+    }
+
+    func testMissingNovelCanSelectAMultiKindPackageWhosePrimaryKindIsManga() async throws {
+        let package = candidate(pluginType: .manga, kinds: ["manga", "novel"])
+        let subject = try makeSubject(
+            item: encodedItem(.novel(Novel(key: "novel", title: "Novel")), pluginType: .novel),
+            lookupResponses: [.immediate(package)],
+            installResponses: [.suspended]
+        )
+        let missing = expectation(description: "Missing source detected")
+        let installing = expectation(description: "Multi-kind source selected")
+        let subscription = subject.viewModel.$phase.sink { phase in
+            if case .pluginMissing = phase { missing.fulfill() }
+        }
+        subject.installer.onInstallSuspended = { installing.fulfill() }
+        defer { subscription.cancel() }
+        subject.viewModel.appear()
+        await fulfillment(of: [missing], timeout: 2)
+        subject.viewModel.installMissingPlugin()
+        await fulfillment(of: [installing], timeout: 2)
+
+        XCTAssertNil(subject.viewModel.failure)
+        XCTAssertEqual(subject.installer.installRequests.first?.package.id, "plugin.exact")
+        subject.installer.resolveInstall(at: 0, result: .success(()))
+        subject.viewModel.disappear()
+    }
+
     func testMalformedPayloadAndInconsistentMetadataFailBeforeRunnerLoad() async {
         let malformed = makeSubject(
             item: libraryItem(
@@ -395,7 +450,7 @@ final class DeferredPluginViewModelTests: XCTestCase {
         let installedMismatch = try makeSubject(
             item: encodedItem(.manga(Manga(key: "manga", title: "Manga")), pluginType: .manga),
             installedPluginIDs: ["plugin.exact"],
-            installedPluginType: .novel
+            installedPluginKinds: [.novel]
         )
         installedMismatch.viewModel.appear()
         await waitUntil { installedMismatch.viewModel.failure == .pluginTypeMismatch }
@@ -493,7 +548,7 @@ final class DeferredPluginViewModelTests: XCTestCase {
     private func makeSubject(
         item: Ito.LibraryItem,
         installedPluginIDs: Set<String> = [],
-        installedPluginType: MediaKind? = nil,
+        installedPluginKinds: Set<MediaKind>? = nil,
         runnerResponses: [DeferredPluginFake.RunnerResponse] = [],
         lookupResponses: [DeferredInstallerFake.LookupResponse] = [],
         installResponses: [DeferredInstallerFake.InstallResponse] = [],
@@ -501,7 +556,7 @@ final class DeferredPluginViewModelTests: XCTestCase {
     ) -> DeferredSubject {
         let plugins = DeferredPluginFake(
             installedPluginIDs: installedPluginIDs,
-            defaultPluginType: installedPluginType ?? item.effectiveType,
+            supportedKinds: installedPluginKinds ?? [item.effectiveType],
             runnerResponses: runnerResponses
         )
         let installer = DeferredInstallerFake(
@@ -561,7 +616,8 @@ final class DeferredPluginViewModelTests: XCTestCase {
     private func candidate(
         isCompatible: Bool = true,
         minimumVersion: String = "1.0",
-        pluginType: MediaKind = .manga
+        pluginType: MediaKind = .manga,
+        kinds: [String]? = nil
     ) -> DeferredPluginPackageCandidate {
         DeferredPluginPackageCandidate(
             package: RepoPackage(
@@ -575,7 +631,8 @@ final class DeferredPluginViewModelTests: XCTestCase {
                 pluginType: pluginType.rawValue,
                 archived: nil,
                 archivedReason: nil,
-                archivedDate: nil
+                archivedDate: nil,
+                kinds: kinds
             ),
             repositoryURL: "https://invalid.example/repository",
             incompatibility: isCompatible ? nil : PluginRequiresNewerAppError(minimumAppVersion: minimumVersion)
@@ -663,23 +720,23 @@ private final class DeferredPluginFake: LibraryPluginServing {
     }
 
     private let subject: CurrentValueSubject<LibraryPluginSnapshot, Never>
-    private let defaultPluginType: MediaKind
+    private let defaultKinds: Set<MediaKind>
     private var runnerResponses: [RunnerResponse]
     private var runnerContinuations: [CheckedContinuation<ItoRunner, Error>] = []
     private(set) var runnerRequests: [String] = []
 
     init(
         installedPluginIDs: Set<String>,
-        defaultPluginType: MediaKind,
+        supportedKinds: Set<MediaKind>,
         runnerResponses: [RunnerResponse]
     ) {
-        self.defaultPluginType = defaultPluginType
+        self.defaultKinds = supportedKinds
         subject = CurrentValueSubject(
             LibraryPluginSnapshot(
                 publicationRevision: 0,
                 plugins: Self.identities(
                     for: installedPluginIDs,
-                    pluginType: defaultPluginType,
+                    supportedKinds: supportedKinds,
                     version: "1.0.0"
                 )
             )
@@ -695,7 +752,7 @@ private final class DeferredPluginFake: LibraryPluginServing {
 
     func publish(
         _ pluginIDs: Set<String>,
-        pluginType: MediaKind? = nil,
+        supportedKinds: Set<MediaKind>? = nil,
         version: String = "1.0.0"
     ) {
         subject.send(
@@ -703,7 +760,7 @@ private final class DeferredPluginFake: LibraryPluginServing {
                 publicationRevision: subject.value.publicationRevision &+ 1,
                 plugins: Self.identities(
                     for: pluginIDs,
-                    pluginType: pluginType ?? defaultPluginType,
+                    supportedKinds: supportedKinds ?? defaultKinds,
                     version: version
                 )
             )
@@ -735,7 +792,7 @@ private final class DeferredPluginFake: LibraryPluginServing {
 
     private static func identities(
         for pluginIDs: Set<String>,
-        pluginType: MediaKind,
+        supportedKinds: Set<MediaKind>,
         version: String
     ) -> [String: LibraryInstalledPluginIdentity] {
         Dictionary(uniqueKeysWithValues: pluginIDs.map { pluginID in
@@ -744,7 +801,7 @@ private final class DeferredPluginFake: LibraryPluginServing {
                 LibraryInstalledPluginIdentity(
                     id: pluginID,
                     version: version,
-                    pluginType: pluginType,
+                    supportedKinds: supportedKinds,
                     fileIdentity: URL(fileURLWithPath: "/test/\(pluginID).ito")
                 )
             )
@@ -771,6 +828,7 @@ private final class DeferredInstallerFake: DeferredPluginInstalling {
     private var installContinuations: [CheckedContinuation<Void, Error>] = []
     private(set) var lookupRequests: [String] = []
     private(set) var installRequests: [DeferredPluginPackageCandidate] = []
+    var onInstallSuspended: (() -> Void)?
 
     init(
         lookupResponses: [LookupResponse],
@@ -805,6 +863,7 @@ private final class DeferredInstallerFake: DeferredPluginInstalling {
         case .suspended:
             try await withCheckedThrowingContinuation { continuation in
                 installContinuations.append(continuation)
+                onInstallSuspended?()
             }
         }
     }

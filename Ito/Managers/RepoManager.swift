@@ -3,6 +3,7 @@ import Foundation
 import Combine
 import CryptoKit
 import GRDB
+import ito_runner
 
 nonisolated public struct RepoPackage: Codable, Identifiable, Hashable, Sendable {
     public let id: String
@@ -22,6 +23,27 @@ nonisolated public struct RepoPackage: Codable, Identifiable, Hashable, Sendable
     public let sdk: String?
     /// The host functions the plugin imports, as "module.name". Absent in older indexes.
     public let imports: [String]?
+    /// Optional hints for the media kinds served by this package. Absent in older indexes.
+    public let kinds: [String]?
+
+    public var supportedKinds: [MediaKind] {
+        if let kinds {
+            var seen = Set<MediaKind>()
+            var result: [MediaKind] = []
+            for raw in kinds {
+                if let kind = MediaKind(rawValue: raw.lowercased()), seen.insert(kind).inserted {
+                    result.append(kind)
+                }
+            }
+            if !result.isEmpty {
+                return result
+            }
+        }
+        if let fallback = MediaKind(rawValue: pluginType.lowercased()) {
+            return [fallback]
+        }
+        return []
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, name, version, minAppVersion = "min_app_version"
@@ -32,14 +54,15 @@ nonisolated public struct RepoPackage: Codable, Identifiable, Hashable, Sendable
         case archived
         case archivedReason = "archived_reason"
         case archivedDate = "archived_date"
-        case abi, sdk, imports
+        case abi, sdk, imports, kinds
     }
 
     public init(
         id: String, name: String, version: String, minAppVersion: String, downloadUrl: String,
         iconUrl: String?, sha256: String, pluginType: String, archived: Bool?,
         archivedReason: String?, archivedDate: String?,
-        abi: Int? = nil, sdk: String? = nil, imports: [String]? = nil
+        abi: Int? = nil, sdk: String? = nil, imports: [String]? = nil,
+        kinds: [String]? = nil
     ) {
         self.id = id
         self.name = name
@@ -55,6 +78,26 @@ nonisolated public struct RepoPackage: Codable, Identifiable, Hashable, Sendable
         self.abi = abi
         self.sdk = sdk
         self.imports = imports
+        self.kinds = kinds
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.name = try container.decode(String.self, forKey: .name)
+        self.version = try container.decode(String.self, forKey: .version)
+        self.minAppVersion = try container.decode(String.self, forKey: .minAppVersion)
+        self.downloadUrl = try container.decode(String.self, forKey: .downloadUrl)
+        self.iconUrl = try container.decodeIfPresent(String.self, forKey: .iconUrl)
+        self.sha256 = try container.decode(String.self, forKey: .sha256)
+        self.pluginType = try container.decode(String.self, forKey: .pluginType)
+        self.archived = try container.decodeIfPresent(Bool.self, forKey: .archived)
+        self.archivedReason = try container.decodeIfPresent(String.self, forKey: .archivedReason)
+        self.archivedDate = try container.decodeIfPresent(String.self, forKey: .archivedDate)
+        self.abi = try container.decodeIfPresent(Int.self, forKey: .abi)
+        self.sdk = try container.decodeIfPresent(String.self, forKey: .sdk)
+        self.imports = try container.decodeIfPresent([String].self, forKey: .imports)
+        self.kinds = try? container.decodeIfPresent([String].self, forKey: .kinds)
     }
 }
 

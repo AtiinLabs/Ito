@@ -3,32 +3,19 @@ import CryptoKit
 import Foundation
 import ito_runner
 
-enum SourceSearchPage {
-    case manga([Manga])
-    case anime([Anime])
-    case novel([Novel])
-}
-
-enum ListingContentPage {
-    case manga(entries: [Manga], hasNextPage: Bool)
-    case anime(entries: [Anime], hasNextPage: Bool)
-    case novel(entries: [Novel], hasNextPage: Bool)
-}
-
 protocol SourceRunnerContext: SearchDetailLoading {
     func loadHome() async throws -> HomeLayout
     func loadSettingsSchema() async throws -> SettingsSchema?
     func search(
-        kind: MediaKind,
+        kind: MediaKind?,
         query: String,
         page: Int32,
         filters: [FilterItem]?
-    ) async throws -> SourceSearchPage
+    ) async throws -> MediaPageResult
     func loadListing(
-        kind: MediaKind,
         listing: Listing,
         page: Int32
-    ) async throws -> ListingContentPage
+    ) async throws -> MediaPageResult
 }
 
 final class ItoRunnerSourceContext: SourceRunnerContext {
@@ -47,33 +34,22 @@ final class ItoRunnerSourceContext: SourceRunnerContext {
     }
 
     func search(
-        kind: MediaKind,
+        kind: MediaKind?,
         query: String,
         page: Int32,
         filters: [FilterItem]?
-    ) async throws -> SourceSearchPage {
+    ) async throws -> MediaPageResult {
         try await pluginCall {
-            let entries = try await runner.search(query: query, page: page, kind: kind, filters: filters).entries
-            switch kind {
-            case .manga: return .manga(entries.compactMap(\.manga))
-            case .anime: return .anime(entries.compactMap(\.anime))
-            case .novel: return .novel(entries.compactMap(\.novel))
-            }
+            try await runner.search(query: query, page: page, kind: kind, filters: filters)
         }
     }
 
     func loadListing(
-        kind: MediaKind,
         listing: Listing,
         page: Int32
-    ) async throws -> ListingContentPage {
+    ) async throws -> MediaPageResult {
         try await pluginCall {
-            let result = try await runner.getListing(listing, page: page)
-            switch kind {
-            case .manga: return .manga(entries: result.entries.compactMap(\.manga), hasNextPage: result.hasNextPage)
-            case .anime: return .anime(entries: result.entries.compactMap(\.anime), hasNextPage: result.hasNextPage)
-            case .novel: return .novel(entries: result.entries.compactMap(\.novel), hasNextPage: result.hasNextPage)
-            }
+            try await runner.getListing(listing, page: page)
         }
     }
 

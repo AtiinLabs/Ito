@@ -15,6 +15,7 @@ func pr7bPlugin(
     id: String = "plugin.manga",
     name: String = "Fixture Source",
     type: MediaKind = .manga,
+    kinds: [MediaKind]? = nil,
     archived: Bool = false,
     url: URL? = nil
 ) -> InstalledPlugin {
@@ -26,6 +27,7 @@ func pr7bPlugin(
             version: "1.0",
             minAppVersion: "1.0",
             type: type,
+            kinds: kinds,
             archived: archived
         ),
         iconData: nil
@@ -91,33 +93,33 @@ final class PR7BSourceRunnerProviderSpy: SourceRunnerProviding {
 @MainActor
 final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
     struct SearchInvocation: Equatable {
-        let pluginType: MediaKind
+        let pluginType: MediaKind?
         let query: String
         let page: Int32
         let filterCount: Int?
     }
 
     struct ListingInvocation: Equatable {
-        let pluginType: MediaKind
         let listingID: String
         let page: Int32
     }
 
     struct PendingSearch {
         let query: String
-        let continuation: CheckedContinuation<SourceSearchPage, any Error>
+        let kind: MediaKind?
+        let continuation: CheckedContinuation<MediaPageResult, any Error>
     }
 
     struct PendingListing {
         let page: Int32
-        let continuation: CheckedContinuation<ListingContentPage, any Error>
+        let continuation: CheckedContinuation<MediaPageResult, any Error>
     }
 
     let runner = ItoRunner()
     var homeResult: Result<HomeLayout, any Error> = .success(HomeLayout(components: []))
     var settingsResult: Result<SettingsSchema?, any Error> = .success(nil)
-    var searchResult: Result<SourceSearchPage, any Error> = .success(.manga([]))
-    var listingResults: [Int32: Result<ListingContentPage, any Error>] = [:]
+    var searchResult: Result<MediaPageResult, any Error> = .success(MediaPageResult(entries: [], hasNextPage: false))
+    var listingResults: [Int32: Result<MediaPageResult, any Error>] = [:]
     var suspendsHome = false
     var suspendsSearch = false
     var suspendedListingPages: Set<Int32> = []
@@ -149,36 +151,35 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
     }
 
     func search(
-        kind pluginType: MediaKind,
+        kind pluginType: MediaKind?,
         query: String,
         page: Int32,
         filters: [FilterItem]?
-    ) async throws -> SourceSearchPage {
+    ) async throws -> MediaPageResult {
         searchInvocations.append(
             .init(pluginType: pluginType, query: query, page: page, filterCount: filters?.count)
         )
         if suspendsSearch {
             return try await withCheckedThrowingContinuation {
-                pendingSearches.append(.init(query: query, continuation: $0))
+                pendingSearches.append(.init(query: query, kind: pluginType, continuation: $0))
             }
         }
         return try searchResult.get()
     }
 
     func loadListing(
-        kind pluginType: MediaKind,
         listing: Listing,
         page: Int32
-    ) async throws -> ListingContentPage {
+    ) async throws -> MediaPageResult {
         listingInvocations.append(
-            .init(pluginType: pluginType, listingID: listing.id, page: page)
+            .init(listingID: listing.id, page: page)
         )
         if suspendedListingPages.contains(page) {
             return try await withCheckedThrowingContinuation {
                 pendingListings.append(.init(page: page, continuation: $0))
             }
         }
-        return try listingResults[page, default: .success(.manga(entries: [], hasNextPage: false))].get()
+        return try listingResults[page, default: .success(MediaPageResult(entries: [], hasNextPage: false))].get()
     }
 
     func loadManga(_ manga: Manga) async throws -> Manga {
@@ -202,13 +203,27 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
         continuation.resume(with: result)
     }
 
-    func completeSearch(query: String, with result: Result<SourceSearchPage, any Error>) {
-        guard let index = pendingSearches.firstIndex(where: { $0.query == query }) else { return }
-        let pending = pendingSearches.remove(at: index)
+    func completeSearch(
+        query: String? = nil,
+        kind: MediaKind? = nil,
+        with result: Result<MediaPageResult, any Error>
+    ) {
+        let index: Int?
+        if let query, let kind {
+            index = pendingSearches.firstIndex(where: { $0.query == query && $0.kind == kind })
+        } else if let query {
+            index = pendingSearches.firstIndex(where: { $0.query == query })
+        } else if let kind {
+            index = pendingSearches.firstIndex(where: { $0.kind == kind })
+        } else {
+            index = pendingSearches.indices.first
+        }
+        guard let idx = index else { return }
+        let pending = pendingSearches.remove(at: idx)
         pending.continuation.resume(with: result)
     }
 
-    func completeListing(page: Int32, with result: Result<ListingContentPage, any Error>) {
+    func completeListing(page: Int32, with result: Result<MediaPageResult, any Error>) {
         guard let index = pendingListings.firstIndex(where: { $0.page == page }) else { return }
         let pending = pendingListings.remove(at: index)
         pending.continuation.resume(with: result)

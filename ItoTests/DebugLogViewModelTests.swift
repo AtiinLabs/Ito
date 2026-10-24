@@ -1,5 +1,6 @@
 import Combine
 import XCTest
+import ito_runner
 @testable import Ito
 
 @MainActor
@@ -455,6 +456,7 @@ private final class DebugLogSearchExecutor: SearchPluginExecuting {
 
     func search(
         plugin: SearchPluginDescriptor,
+        kind: MediaKind?,
         query: String,
         limit: Int
     ) async throws -> [PluginSearchResult] {

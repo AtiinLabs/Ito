@@ -514,6 +514,16 @@ struct SourceDestinationHost: View {
                     try await route.runner.getMediaUpdate(.anime(updated)).expecting(\.anime)
                 }
             }
+        case .novel(let novel):
+            viewFactory.makeNovelDetailView(
+                runner: route.runner,
+                media: novel,
+                pluginID: route.pluginID
+            ) { updated in
+                try await pluginCall {
+                    try await route.runner.getMediaUpdate(.novel(updated)).expecting(\.novel)
+                }
+            }
         }
     }
 }
@@ -651,16 +661,6 @@ private struct ResolvedSourceRow: View {
         case .exactAlternative: return "Exact Alt Match"
         case .fuzzy: return String(format: "Fuzzy (%.0f%%)", match.score * 100)
         case .none: return "No Match"
-        }
-    }
-}
-
-// Extension to safely get title from ResolvedPluginMedia
-private extension ResolvedPluginMedia {
-    func title() -> String {
-        switch self {
-        case .manga(let m): return m.title
-        case .anime(let a): return a.title
         }
     }
 }

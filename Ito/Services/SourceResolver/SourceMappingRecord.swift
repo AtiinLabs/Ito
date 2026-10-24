@@ -6,6 +6,7 @@ extension PluginMediaType: Codable, DatabaseValueConvertible {
         switch self {
         case .manga: return "manga".databaseValue
         case .anime: return "anime".databaseValue
+        case .novel: return "novel".databaseValue
         }
     }
 
@@ -14,6 +15,7 @@ extension PluginMediaType: Codable, DatabaseValueConvertible {
             switch string {
             case "manga": return .manga
             case "anime": return .anime
+            case "novel": return .novel
             default: return nil
             }
         }
@@ -26,6 +28,7 @@ extension PluginMediaType: Codable, DatabaseValueConvertible {
         switch value {
         case "manga": self = .manga
         case "anime": self = .anime
+        case "novel": self = .novel
         default: throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid media type: \(value)")
         }
     }
@@ -35,6 +38,7 @@ extension PluginMediaType: Codable, DatabaseValueConvertible {
         switch self {
         case .manga: try container.encode("manga")
         case .anime: try container.encode("anime")
+        case .novel: try container.encode("novel")
         }
     }
 }

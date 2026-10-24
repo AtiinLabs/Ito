@@ -1,7 +1,15 @@
 import Foundation
 import ito_runner
 
+/// Source-local catalog keys can be shared by different media kinds.
+nonisolated struct MediaEntryIdentity: Hashable {
+    let kind: MediaKind
+    let key: String
+}
+
 nonisolated extension MediaEntry {
+    var catalogIdentity: MediaEntryIdentity { MediaEntryIdentity(kind: kind, key: key) }
+
     var manga: Manga? {
         if case .manga(let manga) = self { return manga }
         return nil

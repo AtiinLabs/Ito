@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import ito_runner
 
 @MainActor
 public final class SearchViewModel: ObservableObject {
@@ -74,12 +75,14 @@ public final class SearchViewModel: ObservableObject {
             addRecentSearch(trimmed)
         }
         let initialActivePluginIDs = Set(plugins.map(\.id))
+        let kind = searchScope.mediaKind
         state = .loading(results: [:], activePluginIDs: initialActivePluginIDs)
 
         currentTask = Task { @MainActor [weak self] in
             guard let self else { return }
             await execute(
                 plugins: plugins,
+                kind: kind,
                 query: trimmed,
                 operationID: operationID
             )
@@ -104,6 +107,7 @@ public final class SearchViewModel: ObservableObject {
 
     private func execute(
         plugins: [SearchPluginDescriptor],
+        kind: MediaKind?,
         query: String,
         operationID: UUID
     ) async {
@@ -129,6 +133,7 @@ public final class SearchViewModel: ObservableObject {
             do {
                 let pluginResults = try await searchExecutor.search(
                     plugin: plugin,
+                    kind: kind,
                     query: query,
                     limit: Self.resultLimit
                 )
@@ -306,16 +311,8 @@ public final class SearchViewModel: ObservableObject {
 
     private func filteredPlugins() -> [SearchPluginDescriptor] {
         searchExecutor.plugins.filter { plugin in
-            switch searchScope {
-            case .all:
-                return true
-            case .manga:
-                return plugin.kind == .manga
-            case .anime:
-                return plugin.kind == .anime
-            case .novel:
-                return plugin.kind == .novel
-            }
+            guard let kind = searchScope.mediaKind else { return !plugin.kinds.isEmpty }
+            return plugin.kinds.contains(kind)
         }
     }
 

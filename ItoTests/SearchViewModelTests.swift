@@ -78,9 +78,9 @@ final class SearchViewModelTests: XCTestCase {
 
     func testTypedFailuresPreserveMessagesAndSettingsActionsWithPartialSuccess() async {
         let executor = SearchViewModelRecordingExecutor(plugins: [
-            .init(id: "plugin.a", name: "Alpha", kind: .manga),
-            .init(id: "plugin.b", name: "Beta", kind: .anime),
-            .init(id: "plugin.c", name: "Gamma", kind: .novel)
+            .init(id: "plugin.a", name: "Alpha", kinds: [.manga]),
+            .init(id: "plugin.b", name: "Beta", kinds: [.anime]),
+            .init(id: "plugin.c", name: "Gamma", kinds: [.novel])
         ])
         let privateReason = "sentinel-private-settings-reason"
         executor.errorsByPluginID["plugin.a"] = PluginManagerSearchExecutor.classify(
@@ -237,6 +237,51 @@ final class SearchViewModelTests: XCTestCase {
         XCTAssertEqual(results["Manga Plugin"]?.map(\.id), ["content"])
     }
 
+    func testMultiKindSourcesParticipateInEverySupportedSearchScope() async {
+        let scopes: [(SearchScope, Set<String>)] = [
+            (.manga, ["Mixed"]),
+            (.novel, ["Mixed", "Novels"]),
+            (.anime, ["Anime"]),
+            (.all, ["Mixed", "Novels", "Anime"])
+        ]
+        for (scope, expectedNames) in scopes {
+            let executor = SearchViewModelRecordingExecutor(plugins: [
+                .init(id: "mixed", name: "Mixed", kinds: [.manga, .novel]),
+                .init(id: "novels", name: "Novels", kinds: [.novel]),
+                .init(id: "anime", name: "Anime", kinds: [.anime])
+            ])
+            let finished = expectation(description: "Scope \(scope.rawValue) finished")
+            let logger = SearchFailureEventLogger { event in
+                if event.kind == .operation, event.phase == .finished { finished.fulfill() }
+            }
+            let viewModel = makeViewModel(executor: executor, logger: logger)
+            viewModel.searchScope = scope
+            viewModel.performSearch(query: "title")
+            await fulfillment(of: [finished], timeout: 2)
+
+            XCTAssertEqual(Set(viewModel.searchResults.keys), expectedNames)
+            XCTAssertEqual(executor.invocations.map(\.kind), Array(repeating: scope.mediaKind, count: expectedNames.count))
+        }
+    }
+
+    func testSearchCapturesItsScopeBeforeTheAsyncOperationStarts() async {
+        let executor = SearchViewModelRecordingExecutor(plugins: [
+            .init(id: "mixed", name: "Mixed", kinds: [.manga, .novel])
+        ])
+        let finished = expectation(description: "Captured-scope search finished")
+        let logger = SearchFailureEventLogger { event in
+            if event.kind == .operation, event.phase == .finished { finished.fulfill() }
+        }
+        let viewModel = makeViewModel(executor: executor, logger: logger)
+        viewModel.searchScope = .novel
+        viewModel.performSearch(query: "title")
+        viewModel.searchScope = .manga
+        await fulfillment(of: [finished], timeout: 2)
+
+        XCTAssertEqual(executor.invocations.map(\.kind), [.novel])
+        XCTAssertEqual(Set(viewModel.searchResults.keys), ["Mixed"])
+    }
+
     func testEmptyStateAfterSuccessfulZeroResultSearch() async {
         let executor = SearchViewModelRecordingExecutor(plugins: [.manga()])
         executor.resultsByPluginID["plugin.manga"] = []
@@ -253,8 +298,8 @@ final class SearchViewModelTests: XCTestCase {
     func testPartialFailurePreservesSuccessfulPluginResults() async {
         let executor = SearchViewModelRecordingExecutor(
             plugins: [
-                .init(id: "plugin.a", name: "Alpha", kind: .manga),
-                .init(id: "plugin.b", name: "Beta", kind: .anime)
+                .init(id: "plugin.a", name: "Alpha", kinds: [.manga]),
+                .init(id: "plugin.b", name: "Beta", kinds: [.anime])
             ]
         )
         executor.errorsByPluginID["plugin.a"] = SearchPluginExecutionError.pluginExecution
@@ -369,8 +414,8 @@ final class SearchViewModelTests: XCTestCase {
     func testPartialAndTotalFailureEmitDistinctTypedOutcomes() async {
         let partialExecutor = SearchViewModelRecordingExecutor(
             plugins: [
-                .init(id: "plugin.a", name: "Alpha", kind: .manga),
-                .init(id: "plugin.b", name: "Beta", kind: .anime)
+                .init(id: "plugin.a", name: "Alpha", kinds: [.manga]),
+                .init(id: "plugin.b", name: "Beta", kinds: [.anime])
             ]
         )
         partialExecutor.errorsByPluginID["plugin.a"] = SearchPluginExecutionError.pluginExecution
@@ -497,6 +542,7 @@ private final class SearchViewModelRecentStore: RecentSearchPersisting {
 private final class SearchViewModelRecordingExecutor: SearchPluginExecuting {
     struct Invocation {
         let pluginID: String
+        let kind: MediaKind?
         let query: String
         let limit: Int
     }
@@ -513,10 +559,11 @@ private final class SearchViewModelRecordingExecutor: SearchPluginExecuting {
 
     func search(
         plugin: SearchPluginDescriptor,
+        kind: MediaKind?,
         query: String,
         limit: Int
     ) async throws -> [PluginSearchResult] {
-        invocations.append(.init(pluginID: plugin.id, query: query, limit: limit))
+        invocations.append(.init(pluginID: plugin.id, kind: kind, query: query, limit: limit))
         if let error = errorsByPluginID[plugin.id] { throw error }
         return resultsByPluginID[plugin.id] ?? [.result(id: plugin.id)]
     }
@@ -546,6 +593,7 @@ private final class SearchViewModelSuspendingExecutor: SearchPluginExecuting {
 
     func search(
         plugin: SearchPluginDescriptor,
+        kind: MediaKind?,
         query: String,
         limit: Int
     ) async throws -> [PluginSearchResult] {
@@ -600,7 +648,7 @@ private extension PresentationEventCaptureSpy {
 
 private extension SearchPluginDescriptor {
     static func manga() -> Self {
-        .init(id: "plugin.manga", name: "Manga Plugin", kind: .manga)
+        .init(id: "plugin.manga", name: "Manga Plugin", kinds: [.manga])
     }
 }
 

@@ -1,25 +1,18 @@
 import Foundation
 import ito_runner
 
-nonisolated enum SearchPluginKind: Equatable, Sendable {
-    case manga
-    case anime
-    case novel
-    case unsupported
-}
-
 nonisolated struct SearchPluginDescriptor: Equatable, Sendable {
     let id: String
     let name: String
-    let kind: SearchPluginKind
+    let kinds: Set<MediaKind>
     /// The source's website from its manifest, used to route a pasted link to the source it
     /// belongs to.
     let siteURL: String?
 
-    init(id: String, name: String, kind: SearchPluginKind, siteURL: String? = nil) {
+    init(id: String, name: String, kinds: Set<MediaKind>, siteURL: String? = nil) {
         self.id = id
         self.name = name
-        self.kind = kind
+        self.kinds = kinds
         self.siteURL = siteURL
     }
 }
@@ -36,6 +29,7 @@ protocol SearchPluginExecuting: AnyObject {
 
     func search(
         plugin: SearchPluginDescriptor,
+        kind: MediaKind?,
         query: String,
         limit: Int
     ) async throws -> [PluginSearchResult]
@@ -112,7 +106,7 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
             SearchPluginDescriptor(
                 id: plugin.id,
                 name: plugin.info.name,
-                kind: searchKind(for: plugin),
+                kinds: Set(plugin.info.supportedKinds),
                 siteURL: plugin.info.url
             )
         }
@@ -120,6 +114,7 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
 
     func search(
         plugin: SearchPluginDescriptor,
+        kind: MediaKind?,
         query: String,
         limit: Int
     ) async throws -> [PluginSearchResult] {
@@ -139,22 +134,16 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
         let context = ItoRunnerSearchContext(runner: runner)
 
         if let link {
-            return try await open(link, plugin: plugin, runner: runner, context: context)
+            return try await open(link, plugin: plugin, kind: kind, runner: runner, context: context)
         }
 
         do {
             return try await pluginCall {
-                let kind: MediaKind
-                switch plugin.kind {
-                case .manga: kind = .manga
-                case .anime: kind = .anime
-                case .novel: kind = .novel
-                case .unsupported: return []
-                }
+                if let kind, !plugin.kinds.contains(kind) { return [] }
                 let response = try await runner.search(query: query, page: 1, kind: kind)
                 try Task.checkCancellation()
-                // A plugin serving several kinds may mix them; this scope shows only `kind`.
-                return Array(response.entries.lazy.filter { $0.kind == kind }.prefix(limit).map { entry in
+                // Other kinds cannot leak into a scoped search or consume its result limit.
+                return Array(response.entries.lazy.filter { kind == nil || $0.kind == kind }.prefix(limit).map { entry in
                     self.result(for: entry, plugin: plugin, context: context)
                 })
             }
@@ -171,6 +160,7 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
     private func open(
         _ link: SearchLink,
         plugin: SearchPluginDescriptor,
+        kind: MediaKind?,
         runner: ItoRunner,
         context: ItoRunnerSearchContext
     ) async throws -> [PluginSearchResult] {
@@ -180,6 +170,7 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
                 try Task.checkCancellation()
                 switch value {
                 case .manga(let linked):
+                    guard kind == nil || kind == .manga, plugin.kinds.contains(.manga) else { return [] }
                     let manga = try await runner.getMediaUpdate(.manga(linked), needsUnits: false).expecting(\.manga)
                     try Task.checkCancellation()
                     return [PluginSearchResult(
@@ -188,6 +179,7 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
                         destination: .manga(pluginID: plugin.id, context: context, media: manga)
                     )]
                 case .anime(let linked):
+                    guard kind == nil || kind == .anime, plugin.kinds.contains(.anime) else { return [] }
                     let anime = try await runner.getMediaUpdate(.anime(linked), needsUnits: false).expecting(\.anime)
                     try Task.checkCancellation()
                     return [PluginSearchResult(
@@ -196,6 +188,7 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
                         destination: .anime(pluginID: plugin.id, context: context, media: anime)
                     )]
                 case .novel(let linked):
+                    guard kind == nil || kind == .novel, plugin.kinds.contains(.novel) else { return [] }
                     let novel = try await runner.getMediaUpdate(.novel(linked), needsUnits: false).expecting(\.novel)
                     try Task.checkCancellation()
                     return [PluginSearchResult(
@@ -244,19 +237,6 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
 
     func pendingTrust(for pluginID: String) -> PendingTrust? {
         pluginManager.pluginSettingsStore.trust.pending(pluginID: pluginID)
-    }
-
-    private func searchKind(for plugin: InstalledPlugin) -> SearchPluginKind {
-        switch plugin.info.type {
-        case .manga:
-            return .manga
-        case .anime:
-            return .anime
-        case .novel:
-            return .novel
-        @unknown default:
-            return .unsupported
-        }
     }
 
     func clearPendingTrust(for pluginID: String) {
