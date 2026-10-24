@@ -69,7 +69,10 @@ public final class SearchViewModel: ObservableObject {
             return
         }
 
-        addRecentSearch(trimmed)
+        // Links can carry account or session tokens; only typed searches are remembered.
+        if SearchLink(query: trimmed) == nil {
+            addRecentSearch(trimmed)
+        }
         let initialActivePluginIDs = Set(plugins.map(\.id))
         state = .loading(results: [:], activePluginIDs: initialActivePluginIDs)
 

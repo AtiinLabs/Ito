@@ -17,6 +17,20 @@ final class SearchCharacterizationTests: XCTestCase {
         XCTAssertEqual(store.savedValues, [["One Piece"]])
     }
 
+    func testPastedLinkIsSearchedButNeverRemembered() async {
+        let executor = RecordingSearchExecutor(plugins: [.manga()])
+        let store = InMemoryRecentSearchStore(initial: ["typed"])
+        let viewModel = makeViewModel(executor: executor, store: store)
+        let link = "https://example.org/title/abc?session=private-token"
+
+        viewModel.performSearch(query: " \(link) ")
+        await waitUntil { !viewModel.isSearching }
+
+        XCTAssertEqual(executor.invocations.map(\.query), [link])
+        XCTAssertEqual(viewModel.recentSearches, ["typed"])
+        XCTAssertTrue(store.savedValues.isEmpty)
+    }
+
     func testEmptyOrClearedQueryResetsSearchState() async {
         let executor = RecordingSearchExecutor(plugins: [.manga()])
         let store = InMemoryRecentSearchStore()
