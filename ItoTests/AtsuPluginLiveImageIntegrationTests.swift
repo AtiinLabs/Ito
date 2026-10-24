@@ -32,7 +32,10 @@ final class AtsuPluginLiveImageIntegrationTests: XCTestCase {
 
         // 2. Load runner using ItoRunner configured with AppNetModule and loadBundle
         let runner = ItoRunner()
-        await runner.setNetModule(AppNetModule())
+        await runner.setNetModule(AppNetModule(
+            pluginID: "com.kunihir0.ito.atsumaru",
+            cookieJar: PluginCookieJar(keychain: InMemoryPluginSecretKeychain())
+        ))
         await runner.setStdModule(DefaultStdModule())
         await runner.setHtmlModule(DefaultHtmlModule())
         await runner.setWebviewModule(AppWebviewModule())

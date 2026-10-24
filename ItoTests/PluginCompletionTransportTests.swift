@@ -551,7 +551,7 @@ private struct ExecutorHarness {
         executor = PluginCompletionExecutor(
             store: store,
             locatePlugin: locator,
-            makeNetModule: {
+            makeNetModule: { _ in
                 onNetworkCreated?()
                 return PluginCompletionNetModule(configuration: networkConfiguration?() ?? .ephemeral)
             }

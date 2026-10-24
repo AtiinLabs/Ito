@@ -10,6 +10,8 @@ struct PluginCallError: LocalizedError, Equatable {
         /// The plugin needs settings it doesn't have, or its credentials were rejected: the way
         /// out is the plugin's settings. `message` is its own text.
         case needsSettings
+        /// The source needs the user to sign in on its website. `message` is its own text.
+        case needsLogin
         /// The plugin stopped part-way (a trap or a bad memory access). Reload it before calling
         /// it again: its state may be inconsistent.
         case crashed
@@ -33,6 +35,9 @@ struct PluginCallError: LocalizedError, Equatable {
         switch error {
         case .pluginFailed(_, let reason, _) where reason.map(Self.isSDKDecodingFailure) == true:
             self.init(kind: .incompatible, message: Self.incompatibleMessage)
+        case .pluginFailed(_, let reason, .needsLogin):
+            let message = reason?.isEmpty == false ? Self.pluginMessage(reason) : "Sign in to this source to continue."
+            self.init(kind: .needsLogin, message: message)
         case .pluginFailed(_, let reason, let category):
             let kind: Kind = category == .needsSetup || category == .unauthorized ? .needsSettings : .reported
             self.init(kind: kind, message: Self.pluginMessage(reason))

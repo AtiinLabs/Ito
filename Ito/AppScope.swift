@@ -28,6 +28,7 @@ struct PreparedApplicationDependencies {
     let discoverDebounceMilliseconds: Int?
     let completionRecovery: (any PluginCompletionRecovering)?
     let settingsDiagnostics: (any PluginSettingsDiagnosing)?
+    let pluginCookies: PluginCookieJar?
 
     init(
         settings: PreparedSettingsDependencies,
@@ -55,7 +56,8 @@ struct PreparedApplicationDependencies {
         discoverClock: any DiscoverClock = SystemDiscoverClock(),
         discoverDebounceMilliseconds: Int? = DiscoverViewModel.productionDebounceMilliseconds,
         completionRecovery: (any PluginCompletionRecovering)? = nil,
-        settingsDiagnostics: (any PluginSettingsDiagnosing)? = nil
+        settingsDiagnostics: (any PluginSettingsDiagnosing)? = nil,
+        pluginCookies: PluginCookieJar? = nil
     ) {
         self.settings = settings
         self.tracking = tracking ?? .unavailable()
@@ -83,6 +85,7 @@ struct PreparedApplicationDependencies {
         self.discoverDebounceMilliseconds = discoverDebounceMilliseconds
         self.completionRecovery = completionRecovery
         self.settingsDiagnostics = settingsDiagnostics
+        self.pluginCookies = pluginCookies
     }
 
     static func production(
@@ -125,7 +128,8 @@ struct PreparedApplicationDependencies {
                 storageAccess: storageManager,
                 discordRPCManager: discordRPCManager,
                 logReader: SystemDebugLogReader(),
-                clipboardWriter: SystemClipboardWriter()
+                clipboardWriter: SystemClipboardWriter(),
+                siteDataClearer: SystemSiteDataClearer(pluginCookies: pluginManager.pluginSettingsStore.cookies)
             ),
             tracking: tracking,
             mediaDetail: .production(
@@ -222,7 +226,8 @@ struct PreparedApplicationDependencies {
                     if let refusal = plugin.info.compatibilityRefusal { throw refusal }
                     return plugin.url
                 }
-            )
+            ),
+            pluginCookies: pluginManager.pluginSettingsStore.cookies
         )
     }
 }
@@ -523,7 +528,8 @@ final class AppScope {
             categoryHistoryMessagePresenter: categoryHistoryMessagePresenter,
             presentationLogger: preparedDependencies.presentationLogger,
             completionRecovery: preparedDependencies.completionRecovery,
-            settingsDiagnostics: preparedDependencies.settingsDiagnostics
+            settingsDiagnostics: preparedDependencies.settingsDiagnostics,
+            pluginCookies: preparedDependencies.pluginCookies
         )
     }
 

@@ -265,6 +265,109 @@ final class AppNetModulePrivacyTests: XCTestCase {
         XCTAssertEqual(fixture.logger.events, [.challengeDetected, .retryStarted])
     }
 
+    func testCookiesTheSiteSetsAreSentOnLaterRequestsOfThatPluginOnly() async throws {
+        let host = "cookies-\(UUID().uuidString.lowercased()).example.invalid"
+        let url = try XCTUnwrap(URL(string: "https://\(host)/library"))
+        let boundary = ScriptedRequestBoundary(steps: [
+            .success(StubHTTPResponse(statusCode: 200, headers: ["Set-Cookie": "session=abc; Path=/"], body: Data())),
+            .success(StubHTTPResponse(statusCode: 200, headers: [:], body: Data())),
+            .success(StubHTTPResponse(statusCode: 200, headers: [:], body: Data()))
+        ])
+        ScriptedURLProtocol.register(boundary, forHost: host)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ScriptedURLProtocol.self]
+        config.httpCookieStorage = nil
+        config.httpShouldSetCookies = false
+        let jar = PluginCookieJar(keychain: InMemoryPluginSecretKeychain())
+        func module(_ pluginID: String) -> AppNetModule {
+            AppNetModule(
+                urlSession: URLSession(configuration: config),
+                cloudflare: StubCloudflareHandler(cachedUserAgent: "", resolution: .failure(TestFailure.challengeResolution)),
+                retryLogger: RecordingRetryLogger(),
+                pluginID: pluginID,
+                cookieJar: jar
+            )
+        }
+        let request = NetRequest(url: url.absoluteString, method: "GET", headers: [:], body: nil)
+        let signedIn = module("plugin.a")
+
+        _ = try await signedIn.fetch(request: request)
+        _ = try await signedIn.fetch(request: request)
+        _ = try await module("plugin.b").fetch(request: request)
+
+        let cookies = boundary.requests.map { $0.value(forHTTPHeaderField: "Cookie") }
+        XCTAssertEqual(cookies, [nil, "session=abc", nil])
+    }
+
+    func testThePluginsOwnCookieHeaderWinsOverItsStoredCookie() async throws {
+        let host = "cookies-\(UUID().uuidString.lowercased()).example.invalid"
+        let url = try XCTUnwrap(URL(string: "https://\(host)/"))
+        let boundary = ScriptedRequestBoundary(steps: [
+            .success(StubHTTPResponse(statusCode: 200, headers: [:], body: Data()))
+        ])
+        ScriptedURLProtocol.register(boundary, forHost: host)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ScriptedURLProtocol.self]
+        let jar = PluginCookieJar(keychain: InMemoryPluginSecretKeychain())
+        try jar.store([try cookie(name: "session", value: "stored", url: url)], pluginID: "plugin.a")
+        let module = AppNetModule(
+            urlSession: URLSession(configuration: config),
+            cloudflare: StubCloudflareHandler(cachedUserAgent: "", resolution: .failure(TestFailure.challengeResolution)),
+            retryLogger: RecordingRetryLogger(),
+            pluginID: "plugin.a",
+            cookieJar: jar
+        )
+
+        _ = try await module.fetch(request: NetRequest(
+            url: url.absoluteString, method: "GET", headers: ["Cookie": "session=explicit"], body: nil
+        ))
+
+        XCTAssertEqual(boundary.requests.first?.value(forHTTPHeaderField: "Cookie"), "session=explicit")
+    }
+
+    func testASessionNeverFollowsARedirectToAnotherHostAndRedirectCookiesAreKept() async throws {
+        let site = "site-\(UUID().uuidString.lowercased()).example.invalid"
+        let elsewhere = "cdn-\(UUID().uuidString.lowercased()).example.invalid"
+        let siteURL = try XCTUnwrap(URL(string: "https://\(site)/login"))
+        let boundary = ScriptedRequestBoundary(steps: [
+            .success(StubHTTPResponse(
+                statusCode: 302,
+                headers: ["Location": "https://\(elsewhere)/asset", "Set-Cookie": "fresh=1; Path=/"],
+                body: Data()
+            )),
+            .success(StubHTTPResponse(statusCode: 200, headers: ["Set-Cookie": "cdn=2; Path=/"], body: Data()))
+        ])
+        ScriptedURLProtocol.register(boundary, forHost: site)
+        ScriptedURLProtocol.register(boundary, forHost: elsewhere)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ScriptedURLProtocol.self]
+        config.httpCookieStorage = nil
+        config.httpShouldSetCookies = false
+        let jar = PluginCookieJar(keychain: InMemoryPluginSecretKeychain())
+        try jar.store([try XCTUnwrap(HTTPCookie(properties: [
+            .name: "session", .value: "abc", .domain: site, .path: "/"
+        ]))], pluginID: "plugin.a")
+        let module = AppNetModule(
+            urlSession: URLSession(configuration: config),
+            cloudflare: StubCloudflareHandler(cachedUserAgent: "", resolution: .failure(TestFailure.challengeResolution)),
+            retryLogger: RecordingRetryLogger(),
+            pluginID: "plugin.a",
+            cookieJar: jar
+        )
+
+        let response = try await module.fetch(request: NetRequest(
+            url: siteURL.absoluteString, method: "GET", headers: ["Cookie": "explicit=1"], body: nil
+        ))
+
+        XCTAssertEqual(response.status, 200)
+        let sent = boundary.requests.map { $0.value(forHTTPHeaderField: "Cookie") }
+        XCTAssertEqual(sent, ["session=abc; explicit=1", nil])
+        let siteCookies = jar.cookies(pluginID: "plugin.a", for: siteURL).map(\.name).sorted()
+        XCTAssertEqual(siteCookies, ["fresh", "session"])
+        let elsewhereCookies = jar.cookies(pluginID: "plugin.a", for: try XCTUnwrap(URL(string: "https://\(elsewhere)/"))).map(\.name)
+        XCTAssertEqual(elsewhereCookies, ["cdn"])
+    }
+
     private var sensitiveValues: [String] {
         [
             sentinelAuthorization,
@@ -331,7 +434,9 @@ final class AppNetModulePrivacyTests: XCTestCase {
         let module = AppNetModule(
             urlSession: session,
             cloudflare: cloudflare,
-            retryLogger: logger
+            retryLogger: logger,
+            pluginID: "test.plugin",
+            cookieJar: PluginCookieJar(keychain: InMemoryPluginSecretKeychain())
         )
         let request = NetRequest(
             url: url.absoluteString,
@@ -550,6 +655,15 @@ private class ScriptedURLProtocol: URLProtocol {
                 headerFields: stub.headers
             ) else {
                 throw URLError(.badServerResponse)
+            }
+            if (300..<400).contains(stub.statusCode),
+               let location = stub.headers["Location"],
+               let target = URL(string: location, relativeTo: url)?.absoluteURL {
+                // URLSession forwards the original headers, Cookie included, unless told otherwise.
+                var next = URLRequest(url: target)
+                next.allHTTPHeaderFields = request.allHTTPHeaderFields
+                client?.urlProtocol(self, wasRedirectedTo: next, redirectResponse: response)
+                return
             }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: stub.body)

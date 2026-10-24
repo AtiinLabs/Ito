@@ -7,6 +7,7 @@ struct LibraryView: View {
     @ObservedObject var viewModel: LibraryViewModel
     let viewFactory: AppViewFactory
     @State private var settingsFailure: LibraryUpdateFailure?
+    @State private var signInTarget: PluginSignInTarget?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -71,6 +72,11 @@ struct LibraryView: View {
             Task { await viewModel.requestUpdate() }
         }) { failure in
             viewFactory.makePluginSettingsSheet(pluginID: failure.pluginID)
+        }
+        .sheet(item: $signInTarget, onDismiss: {
+            Task { await viewModel.requestUpdate() }
+        }) { target in
+            viewFactory.makePluginSignInSheet(target: target)
         }
         .onAppear { viewModel.appear() }
         .onDisappear { viewModel.disappear() }
@@ -176,6 +182,13 @@ struct LibraryView: View {
                         if failure.needsSettings {
                             Button("Open Settings") {
                                 settingsFailure = failure
+                            }
+                            .font(.caption.weight(.semibold))
+                            .disabled(viewModel.isRefreshing)
+                        }
+                        if failure.needsLogin, let target = viewFactory.signInTarget(pluginID: failure.pluginID) {
+                            Button("Sign In") {
+                                signInTarget = target
                             }
                             .font(.caption.weight(.semibold))
                             .disabled(viewModel.isRefreshing)

@@ -78,7 +78,8 @@ final class PluginSettingsDiagnosticService: PluginSettingsDiagnosing {
         let defaults = try await captureDefaults(pluginID: pluginID, schema: schema, secretDrafts: secretDrafts)
         try Task.checkCancellation()
 
-        let netModule = PluginCompletionNetModule()
+        let cookies = settingsStore.cookies
+        let netModule = PluginCompletionNetModule(cookies: { url in cookies.cookies(pluginID: pluginID, for: url) })
         defer { netModule.invalidate() }
 
         let runner = try await loadRunner(pluginURL: pluginURL, defaults: defaults, netModule: netModule)

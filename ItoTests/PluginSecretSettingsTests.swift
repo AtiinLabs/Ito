@@ -122,18 +122,24 @@ struct PluginSecretSettingsTests {
 
 @MainActor
 struct FirstRunSetupTests {
-    @Test func setupRunsOnceAddingTheRepositoryAndClearingLeftoverSecrets() async throws {
+    @Test func setupRunsOnceAddingTheRepositoryAndClearingLeftoverSecretsAndCookies() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let keychain = InMemoryPluginSecretKeychain()
         let secrets = PluginSecretStore(keychain: keychain)
         try secrets.setValue("from-an-old-install", pluginID: "com.atiinlabs.komga", key: "api_key")
-        let setup = FirstRunSetupBootstrapExtension(secrets: secrets)
+        let cookieKeychain = InMemoryPluginSecretKeychain()
+        let cookies = PluginCookieJar(keychain: cookieKeychain)
+        try cookies.store([try #require(HTTPCookie(properties: [
+            .name: "session", .value: "old", .domain: "example.com", .path: "/"
+        ]))], pluginID: "com.atiinlabs.komga")
+        let setup = FirstRunSetupBootstrapExtension(secrets: secrets, cookies: cookies)
 
         try await setup.prepare(dbPool: database.dbPool)
 
         #expect(try await repositoryURLs(database) == [RepoManager.defaultRepositoryURL])
         #expect(keychain.storedAccounts.isEmpty)
+        #expect(cookieKeychain.storedAccounts.isEmpty)
 
         // The user then signs in and removes the repository; later launches change neither.
         try secrets.setValue("current", pluginID: "com.atiinlabs.komga", key: "api_key")
@@ -149,14 +155,17 @@ struct FirstRunSetupTests {
     @Test func aLockedKeychainDefersTheWholeSetupToTheNextLaunch() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let keychain = InMemoryPluginSecretKeychain()
-        keychain.failingStatus = errSecInteractionNotAllowed
-        let setup = FirstRunSetupBootstrapExtension(secrets: PluginSecretStore(keychain: keychain))
+        let cookieKeychain = InMemoryPluginSecretKeychain()
+        cookieKeychain.failingStatus = errSecInteractionNotAllowed
+        let setup = FirstRunSetupBootstrapExtension(
+            secrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain()),
+            cookies: PluginCookieJar(keychain: cookieKeychain)
+        )
 
         try await setup.prepare(dbPool: database.dbPool)
         #expect(try await repositoryURLs(database).isEmpty)
 
-        keychain.failingStatus = nil
+        cookieKeychain.failingStatus = nil
         try await setup.prepare(dbPool: database.dbPool)
         #expect(try await repositoryURLs(database) == [RepoManager.defaultRepositoryURL])
     }
@@ -165,7 +174,8 @@ struct FirstRunSetupTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let setup = FirstRunSetupBootstrapExtension(
-            secrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain())
+            secrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain()),
+            cookies: PluginCookieJar(keychain: InMemoryPluginSecretKeychain())
         )
         try await setup.prepare(dbPool: database.dbPool)
         let repositories = RepoManager(

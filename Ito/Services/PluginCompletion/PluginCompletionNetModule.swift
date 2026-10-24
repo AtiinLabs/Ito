@@ -4,11 +4,12 @@ import ito_runner
 /// Host networking for one completion attempt.
 ///
 /// Each instance owns a private ephemeral session and is discarded with its attempt. It carries
-/// no browser state: no cookie jar (stored or ambient), no URL cache, no credential store, no
-/// Cloudflare solving and no web view. Every redirect is refused, so a credentialed request can
-/// never be forwarded to another location; the redirect response itself is returned to the
-/// plugin, which reports it as an unexpected response. Cancelling the calling task cancels the
-/// underlying transfer.
+/// no browser state of its own: no URL cache, no credential store, no Cloudflare solving and no
+/// web view. The plugin's stored website cookies are sent read-only; cookies the response sets are
+/// ignored, so an attempt never changes the session. Every redirect is refused, so a credentialed
+/// request can never be forwarded to another location; the redirect response itself is returned
+/// to the plugin, which reports it as an unexpected response. Cancelling the calling task cancels
+/// the underlying transfer.
 nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
     static let requestTimeout: TimeInterval = 30
     static let resourceTimeout: TimeInterval = 60
@@ -22,12 +23,15 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
 
     private let session: URLSession
     private let maximumResponseBytes: Int
+    private let cookies: @Sendable (URL) -> [HTTPCookie]
 
-    /// `configuration` and `maximumResponseBytes` exist so tests can install a protocol stub and a
-    /// small limit. Whatever the configuration carries, the session is made stateless here.
+    /// `cookies` returns the plugin's stored cookies for a URL. `configuration` and
+    /// `maximumResponseBytes` exist so tests can install a protocol stub and a small limit.
+    /// Whatever the configuration carries, the session is made stateless here.
     init(
         configuration: URLSessionConfiguration = .ephemeral,
-        maximumResponseBytes: Int = PluginCompletionNetModule.defaultMaximumResponseBytes
+        maximumResponseBytes: Int = PluginCompletionNetModule.defaultMaximumResponseBytes,
+        cookies: @escaping @Sendable (URL) -> [HTTPCookie] = { _ in [] }
     ) {
         let hardened = (configuration.copy() as? URLSessionConfiguration) ?? .ephemeral
         hardened.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
@@ -41,6 +45,7 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
         hardened.timeoutIntervalForResource = Self.resourceTimeout
         session = URLSession(configuration: hardened)
         self.maximumResponseBytes = maximumResponseBytes
+        self.cookies = cookies
     }
 
     deinit {
@@ -53,7 +58,7 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
     }
 
     func fetch(request: NetRequest) async throws -> NetResponse {
-        let urlRequest = try Self.makeRequest(from: request)
+        let urlRequest = try Self.makeRequest(from: request, cookies: cookies)
         let refusal = RedirectRefusal()
         do {
             return try await transfer(urlRequest, refusal: refusal)
@@ -88,7 +93,10 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
         return NetResponse(status: Int32(response.statusCode), headers: headers, body: body)
     }
 
-    private static func makeRequest(from request: NetRequest) throws -> URLRequest {
+    private static func makeRequest(
+        from request: NetRequest,
+        cookies: (URL) -> [HTTPCookie]
+    ) throws -> URLRequest {
         guard let url = URL(string: request.url),
               let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
               let host = url.host, !host.isEmpty else {
@@ -106,6 +114,12 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
                 throw URLError(.badURL)
             }
             urlRequest.setValue(value, forHTTPHeaderField: name)
+        }
+        if urlRequest.value(forHTTPHeaderField: "Cookie") == nil {
+            let stored = cookies(url)
+            if !stored.isEmpty {
+                urlRequest.setValue(stored.map { "\($0.name)=\($0.value)" }.joined(separator: "; "), forHTTPHeaderField: "Cookie")
+            }
         }
         if let body = request.body {
             urlRequest.httpBody = Data(body)

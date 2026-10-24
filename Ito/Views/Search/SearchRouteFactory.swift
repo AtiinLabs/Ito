@@ -18,6 +18,7 @@ struct AppViewFactory {
     private let presentationLogger: any PresentationEventLogging
     private let completionRecovery: (any PluginCompletionRecovering)?
     private let settingsDiagnostics: (any PluginSettingsDiagnosing)?
+    private let pluginCookies: PluginCookieJar?
     let categoryHistoryViewFactory: CategoryHistoryViewFactory
     let trackingViewFactory: TrackingViewFactory
     let mediaDetailViewFactory: MediaDetailViewFactory?
@@ -46,7 +47,8 @@ struct AppViewFactory {
         presentationLogger: any PresentationEventLogging,
         searchRouteFactory: SearchRouteFactory? = nil,
         completionRecovery: (any PluginCompletionRecovering)? = nil,
-        settingsDiagnostics: (any PluginSettingsDiagnosing)? = nil
+        settingsDiagnostics: (any PluginSettingsDiagnosing)? = nil,
+        pluginCookies: PluginCookieJar? = nil
     ) {
         self.rootModels = rootModels
         self.repositoryManagement = repositoryManagement
@@ -62,6 +64,7 @@ struct AppViewFactory {
         self.presentationLogger = presentationLogger
         self.completionRecovery = completionRecovery
         self.settingsDiagnostics = settingsDiagnostics
+        self.pluginCookies = pluginCookies
         let categoryHistoryViewFactory = CategoryHistoryViewFactory(
             dependencies: categoryHistoryDependencies,
             messagePresenter: categoryHistoryMessagePresenter,
@@ -96,7 +99,9 @@ struct AppViewFactory {
         SearchView(
             viewModel: rootModels.searchViewModel,
             routeFactory: searchRouteFactory,
-            makePluginSettings: { makePluginSettingsSheet(pluginID: $0) }
+            makePluginSettings: { makePluginSettingsSheet(pluginID: $0) },
+            signInTarget: { signInTarget(pluginID: $0) },
+            makePluginSignIn: { makePluginSignInSheet(target: $0) }
         )
     }
 
@@ -231,6 +236,23 @@ struct AppViewFactory {
             ),
             viewFactory: self
         )
+    }
+
+    /// The source's website for signing in, or nil when it has none or sign-in isn't available.
+    func signInTarget(pluginID: String) -> PluginSignInTarget? {
+        guard pluginCookies != nil, let plugin = pluginManager.installedPlugins[pluginID] else { return nil }
+        return PluginSignInTarget(pluginID: plugin.id, pluginName: plugin.info.name, siteURL: plugin.info.url)
+    }
+
+    /// The sign-in sheet for `target`; nil when sign-in isn't available in this app scope.
+    func makePluginSignInSheet(target: PluginSignInTarget) -> PluginSignInSheet? {
+        guard let pluginCookies else { return nil }
+        let runnerProvider = sourceDependencies.runnerProvider
+        return PluginSignInSheet(viewModel: PluginSignInViewModel(
+            target: target,
+            cookieJar: pluginCookies,
+            evictRunner: { runnerProvider.evictSourceRunner(for: $0) }
+        ))
     }
 
     func sourceName(pluginID: String) -> String {

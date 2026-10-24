@@ -152,7 +152,7 @@ public class PluginManager: ObservableObject {
     ) async throws -> (runner: ItoRunner, defaults: AppDefaultsModule) {
         let runner = ItoRunner()
         let defaults = AppDefaultsModule(pluginId: pluginID, store: settingsStore)
-        await runner.setNetModule(AppNetModule())
+        await runner.setNetModule(AppNetModule(pluginID: pluginID, cookieJar: settingsStore.cookies))
         await runner.setStdModule(DefaultStdModule())
         await runner.setDefaultsModule(defaults)
         await runner.setHtmlModule(DefaultHtmlModule())

@@ -59,6 +59,8 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
 
     /// Values of the plugins' secret settings, kept in the Keychain rather than this database.
     public let secrets: PluginSecretStore
+    /// Each plugin's website cookies, kept in the Keychain rather than this database.
+    public let cookies: PluginCookieJar
     let completionStore: PluginCompletionStore
     private let dbPool: DatabasePool
     private let standardApplicationDomain: String
@@ -85,7 +87,8 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
         faultHandler: @escaping FaultHandler = { _, _ in },
         operationFault: @escaping OperationFault = { _ in },
         clock: @escaping @Sendable () -> Date = Date.init,
-        secrets: PluginSecretStore = PluginSecretStore()
+        secrets: PluginSecretStore = PluginSecretStore(),
+        cookies: PluginCookieJar = PluginCookieJar()
     ) {
         self.dbPool = dbPool
         self.standardApplicationDomain = standardApplicationDomain
@@ -94,6 +97,7 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
         self.operationFault = operationFault
         self.clock = clock
         self.secrets = secrets
+        self.cookies = cookies
         completionStore = PluginCompletionStore(dbPool: dbPool, secrets: secrets)
         secrets.configureBeforeMutation { [dbPool] pluginID in
             try dbPool.write { db in

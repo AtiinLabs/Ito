@@ -46,6 +46,20 @@ struct SourceView: View {
                     SourceSettingsUnavailableView(pluginName: viewModel.plugin.info.name, reason: reason)
                 }
             }
+            .sheet(isPresented: $viewModel.showSignIn, onDismiss: {
+                // Reload the source, and repeat the search if that was what asked for a sign-in.
+                let searchNeededSignIn = viewModel.searchFailureNeedsLogin
+                Task {
+                    await viewModel.retry()
+                    if searchNeededSignIn {
+                        viewModel.performSearch(query: viewModel.searchQuery)
+                    }
+                }
+            }) {
+                if let target = signInTarget {
+                    viewFactory.makePluginSignInSheet(target: target)
+                }
+            }
             .searchable(
                 text: $viewModel.searchQuery,
                 placement: .navigationBarDrawer(displayMode: .always),
@@ -83,7 +97,8 @@ struct SourceView: View {
         case .failure(let error):
             failureView(
                 message: "Error: \(error)",
-                opensSettings: viewModel.failureOffersSettings
+                opensSettings: viewModel.failureOffersSettings,
+                offersSignIn: viewModel.failureNeedsLogin && signInTarget != nil
             ) {
                 Task { await viewModel.retry() }
             }
@@ -385,7 +400,11 @@ struct SourceView: View {
         case .idle, .loading:
             ProgressView("Searching source...")
         case .failure(let error):
-            failureView(message: "Search error: \(error)", opensSettings: viewModel.searchFailureOffersSettings) {
+            failureView(
+                message: "Search error: \(error)",
+                opensSettings: viewModel.searchFailureOffersSettings,
+                offersSignIn: viewModel.searchFailureNeedsLogin && signInTarget != nil
+            ) {
                 viewModel.performSearch(query: viewModel.searchQuery)
             }
         case .cancelled:
@@ -450,10 +469,16 @@ struct SourceView: View {
         }
     }
 
-    /// A failure with Retry, and Open Settings when the plugin needs settings to recover.
+    /// The source's website for signing in, when it has one and sign-in is available.
+    private var signInTarget: PluginSignInTarget? {
+        viewFactory.signInTarget(pluginID: viewModel.plugin.id)
+    }
+
+    /// A failure with Retry, plus Open Settings or Sign In when the source needs one to recover.
     private func failureView(
         message: String,
         opensSettings: Bool = false,
+        offersSignIn: Bool = false,
         retry: @escaping () -> Void
     ) -> some View {
         VStack(spacing: 12) {
@@ -461,6 +486,10 @@ struct SourceView: View {
             HStack(spacing: 12) {
                 if opensSettings {
                     Button("Open Settings") { viewModel.showSettings = true }
+                        .buttonStyle(.borderedProminent)
+                }
+                if offersSignIn {
+                    Button("Sign In") { viewModel.showSignIn = true }
                         .buttonStyle(.borderedProminent)
                 }
                 Button("Retry", action: retry)

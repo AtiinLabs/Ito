@@ -73,6 +73,17 @@ struct LibraryUpdateFailure: Identifiable, Equatable, Sendable {
     let pluginID: String
     let reason: String
     let needsSettings: Bool
+    /// The source needs a sign-in on its website.
+    let needsLogin: Bool
+
+    init(pluginID: String, reason: String, needsSettings: Bool, needsLogin: Bool = false) {
+        self.pluginID = pluginID
+        self.reason = reason
+        self.needsSettings = needsSettings
+        self.needsLogin = needsLogin
+    }
+
+    var isActionable: Bool { needsSettings || needsLogin }
 
     var id: String { pluginID }
 }

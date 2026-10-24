@@ -47,6 +47,11 @@ final class SourceViewModel: ObservableObject {
     @Published private(set) var failureNeedsSettings = false
     /// The same for the last search.
     @Published private(set) var searchFailureNeedsSettings = false
+    /// Whether the last load failed because the source needs a sign-in on its website.
+    @Published private(set) var failureNeedsLogin = false
+    /// The same for the last search.
+    @Published private(set) var searchFailureNeedsLogin = false
+    @Published var showSignIn = false
     @Published private(set) var searchMangas: [Manga] = []
     @Published private(set) var searchAnimes: [Anime] = []
     @Published private(set) var searchNovels: [Novel] = []
@@ -123,6 +128,7 @@ final class SourceViewModel: ObservableObject {
         searchOperationID = operationID
         searchPhase = .loading
         searchFailureNeedsSettings = false
+        searchFailureNeedsLogin = false
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             if let searchDebounceNanoseconds {
@@ -256,6 +262,7 @@ final class SourceViewModel: ObservableObject {
         phase = .loading
         homeLayout = nil
         failureNeedsSettings = false
+        failureNeedsLogin = false
 
         if invalidateCachedRunner {
             runnerProvider.evictSourceRunner(for: plugin.id)
@@ -310,6 +317,7 @@ final class SourceViewModel: ObservableObject {
             discardRunnerIfCrashed(error)
             let reason = error.localizedDescription
             failureNeedsSettings = (error as? PluginCallError)?.kind == .needsSettings
+            failureNeedsLogin = (error as? PluginCallError)?.kind == .needsLogin
             phase = .failure(reason)
             messagePresenter.present(.loadFailed(pluginName: plugin.info.name, reason: reason))
             finishLoad(operationID)
@@ -381,6 +389,7 @@ final class SourceViewModel: ObservableObject {
         guard isCurrentSearch(operationID), !Task.isCancelled else { return }
         let reason = error.localizedDescription
         searchFailureNeedsSettings = (error as? PluginCallError)?.kind == .needsSettings
+        searchFailureNeedsLogin = (error as? PluginCallError)?.kind == .needsLogin
         searchPhase = .failure(reason)
         messagePresenter.present(.searchFailed(pluginName: plugin.info.name, reason: reason))
         finishSearch(operationID)

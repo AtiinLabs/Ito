@@ -3,23 +3,27 @@ import GRDB
 import OSLog
 
 /// One-time setup for this database, run during bootstrap:
-/// - removes plugin secrets an earlier installation left in the Keychain (iOS keeps Keychain items
-///   after the app is deleted, so a reinstall would otherwise inherit old credentials);
+/// - removes plugin secrets and website cookies an earlier installation left in the Keychain (iOS
+///   keeps Keychain items after the app is deleted, so a reinstall would otherwise inherit old
+///   credentials and sessions);
 /// - adds the AtiinLabs plugin repository. It is added once: a user who removes it keeps it removed.
 ///
 /// If the Keychain can't be cleared yet (a background launch before the first unlock), nothing is
 /// recorded and the setup runs again on the next launch.
 struct FirstRunSetupBootstrapExtension: DurableStateBootstrapExtension {
     private let secrets: PluginSecretStore
+    private let cookies: PluginCookieJar
     private let defaultRepositoryURL: String
     private let clock: @Sendable () -> Date
 
     init(
         secrets: PluginSecretStore,
+        cookies: PluginCookieJar,
         defaultRepositoryURL: String = RepoManager.defaultRepositoryURL,
         clock: @escaping @Sendable () -> Date = Date.init
     ) {
         self.secrets = secrets
+        self.cookies = cookies
         self.defaultRepositoryURL = defaultRepositoryURL
         self.clock = clock
     }
@@ -32,8 +36,9 @@ struct FirstRunSetupBootstrapExtension: DurableStateBootstrapExtension {
 
         do {
             try secrets.removeAll()
+            try cookies.removeEveryPlugin()
         } catch {
-            AppLogger.plugin.error("First-run setup deferred: plugin secrets could not be cleared.")
+            AppLogger.plugin.error("First-run setup deferred: plugin secrets or cookies could not be cleared.")
             return
         }
 

@@ -28,21 +28,25 @@ nonisolated enum PluginCompletionExecutionFailure: Error, Equatable, Sendable {
 nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sendable {
     private let store: PluginCompletionStore
     private let locatePlugin: @MainActor @Sendable (String) throws -> URL
-    private let makeNetModule: @Sendable () -> PluginCompletionNetModule
+    private let makeNetModule: @Sendable (_ pluginID: String) -> PluginCompletionNetModule
 
     /// `locatePlugin` returns the installed file of a source that can run in this app, and throws
-    /// when it is not installed or needs a newer app.
+    /// when it is not installed or needs a newer app. `cookies` holds the sources' website
+    /// cookies, sent read-only.
     convenience init(
         store: PluginCompletionStore,
+        cookies: PluginCookieJar,
         locatePlugin: @escaping @MainActor @Sendable (String) throws -> URL
     ) {
-        self.init(store: store, locatePlugin: locatePlugin, makeNetModule: { PluginCompletionNetModule() })
+        self.init(store: store, locatePlugin: locatePlugin, makeNetModule: { pluginID in
+            PluginCompletionNetModule(cookies: { url in cookies.cookies(pluginID: pluginID, for: url) })
+        })
     }
 
     init(
         store: PluginCompletionStore,
         locatePlugin: @escaping @MainActor @Sendable (String) throws -> URL,
-        makeNetModule: @escaping @Sendable () -> PluginCompletionNetModule
+        makeNetModule: @escaping @Sendable (_ pluginID: String) -> PluginCompletionNetModule
     ) {
         self.store = store
         self.locatePlugin = locatePlugin
@@ -100,7 +104,7 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
     private func run(_ snapshot: PluginCompletionSnapshot, from pluginURL: URL) async throws -> Bool {
         let intent = snapshot.intent
         let defaults = PluginCompletionDefaults(settings: snapshot.settings)
-        let network = makeNetModule()
+        let network = makeNetModule(intent.pluginId)
         defer { network.invalidate() }
 
         var runner = try await load(pluginURL, defaults: defaults, network: network)
@@ -190,7 +194,7 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
             switch category {
             case .unsupported: return .unsupported
             case .needsSetup: return .paused(.configurationChanged, .configurationChanged)
-            case .unauthorized: return .paused(.credentials, .credentials)
+            case .unauthorized, .needsLogin: return .paused(.credentials, .credentials)
             case .notFound: return .paused(.missingRemote, .missingRemote)
             case .network: return .retryable(.network)
             case .server: return .retryable(.server)

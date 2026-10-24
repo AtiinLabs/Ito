@@ -66,6 +66,16 @@ public struct SearchPluginFailure: Identifiable, Equatable {
     public let pluginName: String
     public let message: String
     public let canOpenSettings: Bool
+    /// The source needs a sign-in on its website.
+    public let canSignIn: Bool
+
+    public init(pluginID: String, pluginName: String, message: String, canOpenSettings: Bool, canSignIn: Bool = false) {
+        self.pluginID = pluginID
+        self.pluginName = pluginName
+        self.message = message
+        self.canOpenSettings = canOpenSettings
+        self.canSignIn = canSignIn
+    }
 
     public var id: String { pluginID }
 }

@@ -366,11 +366,12 @@ public class UpdateManager: ObservableObject {
             let failure = LibraryUpdateFailure(
                 pluginID: item.pluginId,
                 reason: error.localizedDescription,
-                needsSettings: (error as? PluginCallError)?.kind == .needsSettings
+                needsSettings: (error as? PluginCallError)?.kind == .needsSettings,
+                needsLogin: (error as? PluginCallError)?.kind == .needsLogin
             )
             if let index = sourceFailures.firstIndex(where: { $0.pluginID == item.pluginId }) {
-                // Keep one row per source, preferring an actionable settings failure.
-                if failure.needsSettings && !sourceFailures[index].needsSettings {
+                // Keep one row per source, preferring an actionable failure (settings or sign-in).
+                if failure.isActionable && !sourceFailures[index].isActionable {
                     sourceFailures[index] = failure
                 }
             } else {
