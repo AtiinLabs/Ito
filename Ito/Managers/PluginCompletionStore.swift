@@ -5,10 +5,12 @@ import GRDB
 nonisolated final class PluginCompletionStore: Sendable {
     private let dbPool: DatabasePool
     private let secrets: PluginSecretStore
+    private let tokens: PluginSecretStore
 
-    init(dbPool: DatabasePool, secrets: PluginSecretStore) {
+    init(dbPool: DatabasePool, secrets: PluginSecretStore, tokens: PluginSecretStore) {
         self.dbPool = dbPool
         self.secrets = secrets
+        self.tokens = tokens
     }
 
     func observeChanges(_ onChange: @escaping @Sendable () -> Void) -> PluginCompletionObservation {
@@ -118,27 +120,24 @@ nonisolated final class PluginCompletionStore: Sendable {
         }
     }
 
-    /// The caller runs this finite blocking capture off MainActor. Lock order is secret lock -> DB read.
+    /// The caller runs this finite blocking capture off MainActor. Lock order is secret lock ->
+    /// token lock -> DB read.
     func snapshot(for intent: PluginCompletionIntent) throws -> PluginCompletionSnapshot {
         guard let attempt = PluginCompletionAttempt(intent) else {
             throw PluginCompletionScopeError.configurationChanged
         }
         return try secrets.withSnapshot(pluginID: intent.pluginId) { secretValues in
-            try dbPool.read { db in
-                guard try Self.matches(attempt, in: db) else {
-                    throw PluginCompletionScopeError.configurationChanged
-                }
-                let rows = try PluginSettingRecord.filter(Column("pluginId") == intent.pluginId).fetchAll(db)
-                var settings: [String: String] = [:]
-                settings.reserveCapacity(rows.count + secretValues.count)
-                for row in rows {
-                    guard let value = String(data: row.value, encoding: .utf8) else {
-                        throw PluginCompletionScopeError.invalidSettingEncoding
+            try tokens.withSnapshot(pluginID: intent.pluginId) { tokenValues in
+                try dbPool.read { db in
+                    guard try Self.matches(attempt, in: db) else {
+                        throw PluginCompletionScopeError.configurationChanged
                     }
-                    settings[row.key] = value
+                    let rows = try PluginSettingRecord.filter(Column("pluginId") == intent.pluginId).fetchAll(db)
+                    let settings = try PluginSettingsStore.layeredSettings(
+                        rows: rows, tokens: tokenValues, secrets: secretValues
+                    )
+                    return PluginCompletionSnapshot(intent: intent, settings: settings)
                 }
-                settings.merge(secretValues) { _, secret in secret }
-                return PluginCompletionSnapshot(intent: intent, settings: settings)
             }
         }
     }

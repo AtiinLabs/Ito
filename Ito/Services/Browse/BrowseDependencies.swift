@@ -61,13 +61,19 @@ extension PluginManager: BrowsePluginManaging {
         $installedPlugins.eraseToAnyPublisher()
     }
 
-    /// Deleting a plugin removes its secrets (API keys, passwords) and its website cookies from the
-    /// Keychain. Its plain settings stay, as they always have, so a reinstall keeps them.
+    /// Deleting a plugin removes its secrets (API keys, passwords), the tokens it stored and its
+    /// website cookies from the Keychain. Its plain settings stay, as they always have, so a
+    /// reinstall keeps them.
     func removeSecrets(for pluginID: String) {
         do {
             try pluginSettingsStore.secrets.removeAll(pluginID: pluginID)
         } catch {
             AppLogger.plugin.error("The secrets of a deleted plugin could not be removed.")
+        }
+        do {
+            try pluginSettingsStore.tokens.removeAll(pluginID: pluginID)
+        } catch {
+            AppLogger.plugin.error("The tokens of a deleted plugin could not be removed.")
         }
         do {
             try pluginSettingsStore.cookies.removeAll(pluginID: pluginID)

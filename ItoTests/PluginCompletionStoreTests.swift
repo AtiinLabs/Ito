@@ -946,6 +946,7 @@ private struct CompletionFixture {
     let database: TestDatabase
     let keychain: CompletionFakeKeychain
     let secrets: PluginSecretStore
+    let tokens = PluginSecretStore(keychain: CompletionFakeKeychain())
     let settings: PluginSettingsStore
     let store: PluginCompletionStore
     let manager: ReadProgressManager
@@ -958,9 +959,10 @@ private struct CompletionFixture {
         settings = PluginSettingsStore(
             dbPool: database.dbPool,
             domainFactory: { CompletionTestDomain(name: $0) },
-            secrets: secrets
+            secrets: secrets,
+            tokens: tokens
         )
-        store = PluginCompletionStore(dbPool: database.dbPool, secrets: secrets)
+        store = PluginCompletionStore(dbPool: database.dbPool, secrets: secrets, tokens: tokens)
         manager = ReadProgressManager(dbPool: database.dbPool)
         let wakes = wakes
         manager.configureCompletionDelivery(store: store) { wakes.count += 1 }

@@ -2,8 +2,9 @@ import Foundation
 import ito_runner
 
 /// Settings a plugin sees while delivering one completion: the values captured with the attempt's
-/// intent, held in memory. A plugin may `set` or `remove` keys, but only inside this sandbox and
-/// only for the attempt; nothing reaches the live settings store, the Keychain or another attempt.
+/// intent, held in memory. A plugin may `set`, `setSecret` or `remove` keys, but only inside this
+/// sandbox and only for the attempt; nothing reaches the live settings store, the Keychain or
+/// another attempt.
 nonisolated final class PluginCompletionDefaults: DefaultsModule, @unchecked Sendable {
     private let lock = NSLock()
     private var values: [String: String]
@@ -21,6 +22,10 @@ nonisolated final class PluginCompletionDefaults: DefaultsModule, @unchecked Sen
 
     func set(key: String, value: String) {
         lock.withLock { values[key] = value }
+    }
+
+    func setSecret(key: String, value: String) {
+        set(key: key, value: value)
     }
 
     func get(key: String) -> String? {

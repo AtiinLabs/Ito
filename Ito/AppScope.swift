@@ -129,7 +129,10 @@ struct PreparedApplicationDependencies {
                 discordRPCManager: discordRPCManager,
                 logReader: SystemDebugLogReader(),
                 clipboardWriter: SystemClipboardWriter(),
-                siteDataClearer: SystemSiteDataClearer(pluginCookies: pluginManager.pluginSettingsStore.cookies)
+                siteDataClearer: SystemSiteDataClearer(
+                    pluginCookies: pluginManager.pluginSettingsStore.cookies,
+                    pluginTokens: pluginManager.pluginSettingsStore.tokens
+                )
             ),
             tracking: tracking,
             mediaDetail: .production(

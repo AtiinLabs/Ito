@@ -85,6 +85,7 @@ public final class DurableStateBootstrap: ObservableObject {
     private let trackerKeychainService: String
     private let pluginSecrets: PluginSecretStore
     private let pluginCookies: PluginCookieJar
+    private let pluginTokens: PluginSecretStore
     private var preparationTask: Task<Bool, Never>?
     private var sourcesPrepared = false
     private var runtime: Runtime?
@@ -126,7 +127,10 @@ public final class DurableStateBootstrap: ObservableObject {
         runtimeDefaultsSuiteName: String? = nil,
         trackerKeychainService: String = "moe.itoapp.ito.tracker.oauth-token",
         pluginSecrets: PluginSecretStore = PluginSecretStore(),
-        pluginCookies: PluginCookieJar = PluginCookieJar()
+        pluginCookies: PluginCookieJar = PluginCookieJar(),
+        pluginTokens: PluginSecretStore = PluginSecretStore(
+            keychain: SystemPluginSecretKeychain(service: PluginSecretStore.tokenService)
+        )
     ) {
         self.dbPool = dbPool
         self.migration = migration
@@ -140,6 +144,7 @@ public final class DurableStateBootstrap: ObservableObject {
         self.trackerKeychainService = trackerKeychainService
         self.pluginSecrets = pluginSecrets
         self.pluginCookies = pluginCookies
+        self.pluginTokens = pluginTokens
         pluginSecrets.configureBeforeMutation { [dbPool] pluginID in
             try dbPool.write { db in
                 try PluginImageCacheEpoch.rotate(in: db)
@@ -280,7 +285,9 @@ public final class DurableStateBootstrap: ObservableObject {
 
     private func makeRuntime() -> Runtime {
         let settings = AppSettingsStore(dbPool: dbPool)
-        let pluginSettings = PluginSettingsStore(dbPool: dbPool, secrets: pluginSecrets, cookies: pluginCookies)
+        let pluginSettings = PluginSettingsStore(
+            dbPool: dbPool, secrets: pluginSecrets, cookies: pluginCookies, tokens: pluginTokens
+        )
         let plugins: PluginManager = {
             guard let installedPluginsDirectory else {
                 let plugins = PluginManager(pluginSettingsStore: pluginSettings)
@@ -582,6 +589,7 @@ public final class DurableStateBootstrap: ObservableObject {
         let trackerKeychainService: String
         let pluginSecrets: PluginSecretStore
         let pluginCookies: PluginCookieJar
+        let pluginTokens: PluginSecretStore
         let installedPluginsDirectory: URL?
         let extensions: [any DurableStateBootstrapExtension]
         #if DEBUG
@@ -599,6 +607,11 @@ public final class DurableStateBootstrap: ObservableObject {
             pluginCookies = PluginCookieJar(
                 keychain: SystemPluginSecretKeychain(
                     service: UITestLaunchConfiguration.fixturePluginCookieKeychainService
+                )
+            )
+            pluginTokens = PluginSecretStore(
+                keychain: SystemPluginSecretKeychain(
+                    service: UITestLaunchConfiguration.fixturePluginTokenKeychainService
                 )
             )
             guard let fixtureDefaults = UserDefaults(suiteName: domainName) else {
@@ -632,10 +645,11 @@ public final class DurableStateBootstrap: ObservableObject {
             trackerKeychainService = KeychainTrackerCredentialStore.productionService
             pluginSecrets = PluginSecretStore()
             pluginCookies = PluginCookieJar()
+            pluginTokens = PluginSecretStore(keychain: SystemPluginSecretKeychain(service: PluginSecretStore.tokenService))
             installedPluginsDirectory = nil
             extensions = [
                 InstalledPluginSuiteBootstrapExtension(),
-                FirstRunSetupBootstrapExtension(secrets: pluginSecrets, cookies: pluginCookies)
+                FirstRunSetupBootstrapExtension(secrets: pluginSecrets, cookies: pluginCookies, tokens: pluginTokens)
             ]
         }
         #else
@@ -645,10 +659,11 @@ public final class DurableStateBootstrap: ObservableObject {
         trackerKeychainService = KeychainTrackerCredentialStore.productionService
         pluginSecrets = PluginSecretStore()
         pluginCookies = PluginCookieJar()
+        pluginTokens = PluginSecretStore(keychain: SystemPluginSecretKeychain(service: PluginSecretStore.tokenService))
         installedPluginsDirectory = nil
         extensions = [
             InstalledPluginSuiteBootstrapExtension(),
-            FirstRunSetupBootstrapExtension(secrets: pluginSecrets, cookies: pluginCookies)
+            FirstRunSetupBootstrapExtension(secrets: pluginSecrets, cookies: pluginCookies, tokens: pluginTokens)
         ]
         #endif
         let dbPool = AppDatabase.shared.dbPool
@@ -666,7 +681,8 @@ public final class DurableStateBootstrap: ObservableObject {
             runtimeDefaultsSuiteName: launchDefaultsSuiteName,
             trackerKeychainService: trackerKeychainService,
             pluginSecrets: pluginSecrets,
-            pluginCookies: pluginCookies
+            pluginCookies: pluginCookies,
+            pluginTokens: pluginTokens
         )
     }
 }

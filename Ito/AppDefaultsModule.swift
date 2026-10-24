@@ -24,14 +24,29 @@ public final class AppDefaultsModule: DefaultsModule, @unchecked Sendable {
         store.set(pluginId: pluginId, key: key, value: value)
     }
 
+    /// Keeps a credential the plugin obtained in the Keychain, never in the settings database or
+    /// backups. A secret the user entered for the key wins and is left alone. Once the token is
+    /// stored, any plain copy under the key is dropped so it can't be backed up.
+    public func setSecret(key: String, value: String) {
+        guard store.secrets.value(pluginID: pluginId, key: key) == nil else { return }
+        do {
+            try store.tokens.setValue(value, pluginID: pluginId, key: key)
+        } catch {
+            return
+        }
+        store.remove(pluginId: pluginId, key: key)
+    }
+
     public func get(key: String) -> String? {
         store.secrets.value(pluginID: pluginId, key: key)
+            ?? store.tokens.value(pluginID: pluginId, key: key)
             ?? store.get(pluginId: pluginId, key: key)
             ?? lock.withLock { schemaDefaults[key] }
     }
 
+    /// Removes what the plugin stored. Secrets the user entered change only in the settings screen.
     public func remove(key: String) {
-        try? store.secrets.removeValue(pluginID: pluginId, key: key)
+        try? store.tokens.removeValue(pluginID: pluginId, key: key)
         store.remove(pluginId: pluginId, key: key)
     }
 }

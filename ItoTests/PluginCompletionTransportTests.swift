@@ -521,7 +521,8 @@ private struct ExecutorHarness {
         let database = try TestDatabase()
         let store = PluginCompletionStore(
             dbPool: database.dbPool,
-            secrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain())
+            secrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain()),
+            tokens: PluginSecretStore(keychain: InMemoryPluginSecretKeychain())
         )
         let archiveURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("completion-\(UUID().uuidString).ito")

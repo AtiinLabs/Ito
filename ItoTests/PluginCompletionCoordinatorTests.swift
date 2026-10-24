@@ -436,7 +436,8 @@ private final class CoordinatorFixture {
         database = try TestDatabase()
         store = PluginCompletionStore(
             dbPool: database.dbPool,
-            secrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain())
+            secrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain()),
+            tokens: PluginSecretStore(keychain: InMemoryPluginSecretKeychain())
         )
         scheduler = ManualCompletionScheduler(start: clockStart)
         connectivity = FakeCompletionConnectivity(isReachable: reachable)

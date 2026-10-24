@@ -81,6 +81,8 @@ nonisolated public struct PluginSecretStoreError: Error, Equatable, LocalizedErr
 /// checks this store before the plain settings.
 nonisolated public final class PluginSecretStore: @unchecked Sendable {
     public static let productionService = "moe.itoapp.ito.plugin-secret"
+    /// The Keychain service of credentials plugins store themselves (`defaults::set_secret`).
+    public static let tokenService = "moe.itoapp.ito.plugin-tokens"
 
     private let keychain: any PluginSecretKeychain
     private let lock = NSLock()
