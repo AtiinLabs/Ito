@@ -84,7 +84,7 @@ nonisolated public final class PluginSecretStore: @unchecked Sendable {
 
     private let keychain: any PluginSecretKeychain
     private let lock = NSLock()
-    private var beforeMutationHook: (@Sendable () throws -> Void)?
+    private var beforeMutationHook: (@Sendable (String?) throws -> Void)?
     /// Values and known-missing entries by Keychain account. Plugins read settings on every call,
     /// image loads included, so each secret is read from the Keychain once.
     private var cache: [String: String?] = [:]
@@ -93,7 +93,7 @@ nonisolated public final class PluginSecretStore: @unchecked Sendable {
         self.keychain = keychain
     }
 
-    internal func configureBeforeMutation(_ hook: @escaping @Sendable () throws -> Void) {
+    internal func configureBeforeMutation(_ hook: @escaping @Sendable (String?) throws -> Void) {
         lock.lock()
         defer { lock.unlock() }
         beforeMutationHook = hook
@@ -123,7 +123,7 @@ nonisolated public final class PluginSecretStore: @unchecked Sendable {
         let account = Self.account(pluginID: pluginID, key: key)
         lock.lock()
         defer { lock.unlock() }
-        try beforeMutationHook?()
+        try beforeMutationHook?(pluginID)
         let status = keychain.setData(Data(value.utf8), account: account)
         guard status == errSecSuccess else {
             cache.removeValue(forKey: account)
@@ -136,7 +136,7 @@ nonisolated public final class PluginSecretStore: @unchecked Sendable {
         let account = Self.account(pluginID: pluginID, key: key)
         lock.lock()
         defer { lock.unlock() }
-        try beforeMutationHook?()
+        try beforeMutationHook?(pluginID)
         let status = keychain.delete(account: account)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             cache.removeValue(forKey: account)
@@ -150,7 +150,7 @@ nonisolated public final class PluginSecretStore: @unchecked Sendable {
         let prefix = Self.account(pluginID: pluginID, key: "")
         lock.lock()
         defer { lock.unlock() }
-        try beforeMutationHook?()
+        try beforeMutationHook?(pluginID)
         let (status, accounts) = keychain.accounts()
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw PluginSecretStoreError(status: status)
@@ -170,12 +170,40 @@ nonisolated public final class PluginSecretStore: @unchecked Sendable {
     public func removeAll() throws {
         lock.lock()
         defer { lock.unlock() }
-        try beforeMutationHook?()
+        try beforeMutationHook?(nil)
         let status = keychain.deleteAll()
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw PluginSecretStoreError(status: status)
         }
         cache.removeAll()
+    }
+
+    internal func withConfigurationLock<T>(_ body: () throws -> T) rethrows -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return try body()
+    }
+
+    /// Holds the same lock as secret mutation while the caller captures its database scope/settings.
+    internal func withSnapshot<T>(pluginID: String, _ body: ([String: String]) throws -> T) throws -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        let prefix = Self.account(pluginID: pluginID, key: "")
+        let (status, accounts) = keychain.accounts()
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw PluginSecretStoreError(status: status)
+        }
+        var values: [String: String] = [:]
+        for account in accounts where account.hasPrefix(prefix) {
+            let (readStatus, data) = keychain.data(account: account)
+            if readStatus == errSecItemNotFound { continue }
+            guard readStatus == errSecSuccess else { throw PluginSecretStoreError(status: readStatus) }
+            guard let data, let value = String(data: data, encoding: .utf8) else {
+                throw PluginSecretStoreError(status: errSecDecode)
+            }
+            values[String(account.dropFirst(prefix.count))] = value
+        }
+        return try body(values)
     }
 
     /// Plugin ids and setting ids never contain the unit separator.

@@ -21,9 +21,9 @@ final class ItoRunnerNovelChapterLoader: NovelChapterLoading {
 }
 
 @MainActor
-protocol NovelReaderProgressTracking: AnyObject {
+protocol NovelReaderProgressTracking: PluginCompletionScopeCapturing, AnyObject {
     func markNovelChapterRead(
-        media: MediaIdentity,
+        context: PluginCompletionContext,
         chapterID: String,
         chapterNumber: Float?
     ) async throws
@@ -35,12 +35,12 @@ protocol NovelReaderProgressTracking: AnyObject {
 
 extension ReadProgressManager: NovelReaderProgressTracking {
     func markNovelChapterRead(
-        media: MediaIdentity,
+        context: PluginCompletionContext,
         chapterID: String,
         chapterNumber: Float?
     ) async throws {
         try await markAsRead(
-            media: media,
+            context: context,
             chapterId: chapterID,
             chapterNum: chapterNumber
         )
@@ -287,12 +287,20 @@ private final class UnavailableNovelReaderDependencies:
         Just(settings).eraseToAnyPublisher()
     }
 
-    func markNovelChapterRead(
+    func captureCompletionContext(
         media: MediaIdentity,
+        mediaKey: String,
+        kind: PluginCompletionKind
+    ) -> PluginCompletionContext {
+        PluginCompletionContext(media: media, mediaKey: mediaKey, kind: kind, originatingEpoch: nil)
+    }
+
+    func markNovelChapterRead(
+        context: PluginCompletionContext,
         chapterID: String,
         chapterNumber: Float?
     ) async throws {
-        _ = media
+        _ = context
         _ = chapterID
         _ = chapterNumber
     }

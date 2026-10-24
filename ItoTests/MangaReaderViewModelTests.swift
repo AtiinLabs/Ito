@@ -604,6 +604,11 @@ final class MangaReaderViewModelTests: XCTestCase {
         subject.viewModel.continuousViewportChanged([lastB.id])
         await waitForReader { subject.progress.requests.count == 2 }
         XCTAssertEqual(subject.progress.requests.map(\.chapterID), ["a", "b"])
+        // One context is captured for the session and reused across chapters.
+        XCTAssertEqual(subject.progress.capturedContexts.count, 1)
+        XCTAssertEqual(subject.progress.requests.map(\.context), [subject.progress.capturedContexts[0], subject.progress.capturedContexts[0]])
+        XCTAssertEqual(subject.progress.capturedContexts[0].mediaKey, "manga")
+        XCTAssertEqual(subject.progress.capturedContexts[0].kind, .manga)
     }
 
     func testViewerPrecedenceAndModeClassification() {

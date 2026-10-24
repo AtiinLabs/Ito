@@ -3,7 +3,7 @@ import Foundation
 import GRDB
 
 @MainActor
-public final class ReadProgressManager: ObservableObject {
+public final class ReadProgressManager: ObservableObject, PluginCompletionScopeCapturing {
     @Published private var readChapters: [MediaIdentity: Set<String>] = [:]
     @Published private var readChapterNumbers: [MediaIdentity: Set<Float>] = [:]
     @Published private var lastReadChapter: [MediaIdentity: String] = [:]
@@ -14,6 +14,8 @@ public final class ReadProgressManager: ObservableObject {
 
     private let dbPool: DatabasePool
     private weak var updateManager: UpdateManager?
+    private var completionStore: PluginCompletionStore?
+    private var onCompletionQueued: (@MainActor () -> Void)?
 
     public init(dbPool: DatabasePool) {
         self.dbPool = dbPool
@@ -21,6 +23,20 @@ public final class ReadProgressManager: ObservableObject {
 
     func configure(updateManager: UpdateManager) {
         self.updateManager = updateManager
+    }
+
+    func configureCompletionDelivery(store: PluginCompletionStore, onQueued: @escaping @MainActor () -> Void) {
+        completionStore = store
+        onCompletionQueued = onQueued
+    }
+
+    func captureCompletionContext(
+        media: MediaIdentity,
+        mediaKey: String,
+        kind: PluginCompletionKind
+    ) -> PluginCompletionContext {
+        completionStore?.captureContext(media: media, mediaKey: mediaKey, kind: kind)
+            ?? PluginCompletionContext(media: media, mediaKey: mediaKey, kind: kind, originatingEpoch: nil)
     }
 
     public func reload() async throws {
@@ -141,11 +157,12 @@ public final class ReadProgressManager: ObservableObject {
         readerViewer[media] = viewer
     }
 
-    public func markAsRead(
-        media: MediaIdentity,
+    func markAsRead(
+        context: PluginCompletionContext,
         chapterId: String,
         chapterNum: Float? = nil
     ) async throws {
+        let media = context.media
         let now = Date()
         try await dbPool.write { db in
             try ReadProgressKeyRecord(
@@ -171,14 +188,16 @@ public final class ReadProgressManager: ObservableObject {
                 "pluginId": media.pluginId,
                 "canonicalMediaId": media.canonicalMediaId
             ]
-            guard try MediaReadProgressRecord.fetchOne(db, key: key) == nil else { return }
-            try MediaReadProgressRecord(
-                pluginId: media.pluginId,
-                canonicalMediaId: media.canonicalMediaId,
-                lastReadChapterKey: chapterId,
-                updatedAt: now,
-                provenance: .runtime
-            ).insert(db)
+            if try MediaReadProgressRecord.fetchOne(db, key: key) == nil {
+                try MediaReadProgressRecord(
+                    pluginId: media.pluginId,
+                    canonicalMediaId: media.canonicalMediaId,
+                    lastReadChapterKey: chapterId,
+                    updatedAt: now,
+                    provenance: .runtime
+                ).insert(db)
+            }
+            try PluginCompletionStore.enqueue(context: context, unitKey: chapterId, now: now, in: db)
         }
 
         readChapters[media, default: []].insert(chapterId)
@@ -188,14 +207,15 @@ public final class ReadProgressManager: ObservableObject {
         if lastReadChapter[media] == nil {
             lastReadChapter[media] = chapterId
         }
+        onCompletionQueued?()
     }
 
-    public func markAsWatched(
-        media: MediaIdentity,
+    func markAsWatched(
+        context: PluginCompletionContext,
         episodeId: String,
         episodeNum: Float? = nil
     ) async throws {
-        try await markAsRead(media: media, chapterId: episodeId, chapterNum: episodeNum)
+        try await markAsRead(context: context, chapterId: episodeId, chapterNum: episodeNum)
     }
 
     public func isRead(

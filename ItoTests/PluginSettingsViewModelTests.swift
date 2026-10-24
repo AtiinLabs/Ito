@@ -189,17 +189,153 @@ final class PluginSettingsViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.reloadError)
     }
 
-    func testDefaultInitializationWritesOnlyWhenAuthoritativeValueIsMissing() throws {
+    func testOpeningSettingsNeverMaterializesSchemaDefaults() async throws {
         let store = PR7BSettingsStoreSpy()
-        store.values["existing"] = "kept"
-        let viewModel = makeViewModel(schema: try pr7bSettingsSchema(), store: store)
+        let settings: [Setting] = [
+            .toggle(id: "toggle", name: "Toggle", summary: nil, defaultValue: true),
+            .text(id: "text", name: "Text", summary: nil, defaultValue: "value")
+        ]
+        let viewModel = makeViewModel(schema: try pr7bSettingsSchema(settings: settings), store: store)
 
-        viewModel.ensureDefault(key: "existing", value: "replacement")
-        viewModel.ensureDefault(key: "missing", value: "default")
+        await viewModel.loadIfNeeded()
 
-        XCTAssertEqual(store.values["existing"], "kept")
-        XCTAssertEqual(store.values["missing"], "default")
-        XCTAssertEqual(store.writes.map(\.key), ["missing"])
+        XCTAssertTrue(store.writes.isEmpty)
+        XCTAssertNil(store.values["toggle"])
+        XCTAssertNil(store.values["text"])
+    }
+
+    func testCompletionPresentationIsScopedToThisSourceWithFixedReasonText() throws {
+        let recovery = PR7BCompletionRecoverySpy()
+        recovery.summaries.send([
+            PluginCompletionSummary(
+                pluginID: "other.source", pendingCount: 9, pausedCount: 9,
+                pauseReasons: [.credentials]
+            ),
+            PluginCompletionSummary(
+                pluginID: "plugin.manga", pendingCount: 2, pausedCount: 3,
+                pauseReasons: [.retryLimit, .configurationChanged]
+            )
+        ])
+        let viewModel = makeViewModel(schema: try pr7bSettingsSchema(), recovery: recovery)
+
+        XCTAssertEqual(viewModel.completionPresentation, CompletionPresentation(
+            pendingCount: 2,
+            pausedCount: 3,
+            pauseReasons: [
+                PluginCompletionPauseReason.configurationChanged.recoveryDescription,
+                PluginCompletionPauseReason.retryLimit.recoveryDescription
+            ]
+        ))
+
+        recovery.summaries.send([
+            PluginCompletionSummary(
+                pluginID: "plugin.manga", pendingCount: 1, pausedCount: 0, pauseReasons: []
+            )
+        ])
+        XCTAssertEqual(viewModel.completionPresentation?.pendingCount, 1)
+        XCTAssertEqual(viewModel.completionPresentation?.pauseReasons, [])
+
+        recovery.summaries.send([])
+        XCTAssertNil(viewModel.completionPresentation)
+    }
+
+    func testReauthorizeRequiresExplicitConfirmationAndTargetsThisSourceOnly() async throws {
+        let recovery = PR7BCompletionRecoverySpy()
+        recovery.summaries.send([pausedSummary(pausedCount: 2)])
+        let viewModel = makeViewModel(schema: try pr7bSettingsSchema(), recovery: recovery)
+
+        viewModel.requestCompletionRecovery(.reauthorize)
+        XCTAssertEqual(viewModel.completionRecoveryRequest, .reauthorize)
+        XCTAssertTrue(recovery.calls.isEmpty)
+
+        viewModel.cancelCompletionRecoveryRequest()
+        XCTAssertNil(viewModel.confirmCompletionRecovery())
+        XCTAssertTrue(recovery.calls.isEmpty)
+
+        viewModel.requestCompletionRecovery(.reauthorize)
+        await viewModel.confirmCompletionRecovery()?.value
+
+        XCTAssertEqual(recovery.calls, [.reauthorize("plugin.manga")])
+        XCTAssertNil(viewModel.completionRecoveryRequest)
+        XCTAssertFalse(viewModel.isRecoveringCompletion)
+        XCTAssertNil(viewModel.completionRecoveryError)
+    }
+
+    func testDiscardRequiresExplicitConfirmation() async throws {
+        let recovery = PR7BCompletionRecoverySpy()
+        recovery.summaries.send([pausedSummary(pausedCount: 1)])
+        let viewModel = makeViewModel(schema: try pr7bSettingsSchema(), recovery: recovery)
+
+        viewModel.requestCompletionRecovery(.discard)
+        XCTAssertTrue(recovery.calls.isEmpty)
+        await viewModel.confirmCompletionRecovery()?.value
+
+        XCTAssertEqual(recovery.calls, [.discard("plugin.manga")])
+    }
+
+    func testRecoveryIsNotOfferedWithoutPausedProgressOrRecoveryDependency() async throws {
+        let recovery = PR7BCompletionRecoverySpy()
+        recovery.summaries.send([
+            PluginCompletionSummary(
+                pluginID: "plugin.manga", pendingCount: 4, pausedCount: 0, pauseReasons: []
+            )
+        ])
+        let withRecovery = makeViewModel(schema: try pr7bSettingsSchema(), recovery: recovery)
+        withRecovery.requestCompletionRecovery(.reauthorize)
+        XCTAssertNil(withRecovery.completionRecoveryRequest)
+        XCTAssertNil(withRecovery.confirmCompletionRecovery())
+
+        let withoutRecovery = makeViewModel(schema: try pr7bSettingsSchema())
+        withoutRecovery.requestCompletionRecovery(.discard)
+        XCTAssertNil(withoutRecovery.completionRecoveryRequest)
+        XCTAssertNil(withoutRecovery.completionPresentation)
+        XCTAssertTrue(recovery.calls.isEmpty)
+    }
+
+    func testRecoveryFailureIsVisibleSanitizedAndRetryable() async throws {
+        let recovery = PR7BCompletionRecoverySpy()
+        recovery.summaries.send([pausedSummary(pausedCount: 1)])
+        recovery.error = PR7BTestFailure.failed
+        let viewModel = makeViewModel(schema: try pr7bSettingsSchema(), recovery: recovery)
+
+        viewModel.requestCompletionRecovery(.reauthorize)
+        await viewModel.confirmCompletionRecovery()?.value
+
+        XCTAssertEqual(
+            viewModel.completionRecoveryError,
+            "The queued progress could not be updated. Try again."
+        )
+        XCTAssertFalse(viewModel.isRecoveringCompletion)
+
+        recovery.error = nil
+        viewModel.requestCompletionRecovery(.reauthorize)
+        XCTAssertNil(viewModel.completionRecoveryError)
+        await viewModel.confirmCompletionRecovery()?.value
+        XCTAssertNil(viewModel.completionRecoveryError)
+        XCTAssertEqual(recovery.calls.count, 2)
+    }
+
+    func testConfirmedRecoveryRunsOnceAndSurvivesSettingsClosing() async throws {
+        let recovery = PR7BCompletionRecoverySpy()
+        recovery.summaries.send([pausedSummary(pausedCount: 1)])
+        recovery.suspends = true
+        let viewModel = makeViewModel(schema: try pr7bSettingsSchema(), recovery: recovery)
+
+        viewModel.requestCompletionRecovery(.discard)
+        let task = try XCTUnwrap(viewModel.confirmCompletionRecovery())
+        await pr7bWaitUntil { recovery.calls.count == 1 }
+        XCTAssertTrue(viewModel.isRecoveringCompletion)
+
+        viewModel.requestCompletionRecovery(.reauthorize)
+        XCTAssertNil(viewModel.completionRecoveryRequest)
+        XCTAssertNil(viewModel.confirmCompletionRecovery())
+        viewModel.cancel()
+        XCTAssertTrue(viewModel.isRecoveringCompletion)
+
+        recovery.complete()
+        await task.value
+        XCTAssertFalse(viewModel.isRecoveringCompletion)
+        XCTAssertEqual(recovery.calls, [.discard("plugin.manga")])
     }
 
     func testArchivedDeletionConfirmationNamesExactStablePluginAndDoesNotActEarly() {
@@ -410,13 +546,24 @@ final class PluginSettingsViewModelTests: XCTestCase {
     private func makeViewModel(
         schema: SettingsSchema,
         store: PR7BSettingsStoreSpy = PR7BSettingsStoreSpy(),
-        messages: PR7BMessagePresenterSpy = PR7BMessagePresenterSpy()
+        messages: PR7BMessagePresenterSpy = PR7BMessagePresenterSpy(),
+        recovery: (any PluginCompletionRecovering)? = nil
     ) -> PluginSettingsViewModel {
         PluginSettingsViewModel(
             plugin: pr7bPlugin(),
             schema: schema,
             settingsStore: store,
-            messagePresenter: messages
+            messagePresenter: messages,
+            completionRecovery: recovery
+        )
+    }
+
+    private func pausedSummary(pausedCount: Int) -> PluginCompletionSummary {
+        PluginCompletionSummary(
+            pluginID: "plugin.manga",
+            pendingCount: 0,
+            pausedCount: pausedCount,
+            pauseReasons: [.configurationChanged]
         )
     }
 
@@ -498,4 +645,44 @@ private final class PR7BEmptyPluginDomain: LegacyDefaultsDomain, @unchecked Send
 
     func persistentDomain() -> [String: Any] { [:] }
     func removeObject(forKey key: String) { _ = key }
+}
+
+@MainActor
+private final class PR7BCompletionRecoverySpy: PluginCompletionRecovering {
+    enum Call: Equatable {
+        case reauthorize(String)
+        case discard(String)
+    }
+
+    let summaries = CurrentValueSubject<[PluginCompletionSummary], Never>([])
+    private(set) var calls: [Call] = []
+    var error: (any Error)?
+    var suspends = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    var completionSummariesPublisher: AnyPublisher<[PluginCompletionSummary], Never> {
+        summaries.eraseToAnyPublisher()
+    }
+
+    func reauthorize(pluginID: String) async throws {
+        calls.append(.reauthorize(pluginID))
+        try await finish()
+    }
+
+    func discard(pluginID: String) async throws {
+        calls.append(.discard(pluginID))
+        try await finish()
+    }
+
+    func complete() {
+        continuation?.resume()
+        continuation = nil
+    }
+
+    private func finish() async throws {
+        if suspends {
+            await withCheckedContinuation { continuation = $0 }
+        }
+        if let error { throw error }
+    }
 }

@@ -20,6 +20,18 @@ struct PluginSettingsView: View {
         self._viewModel = StateObject(wrappedValue: viewModel)
     }
 
+    private var recoveryConfirmationTitle: String {
+        viewModel.completionRecoveryRequest == .discard
+            ? "Discard paused progress?"
+            : "Send paused progress to the current account?"
+    }
+
+    private var recoveryConfirmationMessage: String {
+        viewModel.completionRecoveryRequest == .discard
+            ? "Paused read progress for this source is deleted without being sent. Your local reading history is unchanged."
+            : "Paused read progress was recorded before this source's server or account settings changed. It is sent to the server and account configured now. Nothing is sent until you confirm."
+    }
+
     var body: some View {
         NavigationView {
             Form {
@@ -30,6 +42,26 @@ struct PluginSettingsView: View {
             .navigationBarItems(trailing: Button("Done") {
                 dismiss()
             })
+            .confirmationDialog(
+                recoveryConfirmationTitle,
+                isPresented: Binding(
+                    get: { viewModel.completionRecoveryRequest != nil },
+                    set: { if !$0 { viewModel.cancelCompletionRecoveryRequest() } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button(
+                    viewModel.completionRecoveryRequest == .discard ? "Discard" : "Send to Current Account",
+                    role: viewModel.completionRecoveryRequest == .discard ? .destructive : nil
+                ) {
+                    viewModel.confirmCompletionRecovery()
+                }
+                Button("Cancel", role: .cancel) {
+                    viewModel.cancelCompletionRecoveryRequest()
+                }
+            } message: {
+                Text(recoveryConfirmationMessage)
+            }
             .task {
                 await viewModel.loadIfNeeded()
             }
@@ -88,6 +120,48 @@ struct PluginSettingsView: View {
             Section {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .foregroundColor(.red)
+            }
+        }
+        completionSection
+    }
+
+    @ViewBuilder
+    private var completionSection: some View {
+        if let presentation = viewModel.completionPresentation {
+            Section(header: Text("Read Progress Sync")) {
+                if presentation.pendingCount > 0 {
+                    Label(
+                        "\(presentation.pendingCount) waiting to sync",
+                        systemImage: "arrow.triangle.2.circlepath"
+                    )
+                }
+                if presentation.pausedCount > 0 {
+                    Label(
+                        "\(presentation.pausedCount) paused",
+                        systemImage: "pause.circle.fill"
+                    )
+                    .foregroundColor(.orange)
+                    ForEach(presentation.pauseReasons, id: \.self) { reason in
+                        Text(reason)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("Retry with Current Account…") {
+                        viewModel.requestCompletionRecovery(.reauthorize)
+                    }
+                    .disabled(viewModel.isRecoveringCompletion)
+                    Button("Discard Paused Progress…", role: .destructive) {
+                        viewModel.requestCompletionRecovery(.discard)
+                    }
+                    .disabled(viewModel.isRecoveringCompletion)
+                }
+                if viewModel.isRecoveringCompletion {
+                    ProgressView("Updating queued progress…")
+                }
+                if let error = viewModel.completionRecoveryError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundColor(.red)
+                }
             }
         }
     }
@@ -150,9 +224,6 @@ private struct ToggleSettingRow: View {
             }
         }
         .padding(.vertical, 2)
-        .onAppear {
-            viewModel.ensureDefault(key: id, value: Setting.storedToggle(defaultValue))
-        }
     }
 }
 
@@ -179,9 +250,6 @@ private struct TextSettingRow: View {
             }
         }
         .padding(.vertical, 2)
-        .onAppear {
-            viewModel.ensureDefault(key: id, value: defaultValue)
-        }
     }
 }
 
@@ -210,9 +278,6 @@ private struct PickerSettingRow: View {
             }
         }
         .padding(.vertical, 2)
-        .onAppear {
-            viewModel.ensureDefault(key: id, value: defaultValue)
-        }
     }
 }
 

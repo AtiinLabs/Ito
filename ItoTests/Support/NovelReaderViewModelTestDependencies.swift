@@ -134,7 +134,7 @@ final class NovelReaderProgressFake: NovelReaderProgressTracking {
     }
 
     struct Request {
-        let media: MediaIdentity
+        let context: PluginCompletionContext
         let chapterID: String
         let chapterNumber: Float?
     }
@@ -142,6 +142,8 @@ final class NovelReaderProgressFake: NovelReaderProgressTracking {
     let events: NovelReaderEventRecorder
     var responses: [Response] = []
     private(set) var requests: [Request] = []
+    private(set) var capturedContexts: [PluginCompletionContext] = []
+    var originatingEpoch: String? = "epoch"
     /// The series' saved position, keyed by its chapter. Like the real store it holds at most
     /// one chapter: saving another replaces it, and finishing another chapter clears it.
     var savedOffsets: [String: Int] = [:]
@@ -152,15 +154,30 @@ final class NovelReaderProgressFake: NovelReaderProgressTracking {
         self.events = events
     }
 
-    func markNovelChapterRead(
+    func captureCompletionContext(
         media: MediaIdentity,
+        mediaKey: String,
+        kind: PluginCompletionKind
+    ) -> PluginCompletionContext {
+        let context = PluginCompletionContext(
+            media: media,
+            mediaKey: mediaKey,
+            kind: kind,
+            originatingEpoch: originatingEpoch
+        )
+        capturedContexts.append(context)
+        return context
+    }
+
+    func markNovelChapterRead(
+        context: PluginCompletionContext,
         chapterID: String,
         chapterNumber: Float?
     ) async throws {
         events.record("progress:\(chapterID)")
         requests.append(
             Request(
-                media: media,
+                context: context,
                 chapterID: chapterID,
                 chapterNumber: chapterNumber
             )

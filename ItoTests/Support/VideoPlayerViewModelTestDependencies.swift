@@ -387,7 +387,7 @@ final class VideoPlayerProgressFake: VideoPlayerProgressTracking {
     }
 
     struct Request {
-        let media: MediaIdentity
+        let context: PluginCompletionContext
         let episodeID: String
         let episodeNumber: Float?
     }
@@ -395,6 +395,8 @@ final class VideoPlayerProgressFake: VideoPlayerProgressTracking {
     let events: VideoPlayerEventRecorder
     var responses: [Response] = []
     private(set) var requests: [Request] = []
+    private(set) var capturedContexts: [PluginCompletionContext] = []
+    var originatingEpoch: String? = "epoch"
     /// Seconds an episode starts at, keyed by episode.
     var savedTimes: [String: Double] = [:]
     private(set) var savedTimeWrites: [Double] = []
@@ -405,14 +407,29 @@ final class VideoPlayerProgressFake: VideoPlayerProgressTracking {
         self.events = events
     }
 
-    func markEpisodeWatched(
+    func captureCompletionContext(
         media: MediaIdentity,
+        mediaKey: String,
+        kind: PluginCompletionKind
+    ) -> PluginCompletionContext {
+        let context = PluginCompletionContext(
+            media: media,
+            mediaKey: mediaKey,
+            kind: kind,
+            originatingEpoch: originatingEpoch
+        )
+        capturedContexts.append(context)
+        return context
+    }
+
+    func markEpisodeWatched(
+        context: PluginCompletionContext,
         episodeID: String,
         episodeNumber: Float?
     ) async throws {
         events.record("progress")
         requests.append(
-            Request(media: media, episodeID: episodeID, episodeNumber: episodeNumber)
+            Request(context: context, episodeID: episodeID, episodeNumber: episodeNumber)
         )
         let response = responses.isEmpty ? .success : responses.removeFirst()
         switch response {

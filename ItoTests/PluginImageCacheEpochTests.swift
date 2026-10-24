@@ -250,7 +250,7 @@ struct PluginImageCacheEpochTests {
         let spyKeychain = SpyPluginSecretKeychain()
         let secrets = PluginSecretStore(keychain: spyKeychain)
 
-        secrets.configureBeforeMutation {
+        secrets.configureBeforeMutation { _ in
             throw SimulatedPersistenceError()
         }
 
@@ -403,7 +403,7 @@ struct PluginImageCacheEpochTests {
 
         // Rotate does not throw or fail when table does not exist
         #expect(throws: Never.self) {
-            try PluginImageCacheEpoch.rotate(in: pool)
+            try pool.write { db in try PluginImageCacheEpoch.rotate(in: db) }
         }
     }
 }

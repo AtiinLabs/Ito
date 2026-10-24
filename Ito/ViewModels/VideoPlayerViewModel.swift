@@ -32,6 +32,8 @@ final class VideoPlayerViewModel: ObservableObject {
 
     private let dependencies: PreparedVideoPlayerDependencies
     private let mediaIdentity: MediaIdentity
+    /// Captured once per player session; every episode in the session shares it.
+    private let completionContext: PluginCompletionContext
 
     private var isActive = true
     private var hasPresentedPresence = false
@@ -82,6 +84,11 @@ final class VideoPlayerViewModel: ObservableObject {
         self.episode = episode
         self.dependencies = dependencies
         mediaIdentity = MediaIdentity(pluginId: pluginID, itemId: anime.key)
+        completionContext = dependencies.progress.captureCompletionContext(
+            media: mediaIdentity,
+            mediaKey: anime.key,
+            kind: .anime
+        )
         playbackCoordinator = dependencies.makePlaybackCoordinator()
     }
 
@@ -596,6 +603,7 @@ final class VideoPlayerViewModel: ObservableObject {
         let progress = dependencies.progress
         let tracker = dependencies.tracker
         let mediaIdentity = mediaIdentity
+        let context = completionContext
         let episode = episode
         let trackerProgress = Self.trackerProgress(for: episode)
         progressOperationID = operationID
@@ -605,7 +613,7 @@ final class VideoPlayerViewModel: ObservableObject {
             defer { self?.finishTestingOperation(operationID) }
             do {
                 try await progress.markEpisodeWatched(
-                    media: mediaIdentity,
+                    context: context,
                     episodeID: episode.key,
                     episodeNumber: episode.episode
                 )

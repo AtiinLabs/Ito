@@ -59,6 +59,7 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
 
     /// Values of the plugins' secret settings, kept in the Keychain rather than this database.
     public let secrets: PluginSecretStore
+    let completionStore: PluginCompletionStore
     private let dbPool: DatabasePool
     private let standardApplicationDomain: String
     private let domainFactory: DomainFactory
@@ -93,8 +94,12 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
         self.operationFault = operationFault
         self.clock = clock
         self.secrets = secrets
-        secrets.configureBeforeMutation { [dbPool] in
-            try PluginImageCacheEpoch.rotate(in: dbPool)
+        completionStore = PluginCompletionStore(dbPool: dbPool, secrets: secrets)
+        secrets.configureBeforeMutation { [dbPool] pluginID in
+            try dbPool.write { db in
+                try PluginImageCacheEpoch.rotate(in: db)
+                try PluginCompletionScope.rotate(pluginID: pluginID, in: db)
+            }
         }
         dbPool.add(transactionObserver: discoverySources, extent: .observerLifetime)
     }

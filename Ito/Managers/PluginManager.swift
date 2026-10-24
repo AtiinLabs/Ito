@@ -40,6 +40,7 @@ public class PluginManager: ObservableObject {
         _ settingsStore: PluginSettingsStore
     ) async throws -> ItoRunner
     public let pluginSettingsStore: PluginSettingsStore
+    private weak var completionCoordinator: PluginCompletionCoordinator?
 
     var configuredInstalledPluginsDirectory: URL? {
         pluginsDirectory
@@ -63,6 +64,33 @@ public class PluginManager: ObservableObject {
         self.pluginSettingsStore = pluginSettingsStore
         self.pluginsDirectory = pluginsDirectory
         self.runnerLoader = runnerLoader
+    }
+
+    @MainActor
+    func configureCompletionDelivery(coordinator: PluginCompletionCoordinator) {
+        completionCoordinator = coordinator
+    }
+
+    @MainActor
+    func holdCompletionDelivery(for pluginID: String) async throws {
+        do {
+            try await pluginSettingsStore.completionStore.holdForRemoval(pluginID: pluginID)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw PluginCompletionRecoveryError.queueUnavailable
+        }
+        completionCoordinator?.cancel(for: pluginID)
+    }
+
+    @MainActor
+    func purgeCompletionDelivery(for pluginID: String) async {
+        do {
+            try await pluginSettingsStore.completionStore.purgeRemoved(pluginID: pluginID)
+        } catch {
+            // The held intents stay paused and inert; a reinstall offers them for retry or discard.
+            AppLogger.plugin.error("PluginManager: queued read progress of a removed source could not be cleared")
+        }
     }
 
     /// Gets a cached ItoRunner for a plugin ID, or initializes a new one if not cached.

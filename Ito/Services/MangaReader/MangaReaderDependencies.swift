@@ -21,9 +21,9 @@ final class ItoRunnerMangaPageLoader: MangaPageLoading {
 }
 
 @MainActor
-protocol MangaReaderProgressTracking: AnyObject {
+protocol MangaReaderProgressTracking: PluginCompletionScopeCapturing, AnyObject {
     func markChapterRead(
-        media: MediaIdentity,
+        context: PluginCompletionContext,
         chapterID: String,
         chapterNumber: Float?
     ) async throws
@@ -37,12 +37,12 @@ protocol MangaReaderProgressTracking: AnyObject {
 
 extension ReadProgressManager: MangaReaderProgressTracking {
     func markChapterRead(
-        media: MediaIdentity,
+        context: PluginCompletionContext,
         chapterID: String,
         chapterNumber: Float?
     ) async throws {
         try await markAsRead(
-            media: media,
+            context: context,
             chapterId: chapterID,
             chapterNum: chapterNumber
         )
@@ -279,12 +279,20 @@ private final class UnavailableMangaReaderDependencies:
         AppPreferenceCatalog.preloadImageCount.defaultValue.rawValue
     }
 
-    func markChapterRead(
+    func captureCompletionContext(
         media: MediaIdentity,
+        mediaKey: String,
+        kind: PluginCompletionKind
+    ) -> PluginCompletionContext {
+        PluginCompletionContext(media: media, mediaKey: mediaKey, kind: kind, originatingEpoch: nil)
+    }
+
+    func markChapterRead(
+        context: PluginCompletionContext,
         chapterID: String,
         chapterNumber: Float?
     ) async throws {
-        _ = media
+        _ = context
         _ = chapterID
         _ = chapterNumber
     }

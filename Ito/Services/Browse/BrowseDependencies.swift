@@ -9,6 +9,10 @@ protocol BrowsePluginManaging: AnyObject {
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> { get }
 
     func reloadInstalledPlugins() async
+    /// Pauses source-bound delivery before its installed file can be removed.
+    func holdCompletionDelivery(for pluginID: String) async throws
+    /// Forgets a removed source's held delivery.
+    func purgeCompletionDelivery(for pluginID: String) async
     /// Forgets a deleted plugin's secret settings.
     func removeSecrets(for pluginID: String)
 }

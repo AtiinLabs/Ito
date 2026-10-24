@@ -712,6 +712,8 @@ private final class AppScopeBrowsePluginManager: BrowsePluginManaging {
     }
 
     func reloadInstalledPlugins() async {}
+    func holdCompletionDelivery(for pluginID: String) async throws {}
+    func purgeCompletionDelivery(for pluginID: String) async {}
     func removeSecrets(for pluginID: String) {}
 }
 

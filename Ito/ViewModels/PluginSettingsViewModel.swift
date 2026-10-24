@@ -14,9 +14,14 @@ final class PluginSettingsViewModel: ObservableObject {
     @Published private(set) var reloadError: String?
     @Published private(set) var persistenceError: String?
     @Published private(set) var bindingRevision = 0
+    @Published private(set) var completionSummary: PluginCompletionSummary?
+    @Published private(set) var completionRecoveryError: String?
+    @Published private(set) var isRecoveringCompletion = false
+    @Published private(set) var completionRecoveryRequest: CompletionRecoveryAction?
 
     private let settingsStore: any PluginSettingsPersisting
     private let messagePresenter: any SourceMessagePresenting
+    private let completionRecovery: (any PluginCompletionRecovering)?
     private var loadOperationID: UUID?
     private var reloadOperationID: UUID?
     private var reloadTask: Task<Void, Never>?
@@ -26,16 +31,25 @@ final class PluginSettingsViewModel: ObservableObject {
         plugin: InstalledPlugin,
         schema: SettingsSchema,
         settingsStore: any PluginSettingsPersisting,
-        messagePresenter: any SourceMessagePresenting
+        messagePresenter: any SourceMessagePresenting,
+        completionRecovery: (any PluginCompletionRecovering)? = nil
     ) {
         self.plugin = plugin
         self.schema = schema
         self.settingsStore = settingsStore
         self.messagePresenter = messagePresenter
+        self.completionRecovery = completionRecovery
 
         settingsStore.settingsRevisionPublisher
             .sink { @MainActor [weak self] revision in
                 self?.bindingRevision = revision
+            }
+            .store(in: &cancellables)
+
+        completionRecovery?.completionSummariesPublisher
+            .sink { @MainActor [weak self] summaries in
+                guard let self else { return }
+                completionSummary = summaries.first { $0.pluginID == self.plugin.id }
             }
             .store(in: &cancellables)
     }
@@ -130,9 +144,63 @@ final class PluginSettingsViewModel: ObservableObject {
         finishPersistence(settingsStore.persistValue(pluginID: plugin.id, key: key, value: value))
     }
 
-    func ensureDefault(key: String, value: String) {
-        guard storedValue(key: key) == nil else { return }
-        persistValue(key: key, value: value)
+    /// Queued read progress for this source, or nil when nothing is queued.
+    var completionPresentation: CompletionPresentation? {
+        guard let summary = completionSummary,
+              summary.pendingCount > 0 || summary.pausedCount > 0 else { return nil }
+        let reasons = PluginCompletionPauseReason.allCases
+            .filter { summary.pauseReasons.contains($0) }
+            .map(\.recoveryDescription)
+        return CompletionPresentation(
+            pendingCount: summary.pendingCount,
+            pausedCount: summary.pausedCount,
+            pauseReasons: summary.pausedCount > 0 ? reasons : []
+        )
+    }
+
+    /// Asks for confirmation. Nothing is sent or deleted until `confirmCompletionRecovery()`.
+    func requestCompletionRecovery(_ action: CompletionRecoveryAction) {
+        guard completionRecovery != nil, !isRecoveringCompletion,
+              (completionSummary?.pausedCount ?? 0) > 0 else { return }
+        completionRecoveryError = nil
+        completionRecoveryRequest = action
+    }
+
+    func cancelCompletionRecoveryRequest() {
+        completionRecoveryRequest = nil
+    }
+
+    /// Captures the confirmed action synchronously (the confirmation UI dismisses and clears the
+    /// request right after the button fires) and runs it to completion even if settings close.
+    @discardableResult
+    func confirmCompletionRecovery() -> Task<Void, Never>? {
+        guard let action = completionRecoveryRequest, let recovery = completionRecovery,
+              !isRecoveringCompletion else { return nil }
+        completionRecoveryRequest = nil
+        guard (completionSummary?.pausedCount ?? 0) > 0 else { return nil }
+        isRecoveringCompletion = true
+        completionRecoveryError = nil
+        let pluginID = plugin.id
+        return Task { @MainActor [weak self] in
+            var failed = false
+            do {
+                switch action {
+                case .reauthorize:
+                    try await recovery.reauthorize(pluginID: pluginID)
+                case .discard:
+                    try await recovery.discard(pluginID: pluginID)
+                }
+            } catch is CancellationError {
+                // Cancelled before any change; nothing to report.
+            } catch {
+                failed = true
+            }
+            guard let self else { return }
+            isRecoveringCompletion = false
+            if failed {
+                completionRecoveryError = "The queued progress could not be updated. Try again."
+            }
+        }
     }
 
     func hasSecret(key: String) -> Bool {
@@ -165,6 +233,7 @@ final class PluginSettingsViewModel: ObservableObject {
     }
 
     func cancel() {
+        completionRecoveryRequest = nil
         loadOperationID = nil
         isLoading = false
         reloadOperationID = nil
@@ -182,4 +251,18 @@ final class PluginSettingsViewModel: ObservableObject {
         reloadOperationID = nil
         reloadTask = nil
     }
+}
+
+nonisolated enum CompletionRecoveryAction: Equatable, Sendable {
+    /// Send paused progress to the server and account configured now.
+    case reauthorize
+    /// Delete paused progress without sending it.
+    case discard
+}
+
+/// Source-scoped queued-progress state. Counts and fixed reason text only.
+nonisolated struct CompletionPresentation: Equatable, Sendable {
+    let pendingCount: Int
+    let pausedCount: Int
+    let pauseReasons: [String]
 }

@@ -80,7 +80,7 @@ final class MangaPageLoaderFake: MangaPageLoading {
 @MainActor
 final class MangaReaderProgressFake: MangaReaderProgressTracking {
     struct Request {
-        let media: MediaIdentity
+        let context: PluginCompletionContext
         let chapterID: String
         let chapterNumber: Float?
     }
@@ -88,6 +88,8 @@ final class MangaReaderProgressFake: MangaReaderProgressTracking {
     let events: MangaReaderEventRecorder
     var error: (any Error)?
     private(set) var requests: [Request] = []
+    private(set) var capturedContexts: [PluginCompletionContext] = []
+    var originatingEpoch: String? = "epoch"
     /// Pages the reader starts at, keyed by chapter.
     var savedPages: [String: Int] = [:]
     private(set) var savedPageWrites: [(chapterID: String, page: Int)] = []
@@ -98,15 +100,30 @@ final class MangaReaderProgressFake: MangaReaderProgressTracking {
         self.events = events
     }
 
-    func markChapterRead(
+    func captureCompletionContext(
         media: MediaIdentity,
+        mediaKey: String,
+        kind: PluginCompletionKind
+    ) -> PluginCompletionContext {
+        let context = PluginCompletionContext(
+            media: media,
+            mediaKey: mediaKey,
+            kind: kind,
+            originatingEpoch: originatingEpoch
+        )
+        capturedContexts.append(context)
+        return context
+    }
+
+    func markChapterRead(
+        context: PluginCompletionContext,
         chapterID: String,
         chapterNumber: Float?
     ) async throws {
         events.record("progress:\(chapterID)")
         requests.append(
             Request(
-                media: media,
+                context: context,
                 chapterID: chapterID,
                 chapterNumber: chapterNumber
             )

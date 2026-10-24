@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
 
-public struct MediaIdentity: Codable, Hashable, Sendable {
+nonisolated public struct MediaIdentity: Codable, Hashable, Sendable {
     public let pluginId: String
     public let canonicalMediaId: String
 

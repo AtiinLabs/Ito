@@ -211,9 +211,9 @@ final class AVPlayerVideoPlaybackCoordinator: VideoPlaybackCoordinating {
 }
 
 @MainActor
-protocol VideoPlayerProgressTracking: AnyObject {
+protocol VideoPlayerProgressTracking: PluginCompletionScopeCapturing, AnyObject {
     func markEpisodeWatched(
-        media: MediaIdentity,
+        context: PluginCompletionContext,
         episodeID: String,
         episodeNumber: Float?
     ) async throws
@@ -224,12 +224,12 @@ protocol VideoPlayerProgressTracking: AnyObject {
 
 extension ReadProgressManager: VideoPlayerProgressTracking {
     func markEpisodeWatched(
-        media: MediaIdentity,
+        context: PluginCompletionContext,
         episodeID: String,
         episodeNumber: Float?
     ) async throws {
         try await markAsWatched(
-            media: media,
+            context: context,
             episodeId: episodeID,
             episodeNum: episodeNumber
         )
@@ -385,12 +385,20 @@ private final class UnavailableVideoPlayerDependencies:
     VideoPlayerPresencePresenting,
     VideoPlayerPluginMetadataProviding,
     VideoSubtitleTextLoading {
-    func markEpisodeWatched(
+    func captureCompletionContext(
         media: MediaIdentity,
+        mediaKey: String,
+        kind: PluginCompletionKind
+    ) -> PluginCompletionContext {
+        PluginCompletionContext(media: media, mediaKey: mediaKey, kind: kind, originatingEpoch: nil)
+    }
+
+    func markEpisodeWatched(
+        context: PluginCompletionContext,
         episodeID: String,
         episodeNumber: Float?
     ) async throws {
-        _ = media
+        _ = context
         _ = episodeID
         _ = episodeNumber
     }

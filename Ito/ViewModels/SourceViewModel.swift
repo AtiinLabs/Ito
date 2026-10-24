@@ -226,6 +226,7 @@ final class SourceViewModel: ObservableObject {
             guard currentIdentity == archivedPluginFileSnapshot.identity else {
                 throw SourcePluginFileError.stalePluginIdentity
             }
+            try await pluginStatePublisher.holdCompletionDelivery(for: plugin.id)
             transaction = try fileDeletion.stagePluginFileDeletion(
                 from: archivedPluginFileSnapshot
             )
@@ -236,6 +237,7 @@ final class SourceViewModel: ObservableObject {
             pluginStatePublisher.removeSecrets(for: plugin.id)
             shouldDismiss = true
             finishDeletion(operationID)
+            await pluginStatePublisher.purgeCompletionDelivery(for: plugin.id)
         } catch {
             let failure = restoreAfterFailedDeletion(
                 transaction: transaction,

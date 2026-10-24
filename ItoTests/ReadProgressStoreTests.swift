@@ -3,6 +3,16 @@ import GRDB
 import Testing
 @testable import Ito
 
+/// An unverified-origin manga context; these tests exercise local progress only.
+private nonisolated func completionContext(for media: MediaIdentity) -> PluginCompletionContext {
+    PluginCompletionContext(
+        media: media,
+        mediaKey: media.canonicalMediaId,
+        kind: .manga,
+        originatingEpoch: nil
+    )
+}
+
 @MainActor
 struct ReadProgressStoreTests {
     @Test func scopedProgressRoundTripsAndUsesNumberFallback() async throws {
@@ -12,7 +22,7 @@ struct ReadProgressStoreTests {
         let first = MediaIdentity(pluginId: "plugin.one", canonicalMediaId: "same")
         let second = MediaIdentity(pluginId: "plugin.two", canonicalMediaId: "same")
 
-        try await manager.markAsRead(media: first, chapterId: "chapter-a", chapterNum: 1.5)
+        try await manager.markAsRead(context: completionContext(for: first), chapterId: "chapter-a", chapterNum: 1.5)
         #expect(manager.isRead(media: first, chapterId: "other-key", chapterNum: 1.5))
         #expect(!manager.isRead(media: second, chapterId: "chapter-a", chapterNum: 1.5))
         #expect(manager.lastReadChapter(for: first) == "chapter-a")
@@ -29,8 +39,8 @@ struct ReadProgressStoreTests {
         let manager = ReadProgressManager(dbPool: database.dbPool)
         let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
 
-        try await manager.markAsRead(media: media, chapterId: "chapter", chapterNum: 2)
-        try await manager.markAsRead(media: media, chapterId: "chapter", chapterNum: 2)
+        try await manager.markAsRead(context: completionContext(for: media), chapterId: "chapter", chapterNum: 2)
+        try await manager.markAsRead(context: completionContext(for: media), chapterId: "chapter", chapterNum: 2)
 
         try await database.dbPool.read { db in
             let keyCount = try ReadProgressKeyRecord.fetchCount(db)
@@ -101,7 +111,7 @@ struct ReadProgressStoreTests {
 
         await #expect(throws: (any Error).self) {
             try await manager.markAsRead(
-                media: media,
+                context: completionContext(for: media),
                 chapterId: "chapter",
                 chapterNum: 1
             )
@@ -144,16 +154,16 @@ struct ReadProgressStoreTests {
         let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
 
         // A series with no reading state starts it at the chapter marked read.
-        try await manager.markAsRead(media: media, chapterId: "chapter-1", chapterNum: 1)
+        try await manager.markAsRead(context: completionContext(for: media), chapterId: "chapter-1", chapterNum: 1)
         #expect(manager.lastReadChapter(for: media) == "chapter-1")
 
         try await manager.savePosition(media: media, chapterKey: "chapter-3", position: 19)
-        try await manager.markAsRead(media: media, chapterId: "chapter-3", chapterNum: 3)
+        try await manager.markAsRead(context: completionContext(for: media), chapterId: "chapter-3", chapterNum: 3)
         #expect(manager.savedPosition(media: media, chapterKey: "chapter-3") == 19)
 
         // The reader moved on to chapter 4 before chapter 3's read mark landed.
         try await manager.savePosition(media: media, chapterKey: "chapter-4", position: 2)
-        try await manager.markAsRead(media: media, chapterId: "chapter-3", chapterNum: 3)
+        try await manager.markAsRead(context: completionContext(for: media), chapterId: "chapter-3", chapterNum: 3)
         #expect(manager.isRead(media: media, chapterId: "chapter-3", chapterNum: 3))
         let reloaded = ReadProgressManager(dbPool: database.dbPool)
         try await reloaded.reload()
@@ -172,7 +182,7 @@ struct ReadProgressStoreTests {
         #expect(manager.lastReadChapter(for: media) == "chapter-1")
 
         try await manager.savePosition(media: media, chapterKey: "chapter-2", position: 5)
-        try await manager.markAsRead(media: media, chapterId: "chapter-2", chapterNum: 2)
+        try await manager.markAsRead(context: completionContext(for: media), chapterId: "chapter-2", chapterNum: 2)
         #expect(manager.savedReaderViewer(media: media) == 4)
 
         let reloaded = ReadProgressManager(dbPool: database.dbPool)

@@ -87,7 +87,17 @@ struct DurableStateSchemaTests {
             "backupCapability": .init(columns: ["component", "representation"], primaryKey: ["component"], nullable: []),
             "backupRestoreJournal": .init(columns: ["operationId", "status", "reportPayload", "updatedAt"], primaryKey: ["operationId"], nullable: []),
             "firstRunSetup": .init(columns: ["id", "completedAt"], primaryKey: ["id"], nullable: []),
-            "pluginImageCacheEpoch": .init(columns: ["id", "epoch"], primaryKey: ["id"], nullable: [])
+            "pluginImageCacheEpoch": .init(columns: ["id", "epoch"], primaryKey: ["id"], nullable: []),
+            "pluginCompletionScope": .init(columns: ["pluginId", "epoch"], primaryKey: ["pluginId"], nullable: []),
+            "pluginCompletionOutbox": .init(
+                columns: [
+                    "id", "pluginId", "canonicalMediaId", "mediaKey", "unitKey", "kind",
+                    "originatingEpoch", "revision", "status", "pauseReason", "attemptCount",
+                    "createdAt", "nextAttemptAt", "lastAttemptAt", "lastErrorCategory"
+                ],
+                primaryKey: ["id"],
+                nullable: ["originatingEpoch", "pauseReason", "lastAttemptAt", "lastErrorCategory"]
+            )
         ]
         let preexistingTables: Set<String> = [
             "libraryCategory", "libraryItem", "itemCategoryLink", "readingHistory", "themeCache",

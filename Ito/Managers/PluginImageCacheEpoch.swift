@@ -30,29 +30,25 @@ nonisolated enum PluginImageCacheEpoch {
         return epoch
     }
 
-    static func rotate(in pool: DatabasePool) throws {
-        try pool.write { db in
-            guard try db.tableExists(tableName) else {
-                return
-            }
+    static func rotate(in db: Database) throws {
+        guard try db.tableExists(tableName) else { return }
+        try db.execute(sql: """
+            UPDATE \(tableName)
+            SET epoch = lower(hex(randomblob(16)))
+            WHERE id = 1
+            """)
+        if db.changesCount == 0 {
             try db.execute(sql: """
-                UPDATE \(tableName)
-                SET epoch = lower(hex(randomblob(16)))
-                WHERE id = 1
+                INSERT INTO \(tableName) (id, epoch)
+                VALUES (1, lower(hex(randomblob(16))))
+                ON CONFLICT(id) DO UPDATE SET epoch = lower(hex(randomblob(16)))
                 """)
-            if db.changesCount == 0 {
-                try db.execute(sql: """
-                    INSERT INTO \(tableName) (id, epoch)
-                    VALUES (1, lower(hex(randomblob(16))))
-                    ON CONFLICT(id) DO UPDATE SET epoch = lower(hex(randomblob(16)))
-                    """)
-            }
-            guard let updated = try String.fetchOne(
-                db,
-                sql: "SELECT epoch FROM \(tableName) WHERE id = 1"
-            ), isValidEpoch(updated) else {
-                throw PluginImageCacheEpochError.invalidOrMissingEpoch
-            }
+        }
+        guard let updated = try String.fetchOne(
+            db,
+            sql: "SELECT epoch FROM \(tableName) WHERE id = 1"
+        ), isValidEpoch(updated) else {
+            throw PluginImageCacheEpochError.invalidOrMissingEpoch
         }
     }
 }

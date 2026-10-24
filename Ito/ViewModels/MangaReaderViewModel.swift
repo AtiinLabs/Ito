@@ -36,6 +36,8 @@ final class MangaReaderViewModel: ObservableObject {
     private let dependencies: PreparedMangaReaderDependencies
     private let imagePrefetcher: any MangaReaderImagePrefetching
     private let mediaIdentity: MediaIdentity
+    /// Captured once per reader session; every chapter in the session shares it.
+    private let completionContext: PluginCompletionContext
 
     private var isActive = true
     private var hasPresentedPresence = false
@@ -80,6 +82,7 @@ final class MangaReaderViewModel: ObservableObject {
         imagePrefetcher = dependencies.makeImagePrefetcher()
         preloadImageCount = dependencies.settings.mangaReaderPreloadImageCount
         mediaIdentity = MediaIdentity(pluginId: pluginID, itemId: manga.key)
+        completionContext = dependencies.progress.captureCompletionContext(media: mediaIdentity, mediaKey: manga.key, kind: .manga)
         overrideViewer = dependencies.progress.savedViewer(media: mediaIdentity) ?? .Default
     }
 
@@ -1022,7 +1025,7 @@ final class MangaReaderViewModel: ObservableObject {
         let session = sessionID
         let progress = dependencies.progress
         let tracker = dependencies.tracker
-        let identity = mediaIdentity
+        let context = completionContext
         logStarted(kind: .chapterEffects, operationID: operationID)
 
         let task = Task { @MainActor [weak self, progress, tracker] in
@@ -1030,20 +1033,13 @@ final class MangaReaderViewModel: ObservableObject {
                 for effect in plan.effects {
                     switch effect {
                     case .markLocalProgress:
-                        try await progress.markChapterRead(
-                            media: identity,
-                            chapterID: chapter.key,
-                            chapterNumber: chapter.chapter
-                        )
+                        try await progress.markChapterRead(context: context, chapterID: chapter.key, chapterNumber: chapter.chapter)
                     case .updateTracker(let progressValue):
                         guard let self,
                               self.isActive,
                               self.sessionID == session,
                               !Task.isCancelled else { return }
-                        await tracker.updateMangaProgress(
-                            media: identity,
-                            progress: progressValue
-                        )
+                        await tracker.updateMangaProgress(media: context.media, progress: progressValue)
                     }
                 }
                 self?.finishEffect(operationID: operationID, outcome: .succeeded)

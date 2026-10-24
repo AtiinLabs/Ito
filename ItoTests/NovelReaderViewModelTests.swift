@@ -38,7 +38,16 @@ final class NovelReaderViewModelTests: XCTestCase {
         subject.viewModel.continuousChapterEndAppeared(chapterID: loaded.id)
         await subject.viewModel.waitForAllOperationsForTesting()
         XCTAssertEqual(subject.events.events, ["history:a", "progress:a", "tracker:12"])
-        XCTAssertEqual(subject.progress.requests[0].media, mediaIdentity)
+        XCTAssertEqual(
+            subject.progress.requests[0].context,
+            PluginCompletionContext(
+                media: mediaIdentity,
+                mediaKey: "novel",
+                kind: .novel,
+                originatingEpoch: "epoch"
+            )
+        )
+        XCTAssertEqual(subject.progress.capturedContexts, [subject.progress.requests[0].context])
         XCTAssertEqual(subject.progress.requests[0].chapterNumber, 12.75)
     }
 

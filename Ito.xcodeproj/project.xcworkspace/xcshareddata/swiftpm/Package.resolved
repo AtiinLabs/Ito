@@ -22,7 +22,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AtiinLabs/ito-runner.git",
       "state" : {
-        "revision" : "56d0c9f608b5cbf19fc16113c6839716dffd40a0"
+        "revision" : "c2726c0ec23d612f376e36b9b6287f72a816ed57"
       }
     },
     {

@@ -26,8 +26,10 @@ struct ItoApp: App {
         .onChange(of: scenePhase) { phase in
             switch phase {
             case .background:
+                bootstrap.setCompletionForeground(false)
                 Task { await Self.scheduleAppRefresh(bootstrap: bootstrap) }
             case .active:
+                bootstrap.setCompletionForeground(true)
                 // Notifications may have been allowed in iOS Settings since the last check.
                 Task { await bootstrap.notificationManager?.checkStatus() }
             default:

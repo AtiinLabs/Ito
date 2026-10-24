@@ -173,6 +173,8 @@ extension PluginSettingsStore: PluginSettingsPersisting {
 protocol SourcePluginStatePublishing: AnyObject {
     func currentSourcePlugin(for pluginID: String) -> InstalledPlugin?
     func prepareSourcePluginStatePublication() async throws -> any SourcePluginStatePublication
+    func holdCompletionDelivery(for pluginID: String) async throws
+    func purgeCompletionDelivery(for pluginID: String) async
     func removeSecrets(for pluginID: String)
 }
 
@@ -467,6 +469,12 @@ private final class UnavailableSourceDependency: SourceRunnerProviding,
     func prepareSourcePluginStatePublication() async throws -> any SourcePluginStatePublication {
         throw SourceDependencyUnavailableError.unavailable
     }
+
+    func holdCompletionDelivery(for pluginID: String) async throws {
+        throw SourceDependencyUnavailableError.unavailable
+    }
+
+    func purgeCompletionDelivery(for pluginID: String) async {}
 
     func removeSecrets(for pluginID: String) {}
 

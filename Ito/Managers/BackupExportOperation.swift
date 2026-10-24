@@ -42,7 +42,9 @@ nonisolated public struct BackupExportOperation: Sendable {
         BackupRestoreJournalRecord.databaseTableName,
         ThemeCacheRecord.databaseTableName,
         FirstRunSetupRecord.databaseTableName,
-        PluginImageCacheEpoch.tableName
+        PluginImageCacheEpoch.tableName,
+        PluginCompletionScope.outboxTableName,
+        PluginCompletionScope.tableName
     ]
 
     static let excludedTableReasons: [String: String] = [
@@ -65,7 +67,11 @@ nonisolated public struct BackupExportOperation: Sendable {
         FirstRunSetupRecord.databaseTableName:
             "Installation-local marker that this device's one-time setup has run.",
         PluginImageCacheEpoch.tableName:
-            "Installation-local cache invalidation epoch; never exported in backups."
+            "Installation-local cache invalidation epoch; never exported in backups.",
+        PluginCompletionScope.outboxTableName:
+            "Installation-local remote completion authorization; never replayed from a backup.",
+        PluginCompletionScope.tableName:
+            "Installation-local source/account authorization scopes; never exported in backups."
     ]
 
     static let durableTablesByComponent: [BackupComponent: [String]] = [

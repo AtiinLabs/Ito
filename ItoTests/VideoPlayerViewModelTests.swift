@@ -522,6 +522,15 @@ final class VideoPlayerViewModelTests: XCTestCase {
         XCTAssertTrue(subject.viewModel.hasTrackedProgress)
         await subject.viewModel.waitForAllOperationsForTesting()
         XCTAssertEqual(subject.progress.requests.count, 1)
+        XCTAssertEqual(
+            subject.progress.requests[0].context,
+            PluginCompletionContext(
+                media: MediaIdentity(pluginId: "plugin.test", itemId: "anime"),
+                mediaKey: "anime",
+                kind: .anime,
+                originatingEpoch: "epoch"
+            )
+        )
         XCTAssertEqual(subject.tracker.requests.map(\.progress), [1])
     }
 

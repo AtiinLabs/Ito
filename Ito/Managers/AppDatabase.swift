@@ -528,6 +528,11 @@ public final class AppDatabase: Sendable {
                 """)
         }
 
+        // MARK: - v14: Account-bound plugin completion delivery
+        migrator.registerMigration("v14") { db in
+            try PluginCompletionSchema.create(in: db)
+        }
+
         return migrator
     }
 

@@ -70,6 +70,8 @@ final class NovelReaderViewModel: ObservableObject {
 
     private let dependencies: PreparedNovelReaderDependencies
     private let mediaIdentity: MediaIdentity
+    /// Captured once per reader session; every chapter in the session shares it.
+    private let completionContext: PluginCompletionContext
 
     private var isActive = true
     private var hasPresentedPresence = false
@@ -117,6 +119,11 @@ final class NovelReaderViewModel: ObservableObject {
         currentChapter = initialChapter
         self.dependencies = dependencies
         mediaIdentity = MediaIdentity(pluginId: pluginID, itemId: novel.key)
+        completionContext = dependencies.progress.captureCompletionContext(
+            media: mediaIdentity,
+            mediaKey: novel.key,
+            kind: .novel
+        )
 
         let settings = dependencies.settings.novelReaderSettings
         fontSize = settings.fontSize
@@ -674,6 +681,7 @@ final class NovelReaderViewModel: ObservableObject {
         let progress = dependencies.progress
         let tracker = dependencies.tracker
         let identity = mediaIdentity
+        let context = completionContext
         logStarted(kind: .chapterEffects, operationID: operationID)
 
         let task = Task { @MainActor [weak self, progress, tracker] in
@@ -683,7 +691,7 @@ final class NovelReaderViewModel: ObservableObject {
                     switch effect {
                     case .markLocalProgress:
                         try await progress.markNovelChapterRead(
-                            media: identity,
+                            context: context,
                             chapterID: chapter.key,
                             chapterNumber: chapter.chapter
                         )
