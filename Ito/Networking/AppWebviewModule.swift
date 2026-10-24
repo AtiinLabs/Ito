@@ -116,7 +116,8 @@ class WebviewManager: NSObject, WKNavigationDelegate {
                     AppLogger.network.error("WebviewManager: evaluateJavaScript error: \(error)")
                     continuation.resume(throwing: error)
                 } else {
-                    let resultStr = String(describing: result ?? "")
+                    // `undefined` arrives as nil and `null` as NSNull: both are an empty result.
+                    let resultStr = result.flatMap { $0 is NSNull ? nil : String(describing: $0) } ?? ""
                     AppLogger.network.debug("WebviewManager: evaluateJavaScript success, result length: \(resultStr.count)")
                     continuation.resume(returning: resultStr)
                 }
