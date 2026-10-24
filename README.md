@@ -32,6 +32,7 @@ Ito is a free, open-source client for iPhone and iPad. It combines dedicated rea
 * **WASM plugins** — Install `.ito` plugins from user-added repositories. Downloaded packages are SHA-256 verified before installation.
 * **Source recovery** — Search and library-update failures show the source's reason. When a source needs setup or rejects its credentials, open its settings directly from the failure and retry after correcting them.
 * **Native source images** — Sources can resolve authenticated image requests for concurrent host downloads. Credentials stay transient, destinations are checked against source-declared origins, and cross-origin redirects—including scheme or port changes—are refused. Plugin image caches are partitioned when configuration changes.
+* **Source settings diagnostics** — Supporting sources can offer connection checks using an unsaved secret value without storing it. Inline field validation is advisory and never blocks saving settings.
 * **Backup and migration** — Export native `.itobackup` files or import libraries from Aidoku and Paperback.
 * **On-device storage** — Library data and history are stored locally, with tracker credentials protected by Keychain.
 * **No advertisements** — Ito is free and ad-free.

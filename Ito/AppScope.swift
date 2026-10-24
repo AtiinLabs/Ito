@@ -27,6 +27,7 @@ struct PreparedApplicationDependencies {
     let discoverClock: any DiscoverClock
     let discoverDebounceMilliseconds: Int?
     let completionRecovery: (any PluginCompletionRecovering)?
+    let settingsDiagnostics: (any PluginSettingsDiagnosing)?
 
     init(
         settings: PreparedSettingsDependencies,
@@ -53,7 +54,8 @@ struct PreparedApplicationDependencies {
         discoverCache: any DiscoverCaching = InMemoryDiscoverCache(),
         discoverClock: any DiscoverClock = SystemDiscoverClock(),
         discoverDebounceMilliseconds: Int? = DiscoverViewModel.productionDebounceMilliseconds,
-        completionRecovery: (any PluginCompletionRecovering)? = nil
+        completionRecovery: (any PluginCompletionRecovering)? = nil,
+        settingsDiagnostics: (any PluginSettingsDiagnosing)? = nil
     ) {
         self.settings = settings
         self.tracking = tracking ?? .unavailable()
@@ -80,6 +82,7 @@ struct PreparedApplicationDependencies {
         self.discoverClock = discoverClock
         self.discoverDebounceMilliseconds = discoverDebounceMilliseconds
         self.completionRecovery = completionRecovery
+        self.settingsDiagnostics = settingsDiagnostics
     }
 
     static func production(
@@ -209,7 +212,17 @@ struct PreparedApplicationDependencies {
                 libraryObserver: libraryManager,
                 trackerLinker: trackerManager
             ),
-            completionRecovery: completionRecovery
+            completionRecovery: completionRecovery,
+            settingsDiagnostics: PluginSettingsDiagnosticService(
+                settingsStore: pluginManager.pluginSettingsStore,
+                locatePlugin: { pluginID in
+                    guard let plugin = pluginManager.installedPlugins[pluginID] else {
+                        throw URLError(.fileDoesNotExist)
+                    }
+                    if let refusal = plugin.info.compatibilityRefusal { throw refusal }
+                    return plugin.url
+                }
+            )
         )
     }
 }
@@ -509,7 +522,8 @@ final class AppScope {
             categoryHistoryDependencies: preparedDependencies.categoryHistory,
             categoryHistoryMessagePresenter: categoryHistoryMessagePresenter,
             presentationLogger: preparedDependencies.presentationLogger,
-            completionRecovery: preparedDependencies.completionRecovery
+            completionRecovery: preparedDependencies.completionRecovery,
+            settingsDiagnostics: preparedDependencies.settingsDiagnostics
         )
     }
 

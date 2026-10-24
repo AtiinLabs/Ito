@@ -17,6 +17,7 @@ struct AppViewFactory {
     private let libraryDependencies: PreparedLibraryDependencies
     private let presentationLogger: any PresentationEventLogging
     private let completionRecovery: (any PluginCompletionRecovering)?
+    private let settingsDiagnostics: (any PluginSettingsDiagnosing)?
     let categoryHistoryViewFactory: CategoryHistoryViewFactory
     let trackingViewFactory: TrackingViewFactory
     let mediaDetailViewFactory: MediaDetailViewFactory?
@@ -44,7 +45,8 @@ struct AppViewFactory {
         categoryHistoryMessagePresenter: any CategoryHistoryMessagePresenting,
         presentationLogger: any PresentationEventLogging,
         searchRouteFactory: SearchRouteFactory? = nil,
-        completionRecovery: (any PluginCompletionRecovering)? = nil
+        completionRecovery: (any PluginCompletionRecovering)? = nil,
+        settingsDiagnostics: (any PluginSettingsDiagnosing)? = nil
     ) {
         self.rootModels = rootModels
         self.repositoryManagement = repositoryManagement
@@ -59,6 +61,7 @@ struct AppViewFactory {
         self.libraryDependencies = libraryDependencies
         self.presentationLogger = presentationLogger
         self.completionRecovery = completionRecovery
+        self.settingsDiagnostics = settingsDiagnostics
         let categoryHistoryViewFactory = CategoryHistoryViewFactory(
             dependencies: categoryHistoryDependencies,
             messagePresenter: categoryHistoryMessagePresenter,
@@ -215,7 +218,8 @@ struct AppViewFactory {
             schema: destination.schema,
             settingsStore: sourceDependencies.settingsStore,
             messagePresenter: sourceMessagePresenter,
-            completionRecovery: completionRecovery
+            completionRecovery: completionRecovery,
+            diagnostics: settingsDiagnostics
         )
     }
 

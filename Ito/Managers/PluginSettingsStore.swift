@@ -249,6 +249,26 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
         }
     }
 
+    /// Captures a synchronous in-memory snapshot of settings for a single plugin.
+    /// Lock order is secret lock -> DB read. Fails closed if any stored setting has invalid UTF-8.
+    func snapshot(pluginId: String) throws -> [String: String] {
+        try secrets.withSnapshot(pluginID: pluginId) { secretValues in
+            try dbPool.read { db in
+                let rows = try PluginSettingRecord.filter(Column("pluginId") == pluginId).fetchAll(db)
+                var settings: [String: String] = [:]
+                settings.reserveCapacity(rows.count + secretValues.count)
+                for row in rows {
+                    guard let value = String(data: row.value, encoding: .utf8) else {
+                        throw PluginCompletionScopeError.invalidSettingEncoding
+                    }
+                    settings[row.key] = value
+                }
+                settings.merge(secretValues) { _, secret in secret }
+                return settings
+            }
+        }
+    }
+
     public func reload() throws {
         try lock.withLock {
             try operationFault("reload")

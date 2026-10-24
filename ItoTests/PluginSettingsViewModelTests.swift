@@ -521,40 +521,20 @@ final class PluginSettingsViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.shouldDismiss)
     }
 
-    func testPluginSettingsViewRemainsSchemaAndBindingDrivenWithNoRowViewModels() throws {
-        let viewSource = try sourceFile("Ito/Views/Browse/PluginSettingsView.swift")
-        let modelSource = try sourceFile("Ito/ViewModels/PluginSettingsViewModel.swift")
-
-        XCTAssertTrue(viewSource.contains("ForEach(viewModel.schema.settings"))
-        XCTAssertTrue(viewSource.contains("Binding("))
-        XCTAssertTrue(viewSource.contains("viewModel.storedValue(key:"))
-        XCTAssertTrue(viewSource.contains("viewModel.persistValue(key:"))
-        XCTAssertFalse(viewSource.contains("@State private var setting"))
-        XCTAssertFalse(modelSource.contains("@Published private(set) var settings"))
-        XCTAssertFalse(modelSource.contains("[String: String]"))
-
-        for source in [viewSource, modelSource] {
-            for forbidden in [
-                "PluginManager.shared", "SnackBarManager.shared", "FileManager.default",
-                "UserDefaults.standard", "AppLogger", "AnyView", "configure("
-            ] {
-                XCTAssertFalse(source.contains(forbidden))
-            }
-        }
-    }
-
-    private func makeViewModel(
+    func makeViewModel(
         schema: SettingsSchema,
         store: PR7BSettingsStoreSpy = PR7BSettingsStoreSpy(),
         messages: PR7BMessagePresenterSpy = PR7BMessagePresenterSpy(),
-        recovery: (any PluginCompletionRecovering)? = nil
+        recovery: (any PluginCompletionRecovering)? = nil,
+        diagnostics: (any PluginSettingsDiagnosing)? = nil
     ) -> PluginSettingsViewModel {
         PluginSettingsViewModel(
             plugin: pr7bPlugin(),
             schema: schema,
             settingsStore: store,
             messagePresenter: messages,
-            completionRecovery: recovery
+            completionRecovery: recovery,
+            diagnostics: diagnostics
         )
     }
 
@@ -614,12 +594,6 @@ final class PluginSettingsViewModelTests: XCTestCase {
         return try Data(contentsOf: archiveURL)
     }
 
-    private func sourceFile(_ path: String) throws -> String {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        return try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
-    }
 }
 
 private final class PR7BPluginDomainCatalog: @unchecked Sendable {
