@@ -21,6 +21,8 @@ public final class AppDefaultsModule: DefaultsModule, @unchecked Sendable {
     public func set(key: String, value: String) {
         // Secrets come from the user. A plugin can't overwrite one or shadow it with a plain value.
         guard store.secrets.value(pluginID: pluginId, key: key) == nil else { return }
+        // The last write wins: a token stored earlier under the key would otherwise hide this value.
+        try? store.tokens.removeValue(pluginID: pluginId, key: key)
         store.set(pluginId: pluginId, key: key, value: value)
     }
 

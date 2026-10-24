@@ -134,6 +134,19 @@ struct PluginSecretSettingsTests {
         #expect(after == before)
     }
 
+    @Test func aLaterPlainValueReplacesAToken() throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let store = makeStore(database)
+        let module = AppDefaultsModule(pluginId: "komga", store: store)
+        module.setSecret(key: "auth", value: "token")
+
+        module.set(key: "auth", value: "plain")
+
+        #expect(module.get(key: "auth") == "plain")
+        #expect(store.tokens.value(pluginID: "komga", key: "auth") == nil)
+    }
+
     @Test func removingAPluginsSecretsKeepsEveryOtherPlugin() throws {
         let secrets = PluginSecretStore(keychain: InMemoryPluginSecretKeychain())
         try secrets.setValue("a", pluginID: "com.atiinlabs.komga", key: "api_key")
