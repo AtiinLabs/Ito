@@ -42,7 +42,7 @@ disabled_rules:
 excluded:
   - Carthage
   - Pods
-  - Tests
+  - ItoTests
   - DerivedData
   - build
   - projects
