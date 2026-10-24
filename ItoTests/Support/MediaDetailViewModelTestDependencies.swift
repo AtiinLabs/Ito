@@ -193,6 +193,7 @@ final class MediaDetailProgressFake: MediaDetailProgressServing {
 
     private let subject = PassthroughSubject<Void, Never>()
     var readChapterIDs: [MediaIdentity: Set<String>] = [:]
+    var readChapterNumbers: [MediaIdentity: Set<Float>] = [:]
     var lastRead: [MediaIdentity: String] = [:]
     var markError: (any Error)?
     private(set) var readRequests: [ReadRequest] = []
@@ -205,11 +206,19 @@ final class MediaDetailProgressFake: MediaDetailProgressServing {
 
     func isRead(media: MediaIdentity, chapterID: String, chapterNumber: Float?) -> Bool {
         readRequests.append(ReadRequest(media: media, chapterID: chapterID, chapterNumber: chapterNumber))
-        return readChapterIDs[media]?.contains(chapterID) == true
+        let hasReadChapterID = readChapterIDs[media]?.contains(chapterID) == true
+        let hasReadChapterNumber = chapterNumber.map {
+            readChapterNumbers[media]?.contains($0) == true
+        } ?? false
+        return hasReadChapterID || hasReadChapterNumber
     }
 
     func lastReadChapter(for media: MediaIdentity) -> String? {
         lastRead[media]
+    }
+
+    func readChapterNumbers(for media: MediaIdentity) -> Set<Float> {
+        readChapterNumbers[media] ?? []
     }
 
     func markReadUpTo(media: MediaIdentity, maximumChapterNumber: Float) async throws {

@@ -193,8 +193,36 @@ final class MediaDetailViewModelTests: XCTestCase {
 
         let subject = makeMangaSubject(media: manga(chapters: [chapter("one", 1)]))
         let identity = subject.viewModel.mediaIdentity
+        XCTAssertFalse(subject.viewModel.hasReadProgress)
+
         subject.progress.lastRead[identity] = "one"
         XCTAssertTrue(subject.viewModel.hasReadProgress)
+    }
+
+    func testTrackerSyncedReadChapterNumbersCountAsProgressWithoutChangingResumeTarget() {
+        let media = manga(chapters: [
+            chapter("one", 1), chapter("two", 2), chapter("three", 3)
+        ])
+        let subject = makeMangaSubject(media: media)
+        let identity = subject.viewModel.mediaIdentity
+
+        subject.progress.readChapterNumbers[identity] = [1, 2]
+
+        XCTAssertTrue(subject.viewModel.hasReadProgress)
+        XCTAssertEqual(subject.viewModel.resumeChapter?.key, "three")
+        XCTAssertNil(subject.progress.lastRead[identity])
+    }
+
+    func testNoSyncedReadMarkersMeansStartEvenWhenTrackerSyncIsDisabledOrProgressIsZero() {
+        let subject = makeMangaSubject(media: manga(chapters: [chapter("one", 1)]))
+        let identity = subject.viewModel.mediaIdentity
+
+        subject.settings.autoSyncTrackersToLocal = false
+        XCTAssertFalse(subject.viewModel.hasReadProgress)
+
+        subject.settings.autoSyncTrackersToLocal = true
+        subject.progress.readChapterNumbers[identity] = []
+        XCTAssertFalse(subject.viewModel.hasReadProgress)
     }
 
     func testInitialAndExternalAuthoritativeLibraryStatePublication() async {

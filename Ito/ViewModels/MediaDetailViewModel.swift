@@ -240,7 +240,9 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     var hasReadProgress: Bool {
-        dependencies.progress.lastReadChapter(for: mediaIdentity) != nil
+        let identity = mediaIdentity
+        return dependencies.progress.lastReadChapter(for: identity) != nil
+            || !dependencies.progress.readChapterNumbers(for: identity).isEmpty
     }
 
     var displayedChapters: [M.Chapter] {
