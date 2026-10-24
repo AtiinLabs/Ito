@@ -204,9 +204,6 @@ struct PluginSettingsDiagnosticServiceTests {
         await #expect(throws: URLError.self) {
             try await net.fetch(request: request)
         }
-        await #expect(throws: URLError.self) {
-            try await net.fetch(request: request, options: NetOptions())
-        }
     }
 
     @Test func diagnosticWebviewModuleRejectsAll() async throws {

@@ -6,10 +6,6 @@ nonisolated struct PluginDiagnosticDenyingNetModule: NetModule, Sendable {
     func fetch(request: NetRequest) async throws -> NetResponse {
         throw URLError(.notConnectedToInternet)
     }
-
-    func fetch(request: NetRequest, options: NetOptions) async throws -> NetResponse {
-        throw URLError(.notConnectedToInternet)
-    }
 }
 
 /// A diagnostic runs headless: it never loads a page, runs a page script, or shows login.
