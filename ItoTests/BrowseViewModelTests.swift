@@ -210,6 +210,25 @@ final class BrowseViewModelTests: XCTestCase {
         XCTAssertEqual(messages.messages, [.deleteFailed(pluginName: "Plugin", reason: "fixture failure")])
     }
 
+    func testFailedTrustRevocationKeepsPluginFileAndSecrets() async {
+        let plugin = makePlugin(id: "plugin", name: "Plugin")
+        let plugins = BrowsePluginManagerSpy(installedPlugins: [plugin.id: plugin])
+        plugins.trustRevocationError = BrowseTestFailure.failed
+        let files = BrowsePluginFileOperationsSpy()
+        let messages = BrowseMessagePresenterSpy()
+        let viewModel = makeViewModel(plugins: plugins, files: files, messages: messages)
+
+        viewModel.requestDelete(plugin)
+        await viewModel.confirmDelete()
+
+        // Pins that could not be deleted must not outlive the file and return with a reinstall.
+        XCTAssertEqual(plugins.revokedTrustPluginIDs, [plugin.id])
+        XCTAssertTrue(files.deleteInvocations.isEmpty)
+        XCTAssertTrue(plugins.removedSecretsPluginIDs.isEmpty)
+        XCTAssertEqual(plugins.reloadCallCount, 0)
+        XCTAssertEqual(messages.messages, [.deleteFailed(pluginName: "Plugin", reason: "fixture failure")])
+    }
+
     func testSuccessfulDeleteRefreshesOnlyAfterFileOperationSucceeds() async {
         let plugin = makePlugin(id: "plugin", name: "Plugin")
         let plugins = BrowsePluginManagerSpy(installedPlugins: [plugin.id: plugin])
@@ -817,6 +836,8 @@ private final class BrowsePluginManagerSpy: BrowsePluginManaging {
     private(set) var reloadCallCount = 0
     private(set) var removedSecretsPluginIDs: [String] = []
     var completionHoldError: (any Error)?
+    var trustRevocationError: (any Error)?
+    private(set) var revokedTrustPluginIDs: [String] = []
     private(set) var purgedCompletionPluginIDs: [String] = []
     var onReload: (() -> Void)?
     var suspendReload = false
@@ -844,6 +865,11 @@ private final class BrowsePluginManagerSpy: BrowsePluginManaging {
 
     func purgeCompletionDelivery(for pluginID: String) async {
         purgedCompletionPluginIDs.append(pluginID)
+    }
+
+    func revokeTrust(for pluginID: String) throws {
+        revokedTrustPluginIDs.append(pluginID)
+        if let trustRevocationError { throw trustRevocationError }
     }
 
     func removeSecrets(for pluginID: String) {

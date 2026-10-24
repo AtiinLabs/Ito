@@ -68,13 +68,23 @@ public struct SearchPluginFailure: Identifiable, Equatable {
     public let canOpenSettings: Bool
     /// The source needs a sign-in on its website.
     public let canSignIn: Bool
+    /// An untrusted certificate waiting for user confirmation, if any.
+    public let pendingTrust: PendingTrust?
 
-    public init(pluginID: String, pluginName: String, message: String, canOpenSettings: Bool, canSignIn: Bool = false) {
+    public init(
+        pluginID: String,
+        pluginName: String,
+        message: String,
+        canOpenSettings: Bool,
+        canSignIn: Bool = false,
+        pendingTrust: PendingTrust? = nil
+    ) {
         self.pluginID = pluginID
         self.pluginName = pluginName
         self.message = message
         self.canOpenSettings = canOpenSettings
         self.canSignIn = canSignIn
+        self.pendingTrust = pendingTrust
     }
 
     public var id: String { pluginID }

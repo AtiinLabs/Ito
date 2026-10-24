@@ -24,6 +24,7 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
     private let session: URLSession
     private let maximumResponseBytes: Int
     private let cookies: @Sendable (URL) -> [HTTPCookie]
+    private let trust: (pluginID: String, store: PluginTrustStore)?
 
     /// `cookies` returns the plugin's stored cookies for a URL. `configuration` and
     /// `maximumResponseBytes` exist so tests can install a protocol stub and a small limit.
@@ -31,7 +32,8 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
     init(
         configuration: URLSessionConfiguration = .ephemeral,
         maximumResponseBytes: Int = PluginCompletionNetModule.defaultMaximumResponseBytes,
-        cookies: @escaping @Sendable (URL) -> [HTTPCookie] = { _ in [] }
+        cookies: @escaping @Sendable (URL) -> [HTTPCookie] = { _ in [] },
+        trust: (pluginID: String, store: PluginTrustStore)? = nil
     ) {
         let hardened = (configuration.copy() as? URLSessionConfiguration) ?? .ephemeral
         hardened.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
@@ -46,6 +48,7 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
         session = URLSession(configuration: hardened)
         self.maximumResponseBytes = maximumResponseBytes
         self.cookies = cookies
+        self.trust = trust
     }
 
     deinit {
@@ -59,11 +62,12 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
 
     func fetch(request: NetRequest) async throws -> NetResponse {
         let urlRequest = try Self.makeRequest(from: request, cookies: cookies)
-        let refusal = RedirectRefusal()
+        let refusal = RedirectRefusal(pluginID: trust?.pluginID, trustStore: trust?.store, recordsPending: false)
         do {
             return try await transfer(urlRequest, refusal: refusal)
         } catch {
             if let redirect = refusal.response { return redirect }
+            if !Task.isCancelled, let error = refusal.trustError { throw error }
             if Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled {
                 throw CancellationError()
             }
@@ -135,7 +139,7 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
 
 /// Refuses every redirect. The redirect response is kept so the caller can return it as the
 /// answer, whichever way URLSession then ends the transfer.
-private nonisolated final class RedirectRefusal: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+private nonisolated final class RedirectRefusal: PluginTrustDelegate, @unchecked Sendable {
     private let lock = NSLock()
     private var refused: NetResponse?
 

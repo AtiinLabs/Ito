@@ -22,6 +22,8 @@ struct UITestLaunchConfiguration {
         "moe.itoapp.ito.ui-tests.plugin-cookies"
     nonisolated static let fixturePluginTokenKeychainService =
         "moe.itoapp.ito.ui-tests.plugin-tokens"
+    nonisolated static let fixturePluginTrustKeychainService =
+        "moe.itoapp.ito.ui-tests.plugin-tls-trust"
 
     let resetsStorage: Bool
     let repositoryDeepLinkEnabled: Bool

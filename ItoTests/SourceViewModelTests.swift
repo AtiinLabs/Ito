@@ -518,6 +518,27 @@ final class SourceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.archivedPluginDeleteError, "fixture failure")
     }
 
+    func testArchivedDeleteTrustRevocationFailureStagesNothing() async {
+        let files = PR7BFileDeletionSpy()
+        let publisher = PR7BPluginStatePublisherSpy()
+        publisher.trustRevocationError = PR7BTestFailure.failed
+        let viewModel = makeViewModel(
+            plugin: pr7bPlugin(archived: true),
+            publisher: publisher,
+            files: files
+        )
+        viewModel.requestArchivedPluginDeletion()
+
+        await viewModel.confirmArchivedPluginDeletion()
+
+        XCTAssertEqual(publisher.revokedTrustPluginIDs, [pr7bPlugin(archived: true).id])
+        XCTAssertTrue(files.stagedSnapshots.isEmpty)
+        XCTAssertEqual(publisher.callCount, 0)
+        XCTAssertTrue(publisher.removedSecretsPluginIDs.isEmpty)
+        XCTAssertFalse(viewModel.shouldDismiss)
+        XCTAssertEqual(viewModel.archivedPluginDeleteError, "fixture failure")
+    }
+
     func testArchivedDeletePublicationFailureRollsBackAndDoesNotDismiss() async {
         let files = PR7BFileDeletionSpy()
         let publisher = PR7BPluginStatePublisherSpy()

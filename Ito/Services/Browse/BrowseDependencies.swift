@@ -13,6 +13,9 @@ protocol BrowsePluginManaging: AnyObject {
     func holdCompletionDelivery(for pluginID: String) async throws
     /// Forgets a removed source's held delivery.
     func purgeCompletionDelivery(for pluginID: String) async
+    /// Revokes the plugin's trusted server certificates. Runs before its file is removed; a
+    /// failure stops the removal.
+    func revokeTrust(for pluginID: String) throws
     /// Forgets a deleted plugin's secret settings.
     func removeSecrets(for pluginID: String)
 }
@@ -63,7 +66,7 @@ extension PluginManager: BrowsePluginManaging {
 
     /// Deleting a plugin removes its secrets (API keys, passwords), the tokens it stored and its
     /// website cookies from the Keychain. Its plain settings stay, as they always have, so a
-    /// reinstall keeps them.
+    /// reinstall keeps them. Trusted certificates are revoked earlier, by `revokeTrust(for:)`.
     func removeSecrets(for pluginID: String) {
         do {
             try pluginSettingsStore.secrets.removeAll(pluginID: pluginID)
@@ -80,6 +83,12 @@ extension PluginManager: BrowsePluginManaging {
         } catch {
             AppLogger.plugin.error("The cookies of a deleted plugin could not be removed.")
         }
+    }
+
+    /// Pins are revoked in memory even when the Keychain delete fails, and the removal stops, so
+    /// trust can never outlive the plugin file and silently return with a reinstall.
+    func revokeTrust(for pluginID: String) throws {
+        try pluginSettingsStore.trust.removeAll(pluginID: pluginID)
     }
 }
 

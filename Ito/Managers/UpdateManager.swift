@@ -48,6 +48,13 @@ protocol LibraryUpdateSource: AnyObject {
     /// The sources that can be checked now.
     var installedPluginIDs: Set<String> { get }
     func fetchUpdate(for item: LibraryItem) async throws -> UpdateManager.SuccessfulUpdate
+    func pendingTrust(for pluginID: String) -> PendingTrust?
+    func clearPendingTrust(for pluginID: String)
+}
+
+extension LibraryUpdateSource {
+    func pendingTrust(for pluginID: String) -> PendingTrust? { nil }
+    func clearPendingTrust(for pluginID: String) {}
 }
 
 /// Checks series through their installed plugins.
@@ -64,6 +71,7 @@ final class PluginLibraryUpdateSource: LibraryUpdateSource {
     }
 
     func fetchUpdate(for item: LibraryItem) async throws -> UpdateManager.SuccessfulUpdate {
+        clearPendingTrust(for: item.pluginId)
         let runner = try await pluginManager.getRunner(for: item.pluginId)
         return try await pluginCall {
             switch item.effectiveType {
@@ -95,6 +103,14 @@ final class PluginLibraryUpdateSource: LibraryUpdateSource {
                 )
             }
         }
+    }
+
+    func pendingTrust(for pluginID: String) -> PendingTrust? {
+        pluginManager.pluginSettingsStore.trust.pending(pluginID: pluginID)
+    }
+
+    func clearPendingTrust(for pluginID: String) {
+        pluginManager.pluginSettingsStore.trust.clearPending(pluginID: pluginID)
     }
 }
 
@@ -367,7 +383,8 @@ public class UpdateManager: ObservableObject {
                 pluginID: item.pluginId,
                 reason: error.localizedDescription,
                 needsSettings: (error as? PluginCallError)?.kind == .needsSettings,
-                needsLogin: (error as? PluginCallError)?.kind == .needsLogin
+                needsLogin: (error as? PluginCallError)?.kind == .needsLogin,
+                pendingTrust: updateSource?.pendingTrust(for: item.pluginId)
             )
             if let index = sourceFailures.firstIndex(where: { $0.pluginID == item.pluginId }) {
                 // Keep one row per source, preferring an actionable failure (settings or sign-in).

@@ -65,6 +65,8 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
     /// from the secrets the user entered. Changing one never rotates image caches or completion
     /// scopes: plugins refresh tokens routinely.
     public let tokens: PluginSecretStore
+    /// Server certificates the user trusted for each source's self-hosted servers.
+    public let trust: PluginTrustStore
     let completionStore: PluginCompletionStore
     private let dbPool: DatabasePool
     private let standardApplicationDomain: String
@@ -95,7 +97,8 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
         cookies: PluginCookieJar = PluginCookieJar(),
         tokens: PluginSecretStore = PluginSecretStore(
             keychain: SystemPluginSecretKeychain(service: PluginSecretStore.tokenService)
-        )
+        ),
+        trust: PluginTrustStore = PluginTrustStore()
     ) {
         self.dbPool = dbPool
         self.standardApplicationDomain = standardApplicationDomain
@@ -106,6 +109,7 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
         self.secrets = secrets
         self.cookies = cookies
         self.tokens = tokens
+        self.trust = trust
         completionStore = PluginCompletionStore(dbPool: dbPool, secrets: secrets, tokens: tokens)
         secrets.configureBeforeMutation { [dbPool] pluginID in
             try dbPool.write { db in

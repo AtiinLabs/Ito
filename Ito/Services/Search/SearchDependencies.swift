@@ -41,6 +41,13 @@ protocol SearchPluginExecuting: AnyObject {
     ) async throws -> [PluginSearchResult]
 
     func evictRunner(for pluginID: String)
+    func pendingTrust(for pluginID: String) -> PendingTrust?
+    func clearPendingTrust(for pluginID: String)
+}
+
+extension SearchPluginExecuting {
+    func pendingTrust(for pluginID: String) -> PendingTrust? { nil }
+    func clearPendingTrust(for pluginID: String) {}
 }
 
 @MainActor
@@ -116,6 +123,7 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
         query: String,
         limit: Int
     ) async throws -> [PluginSearchResult] {
+        clearPendingTrust(for: plugin.id)
         let link = SearchLink(query: query)
         if let link, !link.belongs(toSite: plugin.siteURL) { return [] }
 
@@ -240,6 +248,10 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
         pluginManager.evictRunner(for: pluginID)
     }
 
+    func pendingTrust(for pluginID: String) -> PendingTrust? {
+        pluginManager.pluginSettingsStore.trust.pending(pluginID: pluginID)
+    }
+
     private func searchKind(for plugin: InstalledPlugin) -> SearchPluginKind {
         switch plugin.info.type {
         case .manga:
@@ -251,6 +263,10 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
         @unknown default:
             return .unsupported
         }
+    }
+
+    func clearPendingTrust(for pluginID: String) {
+        pluginManager.pluginSettingsStore.trust.clearPending(pluginID: pluginID)
     }
 
     /// Preserve the plugin's user-facing reason; the view model separately classifies telemetry.

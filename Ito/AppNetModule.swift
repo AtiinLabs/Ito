@@ -62,39 +62,41 @@ struct LiveAppNetCloudflareHandler: AppNetCloudflareHandling {
 /// clearance) and then this plugin's own cookies; cookies the site sets are kept for this plugin
 /// only.
 actor AppNetModule: NetModule {
-    private let urlSession: URLSession
+    /// Replaced when this plugin's trust changes; see `PluginSessionPool`.
+    private let sessions: PluginSessionPool
     private let cloudflare: any AppNetCloudflareHandling
     private let retryLogger: any AppNetRetryLogging
     private let pluginID: String
     private let cookieJar: PluginCookieJar
+    private let trust: PluginTrustStore?
 
-    init(pluginID: String, cookieJar: PluginCookieJar) {
+    init(pluginID: String, cookieJar: PluginCookieJar, trust: PluginTrustStore) {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
-        self.urlSession = URLSession(configuration: config)
+        config.urlCredentialStorage = nil
+        self.sessions = PluginSessionPool(configuration: config, trust: trust)
         self.cloudflare = LiveAppNetCloudflareHandler()
         self.retryLogger = OSLogAppNetRetryLogger()
         self.pluginID = pluginID
         self.cookieJar = cookieJar
+        self.trust = trust
     }
 
     init(
-        urlSession: URLSession,
+        configuration: URLSessionConfiguration,
         cloudflare: any AppNetCloudflareHandling,
         retryLogger: any AppNetRetryLogging,
         pluginID: String,
-        cookieJar: PluginCookieJar
+        cookieJar: PluginCookieJar,
+        trust: PluginTrustStore? = nil
     ) {
-        self.urlSession = urlSession
+        self.sessions = PluginSessionPool(configuration: configuration, trust: trust)
         self.cloudflare = cloudflare
         self.retryLogger = retryLogger
         self.pluginID = pluginID
         self.cookieJar = cookieJar
-    }
-
-    deinit {
-        urlSession.invalidateAndCancel()
+        self.trust = trust
     }
 
     func fetch(request: NetRequest) async throws -> NetResponse {
@@ -140,17 +142,28 @@ actor AppNetModule: NetModule {
             urlRequest.httpBody = Data(body)
         }
 
-        let session = self.urlSession
+        let sessions = self.sessions
         let cookieJar = self.cookieJar
         let pluginID = self.pluginID
         let redirects = AppNetCookieRedirects(
             originalHost: url.host,
             explicitCookies: explicitCookies,
             storedCookies: { url in Self.storedCookies(for: url, pluginID: pluginID, in: cookieJar) },
-            keep: { response in Self.keepSetCookies(of: response, pluginID: pluginID, in: cookieJar) }
+            keep: { response in Self.keepSetCookies(of: response, pluginID: pluginID, in: cookieJar) },
+            pluginID: pluginID,
+            trust: trust
         )
 
-        let (data, response) = try await session.data(for: urlRequest, delegate: redirects)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await sessions.withSession(for: pluginID) { session in
+                try await session.data(for: urlRequest, delegate: redirects)
+            }
+        } catch {
+            if Task.isCancelled { throw CancellationError() }
+            throw redirects.trustError ?? error
+        }
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
@@ -257,7 +270,7 @@ actor AppNetModule: NetModule {
 /// Follows a request's redirects with the right cookies: each redirect's Set-Cookie is kept for
 /// the URL that sent it, and the next request carries only the cookies stored for its own URL.
 /// The plugin's own Cookie header goes along only while the host stays the same.
-private nonisolated final class AppNetCookieRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+private nonisolated final class AppNetCookieRedirects: PluginTrustDelegate, @unchecked Sendable {
     private let originalHost: String?
     private let explicitCookies: String?
     private let storedCookies: @Sendable (URL) -> [HTTPCookie]
@@ -267,12 +280,15 @@ private nonisolated final class AppNetCookieRedirects: NSObject, URLSessionTaskD
         originalHost: String?,
         explicitCookies: String?,
         storedCookies: @escaping @Sendable (URL) -> [HTTPCookie],
-        keep: @escaping @Sendable (HTTPURLResponse) -> Void
+        keep: @escaping @Sendable (HTTPURLResponse) -> Void,
+        pluginID: String,
+        trust: PluginTrustStore?
     ) {
         self.originalHost = originalHost?.lowercased()
         self.explicitCookies = explicitCookies
         self.storedCookies = storedCookies
         self.keep = keep
+        super.init(pluginID: pluginID, trustStore: trust)
     }
 
     func urlSession(

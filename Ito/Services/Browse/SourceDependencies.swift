@@ -110,6 +110,13 @@ final class ItoRunnerSourceContext: SourceRunnerContext {
 protocol SourceRunnerProviding: AnyObject {
     func sourceRunnerContext(for pluginID: String) async throws -> any SourceRunnerContext
     func evictSourceRunner(for pluginID: String)
+    func pendingTrust(for pluginID: String) -> PendingTrust?
+    func clearPendingTrust(for pluginID: String)
+}
+
+extension SourceRunnerProviding {
+    func pendingTrust(for pluginID: String) -> PendingTrust? { nil }
+    func clearPendingTrust(for pluginID: String) {}
 }
 
 extension PluginManager: SourceRunnerProviding {
@@ -119,6 +126,14 @@ extension PluginManager: SourceRunnerProviding {
 
     func evictSourceRunner(for pluginID: String) {
         evictRunner(for: pluginID)
+    }
+
+    func pendingTrust(for pluginID: String) -> PendingTrust? {
+        pluginSettingsStore.trust.pending(pluginID: pluginID)
+    }
+
+    func clearPendingTrust(for pluginID: String) {
+        pluginSettingsStore.trust.clearPending(pluginID: pluginID)
     }
 }
 
@@ -174,6 +189,7 @@ protocol SourcePluginStatePublishing: AnyObject {
     func currentSourcePlugin(for pluginID: String) -> InstalledPlugin?
     func prepareSourcePluginStatePublication() async throws -> any SourcePluginStatePublication
     func holdCompletionDelivery(for pluginID: String) async throws
+    func revokeTrust(for pluginID: String) throws
     func purgeCompletionDelivery(for pluginID: String) async
     func removeSecrets(for pluginID: String)
 }
@@ -471,6 +487,10 @@ private final class UnavailableSourceDependency: SourceRunnerProviding,
     }
 
     func holdCompletionDelivery(for pluginID: String) async throws {
+        throw SourceDependencyUnavailableError.unavailable
+    }
+
+    func revokeTrust(for pluginID: String) throws {
         throw SourceDependencyUnavailableError.unavailable
     }
 

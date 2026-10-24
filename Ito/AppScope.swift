@@ -29,6 +29,7 @@ struct PreparedApplicationDependencies {
     let completionRecovery: (any PluginCompletionRecovering)?
     let settingsDiagnostics: (any PluginSettingsDiagnosing)?
     let pluginCookies: PluginCookieJar?
+    let pluginTrust: PluginTrustStore?
 
     init(
         settings: PreparedSettingsDependencies,
@@ -57,7 +58,8 @@ struct PreparedApplicationDependencies {
         discoverDebounceMilliseconds: Int? = DiscoverViewModel.productionDebounceMilliseconds,
         completionRecovery: (any PluginCompletionRecovering)? = nil,
         settingsDiagnostics: (any PluginSettingsDiagnosing)? = nil,
-        pluginCookies: PluginCookieJar? = nil
+        pluginCookies: PluginCookieJar? = nil,
+        pluginTrust: PluginTrustStore? = nil
     ) {
         self.settings = settings
         self.tracking = tracking ?? .unavailable()
@@ -86,6 +88,7 @@ struct PreparedApplicationDependencies {
         self.completionRecovery = completionRecovery
         self.settingsDiagnostics = settingsDiagnostics
         self.pluginCookies = pluginCookies
+        self.pluginTrust = pluginTrust
     }
 
     static func production(
@@ -230,7 +233,8 @@ struct PreparedApplicationDependencies {
                     return plugin.url
                 }
             ),
-            pluginCookies: pluginManager.pluginSettingsStore.cookies
+            pluginCookies: pluginManager.pluginSettingsStore.cookies,
+            pluginTrust: pluginManager.pluginSettingsStore.trust
         )
     }
 }
@@ -532,7 +536,8 @@ final class AppScope {
             presentationLogger: preparedDependencies.presentationLogger,
             completionRecovery: preparedDependencies.completionRecovery,
             settingsDiagnostics: preparedDependencies.settingsDiagnostics,
-            pluginCookies: preparedDependencies.pluginCookies
+            pluginCookies: preparedDependencies.pluginCookies,
+            pluginTrust: preparedDependencies.pluginTrust
         )
     }
 

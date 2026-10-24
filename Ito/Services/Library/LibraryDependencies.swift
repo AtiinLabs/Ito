@@ -75,15 +75,18 @@ struct LibraryUpdateFailure: Identifiable, Equatable, Sendable {
     let needsSettings: Bool
     /// The source needs a sign-in on its website.
     let needsLogin: Bool
+    /// An untrusted certificate waiting for user confirmation, if any.
+    let pendingTrust: PendingTrust?
 
-    init(pluginID: String, reason: String, needsSettings: Bool, needsLogin: Bool = false) {
+    init(pluginID: String, reason: String, needsSettings: Bool, needsLogin: Bool = false, pendingTrust: PendingTrust? = nil) {
         self.pluginID = pluginID
         self.reason = reason
         self.needsSettings = needsSettings
         self.needsLogin = needsLogin
+        self.pendingTrust = pendingTrust
     }
 
-    var isActionable: Bool { needsSettings || needsLogin }
+    var isActionable: Bool { needsSettings || needsLogin || pendingTrust != nil }
 
     var id: String { pluginID }
 }

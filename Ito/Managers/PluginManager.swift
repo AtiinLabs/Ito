@@ -152,7 +152,7 @@ public class PluginManager: ObservableObject {
     ) async throws -> (runner: ItoRunner, defaults: AppDefaultsModule) {
         let runner = ItoRunner()
         let defaults = AppDefaultsModule(pluginId: pluginID, store: settingsStore)
-        await runner.setNetModule(AppNetModule(pluginID: pluginID, cookieJar: settingsStore.cookies))
+        await runner.setNetModule(AppNetModule(pluginID: pluginID, cookieJar: settingsStore.cookies, trust: settingsStore.trust))
         await runner.setStdModule(DefaultStdModule())
         await runner.setDefaultsModule(defaults)
         await runner.setHtmlModule(DefaultHtmlModule())
@@ -333,6 +333,10 @@ public class PluginManager: ObservableObject {
         }
         // Also evict ALL runners to pick up updated .ito files
         runnerCache.removeAll()
+        // A source removed in this launch trusts certificates again only once reinstalled.
+        for pluginID in newCache.keys {
+            pluginSettingsStore.trust.activateInstalledPlugin(pluginID)
+        }
         installedPluginsPublicationRevision &+= 1
         AppLogger.plugin.debug(
             "🔌 [PluginManager] Cleared runner cache (\(newCache.count) plugins loaded)"

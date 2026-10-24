@@ -44,8 +44,11 @@ nonisolated enum PluginImageTransportError: LocalizedError, Equatable, Sendable 
     }
 }
 
+/// Each source's requests use its own connection pool, replaced when its trust changes; see
+/// `PluginSessionPool`.
 nonisolated final class PluginImageTransport: Sendable {
-    private let session: URLSession
+    private let sessions: PluginSessionPool
+    private let trust: PluginTrustStore?
 
     private static let prohibitedHeaders: Set<String> = [
         "host",
@@ -65,7 +68,7 @@ nonisolated final class PluginImageTransport: Sendable {
         charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&'*+-.^_`|~"
     )
 
-    init(configuration: URLSessionConfiguration = .ephemeral) {
+    init(configuration: URLSessionConfiguration = .ephemeral, trust: PluginTrustStore? = nil) {
         let config: URLSessionConfiguration
         if let copied = configuration.copy() as? URLSessionConfiguration {
             config = copied
@@ -78,11 +81,8 @@ nonisolated final class PluginImageTransport: Sendable {
         config.urlCredentialStorage = nil
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
-        self.session = URLSession(configuration: config)
-    }
-
-    deinit {
-        session.invalidateAndCancel()
+        self.sessions = PluginSessionPool(configuration: config, trust: trust)
+        self.trust = trust
     }
 
     struct NormalizedOrigin: Equatable, Hashable, CustomStringConvertible, Sendable {
@@ -174,7 +174,8 @@ nonisolated final class PluginImageTransport: Sendable {
     func fetch(
         url: URL,
         headers: [String: String]?,
-        allowedOrigins: [String]
+        allowedOrigins: [String],
+        pluginID: String? = nil
     ) async throws -> (Data, HTTPURLResponse) {
         let initialOrigin = try Self.parseAndNormalizeOrigin(from: url)
 
@@ -198,11 +199,15 @@ nonisolated final class PluginImageTransport: Sendable {
 
         let delegate = RedirectDelegate(
             originalOrigin: initialOrigin,
-            explicitHeaders: validatedHeaders
+            explicitHeaders: validatedHeaders,
+            pluginID: pluginID,
+            trust: trust
         )
 
         do {
-            let (data, response) = try await session.data(for: request, delegate: delegate)
+            let (data, response) = try await sessions.withSession(for: pluginID) { session in
+                try await session.data(for: request, delegate: delegate)
+            }
 
             if let redirectError = delegate.redirectError {
                 throw redirectError
@@ -218,6 +223,7 @@ nonisolated final class PluginImageTransport: Sendable {
 
             return (data, httpResponse)
         } catch {
+            if !Task.isCancelled, let trustError = delegate.trustError { throw trustError }
             if let redirectError = delegate.redirectError {
                 throw redirectError
             }
@@ -234,7 +240,7 @@ nonisolated final class PluginImageTransport: Sendable {
     }
 }
 
-private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+private final class RedirectDelegate: PluginTrustDelegate, @unchecked Sendable {
     private let originalOrigin: PluginImageTransport.NormalizedOrigin
     private let explicitHeaders: [String: String]
     private let lock = NSLock()
@@ -242,11 +248,13 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, @uncheck
 
     init(
         originalOrigin: PluginImageTransport.NormalizedOrigin,
-        explicitHeaders: [String: String]
+        explicitHeaders: [String: String],
+        pluginID: String?,
+        trust: PluginTrustStore?
     ) {
         self.originalOrigin = originalOrigin
         self.explicitHeaders = explicitHeaders
-        super.init()
+        super.init(pluginID: pluginID, trustStore: trust)
     }
 
     var redirectError: Error? {

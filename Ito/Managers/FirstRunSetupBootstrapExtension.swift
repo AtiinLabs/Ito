@@ -3,17 +3,20 @@ import GRDB
 import OSLog
 
 /// One-time setup for this database, run during bootstrap:
-/// - removes plugin secrets, plugin tokens and website cookies an earlier installation left in the
-///   Keychain (iOS keeps Keychain items after the app is deleted, so a reinstall would otherwise
-///   inherit old credentials and sessions);
+/// - removes plugin secrets, plugin tokens, website cookies and trusted server certificates an
+///   earlier installation left in the Keychain (iOS keeps Keychain items after the app is deleted,
+///   so a reinstall would otherwise inherit old credentials, sessions and trust);
 /// - adds the AtiinLabs plugin repository. It is added once: a user who removes it keeps it removed.
 ///
 /// If the Keychain can't be cleared yet (a background launch before the first unlock), nothing is
-/// recorded and the setup runs again on the next launch.
+/// recorded and the setup runs again on the next launch. Trust is cleared first: if that fails,
+/// the trust store refuses every pinned certificate for this launch, so no earlier installation's
+/// pin can authorize a connection.
 struct FirstRunSetupBootstrapExtension: DurableStateBootstrapExtension {
     private let secrets: PluginSecretStore
     private let cookies: PluginCookieJar
     private let tokens: PluginSecretStore
+    private let trust: PluginTrustStore
     private let defaultRepositoryURL: String
     private let clock: @Sendable () -> Date
 
@@ -21,12 +24,14 @@ struct FirstRunSetupBootstrapExtension: DurableStateBootstrapExtension {
         secrets: PluginSecretStore,
         cookies: PluginCookieJar,
         tokens: PluginSecretStore,
+        trust: PluginTrustStore,
         defaultRepositoryURL: String = RepoManager.defaultRepositoryURL,
         clock: @escaping @Sendable () -> Date = Date.init
     ) {
         self.secrets = secrets
         self.cookies = cookies
         self.tokens = tokens
+        self.trust = trust
         self.defaultRepositoryURL = defaultRepositoryURL
         self.clock = clock
     }
@@ -38,11 +43,12 @@ struct FirstRunSetupBootstrapExtension: DurableStateBootstrapExtension {
         guard !hasRun else { return }
 
         do {
+            try trust.removeEveryPlugin()
             try secrets.removeAll()
             try cookies.removeEveryPlugin()
             try tokens.removeAll()
         } catch {
-            AppLogger.plugin.error("First-run setup deferred: plugin secrets, tokens or cookies could not be cleared.")
+            AppLogger.plugin.error("First-run setup deferred: plugin credentials could not be cleared.")
             return
         }
 

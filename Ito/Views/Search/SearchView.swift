@@ -6,8 +6,11 @@ struct SearchView: View {
     private let makePluginSettings: (String) -> PluginSettingsRecoverySheet
     private let signInTarget: (String) -> PluginSignInTarget?
     private let makePluginSignIn: (PluginSignInTarget) -> PluginSignInSheet?
+    private let pendingTrust: (String) -> PendingTrust?
+    private let trustAction: (PendingTrust, @escaping () -> Void) -> TrustCertificateAction?
     @State private var settingsPlugin: SettingsPlugin?
     @State private var signInPlugin: PluginSignInTarget?
+    @State private var activeTrustAction: TrustCertificateAction?
 
     private struct SettingsPlugin: Identifiable {
         let id: String
@@ -18,13 +21,17 @@ struct SearchView: View {
         routeFactory: SearchRouteFactory,
         makePluginSettings: @escaping (String) -> PluginSettingsRecoverySheet,
         signInTarget: @escaping (String) -> PluginSignInTarget? = { _ in nil },
-        makePluginSignIn: @escaping (PluginSignInTarget) -> PluginSignInSheet? = { _ in nil }
+        makePluginSignIn: @escaping (PluginSignInTarget) -> PluginSignInSheet? = { _ in nil },
+        pendingTrust: @escaping (String) -> PendingTrust? = { _ in nil },
+        trustAction: @escaping (PendingTrust, @escaping () -> Void) -> TrustCertificateAction? = { _, _ in nil }
     ) {
         self._viewModel = StateObject(wrappedValue: viewModel)
         self.routeFactory = routeFactory
         self.makePluginSettings = makePluginSettings
         self.signInTarget = signInTarget
         self.makePluginSignIn = makePluginSignIn
+        self.pendingTrust = pendingTrust
+        self.trustAction = trustAction
     }
 
     var body: some View {
@@ -51,6 +58,16 @@ struct SearchView: View {
             viewModel.performSearch(query: viewModel.searchText)
         }) { target in
             makePluginSignIn(target)
+        }
+        .sheet(item: $activeTrustAction) { action in
+            PluginCertificateConfirmationSheet(
+                sourceName: action.sourceName,
+                request: action.request,
+                onTrust: {
+                    try action.confirm()
+                    action.onSuccess()
+                }
+            )
         }
     }
 
@@ -260,6 +277,13 @@ struct SearchView: View {
                     if failure.canSignIn, let target = signInTarget(failure.pluginID) {
                         Button("Sign In") {
                             signInPlugin = target
+                        }
+                    }
+                    if let request = failure.pendingTrust ?? pendingTrust(failure.pluginID) {
+                        Button("Trust Certificate…") {
+                            activeTrustAction = trustAction(request) {
+                                viewModel.performSearch(query: viewModel.searchText)
+                            }
                         }
                     }
                 }

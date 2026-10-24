@@ -34,7 +34,8 @@ final class AtsuPluginLiveImageIntegrationTests: XCTestCase {
         let runner = ItoRunner()
         await runner.setNetModule(AppNetModule(
             pluginID: "com.kunihir0.ito.atsumaru",
-            cookieJar: PluginCookieJar(keychain: InMemoryPluginSecretKeychain())
+            cookieJar: PluginCookieJar(keychain: InMemoryPluginSecretKeychain()),
+            trust: PluginTrustStore(keychain: InMemoryPluginSecretKeychain())
         ))
         await runner.setStdModule(DefaultStdModule())
         await runner.setHtmlModule(DefaultHtmlModule())

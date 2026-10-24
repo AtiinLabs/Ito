@@ -281,7 +281,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
         let jar = PluginCookieJar(keychain: InMemoryPluginSecretKeychain())
         func module(_ pluginID: String) -> AppNetModule {
             AppNetModule(
-                urlSession: URLSession(configuration: config),
+                configuration: config,
                 cloudflare: StubCloudflareHandler(cachedUserAgent: "", resolution: .failure(TestFailure.challengeResolution)),
                 retryLogger: RecordingRetryLogger(),
                 pluginID: pluginID,
@@ -311,7 +311,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
         let jar = PluginCookieJar(keychain: InMemoryPluginSecretKeychain())
         try jar.store([try cookie(name: "session", value: "stored", url: url)], pluginID: "plugin.a")
         let module = AppNetModule(
-            urlSession: URLSession(configuration: config),
+            configuration: config,
             cloudflare: StubCloudflareHandler(cachedUserAgent: "", resolution: .failure(TestFailure.challengeResolution)),
             retryLogger: RecordingRetryLogger(),
             pluginID: "plugin.a",
@@ -348,7 +348,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
             .name: "session", .value: "abc", .domain: site, .path: "/"
         ]))], pluginID: "plugin.a")
         let module = AppNetModule(
-            urlSession: URLSession(configuration: config),
+            configuration: config,
             cloudflare: StubCloudflareHandler(cachedUserAgent: "", resolution: .failure(TestFailure.challengeResolution)),
             retryLogger: RecordingRetryLogger(),
             pluginID: "plugin.a",
@@ -400,7 +400,6 @@ final class AppNetModulePrivacyTests: XCTestCase {
         config.protocolClasses = [ScriptedURLProtocol.self]
         config.httpCookieStorage = nil
         config.httpShouldSetCookies = false
-        let session = URLSession(configuration: config)
 
         let resolution: Result<AppNetCloudflareResolution, Error>
         switch resolutionPlan {
@@ -432,7 +431,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
         )
         let logger = RecordingRetryLogger()
         let module = AppNetModule(
-            urlSession: session,
+            configuration: config,
             cloudflare: cloudflare,
             retryLogger: logger,
             pluginID: "test.plugin",

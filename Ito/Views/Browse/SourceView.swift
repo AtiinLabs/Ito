@@ -18,6 +18,7 @@ struct SourceView: View {
     @StateObject private var viewModel: SourceViewModel
     private let viewFactory: AppViewFactory
     @Environment(\.dismiss) private var dismiss
+    @State private var trustAction: TrustCertificateAction?
 
     init(viewModel: SourceViewModel, viewFactory: AppViewFactory) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -60,6 +61,16 @@ struct SourceView: View {
                     viewFactory.makePluginSignInSheet(target: target)
                 }
             }
+            .sheet(item: $trustAction) { action in
+                PluginCertificateConfirmationSheet(
+                    sourceName: action.sourceName,
+                    request: action.request,
+                    onTrust: {
+                        try action.confirm()
+                        action.onSuccess()
+                    }
+                )
+            }
             .searchable(
                 text: $viewModel.searchQuery,
                 placement: .navigationBarDrawer(displayMode: .always),
@@ -98,7 +109,8 @@ struct SourceView: View {
             failureView(
                 message: "Error: \(error)",
                 opensSettings: viewModel.failureOffersSettings,
-                offersSignIn: viewModel.failureNeedsLogin && signInTarget != nil
+                offersSignIn: viewModel.failureNeedsLogin && signInTarget != nil,
+                pendingTrust: viewModel.failurePendingTrust
             ) {
                 Task { await viewModel.retry() }
             }
@@ -403,7 +415,8 @@ struct SourceView: View {
             failureView(
                 message: "Search error: \(error)",
                 opensSettings: viewModel.searchFailureOffersSettings,
-                offersSignIn: viewModel.searchFailureNeedsLogin && signInTarget != nil
+                offersSignIn: viewModel.searchFailureNeedsLogin && signInTarget != nil,
+                pendingTrust: viewModel.searchFailurePendingTrust
             ) {
                 viewModel.performSearch(query: viewModel.searchQuery)
             }
@@ -474,11 +487,12 @@ struct SourceView: View {
         viewFactory.signInTarget(pluginID: viewModel.plugin.id)
     }
 
-    /// A failure with Retry, plus Open Settings or Sign In when the source needs one to recover.
+    /// A failure with Retry, plus Open Settings, Sign In, or Trust Certificate when the source needs one to recover.
     private func failureView(
         message: String,
         opensSettings: Bool = false,
         offersSignIn: Bool = false,
+        pendingTrust: PendingTrust? = nil,
         retry: @escaping () -> Void
     ) -> some View {
         VStack(spacing: 12) {
@@ -491,6 +505,12 @@ struct SourceView: View {
                 if offersSignIn {
                     Button("Sign In") { viewModel.showSignIn = true }
                         .buttonStyle(.borderedProminent)
+                }
+                if let pendingTrust {
+                    Button("Trust Certificate…") {
+                        trustAction = viewFactory.trustAction(for: pendingTrust, retry: retry)
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
                 Button("Retry", action: retry)
                     .buttonStyle(.bordered)

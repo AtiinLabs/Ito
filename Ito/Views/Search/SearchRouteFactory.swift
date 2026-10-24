@@ -19,6 +19,7 @@ struct AppViewFactory {
     private let completionRecovery: (any PluginCompletionRecovering)?
     private let settingsDiagnostics: (any PluginSettingsDiagnosing)?
     private let pluginCookies: PluginCookieJar?
+    private let pluginTrust: PluginTrustStore?
     let categoryHistoryViewFactory: CategoryHistoryViewFactory
     let trackingViewFactory: TrackingViewFactory
     let mediaDetailViewFactory: MediaDetailViewFactory?
@@ -48,7 +49,8 @@ struct AppViewFactory {
         searchRouteFactory: SearchRouteFactory? = nil,
         completionRecovery: (any PluginCompletionRecovering)? = nil,
         settingsDiagnostics: (any PluginSettingsDiagnosing)? = nil,
-        pluginCookies: PluginCookieJar? = nil
+        pluginCookies: PluginCookieJar? = nil,
+        pluginTrust: PluginTrustStore? = nil
     ) {
         self.rootModels = rootModels
         self.repositoryManagement = repositoryManagement
@@ -65,6 +67,7 @@ struct AppViewFactory {
         self.completionRecovery = completionRecovery
         self.settingsDiagnostics = settingsDiagnostics
         self.pluginCookies = pluginCookies
+        self.pluginTrust = pluginTrust
         let categoryHistoryViewFactory = CategoryHistoryViewFactory(
             dependencies: categoryHistoryDependencies,
             messagePresenter: categoryHistoryMessagePresenter,
@@ -101,7 +104,9 @@ struct AppViewFactory {
             routeFactory: searchRouteFactory,
             makePluginSettings: { makePluginSettingsSheet(pluginID: $0) },
             signInTarget: { signInTarget(pluginID: $0) },
-            makePluginSignIn: { makePluginSignInSheet(target: $0) }
+            makePluginSignIn: { makePluginSignInSheet(target: $0) },
+            pendingTrust: { pendingTrust(for: $0) },
+            trustAction: { request, retry in trustAction(for: request, retry: retry) }
         )
     }
 
@@ -253,6 +258,25 @@ struct AppViewFactory {
             cookieJar: pluginCookies,
             evictRunner: { runnerProvider.evictSourceRunner(for: $0) }
         ))
+    }
+
+    func pendingTrust(for pluginID: String) -> PendingTrust? {
+        pluginTrust?.pending(pluginID: pluginID)
+    }
+
+    func trustAction(for request: PendingTrust, retry: @escaping () -> Void) -> TrustCertificateAction {
+        TrustCertificateAction(
+            request: request,
+            sourceName: sourceName(pluginID: request.pluginID),
+            confirm: { [pluginTrust, pluginManager, sourceDependencies] in
+                guard let pluginTrust, pluginManager.installedPlugins[request.pluginID] != nil else {
+                    throw PluginTrustConfirmationError.staleRequest
+                }
+                try pluginTrust.confirm(request)
+                sourceDependencies.runnerProvider.evictSourceRunner(for: request.pluginID)
+            },
+            onSuccess: retry
+        )
     }
 
     func sourceName(pluginID: String) -> String {

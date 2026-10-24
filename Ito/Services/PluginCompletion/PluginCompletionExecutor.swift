@@ -36,10 +36,14 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
     convenience init(
         store: PluginCompletionStore,
         cookies: PluginCookieJar,
+        trust: PluginTrustStore,
         locatePlugin: @escaping @MainActor @Sendable (String) throws -> URL
     ) {
         self.init(store: store, locatePlugin: locatePlugin, makeNetModule: { pluginID in
-            PluginCompletionNetModule(cookies: { url in cookies.cookies(pluginID: pluginID, for: url) })
+            PluginCompletionNetModule(
+                cookies: { url in cookies.cookies(pluginID: pluginID, for: url) },
+                trust: (pluginID, trust)
+            )
         })
     }
 

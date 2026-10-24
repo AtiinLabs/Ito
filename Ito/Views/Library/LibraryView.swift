@@ -8,7 +8,7 @@ struct LibraryView: View {
     let viewFactory: AppViewFactory
     @State private var settingsFailure: LibraryUpdateFailure?
     @State private var signInTarget: PluginSignInTarget?
-
+    @State private var trustAction: TrustCertificateAction?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private let columns = [
@@ -77,6 +77,16 @@ struct LibraryView: View {
             Task { await viewModel.requestUpdate() }
         }) { target in
             viewFactory.makePluginSignInSheet(target: target)
+        }
+        .sheet(item: $trustAction) { action in
+            PluginCertificateConfirmationSheet(
+                sourceName: action.sourceName,
+                request: action.request,
+                onTrust: {
+                    try action.confirm()
+                    action.onSuccess()
+                }
+            )
         }
         .onAppear { viewModel.appear() }
         .onDisappear { viewModel.disappear() }
@@ -189,6 +199,15 @@ struct LibraryView: View {
                         if failure.needsLogin, let target = viewFactory.signInTarget(pluginID: failure.pluginID) {
                             Button("Sign In") {
                                 signInTarget = target
+                            }
+                            .font(.caption.weight(.semibold))
+                            .disabled(viewModel.isRefreshing)
+                        }
+                        if let request = failure.pendingTrust ?? viewFactory.pendingTrust(for: failure.pluginID) {
+                            Button("Trust Certificate…") {
+                                trustAction = viewFactory.trustAction(for: request) {
+                                    Task { await viewModel.requestUpdate() }
+                                }
                             }
                             .font(.caption.weight(.semibold))
                             .disabled(viewModel.isRefreshing)

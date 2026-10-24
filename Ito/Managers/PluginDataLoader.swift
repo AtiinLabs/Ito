@@ -22,16 +22,21 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
         configuration: URLSessionConfiguration = .default,
         pluginManager: PluginManager
     ) {
-        self.init(configuration: configuration, runnerProvider: { try await pluginManager.getRunner(for: $0) })
+        self.init(
+            configuration: configuration,
+            trust: pluginManager.pluginSettingsStore.trust,
+            runnerProvider: { try await pluginManager.getRunner(for: $0) }
+        )
     }
 
     init(
         configuration: URLSessionConfiguration,
+        trust: PluginTrustStore? = nil,
         runnerProvider: @escaping @Sendable (String) async throws -> any PluginImageRunner
     ) {
         self.defaultLoader = DataLoader(configuration: configuration)
         self.runnerProvider = runnerProvider
-        self.imageTransport = PluginImageTransport(configuration: configuration)
+        self.imageTransport = PluginImageTransport(configuration: configuration, trust: trust)
     }
 
     public func loadData(with request: URLRequest, didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void, completion: @escaping @Sendable (Error?) -> Void) -> Cancellable {
@@ -70,7 +75,8 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                     let (data, response) = try await imageTransport.fetch(
                         url: target,
                         headers: resolved.headers,
-                        allowedOrigins: origins
+                        allowedOrigins: origins,
+                        pluginID: pluginId
                     )
                     try Task.checkCancellation()
                     didReceiveData(data, response)
