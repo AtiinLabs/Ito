@@ -22,7 +22,7 @@ public class PluginManager: ObservableObject {
         let publicationRevision: UInt64
         let pluginID: String
         let version: String
-        let pluginType: PluginType
+        let pluginType: MediaKind
         let fileIdentity: URL
     }
 

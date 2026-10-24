@@ -35,7 +35,7 @@ enum DeferredPluginDestination {
 }
 
 private extension DeferredPluginMedia {
-    var pluginType: PluginType {
+    var pluginType: MediaKind {
         switch self {
         case .manga: return .manga
         case .anime: return .anime

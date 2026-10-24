@@ -51,9 +51,6 @@ final class MediaDetailDependencyBoundaryTests: XCTestCase {
 
         for expected in [
             "MediaDetailViewModel(",
-            "getSearchMangaList(",
-            "getSearchAnimeList(",
-            "getSearchNovelList(",
             "ReaderView(",
             "VideoPlayerView(",
             "NovelReaderView("

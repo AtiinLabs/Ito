@@ -195,7 +195,7 @@ protocol LibraryPluginServing: AnyObject {
 struct LibraryInstalledPluginIdentity: Equatable {
     let id: String
     let version: String
-    let pluginType: PluginType
+    let pluginType: MediaKind
     let fileIdentity: URL
 }
 
@@ -261,8 +261,8 @@ struct DeferredPluginPackageCandidate: Equatable {
     /// Why the package can't run here, or nil when it can.
     let incompatibility: PluginRequiresNewerAppError?
 
-    var pluginType: PluginType? {
-        PluginType(rawValue: package.pluginType)
+    var pluginType: MediaKind? {
+        MediaKind(rawValue: package.pluginType)
     }
 }
 

@@ -907,6 +907,41 @@ final class NovelReaderViewModelTests: XCTestCase {
         MediaIdentity(pluginId: "plugin.test", itemId: "novel")
     }
 
+    func testAMangasTextVolumeIsReadAsThatMangaAndStopsAtItsPageVolumes() async {
+        // A series mixing page volumes with a text one; plugins list chapters newest first.
+        let v1 = Chapter(key: "v1", chapter: 1, kind: .images)
+        let v2 = Chapter(key: "v2", chapter: 2, kind: .text)
+        let v3 = Chapter(key: "v3", chapter: 3)
+        let series = Manga(key: "series", title: "Series", chapters: [v3, v2, v1])
+        let subject = makeNovelReaderSubject(entry: .manga(series), initialChapter: v2, settingsSnapshot: settings())
+        subject.loader.enqueue(.pages([page(1)]), for: "v2")
+
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        // Loading, history and completion all belong to the manga, as its page volumes do.
+        XCTAssertEqual(subject.loader.requests.map { $0.entry.kind }, [.manga])
+        XCTAssertEqual(subject.history.requests.map { $0.entry.key }, ["series"])
+        XCTAssertEqual(subject.progress.capturedContexts.map(\.kind), [.manga])
+        XCTAssertEqual(subject.progress.capturedContexts.map(\.mediaKey), ["series"])
+        // Neither neighbour is text: the reader ends here instead of skipping over them.
+        XCTAssertNil(subject.viewModel.nextChapter)
+        XCTAssertNil(subject.viewModel.previousChapter)
+        subject.viewModel.loadNextChapter()
+        XCTAssertEqual(subject.loader.requests.map { $0.chapter.key }, ["v2"])
+    }
+
+    func testANovelsTextReaderStopsAtImageChapters() {
+        let c1 = Chapter(key: "c1", chapter: 1, kind: .text)
+        let c2 = Chapter(key: "c2", chapter: 2, kind: .images)
+        let c3 = Chapter(key: "c3", chapter: 3)
+        let subject = makeSubject(chapters: [c3, c2, c1], initial: c1)
+
+        XCTAssertNil(subject.viewModel.chapterAfter(c1))
+        XCTAssertEqual(subject.viewModel.chapterAfter(c2)?.key, "c3")
+        XCTAssertNil(subject.viewModel.chapterBefore(c3))
+    }
+
     private func makeSubject(
         chapters: [Novel.Chapter],
         initial: Novel.Chapter,

@@ -29,9 +29,26 @@ extension Sequence where Element: ChapterDisplayable {
         }
         return numbers.count + unnumberedKeys.count
     }
+
+    /// The text chapters, when the list also has page chapters; empty otherwise, so an all-text
+    /// novel or an all-pages manga marks nothing.
+    func textChapterKeysInMixedSeries(defaultKind: ContentKind) -> Set<String> {
+        var text = Set<String>()
+        var hasPages = false
+        for chapter in self {
+            guard let chapter = chapter as? Chapter else { continue }
+            if (chapter.kind ?? defaultKind) == .text {
+                text.insert(chapter.key)
+            } else {
+                hasPages = true
+            }
+        }
+        return hasPages ? text : []
+    }
 }
 
-nonisolated extension Manga.Chapter: ChapterDisplayable {
+/// Manga and novel chapters (`Manga.Chapter`, `Novel.Chapter`).
+nonisolated extension Chapter: ChapterDisplayable {
     public var chapterNumber: Float? { chapter }
     public var dateUpload: String? {
         guard let ts = dateUpdated else { return nil }
@@ -43,15 +60,6 @@ nonisolated extension Manga.Chapter: ChapterDisplayable {
 nonisolated extension Anime.Episode: ChapterDisplayable {
     public var chapterNumber: Float? { episode }
     public var scanlator: String? { lang?.uppercased() }
-    public var dateUpload: String? {
-        guard let ts = dateUpdated else { return nil }
-        return Date(timeIntervalSince1970: TimeInterval(ts)).formatted(date: .abbreviated, time: .omitted)
-    }
-    public var isPaywalled: Bool { paywalled ?? false }
-}
-
-nonisolated extension Novel.Chapter: ChapterDisplayable {
-    public var chapterNumber: Float? { chapter }
     public var dateUpload: String? {
         guard let ts = dateUpdated else { return nil }
         return Date(timeIntervalSince1970: TimeInterval(ts)).formatted(date: .abbreviated, time: .omitted)

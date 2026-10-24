@@ -155,7 +155,7 @@ struct AppViewFactory {
                 media: media,
                 pluginID: pluginID
             ) { manga in
-                try await pluginCall { try await runner.getMangaUpdate(manga: manga) }
+                try await pluginCall { try await runner.getMediaUpdate(.manga(manga)).expecting(\.manga) }
             }
         case .anime(let pluginID, let runner, let media):
             makeAnimeDetailView(
@@ -163,9 +163,7 @@ struct AppViewFactory {
                 media: media,
                 pluginID: pluginID
             ) { anime in
-                try await pluginCall {
-                    try await runner.getAnimeUpdate(anime: anime, needsDetails: true, needsEpisodes: true)
-                }
+                try await pluginCall { try await runner.getMediaUpdate(.anime(anime)).expecting(\.anime) }
             }
         case .novel(let pluginID, let runner, let media):
             makeNovelDetailView(
@@ -173,7 +171,7 @@ struct AppViewFactory {
                 media: media,
                 pluginID: pluginID
             ) { novel in
-                try await pluginCall { try await runner.getNovelUpdate(novel: novel) }
+                try await pluginCall { try await runner.getMediaUpdate(.novel(novel)).expecting(\.novel) }
             }
         }
     }

@@ -21,7 +21,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.history.requests.map(\.chapterKey), ["a"])
         XCTAssertEqual(subject.history.requests[0].chapterTitle, "a")
         XCTAssertEqual(subject.history.requests[0].pluginID, "plugin.test")
-        XCTAssertEqual(subject.history.requests[0].manga.key, "manga")
+        XCTAssertEqual(subject.history.requests[0].entry.key, "manga")
         XCTAssertTrue(subject.progress.requests.isEmpty)
         XCTAssertFalse(subject.viewModel.markedChapterKeys.contains("a"))
 
@@ -914,6 +914,43 @@ final class MangaReaderViewModelTests: XCTestCase {
         await waitForReader { subject.viewModel.preloadImageCount == 10 }
 
         XCTAssertEqual(subject.settings.writtenValues, [10])
+    }
+
+    func testThePageReaderStopsWhereTheSeriesSwitchesToText() {
+        let v1 = Chapter(key: "v1", chapter: 1, kind: .images)
+        let v2 = Chapter(key: "v2", chapter: 2, kind: .text)
+        let v3 = Chapter(key: "v3", chapter: 3)
+        let subject = makeSubject(chapters: [v3, v2, v1], initial: v1)
+
+        // The text volume opens in the text reader; the page reader neither shows nor skips it.
+        XCTAssertNil(subject.viewModel.chapterAfter(v1))
+        XCTAssertNil(subject.viewModel.chapterBefore(v3))
+        // An unmarked chapter of a manga reads as pages.
+        XCTAssertEqual(subject.viewModel.chapterAfter(v2)?.key, "v3")
+    }
+
+    func testANovelsImageChapterLoadsAndCompletesAsANovelAndStopsAtText() async {
+        let c1 = Chapter(key: "c1", chapter: 1)
+        let c2 = Chapter(key: "c2", chapter: 2, kind: .images)
+        let c3 = Chapter(key: "c3", chapter: 3, kind: .text)
+        let novel = Novel(key: "novel", title: "Novel", chapters: [c3, c2, c1])
+        let subject = makeMangaReaderSubject(entry: .novel(novel), initialChapter: c2)
+        subject.loader.enqueue(.pages([page(1), page(2)]), for: "c2")
+        subject.viewModel.start()
+        await waitForReader { subject.viewModel.loadPhase == .content }
+
+        XCTAssertEqual(subject.loader.requestedEntries.map(\.kind), [.novel])
+        XCTAssertEqual(subject.history.requests.map { $0.entry.key }, ["novel"])
+        XCTAssertEqual(subject.history.requests.map { $0.entry.kind }, [.novel])
+        XCTAssertEqual(subject.progress.capturedContexts.map(\.kind), [.novel])
+        XCTAssertNil(subject.viewModel.chapterBefore(c2))
+        XCTAssertNil(subject.viewModel.chapterAfter(c2))
+
+        subject.viewModel.setPagedIndex(1)
+        await waitForReader { subject.progress.requests.count == 1 }
+        XCTAssertEqual(subject.progress.requests[0].context.kind, .novel)
+        XCTAssertEqual(subject.progress.requests[0].context.mediaKey, "novel")
+        XCTAssertEqual(subject.progress.requests[0].chapterID, "c2")
     }
 
     // MARK: - Fixtures

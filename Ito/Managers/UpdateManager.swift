@@ -74,29 +74,25 @@ final class PluginLibraryUpdateSource: LibraryUpdateSource {
         clearPendingTrust(for: item.pluginId)
         let runner = try await pluginManager.getRunner(for: item.pluginId)
         return try await pluginCall {
+            let stored: MediaEntry
             switch item.effectiveType {
-            case .manga:
-                let manga = try await runner.getMangaUpdate(
-                    manga: try JSONDecoder().decode(Manga.self, from: item.rawPayload)
-                )
+            case .manga: stored = .manga(try JSONDecoder().decode(Manga.self, from: item.rawPayload))
+            case .anime: stored = .anime(try JSONDecoder().decode(Anime.self, from: item.rawPayload))
+            case .novel: stored = .novel(try JSONDecoder().decode(Novel.self, from: item.rawPayload))
+            }
+            // Details are only needed where the update keeps them (manga and novels show status).
+            switch try await runner.getMediaUpdate(stored, needsDetails: item.effectiveType != .anime) {
+            case .manga(let manga):
                 return UpdateManager.SuccessfulUpdate(
                     freshCount: manga.chapters?.distinctChapterCount ?? 0,
                     status: String(describing: manga.status)
                 )
-            case .anime:
-                let anime = try await runner.getAnimeUpdate(
-                    anime: try JSONDecoder().decode(Anime.self, from: item.rawPayload),
-                    needsDetails: false,
-                    needsEpisodes: true
-                )
+            case .anime(let anime):
                 return UpdateManager.SuccessfulUpdate(
                     freshCount: anime.episodes?.distinctChapterCount ?? 0,
                     status: String(describing: anime.status)
                 )
-            case .novel:
-                let novel = try await runner.getNovelUpdate(
-                    novel: try JSONDecoder().decode(Novel.self, from: item.rawPayload)
-                )
+            case .novel(let novel):
                 return UpdateManager.SuccessfulUpdate(
                     freshCount: novel.chapters?.distinctChapterCount ?? 0,
                     status: String(describing: novel.status)

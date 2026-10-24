@@ -70,19 +70,19 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
         let first = factory.makeNovelViewModel(
             runner: runner,
             pluginID: "plugin",
-            novel: novel,
+            entry: .novel(novel),
             chapter: chapter
         )
         let second = factory.makeNovelViewModel(
             runner: runner,
             pluginID: "plugin",
-            novel: novel,
+            entry: .novel(novel),
             chapter: chapter
         )
 
         XCTAssertFalse(first === second)
         XCTAssertEqual(first.pluginID, "plugin")
-        XCTAssertEqual(first.novel.key, "novel")
+        XCTAssertEqual(first.entry.key, "novel")
         XCTAssertEqual(first.currentChapter.key, "chapter")
         XCTAssertTrue((first.chapterLoader as? ItoRunnerNovelChapterLoader)?.runner === runner)
         XCTAssertTrue((second.chapterLoader as? ItoRunnerNovelChapterLoader)?.runner === runner)

@@ -19,13 +19,13 @@ protocol SourceRunnerContext: SearchDetailLoading {
     func loadHome() async throws -> HomeLayout
     func loadSettingsSchema() async throws -> SettingsSchema?
     func search(
-        pluginType: PluginType,
+        kind: MediaKind,
         query: String,
         page: Int32,
         filters: [FilterItem]?
     ) async throws -> SourceSearchPage
     func loadListing(
-        pluginType: PluginType,
+        kind: MediaKind,
         listing: Listing,
         page: Int32
     ) async throws -> ListingContentPage
@@ -47,62 +47,46 @@ final class ItoRunnerSourceContext: SourceRunnerContext {
     }
 
     func search(
-        pluginType: PluginType,
+        kind: MediaKind,
         query: String,
         page: Int32,
         filters: [FilterItem]?
     ) async throws -> SourceSearchPage {
         try await pluginCall {
-            switch pluginType {
-            case .manga:
-                let result = try await runner.getSearchMangaList(query: query, page: page, filters: filters)
-                return .manga(result.entries)
-            case .anime:
-                let result = try await runner.getSearchAnimeList(query: query, page: page, filters: filters)
-                return .anime(result.entries)
-            case .novel:
-                let result = try await runner.getSearchNovelList(query: query, page: page, filters: filters)
-                return .novel(result.entries)
-            @unknown default:
-                return .manga([])
+            let entries = try await runner.search(query: query, page: page, kind: kind, filters: filters).entries
+            switch kind {
+            case .manga: return .manga(entries.compactMap(\.manga))
+            case .anime: return .anime(entries.compactMap(\.anime))
+            case .novel: return .novel(entries.compactMap(\.novel))
             }
         }
     }
 
     func loadListing(
-        pluginType: PluginType,
+        kind: MediaKind,
         listing: Listing,
         page: Int32
     ) async throws -> ListingContentPage {
         try await pluginCall {
-            switch pluginType {
-            case .manga:
-                let result = try await runner.getMangaList(listing: listing, page: page)
-                return .manga(entries: result.entries, hasNextPage: result.hasNextPage)
-            case .anime:
-                let result = try await runner.getAnimeList(listing: listing, page: page)
-                return .anime(entries: result.entries, hasNextPage: result.hasNextPage)
-            case .novel:
-                let result = try await runner.getNovelList(listing: listing, page: page)
-                return .novel(entries: result.entries, hasNextPage: result.hasNextPage)
-            @unknown default:
-                return .manga(entries: [], hasNextPage: false)
+            let result = try await runner.getListing(listing, page: page)
+            switch kind {
+            case .manga: return .manga(entries: result.entries.compactMap(\.manga), hasNextPage: result.hasNextPage)
+            case .anime: return .anime(entries: result.entries.compactMap(\.anime), hasNextPage: result.hasNextPage)
+            case .novel: return .novel(entries: result.entries.compactMap(\.novel), hasNextPage: result.hasNextPage)
             }
         }
     }
 
     func loadManga(_ manga: Manga) async throws -> Manga {
-        try await pluginCall { try await runner.getMangaUpdate(manga: manga) }
+        try await pluginCall { try await runner.getMediaUpdate(.manga(manga)).expecting(\.manga) }
     }
 
     func loadAnime(_ anime: Anime) async throws -> Anime {
-        try await pluginCall {
-            try await runner.getAnimeUpdate(anime: anime, needsDetails: true, needsEpisodes: true)
-        }
+        try await pluginCall { try await runner.getMediaUpdate(.anime(anime)).expecting(\.anime) }
     }
 
     func loadNovel(_ novel: Novel) async throws -> Novel {
-        try await pluginCall { try await runner.getNovelUpdate(novel: novel) }
+        try await pluginCall { try await runner.getMediaUpdate(.novel(novel)).expecting(\.novel) }
     }
 }
 

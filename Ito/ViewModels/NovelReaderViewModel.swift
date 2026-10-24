@@ -42,7 +42,8 @@ struct NovelBlockReference: Hashable {
 @MainActor
 final class NovelReaderViewModel: ObservableObject {
     let pluginID: String
-    let novel: Novel
+    /// The series being read: a novel, or a manga whose chapter is text.
+    let entry: MediaEntry
     let chapterLoader: any NovelChapterLoading
 
     @Published private(set) var currentChapter: Novel.Chapter
@@ -109,20 +110,20 @@ final class NovelReaderViewModel: ObservableObject {
     init(
         chapterLoader: any NovelChapterLoading,
         pluginID: String,
-        novel: Novel,
+        entry: MediaEntry,
         initialChapter: Novel.Chapter,
         dependencies: PreparedNovelReaderDependencies
     ) {
         self.chapterLoader = chapterLoader
         self.pluginID = pluginID
-        self.novel = novel
+        self.entry = entry
         currentChapter = initialChapter
         self.dependencies = dependencies
-        mediaIdentity = MediaIdentity(pluginId: pluginID, itemId: novel.key)
+        mediaIdentity = MediaIdentity(pluginId: pluginID, itemId: entry.key)
         completionContext = dependencies.progress.captureCompletionContext(
             media: mediaIdentity,
-            mediaKey: novel.key,
-            kind: .novel
+            mediaKey: entry.key,
+            kind: entry.completionKind
         )
 
         let settings = dependencies.settings.novelReaderSettings
@@ -212,12 +213,17 @@ final class NovelReaderViewModel: ObservableObject {
 
     // MARK: - Chapter navigation
 
+    /// Stop at the immediate neighbor when it uses the other reader.
     func chapterAfter(_ chapter: Novel.Chapter) -> Novel.Chapter? {
-        ReaderChapterOrdering.novelChapter(after: chapter, in: novel.chapters)
+        ReaderChapterOrdering.novelChapter(after: chapter, in: entry.chapters).flatMap(textChapter)
     }
 
     func chapterBefore(_ chapter: Novel.Chapter) -> Novel.Chapter? {
-        ReaderChapterOrdering.novelChapter(before: chapter, in: novel.chapters)
+        ReaderChapterOrdering.novelChapter(before: chapter, in: entry.chapters).flatMap(textChapter)
+    }
+
+    private func textChapter(_ chapter: Novel.Chapter) -> Novel.Chapter? {
+        entry.contentKind(of: chapter) == .text ? chapter : nil
     }
 
     func goToNextChapter() {
@@ -347,15 +353,15 @@ final class NovelReaderViewModel: ObservableObject {
         let session = sessionID
         let generation = contentGeneration
         let loader = chapterLoader
-        let novel = novel
+        let entry = entry
         mainLoadOperationID = operationID
         loadPhase = .loading
         logStarted(kind: .remoteLoad, operationID: operationID)
 
-        let task = Task { @MainActor [weak self, loader, novel] in
+        let task = Task { @MainActor [weak self, loader, entry] in
             defer { self?.finishTestingOperation(operationID) }
             do {
-                let pages = try await loader.content(for: novel, chapter: chapter)
+                let pages = try await loader.content(for: entry, chapter: chapter)
                 self?.completeMainLoad(
                     pages,
                     chapter: chapter,
@@ -521,15 +527,15 @@ final class NovelReaderViewModel: ObservableObject {
         let boundaryID = last.id
         let boundaryToken = NovelChapterToken(last.chapter)
         let loader = chapterLoader
-        let novel = novel
+        let entry = entry
         appendOperationID = operationID
         isLoadingNext = true
         logStarted(kind: .chapterAppend, operationID: operationID)
 
-        let task = Task { @MainActor [weak self, loader, novel] in
+        let task = Task { @MainActor [weak self, loader, entry] in
             defer { self?.finishTestingOperation(operationID) }
             do {
-                let pages = try await loader.content(for: novel, chapter: next)
+                let pages = try await loader.content(for: entry, chapter: next)
                 self?.completeAppend(
                     pages,
                     chapter: next,
@@ -637,8 +643,8 @@ final class NovelReaderViewModel: ObservableObject {
     /// chapter boundary does not add a row each time.
     private func chapterOpened(_ chapter: Novel.Chapter) {
         guard isActive, historyChapterKeys.insert(chapter.key).inserted else { return }
-        dependencies.history.recordNovel(
-            novel,
+        dependencies.history.recordChapter(
+            of: entry,
             chapterKey: chapter.key,
             chapterTitle: chapter.title ?? chapter.key,
             pluginID: pluginID
@@ -913,12 +919,12 @@ final class NovelReaderViewModel: ObservableObject {
         let scanlator = chapter.scanlator ?? "Official"
         dependencies.presence.presentNovelReaderPresence(
             NovelReaderPresence(
-                details: novel.title,
+                details: entry.title,
                 state: "Reading \(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))",
                 activityType: 3,
                 detailsURL: detailsURL,
                 largeImageText: "Reading from \(scanlator) at \(pluginName)",
-                imageURL: novel.cover,
+                imageURL: entry.cover,
                 resetTimer: resetTimer
             )
         )

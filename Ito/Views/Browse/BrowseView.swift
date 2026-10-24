@@ -311,7 +311,7 @@ struct PluginRowView: View {
 // MARK: - PluginTypeBadge
 
 struct PluginTypeBadge: View {
-    let type: PluginType
+    let type: MediaKind
 
     private var style: (title: String, icon: String, color: Color) {
         switch type {

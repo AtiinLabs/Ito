@@ -18,7 +18,7 @@ public final class BrowseViewModel: ObservableObject {
 
     public struct PluginGroup: Identifiable {
         public var id: String { String(describing: type) }
-        public let type: PluginType
+        public let type: MediaKind
         public let plugins: [InstalledPlugin]
     }
 
@@ -90,7 +90,7 @@ public final class BrowseViewModel: ObservableObject {
     }
 
     public var pluginGroups: [PluginGroup] {
-        let types: [PluginType] = [.anime, .manga, .novel]
+        let types: [MediaKind] = [.anime, .manga, .novel]
         return types.compactMap { type in
             let plugins = sortedPlugins.filter { $0.info.type == type }
             return plugins.isEmpty ? nil : PluginGroup(type: type, plugins: plugins)

@@ -736,7 +736,7 @@ final class BrowseViewModelTests: XCTestCase {
         id: String,
         name: String,
         version: String = "1.0",
-        type: PluginType = .manga
+        type: MediaKind = .manga
     ) -> InstalledPlugin {
         InstalledPlugin(
             url: URL(fileURLWithPath: "/plugins/\(id).ito"),

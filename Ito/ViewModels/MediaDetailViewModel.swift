@@ -38,12 +38,12 @@ enum ChapterFilterOption: String, CaseIterable {
 }
 
 enum MediaDetailReaderDestination: Identifiable {
-    case manga(
+    case pages(
         id: UUID,
         runner: ItoRunner,
         pluginID: String,
-        media: Manga,
-        chapter: Manga.Chapter
+        entry: MediaEntry,
+        chapter: Chapter
     )
     case anime(
         id: UUID,
@@ -52,21 +52,32 @@ enum MediaDetailReaderDestination: Identifiable {
         media: Anime,
         episode: Anime.Episode
     )
-    case novel(
+    /// A text chapter, retaining the catalog entry's kind for history and completion.
+    case text(
         id: UUID,
         runner: ItoRunner,
         pluginID: String,
-        media: Novel,
-        chapter: Novel.Chapter
+        entry: MediaEntry,
+        chapter: Chapter
     )
 
     var id: UUID {
         switch self {
-        case .manga(let id, _, _, _, _),
+        case .pages(let id, _, _, _, _),
              .anime(let id, _, _, _, _),
-             .novel(let id, _, _, _, _):
+             .text(let id, _, _, _, _):
             return id
         }
+    }
+}
+
+extension MediaDetailReaderDestination {
+    /// The chapter's format selects the reader; its catalog identity is unchanged.
+    static func reading(_ chapter: Chapter, of entry: MediaEntry, runner: ItoRunner, pluginID: String) -> Self {
+        if entry.contentKind(of: chapter) == .text {
+            return .text(id: UUID(), runner: runner, pluginID: pluginID, entry: entry, chapter: chapter)
+        }
+        return .pages(id: UUID(), runner: runner, pluginID: pluginID, entry: entry, chapter: chapter)
     }
 }
 

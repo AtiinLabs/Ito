@@ -120,12 +120,13 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
         }
         try Task.checkCancellation()
 
+        let kind: MediaKind
         switch intent.kind {
-        case .manga, .novel:
-            return try await runner.markChapterRead(mediaKey: intent.mediaKey, chapterKey: intent.unitKey)
-        case .anime:
-            return try await runner.markEpisodeWatched(mediaKey: intent.mediaKey, episodeKey: intent.unitKey)
+        case .manga: kind = .manga
+        case .novel: kind = .novel
+        case .anime: kind = .anime
         }
+        return try await runner.markCompleted(kind: kind, mediaKey: intent.mediaKey, unitKey: intent.unitKey)
     }
 
     private func load(

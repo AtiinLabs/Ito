@@ -6,7 +6,7 @@ import ito_runner
 @MainActor
 final class DeferredPluginViewModelTests: XCTestCase {
     func testAlreadyInstalledRoutesMangaAnimeAndNovelWithExactRunnerAndPluginIdentity() async throws {
-        let cases: [(PluginType, DeferredPluginMedia)] = [
+        let cases: [(MediaKind, DeferredPluginMedia)] = [
             (.manga, .manga(Manga(key: "manga", title: "Manga"))),
             (.anime, .anime(Anime(key: "anime", title: "Anime"))),
             (.novel, .novel(Novel(key: "novel", title: "Novel")))
@@ -493,7 +493,7 @@ final class DeferredPluginViewModelTests: XCTestCase {
     private func makeSubject(
         item: Ito.LibraryItem,
         installedPluginIDs: Set<String> = [],
-        installedPluginType: PluginType? = nil,
+        installedPluginType: MediaKind? = nil,
         runnerResponses: [DeferredPluginFake.RunnerResponse] = [],
         lookupResponses: [DeferredInstallerFake.LookupResponse] = [],
         installResponses: [DeferredInstallerFake.InstallResponse] = [],
@@ -526,7 +526,7 @@ final class DeferredPluginViewModelTests: XCTestCase {
 
     private func encodedItem(
         _ media: DeferredPluginMedia,
-        pluginType: PluginType
+        pluginType: MediaKind
     ) throws -> Ito.LibraryItem {
         let data: Data
         switch media {
@@ -543,7 +543,7 @@ final class DeferredPluginViewModelTests: XCTestCase {
 
     private func libraryItem(
         rawPayload: Data,
-        pluginType: PluginType,
+        pluginType: MediaKind,
         isAnime: Bool
     ) -> Ito.LibraryItem {
         Ito.LibraryItem(
@@ -561,7 +561,7 @@ final class DeferredPluginViewModelTests: XCTestCase {
     private func candidate(
         isCompatible: Bool = true,
         minimumVersion: String = "1.0",
-        pluginType: PluginType = .manga
+        pluginType: MediaKind = .manga
     ) -> DeferredPluginPackageCandidate {
         DeferredPluginPackageCandidate(
             package: RepoPackage(
@@ -663,14 +663,14 @@ private final class DeferredPluginFake: LibraryPluginServing {
     }
 
     private let subject: CurrentValueSubject<LibraryPluginSnapshot, Never>
-    private let defaultPluginType: PluginType
+    private let defaultPluginType: MediaKind
     private var runnerResponses: [RunnerResponse]
     private var runnerContinuations: [CheckedContinuation<ItoRunner, Error>] = []
     private(set) var runnerRequests: [String] = []
 
     init(
         installedPluginIDs: Set<String>,
-        defaultPluginType: PluginType,
+        defaultPluginType: MediaKind,
         runnerResponses: [RunnerResponse]
     ) {
         self.defaultPluginType = defaultPluginType
@@ -695,7 +695,7 @@ private final class DeferredPluginFake: LibraryPluginServing {
 
     func publish(
         _ pluginIDs: Set<String>,
-        pluginType: PluginType? = nil,
+        pluginType: MediaKind? = nil,
         version: String = "1.0.0"
     ) {
         subject.send(
@@ -735,7 +735,7 @@ private final class DeferredPluginFake: LibraryPluginServing {
 
     private static func identities(
         for pluginIDs: Set<String>,
-        pluginType: PluginType,
+        pluginType: MediaKind,
         version: String
     ) -> [String: LibraryInstalledPluginIdentity] {
         Dictionary(uniqueKeysWithValues: pluginIDs.map { pluginID in

@@ -708,7 +708,7 @@ final class MediaDetailViewModelTests: XCTestCase {
         let selected = subject.viewModel.media.chapters![0]
         subject.viewModel.selectChapter(selected)
 
-        guard case .manga(_, let runner, let pluginID, let media, let chapter) = subject.viewModel.readerDestination else {
+        guard case .pages(_, let runner, let pluginID, let media, let chapter) = subject.viewModel.readerDestination else {
             return XCTFail("Expected Manga reader destination")
         }
         XCTAssertTrue(runner === subject.runner)
@@ -717,7 +717,7 @@ final class MediaDetailViewModelTests: XCTestCase {
         XCTAssertEqual(chapter.key, "c1")
 
         subject.viewModel.selectChapter(subject.viewModel.media.chapters![1])
-        guard case .manga(let secondID, _, _, _, let secondChapter) = subject.viewModel.readerDestination else {
+        guard case .pages(let secondID, _, _, _, let secondChapter) = subject.viewModel.readerDestination else {
             return XCTFail("Expected replacement Manga destination")
         }
         XCTAssertEqual(secondChapter.key, "c2")
@@ -739,12 +739,13 @@ final class MediaDetailViewModelTests: XCTestCase {
 
         let novelSubject = makeNovelSubject(media: novel(chapters: [novelChapter("n1", 1)]))
         novelSubject.viewModel.selectChapter(novelSubject.viewModel.media.chapters![0])
-        guard case .novel(_, let novelRunner, let novelPlugin, let novelMedia, let selectedChapter) = novelSubject.viewModel.readerDestination else {
-            return XCTFail("Expected Novel reader destination")
+        guard case .text(_, let novelRunner, let novelPlugin, let entry, let selectedChapter) = novelSubject.viewModel.readerDestination else {
+            return XCTFail("Expected text reader destination")
         }
         XCTAssertTrue(novelRunner === novelSubject.runner)
         XCTAssertEqual(novelPlugin, Self.pluginID)
-        XCTAssertEqual(novelMedia.key, "n1")
+        XCTAssertEqual(entry.kind, .novel)
+        XCTAssertEqual(entry.key, "n1")
         XCTAssertEqual(selectedChapter.key, "n1")
     }
 
@@ -984,11 +985,11 @@ final class MediaDetailViewModelTests: XCTestCase {
             loadDetails: { try await route.load($0) },
             searchForRelink: { try await route.search($0) },
             makeReaderDestination: { parent, selected in
-                .manga(
+                .pages(
                     id: UUID(),
                     runner: runner,
                     pluginID: Self.pluginID,
-                    media: parent,
+                    entry: .manga(parent),
                     chapter: selected
                 )
             }
@@ -1087,11 +1088,11 @@ final class MediaDetailViewModelTests: XCTestCase {
                 loadDetails: { $0 },
                 searchForRelink: { _ in [] },
                 makeReaderDestination: { parent, selected in
-                    .novel(
+                    .text(
                         id: UUID(),
                         runner: runner,
                         pluginID: Self.pluginID,
-                        media: parent,
+                        entry: .novel(parent),
                         chapter: selected
                     )
                 }

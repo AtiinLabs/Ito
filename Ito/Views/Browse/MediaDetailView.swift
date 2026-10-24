@@ -206,7 +206,8 @@ struct MediaDetailView<M: MediaDisplayable>: View {
         if let chapters = viewModel.media.chapterList, !chapters.isEmpty {
             let displayed = viewModel.displayedChapters
             chapterListHeader(allChapters: chapters, displayedChapters: displayed)
-            chapterList(chapters: displayed)
+            let textKeys = chapters.textChapterKeysInMixedSeries(defaultKind: viewModel.media is Novel ? .text : .images)
+            chapterList(chapters: displayed, textKeys: textKeys)
         } else if viewModel.isSaved {
             relinkBanner
         } else if viewModel.detailLoadState == .content {
@@ -391,10 +392,15 @@ struct MediaDetailView<M: MediaDisplayable>: View {
         }
     }
 
-    private func chapterList(chapters: [M.Chapter]) -> some View {
+    /// `textKeys` comes from the whole series, so a filter that leaves only text chapters keeps their marks.
+    private func chapterList(chapters: [M.Chapter], textKeys: Set<String>) -> some View {
         LazyVStack(spacing: 0) {
             ForEach(chapters, id: \.key) { chapter in
-                ChapterRowView(chapter: chapter, isRead: viewModel.isRead(chapter)) {
+                ChapterRowView(
+                    chapter: chapter,
+                    isRead: viewModel.isRead(chapter),
+                    marksText: textKeys.contains(chapter.key)
+                ) {
                     viewModel.selectChapter(chapter)
                 }
                 Divider().padding(.leading, 16)

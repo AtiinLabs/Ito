@@ -4,7 +4,7 @@ import ito_runner
 
 @MainActor
 protocol MangaPageLoading: AnyObject {
-    func pages(for manga: Manga, chapter: Manga.Chapter) async throws -> [Page]
+    func pages(for entry: MediaEntry, chapter: Chapter) async throws -> [Page]
 }
 
 @MainActor
@@ -15,8 +15,8 @@ final class ItoRunnerMangaPageLoader: MangaPageLoading {
         self.runner = runner
     }
 
-    func pages(for manga: Manga, chapter: Manga.Chapter) async throws -> [Page] {
-        try await pluginCall { try await runner.getPageList(manga: manga, chapter: chapter) }
+    func pages(for entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
+        try await pluginCall { try await runner.getChapterPages(entry: entry, chapter: chapter) }
     }
 }
 
@@ -72,28 +72,12 @@ extension ReadProgressManager: MangaReaderProgressTracking {
 
 @MainActor
 protocol MangaReaderHistoryRecording: AnyObject {
-    func recordManga(
-        _ manga: Manga,
+    func recordChapter(
+        of entry: MediaEntry,
         chapterKey: String,
         chapterTitle: String,
         pluginID: String
     )
-}
-
-extension HistoryManager: MangaReaderHistoryRecording {
-    func recordManga(
-        _ manga: Manga,
-        chapterKey: String,
-        chapterTitle: String,
-        pluginID: String
-    ) {
-        addManga(
-            manga,
-            chapterKey: chapterKey,
-            chapterTitle: chapterTitle,
-            pluginId: pluginID
-        )
-    }
 }
 
 @MainActor
@@ -320,13 +304,13 @@ private final class UnavailableMangaReaderDependencies:
         _ = chapterID
     }
 
-    func recordManga(
-        _ manga: Manga,
+    func recordChapter(
+        of entry: MediaEntry,
         chapterKey: String,
         chapterTitle: String,
         pluginID: String
     ) {
-        _ = manga
+        _ = entry
         _ = chapterKey
         _ = chapterTitle
         _ = pluginID

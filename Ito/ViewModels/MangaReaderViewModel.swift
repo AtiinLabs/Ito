@@ -5,7 +5,7 @@ import ito_runner
 @MainActor
 final class MangaReaderViewModel: ObservableObject {
     let pluginID: String
-    let manga: Manga
+    let entry: MediaEntry
     let pageLoader: any MangaPageLoading
 
     @Published private(set) var currentChapter: Manga.Chapter
@@ -70,25 +70,27 @@ final class MangaReaderViewModel: ObservableObject {
     init(
         pageLoader: any MangaPageLoading,
         pluginID: String,
-        manga: Manga,
+        entry: MediaEntry,
         initialChapter: Manga.Chapter,
         dependencies: PreparedMangaReaderDependencies
     ) {
         self.pageLoader = pageLoader
         self.pluginID = pluginID
-        self.manga = manga
+        self.entry = entry
         currentChapter = initialChapter
         self.dependencies = dependencies
         imagePrefetcher = dependencies.makeImagePrefetcher()
         preloadImageCount = dependencies.settings.mangaReaderPreloadImageCount
-        mediaIdentity = MediaIdentity(pluginId: pluginID, itemId: manga.key)
-        completionContext = dependencies.progress.captureCompletionContext(media: mediaIdentity, mediaKey: manga.key, kind: .manga)
+        mediaIdentity = MediaIdentity(pluginId: pluginID, itemId: entry.key)
+        completionContext = dependencies.progress.captureCompletionContext(media: mediaIdentity, mediaKey: entry.key, kind: entry.completionKind)
         overrideViewer = dependencies.progress.savedViewer(media: mediaIdentity) ?? .Default
     }
 
+    var defaultViewer: Manga.Viewer { entry.manga?.viewer ?? .Default }
+
     var activeViewer: Manga.Viewer {
         if overrideViewer != .Default { return overrideViewer }
-        if manga.viewer != .Default { return manga.viewer }
+        if defaultViewer != .Default { return defaultViewer }
         return .Rtl
     }
 
@@ -262,20 +264,26 @@ final class MangaReaderViewModel: ObservableObject {
 
     // MARK: - Chapter and page navigation
 
+    /// The next chapter, if it is pages too: the reader stops where the series switches to text,
+    /// which opens in the text reader instead.
     func chapterAfter(_ chapter: Manga.Chapter) -> Manga.Chapter? {
         ReaderChapterOrdering.mangaChapter(
             after: chapter,
-            in: manga.chapters,
+            in: entry.chapters,
             preferredScanlator: currentChapter.scanlator
-        )
+        ).flatMap(pagesChapter)
     }
 
     func chapterBefore(_ chapter: Manga.Chapter) -> Manga.Chapter? {
         ReaderChapterOrdering.mangaChapter(
             before: chapter,
-            in: manga.chapters,
+            in: entry.chapters,
             preferredScanlator: currentChapter.scanlator
-        )
+        ).flatMap(pagesChapter)
+    }
+
+    private func pagesChapter(_ chapter: Manga.Chapter) -> Manga.Chapter? {
+        entry.contentKind(of: chapter) == .images ? chapter : nil
     }
 
     func setPagedIndex(_ newIndex: Int) {
@@ -462,14 +470,14 @@ final class MangaReaderViewModel: ObservableObject {
         let generation = contentGeneration
         let expectedPaged = isPaged
         let loader = pageLoader
-        let manga = manga
+        let entry = entry
         mainLoadOperationID = operationID
         loadPhase = .loading
         logStarted(kind: .remoteLoad, operationID: operationID)
 
-        mainLoadTask = Task { @MainActor [weak self, loader, manga] in
+        mainLoadTask = Task { @MainActor [weak self, loader, entry] in
             do {
-                let result = try await loader.pages(for: manga, chapter: chapter)
+                let result = try await loader.pages(for: entry, chapter: chapter)
                 self?.completeMainLoad(
                     result,
                     chapter: chapter,
@@ -606,11 +614,11 @@ final class MangaReaderViewModel: ObservableObject {
         let session = sessionID
         let generation = contentGeneration
         let loader = pageLoader
-        let manga = manga
+        let entry = entry
         adjacentPrefetchOperationID = operationID
         logStarted(kind: .chapterPrefetch, operationID: operationID)
 
-        adjacentPrefetchTask = Task { @MainActor [weak self, loader, manga] in
+        adjacentPrefetchTask = Task { @MainActor [weak self, loader, entry] in
             var hadFailure = false
             for chapter in missing {
                 guard self?.isCurrentAdjacentPrefetch(
@@ -627,7 +635,7 @@ final class MangaReaderViewModel: ObservableObject {
                     return
                 }
                 do {
-                    let pages = try await loader.pages(for: manga, chapter: chapter)
+                    let pages = try await loader.pages(for: entry, chapter: chapter)
                     guard self?.isCurrentAdjacentPrefetch(
                         reference: referenceToken,
                         operationID: operationID,
@@ -700,13 +708,13 @@ final class MangaReaderViewModel: ObservableObject {
         let session = sessionID
         let generation = contentGeneration
         let loader = pageLoader
-        let manga = manga
+        let entry = entry
         appendOperationID = operationID
         logStarted(kind: .chapterAppend, operationID: operationID)
 
-        appendTask = Task { @MainActor [weak self, loader, manga] in
+        appendTask = Task { @MainActor [weak self, loader, entry] in
             do {
-                let pages = try await loader.pages(for: manga, chapter: chapter)
+                let pages = try await loader.pages(for: entry, chapter: chapter)
                 self?.completeAppend(
                     pages,
                     chapter: chapter,
@@ -803,13 +811,13 @@ final class MangaReaderViewModel: ObservableObject {
         let session = sessionID
         let generation = contentGeneration
         let loader = pageLoader
-        let manga = manga
+        let entry = entry
         prependOperationID = operationID
         logStarted(kind: .chapterPrepend, operationID: operationID)
 
-        prependTask = Task { @MainActor [weak self, loader, manga] in
+        prependTask = Task { @MainActor [weak self, loader, entry] in
             do {
-                let pages = try await loader.pages(for: manga, chapter: chapter)
+                let pages = try await loader.pages(for: entry, chapter: chapter)
                 self?.completePrepend(
                     pages,
                     chapter: chapter,
@@ -982,8 +990,8 @@ final class MangaReaderViewModel: ObservableObject {
     /// chapter boundary does not add a row each time.
     private func chapterOpened(_ chapter: Manga.Chapter) {
         guard historyChapterKeys.insert(chapter.key).inserted else { return }
-        dependencies.history.recordManga(
-            manga,
+        dependencies.history.recordChapter(
+            of: entry,
             chapterKey: chapter.key,
             chapterTitle: chapter.title ?? chapter.key,
             pluginID: pluginID
@@ -1079,7 +1087,7 @@ final class MangaReaderViewModel: ObservableObject {
         guard isActive else { return }
         dependencies.presence.presentMangaReaderPresence(
             Self.presence(
-                manga: manga,
+                entry: entry,
                 chapter: chapter,
                 anilistID: dependencies.tracker.anilistID(for: mediaIdentity),
                 pluginName: dependencies.pluginMetadata.displayName(for: pluginID),

@@ -20,12 +20,12 @@ struct MediaDetailReaderViewFactory {
     @ViewBuilder
     func destination(for destination: MediaDetailReaderDestination) -> some View {
         switch destination {
-        case .manga(_, let runner, let pluginID, let media, let chapter):
+        case .pages(_, let runner, let pluginID, let entry, let chapter):
             ReaderView(
                 viewModel: makeMangaViewModel(
                     runner: runner,
                     pluginID: pluginID,
-                    manga: media,
+                    entry: entry,
                     chapter: chapter
                 )
             )
@@ -38,12 +38,12 @@ struct MediaDetailReaderViewFactory {
                     episode: episode
                 )
             )
-        case .novel(_, let runner, let pluginID, let media, let chapter):
+        case .text(_, let runner, let pluginID, let entry, let chapter):
             NovelReaderView(
                 viewModel: makeNovelViewModel(
                     runner: runner,
                     pluginID: pluginID,
-                    novel: media,
+                    entry: entry,
                     chapter: chapter
                 )
             )
@@ -53,13 +53,13 @@ struct MediaDetailReaderViewFactory {
     func makeMangaViewModel(
         runner: ItoRunner,
         pluginID: String,
-        manga: Manga,
-        chapter: Manga.Chapter
+        entry: MediaEntry,
+        chapter: Chapter
     ) -> MangaReaderViewModel {
         MangaReaderViewModel(
             pageLoader: ItoRunnerMangaPageLoader(runner: runner),
             pluginID: pluginID,
-            manga: manga,
+            entry: entry,
             initialChapter: chapter,
             dependencies: mangaReaderDependencies
         )
@@ -68,13 +68,13 @@ struct MediaDetailReaderViewFactory {
     func makeNovelViewModel(
         runner: ItoRunner,
         pluginID: String,
-        novel: Novel,
-        chapter: Novel.Chapter
+        entry: MediaEntry,
+        chapter: Chapter
     ) -> NovelReaderViewModel {
         NovelReaderViewModel(
             chapterLoader: ItoRunnerNovelChapterLoader(runner: runner),
             pluginID: pluginID,
-            novel: novel,
+            entry: entry,
             initialChapter: chapter,
             dependencies: novelReaderDependencies
         )
@@ -137,17 +137,11 @@ struct MediaDetailViewFactory {
             loadDetails: loader,
             searchForRelink: { query in
                 try await pluginCall {
-                    try await runner.getSearchMangaList(query: query, page: 1, filters: nil).entries
+                    try await runner.search(query: query, page: 1, kind: .manga).entries.compactMap(\.manga)
                 }
             },
             makeReaderDestination: { media, chapter in
-                .manga(
-                    id: UUID(),
-                    runner: runner,
-                    pluginID: pluginID,
-                    media: media,
-                    chapter: chapter
-                )
+                .reading(chapter, of: .manga(media), runner: runner, pluginID: pluginID)
             }
         )
         return makeView(media: media, pluginID: pluginID, context: context)
@@ -163,7 +157,7 @@ struct MediaDetailViewFactory {
             loadDetails: loader,
             searchForRelink: { query in
                 try await pluginCall {
-                    try await runner.getSearchAnimeList(query: query, page: 1, filters: nil).entries
+                    try await runner.search(query: query, page: 1, kind: .anime).entries.compactMap(\.anime)
                 }
             },
             makeReaderDestination: { media, episode in
@@ -189,17 +183,11 @@ struct MediaDetailViewFactory {
             loadDetails: loader,
             searchForRelink: { query in
                 try await pluginCall {
-                    try await runner.getSearchNovelList(query: query, page: 1, filters: nil).entries
+                    try await runner.search(query: query, page: 1, kind: .novel).entries.compactMap(\.novel)
                 }
             },
             makeReaderDestination: { media, chapter in
-                .novel(
-                    id: UUID(),
-                    runner: runner,
-                    pluginID: pluginID,
-                    media: media,
-                    chapter: chapter
-                )
+                .reading(chapter, of: .novel(media), runner: runner, pluginID: pluginID)
             }
         )
         return makeView(media: media, pluginID: pluginID, context: context)

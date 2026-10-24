@@ -92,19 +92,19 @@ extension MangaReaderViewModel {
     }
 
     static func presence(
-        manga: Manga,
-        chapter: Manga.Chapter,
+        entry: MediaEntry,
+        chapter: Chapter,
         anilistID: String?,
         pluginName: String?,
         resetTimer: Bool
     ) -> MangaReaderPresence {
         MangaReaderPresence(
-            details: manga.title,
+            details: entry.title,
             state: "Reading \(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))",
             activityType: 3,
             detailsURL: anilistID.map { "https://anilist.co/manga/\($0)" },
             largeImageText: "Reading from \(chapter.scanlator ?? "Official") at \(pluginName ?? "Unknown Plugin")",
-            imageURL: manga.cover,
+            imageURL: entry.cover,
             resetTimer: resetTimer
         )
     }

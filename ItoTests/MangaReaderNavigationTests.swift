@@ -286,7 +286,7 @@ extension MangaReaderViewModelTests {
         let reopened = MangaReaderViewModel(
             pageLoader: subject.loader,
             pluginID: subject.viewModel.pluginID,
-            manga: subject.viewModel.manga,
+            entry: subject.viewModel.entry,
             initialChapter: makeChapter("a", number: 1),
             dependencies: subject.dependencies
         )

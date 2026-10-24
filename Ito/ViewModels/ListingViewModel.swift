@@ -6,7 +6,7 @@ import ito_runner
 final class ListingViewModel: ObservableObject {
     struct Identity: Equatable {
         let pluginID: String
-        let pluginType: PluginType
+        let pluginType: MediaKind
         let listingID: String
         let listingKind: Int32
         let title: String
@@ -53,7 +53,7 @@ final class ListingViewModel: ObservableObject {
     }
 
     var title: String { destination.title }
-    var pluginType: PluginType { destination.plugin.info.type }
+    var pluginType: MediaKind { destination.plugin.info.type }
     var isEmpty: Bool { mangas.isEmpty && animes.isEmpty && novels.isEmpty }
 
     func loadInitialIfNeeded() async {
@@ -150,7 +150,7 @@ final class ListingViewModel: ObservableObject {
     ) async {
         do {
             let result = try await destination.context.loadListing(
-                pluginType: destination.plugin.info.type,
+                kind: destination.plugin.info.type,
                 listing: destination.listing,
                 page: page
             )

@@ -32,14 +32,14 @@ final class MangaPageLoaderFake: MangaPageLoading {
 
     var responses: [String: [Response]] = [:]
     private(set) var requestedChapterKeys: [String] = []
+    private(set) var requestedEntries: [MediaEntry] = []
     private var pending: [Pending] = []
-
     func enqueue(_ response: Response, for chapterKey: String) {
         responses[chapterKey, default: []].append(response)
     }
 
-    func pages(for manga: Manga, chapter: Manga.Chapter) async throws -> [Page] {
-        _ = manga
+    func pages(for entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
+        requestedEntries.append(entry)
         requestedChapterKeys.append(chapter.key)
         let response = responses[chapter.key]?.isEmpty == false
             ? responses[chapter.key]?.removeFirst()
@@ -158,7 +158,7 @@ final class MangaReaderProgressFake: MangaReaderProgressTracking {
 @MainActor
 final class MangaReaderHistoryFake: MangaReaderHistoryRecording {
     struct Request {
-        let manga: Manga
+        let entry: MediaEntry
         let chapterKey: String
         let chapterTitle: String
         let pluginID: String
@@ -171,8 +171,8 @@ final class MangaReaderHistoryFake: MangaReaderHistoryRecording {
         self.events = events
     }
 
-    func recordManga(
-        _ manga: Manga,
+    func recordChapter(
+        of entry: MediaEntry,
         chapterKey: String,
         chapterTitle: String,
         pluginID: String
@@ -180,7 +180,7 @@ final class MangaReaderHistoryFake: MangaReaderHistoryRecording {
         events.record("history:\(chapterKey)")
         requests.append(
             Request(
-                manga: manga,
+                entry: entry,
                 chapterKey: chapterKey,
                 chapterTitle: chapterTitle,
                 pluginID: pluginID
@@ -297,8 +297,8 @@ struct MangaReaderTestSubject {
 
 @MainActor
 func makeMangaReaderSubject(
-    manga: Manga,
-    initialChapter: Manga.Chapter,
+    entry: MediaEntry,
+    initialChapter: Chapter,
     preloadImageCount: Int = 5
 ) -> MangaReaderTestSubject {
     let events = MangaReaderEventRecorder()
@@ -324,7 +324,7 @@ func makeMangaReaderSubject(
     let viewModel = MangaReaderViewModel(
         pageLoader: loader,
         pluginID: "plugin.test",
-        manga: manga,
+        entry: entry,
         initialChapter: initialChapter,
         dependencies: dependencies
     )
@@ -341,5 +341,18 @@ func makeMangaReaderSubject(
         imagePrefetcher: imagePrefetcher,
         logger: logger,
         dependencies: dependencies
+    )
+}
+
+@MainActor
+func makeMangaReaderSubject(
+    manga: Manga,
+    initialChapter: Manga.Chapter,
+    preloadImageCount: Int = 5
+) -> MangaReaderTestSubject {
+    makeMangaReaderSubject(
+        entry: .manga(manga),
+        initialChapter: initialChapter,
+        preloadImageCount: preloadImageCount
     )
 }

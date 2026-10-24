@@ -5,12 +5,15 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
     let chapter: C
     let isRead: Bool
     let onTap: () -> Void
+    /// Marks a text chapter in a series that also has page chapters: it opens in the text reader.
+    let marksText: Bool
 
     @State private var isPressed = false
 
-    public init(chapter: C, isRead: Bool, onTap: @escaping () -> Void) {
+    public init(chapter: C, isRead: Bool, marksText: Bool = false, onTap: @escaping () -> Void) {
         self.chapter = chapter
         self.isRead = isRead
+        self.marksText = marksText
         self.onTap = onTap
     }
 
@@ -66,6 +69,14 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
     @ViewBuilder
     private var chapterSubtitle: some View {
         HStack(spacing: 4) {
+            if marksText {
+                Text("Text")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(subtitleColor)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .overlay(Capsule().stroke(subtitleColor, lineWidth: 0.5))
+            }
             if let dateUpload = chapter.dateUpload {
                 Text(dateUpload)
                     .font(.caption).foregroundStyle(subtitleColor)

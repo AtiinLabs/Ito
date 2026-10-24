@@ -851,7 +851,7 @@ final class SourceResolverViewModelTests: XCTestCase {
         DiscoverMedia(id: 1, title: "Test", titleEnglish: nil, titleRomaji: nil, titleNative: nil, synonyms: [], coverImage: nil, bannerImage: nil, format: nil, status: nil, description: nil, cleanDescription: nil, genres: nil, averageScore: nil, episodes: nil, chapters: nil, season: nil, seasonYear: nil, type: type, recommendations: nil)
     }
 
-    func makePlugin(id: String = "p1", version: String = "1.0", type: PluginType = .manga) -> InstalledPlugin {
+    func makePlugin(id: String = "p1", version: String = "1.0", type: MediaKind = .manga) -> InstalledPlugin {
         InstalledPlugin(url: URL(fileURLWithPath: "/"), info: PluginInfo(id: id, name: id, version: version, minAppVersion: "1.0", type: type), iconData: nil)
     }
 

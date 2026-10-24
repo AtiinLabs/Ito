@@ -85,7 +85,7 @@ struct PluginGatingTests {
             ),
             InstalledPlugin(
                 url: URL(fileURLWithPath: "/test/newer-abi.ito"),
-                info: PluginInfo(id: "newer-abi", name: "Newer", version: "1.0", minAppVersion: "1.0", type: .manga, abi: 2),
+                info: PluginInfo(id: "newer-abi", name: "Newer", version: "1.0", minAppVersion: "1.0", type: .manga, abi: 3),
                 iconData: nil
             )
         ]
@@ -147,7 +147,7 @@ struct PluginGatingTests {
             RepoPackage(
                 id: "newer-abi", name: "Newer", version: "1.0", minAppVersion: "1.0",
                 downloadUrl: "newer.ito", iconUrl: nil, sha256: "unused", pluginType: "manga",
-                archived: nil, archivedReason: nil, archivedDate: nil, abi: 2
+                archived: nil, archivedReason: nil, archivedDate: nil, abi: 3
             )
         ]
 
@@ -170,9 +170,10 @@ struct PluginGatingTests {
         }
         let refused = PluginRequiresNewerAppError(minimumAppVersion: nil)
 
-        #expect(package(abi: 2, imports: nil).compatibilityRefusal() == refused)
+        #expect(package(abi: 3, imports: nil).compatibilityRefusal() == refused)
         #expect(package(abi: 1, imports: ["ito:core/net.fetch_v9"]).compatibilityRefusal() == refused)
         #expect(package(abi: 1, imports: ["ito:core/net.fetch_v2", "ito:core/std.print"]).compatibilityRefusal() == nil)
+        #expect(package(abi: 2, imports: ["ito:core/std.print"]).compatibilityRefusal() == nil)
         #expect(package(abi: nil, imports: nil).compatibilityRefusal() == nil)
         #expect(refused.localizedDescription == "This source needs a newer version of Ito. Update Ito to use it.")
     }

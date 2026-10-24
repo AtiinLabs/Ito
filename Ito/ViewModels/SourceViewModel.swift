@@ -354,7 +354,7 @@ final class SourceViewModel: ObservableObject {
         runnerProvider.clearPendingTrust(for: plugin.id)
         do {
             let page = try await context.search(
-                pluginType: plugin.info.type,
+                kind: plugin.info.type,
                 query: query,
                 page: 1,
                 filters: []

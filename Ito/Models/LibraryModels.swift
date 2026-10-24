@@ -44,7 +44,7 @@ public struct LibraryItem: Codable, Identifiable, Hashable, Sendable, FetchableR
     public let coverUrl: String?
     public let pluginId: String
     public let isAnime: Bool
-    public var pluginType: PluginType?
+    public var pluginType: MediaKind?
 
     // We store the raw payload so we can easily instantiate an Anime/Manga/Novel object when the user clicks it.
     public let rawPayload: Data
@@ -58,7 +58,7 @@ public struct LibraryItem: Codable, Identifiable, Hashable, Sendable, FetchableR
     public var lastUpdatedAt: Date?
     public var knownChapterCount: Int?
 
-    public var effectiveType: PluginType {
+    public var effectiveType: MediaKind {
         if let pt = pluginType { return pt }
         return isAnime ? .anime : .manga
     }

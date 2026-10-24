@@ -4,7 +4,7 @@ import ito_runner
 
 @MainActor
 protocol NovelChapterLoading: AnyObject {
-    func content(for novel: Novel, chapter: Novel.Chapter) async throws -> [Page]
+    func content(for entry: MediaEntry, chapter: Chapter) async throws -> [Page]
 }
 
 @MainActor
@@ -15,8 +15,8 @@ final class ItoRunnerNovelChapterLoader: NovelChapterLoading {
         self.runner = runner
     }
 
-    func content(for novel: Novel, chapter: Novel.Chapter) async throws -> [Page] {
-        try await pluginCall { try await runner.getChapterContent(novel: novel, chapter: chapter) }
+    func content(for entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
+        try await pluginCall { try await runner.getChapterPages(entry: entry, chapter: chapter) }
     }
 }
 
@@ -57,27 +57,31 @@ extension ReadProgressManager: NovelReaderProgressTracking {
 
 @MainActor
 protocol NovelReaderHistoryRecording: AnyObject {
-    func recordNovel(
-        _ novel: Novel,
+    /// Records a chapter under its catalog entry's kind, independent of reader format.
+    func recordChapter(
+        of entry: MediaEntry,
         chapterKey: String,
         chapterTitle: String,
         pluginID: String
     )
 }
 
-extension HistoryManager: NovelReaderHistoryRecording {
-    func recordNovel(
-        _ novel: Novel,
+extension HistoryManager: NovelReaderHistoryRecording, MangaReaderHistoryRecording {
+    func recordChapter(
+        of entry: MediaEntry,
         chapterKey: String,
         chapterTitle: String,
         pluginID: String
     ) {
-        addNovel(
-            novel,
-            chapterKey: chapterKey,
-            chapterTitle: chapterTitle,
-            pluginId: pluginID
-        )
+        switch entry {
+        case .manga(let manga):
+            addManga(manga, chapterKey: chapterKey, chapterTitle: chapterTitle, pluginId: pluginID)
+        case .novel(let novel):
+            addNovel(novel, chapterKey: chapterKey, chapterTitle: chapterTitle, pluginId: pluginID)
+        case .anime:
+            // Anime has episodes and never opens either chapter reader.
+            break
+        }
     }
 }
 
@@ -317,13 +321,13 @@ private final class UnavailableNovelReaderDependencies:
         _ = chapterID
     }
 
-    func recordNovel(
-        _ novel: Novel,
+    func recordChapter(
+        of entry: MediaEntry,
         chapterKey: String,
         chapterTitle: String,
         pluginID: String
     ) {
-        _ = novel
+        _ = entry
         _ = chapterKey
         _ = chapterTitle
         _ = pluginID

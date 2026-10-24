@@ -19,11 +19,13 @@ public actor PluginSearchAdapter: PluginSearching {
         try await pluginCall {
             switch mediaType {
             case .manga:
-                let res = try await runner.getSearchMangaList(query: query, page: 1, filters: nil)
-                return res.entries.map { .manga($0) }
+                return try await runner.search(query: query, page: 1, kind: .manga).entries.compactMap(\.manga).map {
+                    .manga($0)
+                }
             case .anime:
-                let res = try await runner.getSearchAnimeList(query: query, page: 1, filters: nil)
-                return res.entries.map { .anime($0) }
+                return try await runner.search(query: query, page: 1, kind: .anime).entries.compactMap(\.anime).map {
+                    .anime($0)
+                }
             }
         }
     }

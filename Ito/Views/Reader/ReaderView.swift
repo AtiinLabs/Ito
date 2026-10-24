@@ -35,7 +35,7 @@ struct ReaderView: View {
                     get: { viewModel.overrideViewer },
                     set: { viewModel.setViewerOverride($0) }
                 ),
-                defaultViewer: viewModel.manga.viewer,
+                defaultViewer: viewModel.defaultViewer,
                 preloadCount: Binding(
                     get: { viewModel.preloadImageCount },
                     set: { viewModel.setPreloadImageCount($0) }
@@ -84,7 +84,7 @@ struct ReaderView: View {
             if showUI {
                 VStack {
                     ReaderHeaderView(
-                        title: viewModel.manga.title,
+                        title: viewModel.entry.title,
                         chapterTitle: ReaderChapterTitle.text(
                             title: viewModel.currentChapter.title,
                             number: viewModel.currentChapter.chapter

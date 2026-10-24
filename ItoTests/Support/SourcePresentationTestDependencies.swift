@@ -14,7 +14,7 @@ enum PR7BTestFailure: LocalizedError {
 func pr7bPlugin(
     id: String = "plugin.manga",
     name: String = "Fixture Source",
-    type: PluginType = .manga,
+    type: MediaKind = .manga,
     archived: Bool = false,
     url: URL? = nil
 ) -> InstalledPlugin {
@@ -91,14 +91,14 @@ final class PR7BSourceRunnerProviderSpy: SourceRunnerProviding {
 @MainActor
 final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
     struct SearchInvocation: Equatable {
-        let pluginType: PluginType
+        let pluginType: MediaKind
         let query: String
         let page: Int32
         let filterCount: Int?
     }
 
     struct ListingInvocation: Equatable {
-        let pluginType: PluginType
+        let pluginType: MediaKind
         let listingID: String
         let page: Int32
     }
@@ -149,7 +149,7 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
     }
 
     func search(
-        pluginType: PluginType,
+        kind pluginType: MediaKind,
         query: String,
         page: Int32,
         filters: [FilterItem]?
@@ -166,7 +166,7 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
     }
 
     func loadListing(
-        pluginType: PluginType,
+        kind pluginType: MediaKind,
         listing: Listing,
         page: Int32
     ) async throws -> ListingContentPage {

@@ -43,7 +43,7 @@ final class AtsuPluginLiveImageIntegrationTests: XCTestCase {
         _ = try await runner.loadBundle(from: pluginURL)
         // 3. Request manga update (details + chapters) for user's sample "YMv6"
         let manga = Manga(key: "YMv6", title: "", status: .Unknown, contentRating: .Safe)
-        let updatedManga = try await runner.getMangaUpdate(manga: manga, needsDetails: true, needsChapters: true)
+        let updatedManga = try await runner.getMediaUpdate(.manga(manga)).expecting(\.manga)
 
         XCTAssertFalse(updatedManga.title.isEmpty, "Manga title must not be empty")
         let chapters = try XCTUnwrap(updatedManga.chapters, "Manga must have chapters")
@@ -76,7 +76,7 @@ final class AtsuPluginLiveImageIntegrationTests: XCTestCase {
 
         // 5. Select first chapter and get page list
         let firstChapter = chapters[0]
-        let pages = try await runner.getPageList(manga: updatedManga, chapter: firstChapter)
+        let pages = try await runner.getChapterPages(entry: .manga(updatedManga), chapter: firstChapter)
         XCTAssertGreaterThan(pages.count, 0, "Chapter must have pages")
 
         // 6. Test first 3 pages

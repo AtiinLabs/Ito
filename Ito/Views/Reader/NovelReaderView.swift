@@ -73,7 +73,7 @@ struct NovelReaderView: View {
             if showUI {
                 VStack {
                     NovelReaderHeaderView(
-                        title: viewModel.novel.title,
+                        title: viewModel.entry.title,
                         chapterTitle: chapterTitle(viewModel.currentChapter),
                         onDismiss: { dismiss() }
                     )

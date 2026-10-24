@@ -37,8 +37,8 @@ final class NovelChapterLoaderFake: NovelChapterLoading {
     }
 
     struct Request {
-        let novel: Novel
-        let chapter: Novel.Chapter
+        let entry: MediaEntry
+        let chapter: Chapter
     }
 
     private struct Pending {
@@ -61,8 +61,8 @@ final class NovelChapterLoaderFake: NovelChapterLoading {
         responses[chapterKey, default: []].append(response)
     }
 
-    func content(for novel: Novel, chapter: Novel.Chapter) async throws -> [Page] {
-        requests.append(Request(novel: novel, chapter: chapter))
+    func content(for entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
+        requests.append(Request(entry: entry, chapter: chapter))
         let response = responses[chapter.key]?.isEmpty == false
             ? responses[chapter.key]?.removeFirst()
             : .pages([])
@@ -246,7 +246,7 @@ final class NovelReaderProgressFake: NovelReaderProgressTracking {
 @MainActor
 final class NovelReaderHistoryFake: NovelReaderHistoryRecording {
     struct Request {
-        let novel: Novel
+        let entry: MediaEntry
         let chapterKey: String
         let chapterTitle: String
         let pluginID: String
@@ -260,8 +260,8 @@ final class NovelReaderHistoryFake: NovelReaderHistoryRecording {
         self.events = events
     }
 
-    func recordNovel(
-        _ novel: Novel,
+    func recordChapter(
+        of entry: MediaEntry,
         chapterKey: String,
         chapterTitle: String,
         pluginID: String
@@ -270,7 +270,7 @@ final class NovelReaderHistoryFake: NovelReaderHistoryRecording {
         events.record("history:\(chapterKey)")
         requests.append(
             Request(
-                novel: novel,
+                entry: entry,
                 chapterKey: chapterKey,
                 chapterTitle: chapterTitle,
                 pluginID: pluginID
@@ -579,6 +579,22 @@ func makeNovelReaderSubject(
         prefetchChapters: true
     )
 ) -> NovelReaderTestSubject {
+    makeNovelReaderSubject(entry: .novel(novel), initialChapter: initialChapter, settingsSnapshot: settingsSnapshot)
+}
+
+@MainActor
+func makeNovelReaderSubject(
+    entry: MediaEntry,
+    initialChapter: Chapter,
+    settingsSnapshot: NovelReaderSettingsSnapshot = NovelReaderSettingsSnapshot(
+        fontSize: 18,
+        lineSpacing: 8,
+        fontFamily: .system,
+        theme: .system,
+        isPaging: false,
+        prefetchChapters: true
+    )
+) -> NovelReaderTestSubject {
     let events = NovelReaderEventRecorder()
     let loader = NovelChapterLoaderFake()
     let progress = NovelReaderProgressFake(events: events)
@@ -600,7 +616,7 @@ func makeNovelReaderSubject(
     let viewModel = NovelReaderViewModel(
         chapterLoader: loader,
         pluginID: "plugin.test",
-        novel: novel,
+        entry: entry,
         initialChapter: initialChapter,
         dependencies: dependencies
     )
