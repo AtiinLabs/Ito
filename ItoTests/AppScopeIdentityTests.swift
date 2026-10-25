@@ -640,6 +640,45 @@ final class AppScopeIdentityTests: XCTestCase {
         )
     }
 
+    func testTrustSheetShowsAndConfirmsTheCertificateCurrentlyWaiting() throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let pluginManager = PluginManager(
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool)
+        )
+        pluginManager.publishPreparedInstalledPlugins(["plugin.tls": InstalledPlugin(
+            url: URL(fileURLWithPath: "/plugins/plugin.tls.ito"),
+            info: PluginInfo(id: "plugin.tls", name: "TLS", version: "1.0", minAppVersion: "1.0", type: .manga),
+            iconData: nil
+        )])
+        let trust = pluginManager.pluginSettingsStore.trust
+        let failureCertificate = PendingTrust(pluginID: "plugin.tls", host: "server.local", fingerprint: "AA11")
+        trust.recordPending(failureCertificate)
+        // A later request (an image or update check) meets a rotated certificate.
+        let currentCertificate = PendingTrust(pluginID: "plugin.tls", host: "server.local", fingerprint: "BB22")
+        trust.recordPending(currentCertificate)
+        let scope = AppScope(
+            preparedDependencies: PreparedApplicationDependencies(
+                settings: makeTestPreparedSettingsDependencies(),
+                searchExecutor: AppScopeSearchExecutor(),
+                recentSearchStore: AppScopeRecentStore(),
+                searchDebounceMilliseconds: nil,
+                presentationLogger: PresentationEventCaptureSpy(),
+                browseRepositoryManager: AppScopeBrowseRepositoryManager(),
+                repositoryManagement: makeTestRepositoryManagementDependencies(),
+                browsePluginManager: pluginManager,
+                browseFileOperations: AppScopeBrowseFileOperations(),
+                pluginTrust: trust
+            )
+        )
+
+        let action = scope.viewFactory.trustAction(for: failureCertificate, retry: {})
+
+        XCTAssertEqual(action.request, currentCertificate)
+        try action.confirm()
+        XCTAssertEqual(trust.pinnedFingerprint(pluginID: "plugin.tls", host: "server.local"), "BB22")
+    }
+
     private func makeScope() -> AppScope {
         AppScope(
             preparedDependencies: PreparedApplicationDependencies(

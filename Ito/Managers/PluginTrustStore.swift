@@ -10,7 +10,8 @@ nonisolated public struct PendingTrust: Equatable, Identifiable, Sendable {
     /// Uppercase hex SHA-256 of the server's leaf certificate.
     public let fingerprint: String
 
-    public var id: String { pluginID + "\u{1F}" + host }
+    /// Includes the fingerprint, so a rotated certificate is a new confirmation, not the same one.
+    public var id: String { pluginID + "\u{1F}" + host + "\u{1F}" + fingerprint }
 
     /// The fingerprint as people compare it: byte pairs separated by colons.
     public var displayFingerprint: String {

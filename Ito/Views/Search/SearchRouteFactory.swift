@@ -262,16 +262,19 @@ struct AppViewFactory {
         pluginTrust?.pending(pluginID: pluginID)
     }
 
+    /// The sheet shows, and Trust approves, the certificate the source is waiting on now: a
+    /// later request may have met a rotated certificate since `request` was captured.
     func trustAction(for request: PendingTrust, retry: @escaping () -> Void) -> TrustCertificateAction {
-        TrustCertificateAction(
-            request: request,
-            sourceName: sourceName(pluginID: request.pluginID),
+        let current = pluginTrust?.pending(pluginID: request.pluginID) ?? request
+        return TrustCertificateAction(
+            request: current,
+            sourceName: sourceName(pluginID: current.pluginID),
             confirm: { [pluginTrust, pluginManager, sourceDependencies] in
-                guard let pluginTrust, pluginManager.installedPlugins[request.pluginID] != nil else {
+                guard let pluginTrust, pluginManager.installedPlugins[current.pluginID] != nil else {
                     throw PluginTrustConfirmationError.staleRequest
                 }
-                try pluginTrust.confirm(request)
-                sourceDependencies.runnerProvider.evictSourceRunner(for: request.pluginID)
+                try pluginTrust.confirm(current)
+                sourceDependencies.runnerProvider.evictSourceRunner(for: current.pluginID)
             },
             onSuccess: retry
         )
