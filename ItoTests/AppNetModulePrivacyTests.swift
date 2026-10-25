@@ -18,7 +18,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
                 .success(
                     StubHTTPResponse(
                         statusCode: 403,
-                        headers: ["Server": "cloudflare"],
+                        headers: ["Server": "cloudflare", "cf-mitigated": "challenge"],
                         body: Data("challenge".utf8)
                     )
                 ),
@@ -155,20 +155,45 @@ final class AppNetModulePrivacyTests: XCTestCase {
         XCTAssertTrue(fixture.logger.events.isEmpty)
     }
 
+    /// A Cloudflare block ("Sorry, you have been blocked") is a final answer: it has no
+    /// `cf-mitigated: challenge` header, nothing in a web view can solve it, so the plugin
+    /// gets the response at once instead of the user facing an unsolvable sheet.
+    func testCloudflareBlockPageIsReturnedWithoutChallenge() async throws {
+        let fixture = try makeFixture(
+            steps: [
+                .success(
+                    StubHTTPResponse(
+                        statusCode: 403,
+                        headers: ["Server": "cloudflare", "CF-Ray": "sentinel-ray"],
+                        body: Data("Sorry, you have been blocked".utf8)
+                    )
+                )
+            ]
+        )
+
+        let response = try await fixture.module.fetch(request: fixture.request)
+
+        XCTAssertEqual(response.status, 403)
+        XCTAssertEqual(response.body, [UInt8]("Sorry, you have been blocked".utf8))
+        XCTAssertEqual(fixture.boundary.requests.count, 1)
+        XCTAssertTrue(fixture.cloudflare.resolvedURLs.isEmpty)
+        XCTAssertTrue(fixture.logger.events.isEmpty)
+    }
+
     func testRepeatedCloudflareResponseRetriesOnlyOnceAndReturnsRetryResponse() async throws {
         let fixture = try makeFixture(
             steps: [
                 .success(
                     StubHTTPResponse(
                         statusCode: 503,
-                        headers: ["CF-Ray": "sentinel-ray"],
+                        headers: ["CF-Ray": "sentinel-ray", "CF-Mitigated": "challenge"],
                         body: Data("challenge".utf8)
                     )
                 ),
                 .success(
                     StubHTTPResponse(
                         statusCode: 503,
-                        headers: ["Server": "cloudflare"],
+                        headers: ["Server": "cloudflare", "cf-mitigated": "challenge"],
                         body: Data("retry-challenge".utf8)
                     )
                 )
@@ -193,7 +218,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
                 .success(
                     StubHTTPResponse(
                         statusCode: 503,
-                        headers: ["Server": "cloudflare"],
+                        headers: ["Server": "cloudflare", "cf-mitigated": "challenge"],
                         body: Data()
                     )
                 )
@@ -219,7 +244,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
                 .success(
                     StubHTTPResponse(
                         statusCode: 403,
-                        headers: ["CF-Ray": "sentinel-ray"],
+                        headers: ["CF-Ray": "sentinel-ray", "cf-mitigated": "challenge"],
                         body: Data()
                     )
                 )
@@ -245,7 +270,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
                 .success(
                     StubHTTPResponse(
                         statusCode: 403,
-                        headers: ["Server": "cloudflare"],
+                        headers: ["Server": "cloudflare", "cf-mitigated": "challenge"],
                         body: Data()
                     )
                 ),

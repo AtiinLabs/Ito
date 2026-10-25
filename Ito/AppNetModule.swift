@@ -179,16 +179,18 @@ actor AppNetModule: NetModule {
         }
         Self.keepSetCookies(of: httpResponse, pluginID: pluginID, in: cookieJar)
 
-        // --- Cloudflare Bypass Interception ---
+        // --- Cloudflare challenge interception ---
+        // Cloudflare marks every challenge page with `cf-mitigated: challenge`. A block page
+        // ("Sorry, you have been blocked") also comes from Cloudflare with 403 and CF-Ray but
+        // has no such header: no web view can solve it, so it goes back to the plugin as is.
         let statusCode = httpResponse.statusCode
-        if !isRetry && (statusCode == 403 || statusCode == 503) {
-            let isCloudflare = httpResponse.allHeaderFields.contains { key, value in
-                let keyStr = String(describing: key).lowercased()
-                let valStr = String(describing: value).lowercased()
-                return (keyStr == "server" && valStr.contains("cloudflare")) || keyStr == "cf-ray"
+        if !isRetry {
+            let isChallenge = httpResponse.allHeaderFields.contains { key, value in
+                String(describing: key).lowercased() == "cf-mitigated"
+                    && String(describing: value).trimmingCharacters(in: .whitespaces).lowercased() == "challenge"
             }
 
-            if isCloudflare {
+            if isChallenge {
                 retryLogger.log(.challengeDetected)
 
                 // The live handler routes through CloudflareManager on MainActor.
