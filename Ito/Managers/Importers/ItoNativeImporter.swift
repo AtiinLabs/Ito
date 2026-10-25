@@ -217,9 +217,9 @@ public struct ItoNativeImporter: BackupImporter {
             throw invalidCapability(code: "duplicateMetadata")
         }
         guard let row = rows.first else { return nil }
-        let id: Int? = row["id"]
-        let formatVersion: Int? = row["formatVersion"]
-        let createdAt: Date? = row["createdAt"]
+        let id: Int? = LegacyMediaKindResolver.value(row, "id")
+        let formatVersion: Int? = LegacyMediaKindResolver.value(row, "formatVersion")
+        let createdAt: Date? = LegacyMediaKindResolver.value(row, "createdAt")
         guard id == 1, let formatVersion, let createdAt else {
             throw invalidCapability(code: "invalidMetadataRow")
         }
@@ -246,8 +246,8 @@ public struct ItoNativeImporter: BackupImporter {
         )
         var seen = Set<BackupComponent>()
         return try rows.map { row in
-            let componentValue: String? = row["component"]
-            let representationValue: String? = row["representation"]
+            let componentValue: String? = LegacyMediaKindResolver.value(row, "component")
+            let representationValue: String? = LegacyMediaKindResolver.value(row, "representation")
             guard let componentValue,
                   let component = BackupComponent(rawValue: componentValue) else {
                 throw invalidCapability(code: "unknownComponent")

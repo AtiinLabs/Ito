@@ -534,6 +534,53 @@ struct BackupImporterCapabilityTests {
         }
     }
 
+    @Test func wrongTypedMetadataValuesAreRejectedWithoutTrapping() async throws {
+        for column in ["id", "formatVersion", "createdAt"] {
+            let fixture = try TemporaryBackupFixture(extension: "itobackup")
+            defer { fixture.cleanup() }
+            try fixture.withDatabase { db in
+                try createMetadataTables(in: db)
+                try db.execute(sql: "INSERT INTO backupMetadata VALUES (1, 1, 0)")
+                try db.execute(
+                    sql: "UPDATE backupMetadata SET \(column) = ?",
+                    arguments: [Data("malformed-metadata-sentinel".utf8)]
+                )
+            }
+            await #expect(
+                throws: BackupPreflightError.rejected(
+                    .invalidCapabilityMetadata(component: nil, code: "invalidMetadataRow")
+                )
+            ) {
+                _ = try await ItoNativeImporter().parse(url: fixture.url)
+            }
+        }
+    }
+
+    @Test func wrongTypedCapabilityValuesAreRejectedWithoutTrapping() async throws {
+        for column in ["component", "representation"] {
+            let fixture = try TemporaryBackupFixture(extension: "itobackup")
+            defer { fixture.cleanup() }
+            try fixture.withDatabase { db in
+                try createMetadataTables(in: db)
+                try db.execute(sql: """
+                    INSERT INTO backupMetadata VALUES (1, 1, 0);
+                    INSERT INTO backupCapability VALUES ('libraryCore', 'representedEmpty');
+                    """)
+                try db.execute(
+                    sql: "UPDATE backupCapability SET \(column) = ?",
+                    arguments: [Data("malformed-capability-sentinel".utf8)]
+                )
+            }
+            let rejection = BackupPreflightError.rejected(.invalidCapabilityMetadata(
+                component: column == "component" ? nil : .libraryCore,
+                code: column == "component" ? "unknownComponent" : "invalidRepresentation"
+            ))
+            await #expect(throws: rejection) {
+                _ = try await ItoNativeImporter().parse(url: fixture.url)
+            }
+        }
+    }
+
     @Test func nativeScalarCapabilityRequiresTheCompleteClosedCatalog() async throws {
         let partial = try TestDatabase()
         defer { partial.cleanup() }
