@@ -43,8 +43,7 @@ public final class TrackerManager: ObservableObject {
         usernameDefaults: UserDefaults,
         backgroundExecution: BackgroundExecution = .none,
         malSession: URLSession = .shared,
-        mangaBakaSession: URLSession = .shared,
-        logsMangaBakaAccountSummary: Bool = false
+        mangaBakaSession: URLSession = .shared
     ) {
         self.dbPool = dbPool
         let credentialRepository = AniListCredentialRepository(
@@ -81,8 +80,7 @@ public final class TrackerManager: ObservableObject {
             ),
             oauth: mangaBakaOAuth,
             usernameDefaults: usernameDefaults,
-            session: mangaBakaSession,
-            logsAccountSummary: logsMangaBakaAccountSummary
+            session: mangaBakaSession
         )
         providers = [tracker, malTracker, mangaBakaTracker]
     }

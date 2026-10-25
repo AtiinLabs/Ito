@@ -334,11 +334,9 @@ public final class DurableStateBootstrap: ObservableObject {
             usernameDefaults = .standard
             legacyTokenStore = LegacyTokenStore()
         }
-        let logsMangaBakaAccountSummary = true
         #else
         let usernameDefaults = UserDefaults.standard
         let legacyTokenStore = LegacyTokenStore()
-        let logsMangaBakaAccountSummary = false
         #endif
         let trackerCredentialStore = KeychainTrackerCredentialStore(service: trackerKeychainService)
         let tracker = TrackerManager(
@@ -348,8 +346,7 @@ public final class DurableStateBootstrap: ObservableObject {
             mangaBakaCredentialStore: trackerCredentialStore,
             legacyTokenStore: legacyTokenStore,
             usernameDefaults: usernameDefaults,
-            backgroundExecution: .application,
-            logsMangaBakaAccountSummary: logsMangaBakaAccountSummary
+            backgroundExecution: .application
         )
         let repositories = RepoManager(
             dbPool: dbPool,

@@ -620,7 +620,7 @@ struct LibraryItemView: View {
                         .frame(width: width)
                         .saturation(isPluginInstalled ? 1.0 : 0.35)
                 } else if state.error != nil {
-                    coverPlaceholder(icon: "photo.slash")
+                    coverPlaceholder(icon: "exclamationmark.triangle")
                 } else {
                     ShimmerView()
                 }

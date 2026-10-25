@@ -185,22 +185,17 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
     private let session: URLSession
     private let catalog: MangaBakaClient
     private var writeChains: [Int: Task<Void, any Error>] = [:]
-    /// Debug builds: after launch, sign-in and each write, log the signed-in account and the start
-    /// of its library. It sends extra requests, so tests leave it off.
-    private let logsAccountSummary: Bool
 
     init(
         credentialRepository: MangaBakaCredentialRepository,
         oauth: MangaBakaOAuth,
         usernameDefaults: UserDefaults,
-        session: URLSession = .shared,
-        logsAccountSummary: Bool = false
+        session: URLSession = .shared
     ) {
         self.credentialRepository = credentialRepository
         self.oauth = oauth
         self.usernameDefaults = usernameDefaults
         self.session = session
-        self.logsAccountSummary = logsAccountSummary
         catalog = Self.client(credential: nil, session: session)
         username = usernameDefaults.string(forKey: usernameKey)
     }
@@ -210,10 +205,6 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
         isSignedIn = result.isSignedIn
         if !result.isSignedIn, result.state == .ready {
             clearUsername()
-        }
-        Self.debugLog("bootstrap \(result.state), signed in: \(result.isSignedIn)")
-        if result.isSignedIn {
-            startAccountSummary()
         }
         return result.state
     }
@@ -229,15 +220,13 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
         do {
             profile = try await Self.client(credential: .oauthAccessToken(token.accessToken), session: session).profile()
         } catch {
-            AppLogger.auth.error("MangaBaka did not accept the new sign-in: \(error.localizedDescription)")
+            AppLogger.auth.error("MangaBaka sign-in validation failed.")
             try? await oauth.revoke(token)
             throw error
         }
         await credentialRepository.persist(.oauth(token))
         isSignedIn = true
         storeUsername(of: profile)
-        Self.debugLog("signed in with OAuth, scopes \(token.scope ?? "unknown"): \(Self.describe(profile))")
-        startAccountSummary()
     }
 
     /// Signs in with a Personal Access Token the user created on mangabaka.org.
@@ -253,8 +242,6 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
         await credentialRepository.persist(.personalAccessToken(token))
         isSignedIn = true
         storeUsername(of: profile)
-        Self.debugLog("signed in with a Personal Access Token: \(Self.describe(profile))")
-        startAccountSummary()
     }
 
     public func logout() async throws {
@@ -314,30 +301,21 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
     private func applyProgress(id: Int, progress: Int?, status: String?) async throws {
         // Fail closed: without a fresh read of the entry and series, nothing is written.
         let entry = try await read(id)
-        let kind = status == nil ? "automatic" : "explicit"
         guard let patch = try MangaBakaWritePolicy.patch(for: entry.snapshot, progress: progress, status: status) else {
-            Self.debugLog("\(kind) write for series \(id) (status \(status ?? "none"), chapter \(progress.map(String.init) ?? "none")) skipped: nothing to change")
             return
         }
         let changes = LibraryEntryChanges(
             state: patch.state.map(Self.libraryState),
             progressChapter: patch.progress.map(Double.init)
         )
-        let sent = "state \(changes.state?.rawValue ?? "unchanged"), chapter \(changes.progressChapter.map { "\($0)" } ?? "unchanged")"
         if entry.library == nil {
             guard changes.state != nil else {
-                Self.debugLog("\(kind) write for series \(id) skipped: no state for a new entry")
                 return
             }
-            Self.debugLog("\(kind) write: POST create series \(id) with \(sent)")
             try await perform { try await $0.createLibraryEntry(seriesID: id, changes) }
-            Self.debugLog("\(kind) write: created series \(id)")
         } else {
-            Self.debugLog("\(kind) write: PATCH series \(id) with \(sent)")
             try await perform { try await $0.updateLibraryEntry(seriesID: id, changes) }
-            Self.debugLog("\(kind) write: updated series \(id)")
         }
-        startAccountSummary()
     }
 
     private struct RemoteEntry {
@@ -349,7 +327,6 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
         async let seriesRead = catalog.series(id: id)
         let library = try await perform { try await $0.libraryEntry(seriesID: id) }
         let series = try await seriesRead
-        Self.debugLog("read series \(id) (\(series.state), \(series.status)): \(Self.describe(library))")
         switch series.state {
         case .active:
             break
@@ -390,67 +367,11 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
                 }
             }
         } catch let error as MangaBakaCredentialRepository.CredentialError {
-            Self.debugLog("credential error: \(error)")
             if await !credentialRepository.hasSession {
                 markSignedOut()
             }
             throw error
-        } catch {
-            Self.debugLog("request failed: \(Self.describe(error))")
-            throw error
         }
-    }
-
-    // MARK: Debug diagnostics
-
-    /// Detailed MangaBaka diagnostics in debug builds: the signed-in account, library reads and
-    /// writes, and API errors. Never tokens, headers or request bodies; release builds log none of it.
-    private static func debugLog(_ message: @autoclosure () -> String) {
-        #if DEBUG
-        let text = message()
-        AppLogger.network.notice("MangaBaka: \(text, privacy: .public)")
-        #endif
-    }
-
-    private func startAccountSummary() {
-        #if DEBUG
-        guard logsAccountSummary else { return }
-        Task { await self.logAccountSummary() }
-        #endif
-    }
-
-    /// Logs which account the saved credential belongs to and the entries it has, to compare with
-    /// the library on mangabaka.org.
-    private func logAccountSummary() async {
-        do {
-            let profile = try await perform { try await $0.profile() }
-            Self.debugLog(Self.describe(profile))
-            let page = try await perform { try await $0.library(LibraryQuery(sort: .recentlyUpdated, limit: 10)) }
-            let entries = page.items
-                .map { "\($0.entry.seriesID) \($0.entry.state?.rawValue ?? "none") ch \($0.entry.progressChapter.map { "\($0)" } ?? "none")" }
-                .joined(separator: "; ")
-            Self.debugLog("library has \(page.totalCount) entries; recently updated: [\(entries)]")
-        } catch {
-            Self.debugLog("account summary failed: \(Self.describe(error))")
-        }
-    }
-
-    private static func describe(_ profile: MangaBakaProfile) -> String {
-        "account \(profile.id), username \(profile.preferredUsername ?? "none"), nickname \(profile.nickname ?? "none"), "
-            + "auth \(profile.authenticationType), scopes \(profile.scopes.joined(separator: " "))"
-    }
-
-    private static func describe(_ entry: LibraryEntry?) -> String {
-        guard let entry else { return "not in library" }
-        return "entry state \(entry.state?.rawValue ?? "none"), chapter \(entry.progressChapter.map { "\($0)" } ?? "none"), "
-            + "private \(entry.isPrivate)"
-    }
-
-    private static func describe(_ error: any Error) -> String {
-        guard let response = (error as? MangaBakaError)?.response else {
-            return String(describing: error)
-        }
-        return "HTTP \(response.statusCode), code \(response.code.map { "\($0)" } ?? "none"), message \(response.message ?? "none")"
     }
 
     private func storeUsername(of profile: MangaBakaProfile) {

@@ -118,7 +118,7 @@ struct HistoryItemRow: View {
                         image.resizable().scaledToFill()
                     } else if state.error != nil {
                         Color.itoCardBackground
-                            .overlay(Image(systemName: "photo.slash").foregroundStyle(.tertiary))
+                            .overlay(Image(systemName: "exclamationmark.triangle").foregroundStyle(.tertiary))
                     } else {
                         Color.itoCardBackground
                     }
