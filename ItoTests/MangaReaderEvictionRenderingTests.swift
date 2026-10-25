@@ -54,8 +54,13 @@ extension MangaReaderViewModelTests {
         })
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         let oldKeyWindow = scene?.windows.first(where: \.isKeyWindow)
-        let window = scene.map(UIWindow.init(windowScene:))
-            ?? UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let window = scene.map(UIWindow.init(windowScene:)) ?? UIWindow()
+        // The probe's geometry is portrait; a scene window would otherwise take the
+        // scene's current, possibly landscape, bounds and safe-area insets.
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        if #available(iOS 16.4, *) {
+            host.safeAreaRegions = []
+        }
         window.rootViewController = host
         window.makeKeyAndVisible()
         defer {

@@ -17,6 +17,11 @@ final class ItoUITestsLaunchTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    override func tearDownWithError() throws {
+        // Each UI configuration run may rotate the device; leave it as later tests expect.
+        XCUIDevice.shared.orientation = .portrait
+    }
+
     @MainActor
     func testLaunch() throws {
         let app = XCUIApplication()
