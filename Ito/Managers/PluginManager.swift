@@ -41,6 +41,15 @@ public class PluginManager: ObservableObject {
 
     // Cache for loaded WASM runners
     private var runnerCache: [String: CachedRunner] = [:]
+    // Dedicated cache for image runners
+    private var imageRunnerCache: [String: CachedRunner] = [:]
+
+    private struct PendingImageLoad {
+        let token: UUID
+        let authority: RunnerAuthority
+        let task: Task<ItoRunner, Error>
+    }
+    private var pendingImageLoads: [String: PendingImageLoad] = [:]
     private let pluginsDirectory: URL?
     private let runnerLoader: @MainActor (
         _ pluginID: String,
@@ -132,6 +141,84 @@ public class PluginManager: ObservableObject {
         return runner
     }
 
+    /// Gets a cached ItoRunner dedicated to image loading for a plugin ID, or initializes a new one.
+    /// In-flight requests for the same plugin and authority share a single pending load task.
+    @MainActor
+    public func getImageRunner(for pluginId: String) async throws -> ItoRunner {
+        try Task.checkCancellation()
+        guard let plugin = installedPlugins[pluginId] else {
+            AppLogger.plugin.debug("🔌 [PluginManager] Plugin not found: \(pluginId)")
+            throw URLError(.fileDoesNotExist) // Plugin not installed
+        }
+        // A plugin built for a newer Ito may call what this version doesn't provide.
+        if let refusal = plugin.info.compatibilityRefusal {
+            throw refusal
+        }
+        let authority = runnerAuthority(for: plugin)
+
+        try pluginSettingsStore.prepare(pluginId: pluginId)
+        if let cached = imageRunnerCache[pluginId] {
+            if cached.authority == authority {
+                AppLogger.plugin.debug("🔌 [PluginManager] Returning cached image runner for \(pluginId)")
+                return cached.runner
+            }
+            imageRunnerCache[pluginId] = nil
+        }
+
+        let pendingTask: Task<ItoRunner, Error>
+        if let existing = pendingImageLoads[pluginId], existing.authority == authority {
+            pendingTask = existing.task
+        } else {
+            if let stale = pendingImageLoads.removeValue(forKey: pluginId) {
+                stale.task.cancel()
+            }
+            let token = UUID()
+            let task = Task<ItoRunner, Error> { @MainActor [weak self] () -> ItoRunner in
+                guard let runnerLoader = self?.runnerLoader,
+                      let settingsStore = self?.pluginSettingsStore else {
+                    throw CancellationError()
+                }
+                do {
+                    try Task.checkCancellation()
+                    let runner = try await runnerLoader(pluginId, plugin.url, settingsStore)
+                    try Task.checkCancellation()
+                    guard let self else { throw CancellationError() }
+                    guard self.pendingImageLoads[pluginId]?.token == token,
+                          self.installedPlugins[pluginId].map(self.runnerAuthority) == authority else {
+                        if self.pendingImageLoads[pluginId]?.token == token {
+                            self.pendingImageLoads[pluginId] = nil
+                        }
+                        throw PluginRunnerAuthorityError.changedDuringLoad
+                    }
+                    self.pendingImageLoads[pluginId] = nil
+                    self.imageRunnerCache[pluginId] = CachedRunner(authority: authority, runner: runner)
+                    AppLogger.plugin.debug("🔌 [PluginManager] Image runner cached for \(pluginId)")
+                    return runner
+                } catch {
+                    if let self, self.pendingImageLoads[pluginId]?.token == token {
+                        self.pendingImageLoads[pluginId] = nil
+                    }
+                    throw error
+                }
+            }
+            pendingImageLoads[pluginId] = PendingImageLoad(
+                token: token,
+                authority: authority,
+                task: task
+            )
+            pendingTask = task
+        }
+
+        try Task.checkCancellation()
+        let runner = try await pendingTask.value
+        try Task.checkCancellation()
+        guard installedPlugins[pluginId].map(runnerAuthority) == authority,
+              imageRunnerCache[pluginId]?.runner === runner else {
+            throw PluginRunnerAuthorityError.changedDuringLoad
+        }
+        return runner
+    }
+
     /// Loads the plugin and gives it its settings defaults. A plugin that crashes while describing
     /// its settings is loaded again without them: that runner may be broken, but the plugin can
     /// still read, search and update.
@@ -201,11 +288,30 @@ public class PluginManager: ObservableObject {
     }
 
     /// Evicts a cached runner for a plugin so the next getRunner call creates a fresh one.
+    /// Also evicts the image runner cache and cancels any pending image runner load.
     /// Use this after settings changes that require the WASM module to be reloaded.
     @MainActor
     public func evictRunner(for pluginId: String) {
         if runnerCache.removeValue(forKey: pluginId) != nil {
             AppLogger.plugin.debug("🔌 [PluginManager] Evicted cached runner for \(pluginId)")
+        }
+        if imageRunnerCache.removeValue(forKey: pluginId) != nil {
+            AppLogger.plugin.debug("🔌 [PluginManager] Evicted cached image runner for \(pluginId)")
+        }
+        if let pending = pendingImageLoads.removeValue(forKey: pluginId) {
+            pending.task.cancel()
+            AppLogger.plugin.debug("🔌 [PluginManager] Cancelled pending image runner load for \(pluginId)")
+        }
+    }
+
+    /// Evicts a cached image runner for a plugin only if the currently cached runner matches the instance.
+    /// This prevents a late trap callback from an old instance from evicting a newer runner or an in-flight replacement.
+    @MainActor
+    func evictImageRunner(for pluginId: String, matching runner: ItoRunner) {
+        guard let cached = imageRunnerCache[pluginId] else { return }
+        if cached.runner === runner {
+            imageRunnerCache.removeValue(forKey: pluginId)
+            AppLogger.plugin.debug("🔌 [PluginManager] Evicted crashed image runner for \(pluginId)")
         }
     }
 
@@ -341,6 +447,11 @@ public class PluginManager: ObservableObject {
         }
         // Also evict ALL runners to pick up updated .ito files
         runnerCache.removeAll()
+        imageRunnerCache.removeAll()
+        for (_, pending) in pendingImageLoads {
+            pending.task.cancel()
+        }
+        pendingImageLoads.removeAll()
         // A source removed in this launch trusts certificates again only once reinstalled.
         for pluginID in newCache.keys {
             pluginSettingsStore.trust.activateInstalledPlugin(pluginID)
@@ -362,6 +473,6 @@ public class PluginManager: ObservableObject {
     }
 }
 
-private enum PluginRunnerAuthorityError: Error {
+enum PluginRunnerAuthorityError: Error, Equatable {
     case changedDuringLoad
 }

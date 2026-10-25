@@ -129,6 +129,154 @@ final class PluginDataLoaderNativeTests: XCTestCase {
         }
     }
 
+    func testCrashedImageRunnerIsEvictedSoNextImageRequestSucceedsWithHealthyReplacement() async {
+        await assertCrashRecovery(crashOnLegacy: true)
+        await assertCrashRecovery(crashOnLegacy: false)
+    }
+
+    private func assertCrashRecovery(crashOnLegacy: Bool) async {
+        let crashedRunner = CrashingImageRunner(
+            crashOnDescriptor: !crashOnLegacy,
+            crashOnLegacy: crashOnLegacy
+        )
+        let healthyRunner = NativeImageRunner()
+
+        let cache = TestImageRunnerCache(initialRunner: crashedRunner)
+        let loader = PluginDataLoader(
+            configuration: .ephemeral,
+            runnerProvider: { pluginId in
+                await cache.runner(for: pluginId)
+            },
+            runnerEvictor: { pluginId, runner in
+                await cache.evict(pluginId: pluginId, matching: runner)
+            }
+        )
+
+        // First request uses the crashing runner
+        let capture1 = NativeImageCapture()
+        let done1 = expectation(description: "First request completed")
+        let sub1 = loader.loadData(
+            with: URLRequest(url: URL(string: "ito://fixture.plugin/cover1")!),
+            didReceiveData: { data, _ in capture1.append(data) },
+            completion: { error in
+                capture1.complete(error)
+                done1.fulfill()
+            }
+        )
+        await fulfillment(of: [done1], timeout: 5)
+        withExtendedLifetime(sub1) {}
+
+        XCTAssertTrue(capture1.data.isEmpty)
+        XCTAssertEqual(capture1.completions, 1)
+        XCTAssertEqual(capture1.error as? PluginCallError, PluginCallError(kind: .crashed, message: "The source stopped unexpectedly. Try again."))
+
+        // Cache should have had its runner evicted
+        let currentRunnerAfterCrash = await cache.currentRunner
+        XCTAssertNil(currentRunnerAfterCrash, "Crashing runner must be evicted from cache")
+        let evictions = await cache.evictionCount
+        XCTAssertEqual(evictions, 1)
+
+        // Supply healthy replacement into the cache for next request
+        await cache.setReplacement(healthyRunner)
+
+        // Second request gets the replacement runner and succeeds
+        let capture2 = NativeImageCapture()
+        let done2 = expectation(description: "Second request completed")
+        let sub2 = loader.loadData(
+            with: URLRequest(url: URL(string: "ito://fixture.plugin/cover2")!),
+            didReceiveData: { data, _ in capture2.append(data) },
+            completion: { error in
+                capture2.complete(error)
+                done2.fulfill()
+            }
+        )
+        await fulfillment(of: [done2], timeout: 5)
+        withExtendedLifetime(sub2) {}
+
+        XCTAssertEqual(capture2.data, Data([9, 8]))
+        XCTAssertEqual(capture2.completions, 1)
+        XCTAssertNil(capture2.error)
+        let legacyCalls = await healthyRunner.legacyCalls
+        XCTAssertEqual(legacyCalls, 1)
+    }
+
+
+    func testReportedRefusalRemainsFailClosedAndDoesNotEvictRunner() async {
+        let refusal = PluginCallError(kind: .reported, message: "Explicit refusal")
+        let runner = NativeImageRunner(refusal: refusal)
+        let cache = TestImageRunnerCache(initialRunner: runner)
+        let loader = PluginDataLoader(
+            configuration: .ephemeral,
+            runnerProvider: { pluginId in
+                await cache.runner(for: pluginId)
+            },
+            runnerEvictor: { pluginId, r in
+                await cache.evict(pluginId: pluginId, matching: r)
+            }
+        )
+
+        let capture = NativeImageCapture()
+        let done = expectation(description: "Refusal request completed")
+        let sub = loader.loadData(
+            with: URLRequest(url: URL(string: "ito://fixture.plugin/cover")!),
+            didReceiveData: { data, _ in capture.append(data) },
+            completion: { error in
+                capture.complete(error)
+                done.fulfill()
+            }
+        )
+        await fulfillment(of: [done], timeout: 5)
+        withExtendedLifetime(sub) {}
+
+        XCTAssertEqual(capture.error as? PluginCallError, refusal)
+        XCTAssertTrue(capture.data.isEmpty)
+        XCTAssertEqual(capture.completions, 1)
+        let evictions = await cache.evictionCount
+        XCTAssertEqual(evictions, 0, "Refusal must not evict the runner")
+        let currentRunner = await cache.currentRunner
+        XCTAssertNotNil(currentRunner, "Runner must remain in cache")
+    }
+
+    func testCancellationRemainsFailClosedAndDoesNotEvictRunner() async {
+        let started = expectation(description: "Legacy handler entered")
+        let done = expectation(description: "Cancelled request completed")
+        let runner = DelayedLegacyImageRunner(didStart: { started.fulfill() })
+        let cache = TestImageRunnerCache(initialRunner: runner)
+        let loader = PluginDataLoader(
+            configuration: .ephemeral,
+            runnerProvider: { pluginId in
+                await cache.runner(for: pluginId)
+            },
+            runnerEvictor: { pluginId, r in
+                await cache.evict(pluginId: pluginId, matching: r)
+            }
+        )
+
+        let capture = NativeImageCapture()
+        let request = URLRequest(url: URL(string: "ito://fixture.plugin/https://images.example/cover")!)
+        let sub = loader.loadData(
+            with: request,
+            didReceiveData: { data, _ in capture.append(data) },
+            completion: { error in
+                capture.complete(error)
+                done.fulfill()
+            }
+        )
+
+        await fulfillment(of: [started], timeout: 5)
+        sub.cancel()
+        await runner.resume(returning: Data([9, 8]))
+        await fulfillment(of: [done], timeout: 5)
+
+        XCTAssertTrue(capture.data.isEmpty)
+        XCTAssertEqual(capture.completions, 1)
+        XCTAssertEqual((capture.error as? URLError)?.code, .cancelled)
+        let evictions = await cache.evictionCount
+        XCTAssertEqual(evictions, 0, "Cancellation must not evict the runner")
+        let currentRunner = await cache.currentRunner
+        XCTAssertNotNil(currentRunner, "Runner must remain in cache")
+    }
+
     private func load(_ runner: NativeImageRunner) async -> NativeImageCapture {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [PluginImageTransportTestURLProtocol.self]
@@ -145,6 +293,67 @@ final class PluginDataLoaderNativeTests: XCTestCase {
         await fulfillment(of: [done], timeout: 5)
         withExtendedLifetime(subscription) {}
         return capture
+    }
+}
+
+private actor TestImageRunnerCache {
+    private var current: (any PluginImageRunner)?
+    private var replacement: (any PluginImageRunner)?
+    private(set) var evictionCount = 0
+
+    init(initialRunner: any PluginImageRunner) {
+        self.current = initialRunner
+    }
+
+    func runner(for pluginId: String) -> any PluginImageRunner {
+        if let current { return current }
+        if let replacement {
+            current = replacement
+            return replacement
+        }
+        fatalError("No runner available")
+    }
+
+    func evict(pluginId: String, matching runner: any PluginImageRunner) {
+        if let current, current as AnyObject === runner as AnyObject {
+            self.current = nil
+            evictionCount += 1
+        }
+    }
+
+    func setReplacement(_ runner: any PluginImageRunner) {
+        self.replacement = runner
+        if current == nil {
+            self.current = runner
+        }
+    }
+
+    var currentRunner: (any PluginImageRunner)? { current }
+}
+
+private actor CrashingImageRunner: PluginImageRunner {
+    private let crashOnDescriptor: Bool
+    private let crashOnLegacy: Bool
+
+    init(crashOnDescriptor: Bool = false, crashOnLegacy: Bool = false) {
+        self.crashOnDescriptor = crashOnDescriptor
+        self.crashOnLegacy = crashOnLegacy
+    }
+
+    func getImageRequest(_ locator: String) async throws -> PluginImageRequest? {
+        if crashOnDescriptor {
+            throw ItoError.wasmTrap("Synthetic image trap")
+        }
+        return nil
+    }
+
+    func getImageOrigins() async throws -> [String]? { nil }
+
+    func handleImage(_ locator: String) async throws -> Data? {
+        if crashOnLegacy {
+            throw ItoError.wasmTrap("Synthetic image trap")
+        }
+        return Data([1, 2, 3])
     }
 }
 

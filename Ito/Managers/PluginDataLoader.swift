@@ -17,7 +17,9 @@ extension ItoRunner: PluginImageRunner {}
 public final class PluginDataLoader: DataLoading, @unchecked Sendable {
     private let defaultLoader: DataLoader
     private let runnerProvider: @Sendable (String) async throws -> any PluginImageRunner
+    private let runnerEvictor: (@Sendable (String, any PluginImageRunner) async -> Void)?
     private let imageTransport: PluginImageTransport
+
     public convenience init(
         configuration: URLSessionConfiguration = .default,
         pluginManager: PluginManager
@@ -25,17 +27,24 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
         self.init(
             configuration: configuration,
             trust: pluginManager.pluginSettingsStore.trust,
-            runnerProvider: { try await pluginManager.getRunner(for: $0) }
+            runnerProvider: { try await pluginManager.getImageRunner(for: $0) },
+            runnerEvictor: { pluginId, runner in
+                if let itoRunner = runner as? ItoRunner {
+                    await pluginManager.evictImageRunner(for: pluginId, matching: itoRunner)
+                }
+            }
         )
     }
 
     init(
         configuration: URLSessionConfiguration,
         trust: PluginTrustStore? = nil,
-        runnerProvider: @escaping @Sendable (String) async throws -> any PluginImageRunner
+        runnerProvider: @escaping @Sendable (String) async throws -> any PluginImageRunner,
+        runnerEvictor: (@Sendable (String, any PluginImageRunner) async -> Void)? = nil
     ) {
         self.defaultLoader = DataLoader(configuration: configuration)
         self.runnerProvider = runnerProvider
+        self.runnerEvictor = runnerEvictor
         self.imageTransport = PluginImageTransport(configuration: configuration, trust: trust)
     }
 
@@ -47,12 +56,15 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
 
         let cancellationLatch = CancellationLatch()
         let task = Task {
+            var usedRunner: (any PluginImageRunner)?
+            var targetPluginId: String?
             do {
                 // url format: ito://<plugin_id>/<real_url>
                 guard let host = url.host else {
                     throw URLError(.badURL)
                 }
                 let pluginId = host
+                targetPluginId = pluginId
                 // Extract real URL
                 var realUrlString = url.path
                 if realUrlString.hasPrefix("/") {
@@ -67,6 +79,7 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                 realUrlString = realUrlString.replacingOccurrences(of: "https:///", with: "https://")
 
                 let runner = try await runnerProvider(pluginId)
+                usedRunner = runner
                 try Task.checkCancellation()
 
                 if let resolved = try await pluginCall({ try await runner.getImageRequest(realUrlString) }) {
@@ -112,6 +125,12 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
             } catch is CancellationError {
                 completion(URLError(.cancelled))
             } catch {
+                if let runner = usedRunner,
+                   let pluginId = targetPluginId,
+                   let callError = error as? PluginCallError,
+                   callError.kind == .crashed {
+                    await runnerEvictor?(pluginId, runner)
+                }
                 completion(error)
             }
         }
