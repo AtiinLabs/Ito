@@ -158,6 +158,52 @@ struct PluginTrustStoreTests {
         #expect(store.pinnedFingerprint(pluginID: "plugin-a", host: "a.local") == "INITIAL")
     }
 
+    @Test func observersHearEveryTrustChangeOfTheirSourceButNotAFailedWrite() throws {
+        let keychain = InMemoryPluginSecretKeychain()
+        let store = PluginTrustStore(keychain: keychain)
+        let heard = ObservedGenerations()
+        let other = ObservedGenerations()
+        // Callbacks read the store again: they must run outside its lock.
+        let watched = store.observeTrustChanges(pluginID: "plugin-a") {
+            heard.record(store.transportGeneration(for: "plugin-a"))
+        }
+        let otherWatched = store.observeTrustChanges(pluginID: "plugin-b") {
+            other.record(store.transportGeneration(for: "plugin-b"))
+        }
+        #expect(store.transportGeneration(for: "plugin-a") == watched.generation)
+
+        try store.trust(fingerprint: "AA11", host: "a.local", pluginID: "plugin-a")
+        let confirmation = PendingTrust(pluginID: "plugin-a", host: "a.local", fingerprint: "BB22")
+        store.recordPending(confirmation)
+        try store.confirm(confirmation)
+        #expect(heard.count == 2)
+        #expect(heard.latest != watched.generation)
+
+        keychain.failingStatus = errSecIO
+        #expect(throws: PluginSecretStoreError.self) {
+            try store.trust(fingerprint: "CC33", host: "a.local", pluginID: "plugin-a")
+        }
+        #expect(heard.count == 2)
+        // The pin is revoked in memory first, so even a failed delete is a change.
+        #expect(throws: PluginSecretStoreError.self) {
+            try store.removeAll(pluginID: "plugin-a")
+        }
+        #expect(heard.count == 3)
+        keychain.failingStatus = nil
+        #expect(other.count == 0)
+
+        try store.removeEveryPlugin()
+        #expect(heard.count == 4)
+        #expect(other.count == 1)
+
+        watched.observation.cancel()
+        try store.trust(fingerprint: "DD44", host: "a.local", pluginID: "plugin-a")
+        try store.trust(fingerprint: "EE55", host: "b.local", pluginID: "plugin-b")
+        #expect(heard.count == 4)
+        #expect(other.count == 2)
+        withExtendedLifetime(otherWatched.observation) {}
+    }
+
     @Test func aFailedRemovalKeepsPinsUnusableUntilARetrySucceedsAndTheSourceIsReinstalled() throws {
         let keychain = InMemoryPluginSecretKeychain()
         let store = PluginTrustStore(keychain: keychain)
@@ -280,5 +326,18 @@ struct PluginTrustStoreTests {
         // Disable network fetch on test trust to stay deterministic.
         SecTrustSetNetworkFetchAllowed(unwrappedTrust, false)
         return unwrappedTrust
+    }
+}
+
+/// The trust generations an observer saw, in order.
+private nonisolated final class ObservedGenerations: @unchecked Sendable {
+    private let lock = NSLock()
+    private var generations: [UUID] = []
+
+    var count: Int { lock.withLock { generations.count } }
+    var latest: UUID? { lock.withLock { generations.last } }
+
+    func record(_ generation: UUID) {
+        lock.withLock { generations.append(generation) }
     }
 }

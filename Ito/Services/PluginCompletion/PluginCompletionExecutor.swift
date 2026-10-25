@@ -111,6 +111,27 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
         let network = makeNetModule(intent.pluginId)
         defer { network.invalidate() }
 
+        do {
+            let delivered = try await mark(intent, defaults: defaults, network: network, from: pluginURL)
+            // A source may swallow its cut-off transfer and report anything, even success, so no
+            // result counts once the trusted certificates changed. Delivery is idempotent, so
+            // pausing until the source is checked again is safe.
+            guard network.isTrustCurrent else { throw PluginCompletionExecutionFailure.configurationChanged }
+            return delivered
+        } catch {
+            // Whatever the source made of its cancelled transfer, pause rather than retry an
+            // unchanged intent.
+            if !network.isTrustCurrent { throw PluginCompletionExecutionFailure.configurationChanged }
+            throw error
+        }
+    }
+
+    private func mark(
+        _ intent: PluginCompletionIntent,
+        defaults: PluginCompletionDefaults,
+        network: PluginCompletionNetModule,
+        from pluginURL: URL
+    ) async throws -> Bool {
         var runner = try await load(pluginURL, defaults: defaults, network: network)
         let schemaRead = try await readSchemaDefaults(from: runner, into: defaults)
         if !schemaRead {

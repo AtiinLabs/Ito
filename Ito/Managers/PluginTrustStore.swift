@@ -47,6 +47,8 @@ nonisolated public final class PluginTrustStore: @unchecked Sendable {
     /// Changes whenever a source's trust changes, so transports never reuse a connection a
     /// different trust decision authenticated.
     private var generations: [String: UUID] = [:]
+    /// Called, outside `lock`, whenever a source's trust generation changes.
+    private var observers: [String: [UUID: @Sendable () -> Void]] = [:]
 
     public init(keychain: any PluginSecretKeychain = SystemPluginSecretKeychain(service: PluginTrustStore.productionService)) {
         self.keychain = keychain
@@ -62,19 +64,23 @@ nonisolated public final class PluginTrustStore: @unchecked Sendable {
 
     /// Trusts a fingerprint for this source and host, replacing any earlier certificate.
     public func trust(fingerprint: String, host: String, pluginID: String) throws {
-        try lock.withLock {
+        let changed = try lock.withLock {
             try save(fingerprint: fingerprint, host: host, pluginID: pluginID)
+            return changeObservers(of: pluginID)
         }
+        changed.forEach { $0() }
     }
 
     /// A confirmation only accepts the exact certificate currently waiting for this source. A
     /// late background/image challenge cannot change what a visible confirmation approves.
     public func confirm(_ request: PendingTrust) throws {
-        try lock.withLock {
+        let changed = try lock.withLock {
             guard pending[request.pluginID] == request else { throw PluginTrustConfirmationError.staleRequest }
             try save(fingerprint: request.fingerprint, host: request.host, pluginID: request.pluginID)
             pending[request.pluginID] = nil
+            return changeObservers(of: request.pluginID)
         }
+        changed.forEach { $0() }
     }
 
     /// Callers hold `lock`. Publish the cache only after the Keychain accepted the pin.
@@ -98,9 +104,13 @@ nonisolated public final class PluginTrustStore: @unchecked Sendable {
     /// the Keychain delete fails. Only an installation publication after a successful delete
     /// (`activateInstalledPlugin`) lets the source trust certificates again.
     public func removeAll(pluginID: String) throws {
+        // Observers hear about the revocation even when the Keychain delete then fails.
+        var changed: [@Sendable () -> Void] = []
+        defer { changed.forEach { $0() } }
         try lock.withLock {
             blockedPlugins.insert(pluginID)
             generations[pluginID] = UUID()
+            changed = changeObservers(of: pluginID)
             pending[pluginID] = nil
             let status = keychain.delete(account: pluginID)
             guard status == errSecSuccess || status == errSecItemNotFound else {
@@ -113,9 +123,12 @@ nonisolated public final class PluginTrustStore: @unchecked Sendable {
 
     /// A failure leaves every source's pins unusable until a later cleanup succeeds.
     public func removeEveryPlugin() throws {
+        var changed: [@Sendable () -> Void] = []
+        defer { changed.forEach { $0() } }
         try lock.withLock {
             allTrustBlocked = true
             generations.removeAll()
+            changed = observers.values.flatMap { Array($0.values) }
             pending.removeAll()
             let status = keychain.deleteAll()
             guard status == errSecSuccess || status == errSecItemNotFound else {
@@ -155,12 +168,43 @@ nonisolated public final class PluginTrustStore: @unchecked Sendable {
     /// Identifies the trust decisions a pooled connection was authenticated under. A transport
     /// starts a new session when this changes and retires the old one with its connections.
     func transportGeneration(for pluginID: String) -> UUID {
-        lock.withLock {
-            if let generation = generations[pluginID] { return generation }
-            let generation = UUID()
-            generations[pluginID] = generation
-            return generation
+        lock.withLock { currentGeneration(for: pluginID) }
+    }
+
+    /// Calls `onChange` whenever this source's trust changes from now on, until the returned
+    /// observation is cancelled or released. Also returns the generation current at
+    /// registration, so a caller can tell whether trust changed since by comparing it with
+    /// `transportGeneration(for:)`. `onChange` runs outside the store's lock.
+    func observeTrustChanges(
+        pluginID: String,
+        onChange: @escaping @Sendable () -> Void
+    ) -> (observation: PluginTrustObservation, generation: UUID) {
+        let id = UUID()
+        let registered = lock.withLock {
+            observers[pluginID, default: [:]][id] = onChange
+            return currentGeneration(for: pluginID)
         }
+        let observation = PluginTrustObservation { [weak self] in
+            guard let self else { return }
+            self.lock.withLock {
+                self.observers[pluginID]?[id] = nil
+                if self.observers[pluginID]?.isEmpty == true { self.observers[pluginID] = nil }
+            }
+        }
+        return (observation, registered)
+    }
+
+    /// Callers hold `lock`.
+    private func currentGeneration(for pluginID: String) -> UUID {
+        if let generation = generations[pluginID] { return generation }
+        let generation = UUID()
+        generations[pluginID] = generation
+        return generation
+    }
+
+    /// Callers hold `lock`.
+    private func changeObservers(of pluginID: String) -> [@Sendable () -> Void] {
+        observers[pluginID].map { Array($0.values) } ?? []
     }
 
     /// Callers hold `lock`. Unreadable/corrupt state is never cached or overwritten; reads fail
@@ -235,6 +279,28 @@ nonisolated public final class PluginTrustStore: @unchecked Sendable {
               let leaf = chain.first else { return nil }
         let data = SecCertificateCopyData(leaf) as Data
         return SHA256.hash(data: data).map { String(format: "%02X", $0) }.joined()
+    }
+}
+
+/// Ends a trust-change observation when cancelled or released. Cancelling twice is harmless.
+nonisolated final class PluginTrustObservation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var end: (@Sendable () -> Void)?
+
+    init(end: @escaping @Sendable () -> Void) {
+        self.end = end
+    }
+
+    deinit {
+        cancel()
+    }
+
+    func cancel() {
+        let end = lock.withLock { () -> (@Sendable () -> Void)? in
+            defer { self.end = nil }
+            return self.end
+        }
+        end?()
     }
 }
 

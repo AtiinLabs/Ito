@@ -98,6 +98,54 @@ struct PluginCompletionNetModuleTests {
         await signals.stopped.wait()
     }
 
+    @Test(arguments: ["replaced", "revoked"])
+    func aTrustChangeEndsTheTransferInFlightAndRefusesLaterRequests(change: String) async throws {
+        let slow = CompletionTransportProtocol.makeHost()
+        let signals = CompletionTransportProtocol.registerHang(slow)
+        let later = CompletionTransportProtocol.makeHost()
+        CompletionTransportProtocol.register(later, .respond(status: 204, headers: [:], body: Data()))
+        let trust = PluginTrustStore(keychain: InMemoryPluginSecretKeychain())
+        let module = PluginCompletionNetModule(
+            configuration: CompletionTransportProtocol.configuration(),
+            trust: ("plugin.fixture", trust)
+        )
+
+        let call = Task {
+            try await module.fetch(request: NetRequest(url: "https://\(slow)/slow", method: "PATCH", headers: [:], body: nil))
+        }
+        await signals.started.wait()
+        if change == "replaced" {
+            try trust.trust(fingerprint: "AA11", host: "server.local", pluginID: "plugin.fixture")
+        } else {
+            try trust.removeAll(pluginID: "plugin.fixture")
+        }
+
+        // Nothing but the trust change ends this transfer.
+        await #expect(throws: PluginCompletionExecutionFailure.configurationChanged) { try await call.value }
+        await signals.stopped.wait()
+        await #expect(throws: PluginCompletionExecutionFailure.configurationChanged) {
+            try await module.fetch(request: NetRequest(url: "https://\(later)/ping", method: "PATCH", headers: [:], body: nil))
+        }
+        #expect(CompletionTransportProtocol.requests(to: later).isEmpty)
+    }
+
+    @Test
+    func anotherSourcesTrustChangeLeavesTheTransferAlone() async throws {
+        let host = CompletionTransportProtocol.makeHost()
+        CompletionTransportProtocol.register(host, .respond(status: 204, headers: [:], body: Data()))
+        let trust = PluginTrustStore(keychain: InMemoryPluginSecretKeychain())
+        let module = PluginCompletionNetModule(
+            configuration: CompletionTransportProtocol.configuration(),
+            trust: ("plugin.fixture", trust)
+        )
+        try trust.trust(fingerprint: "AA11", host: "server.local", pluginID: "plugin.other")
+
+        let response = try await module.fetch(
+            request: NetRequest(url: "https://\(host)/ping", method: "PATCH", headers: [:], body: nil)
+        )
+        #expect(response.status == 204)
+    }
+
     @Test(arguments: [
         "file:///etc/hosts", "ftp://example.com/file", "data:text/plain,hello", "javascript:alert(1)", "not a url", ""
     ])
@@ -461,6 +509,30 @@ struct PluginCompletionExecutorTests {
         await signals.stopped.wait()
     }
 
+    @Test
+    func aTrustChangeDuringDeliveryPausesTheIntentInsteadOfCancellingOrRetryingIt() async throws {
+        let host = CompletionTransportProtocol.makeHost()
+        let signals = CompletionTransportProtocol.registerHang(host)
+        let request = NetRequest(url: "https://\(host)/slow", method: "PATCH", headers: [:], body: nil)
+        let trust = PluginTrustStore(keychain: InMemoryPluginSecretKeychain())
+        let harness = try await ExecutorHarness(
+            wasm: TestWasm.build(try TestWasm.sending(request)),
+            networkConfiguration: CompletionTransportProtocol.configuration,
+            trust: trust
+        )
+        defer { harness.cleanup() }
+
+        let executor = harness.executor
+        let intent = harness.intent
+        let attempt = Task { await executor.execute(intent: intent) }
+        await signals.started.wait()
+        try trust.removeAll(pluginID: "plugin.fixture")
+
+        let outcome = describe(await attempt.value)
+        #expect(outcome == "paused(configurationChanged,configurationChanged)")
+        await signals.stopped.wait()
+    }
+
     @Test func aSourceThatAsksForAWebViewPausesAsIncompatibleAndNoPageIsLoaded() async throws {
         let request = WebviewRequest(url: "https://SENTINEL.example/login", script: nil)
         let harness = try await ExecutorHarness(wasm: TestWasm.build(try TestWasm.openingWebView(request)))
@@ -516,7 +588,8 @@ private struct ExecutorHarness {
         kind: MediaKind = .manga,
         locate: (@MainActor @Sendable (String) throws -> URL)? = nil,
         networkConfiguration: (@Sendable () -> URLSessionConfiguration)? = nil,
-        onNetworkCreated: (@Sendable () -> Void)? = nil
+        onNetworkCreated: (@Sendable () -> Void)? = nil,
+        trust: PluginTrustStore? = nil
     ) async throws {
         let database = try TestDatabase()
         let store = PluginCompletionStore(
@@ -551,9 +624,12 @@ private struct ExecutorHarness {
         executor = PluginCompletionExecutor(
             store: store,
             locatePlugin: locator,
-            makeNetModule: { _ in
+            makeNetModule: { pluginID in
                 onNetworkCreated?()
-                return PluginCompletionNetModule(configuration: networkConfiguration?() ?? .ephemeral)
+                return PluginCompletionNetModule(
+                    configuration: networkConfiguration?() ?? .ephemeral,
+                    trust: trust.map { (pluginID, $0) }
+                )
             }
         )
     }

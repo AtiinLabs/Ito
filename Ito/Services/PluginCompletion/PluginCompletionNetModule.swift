@@ -9,7 +9,8 @@ import ito_runner
 /// ignored, so an attempt never changes the session. Every redirect is refused, so a credentialed
 /// request can never be forwarded to another location; the redirect response itself is returned
 /// to the plugin, which reports it as an unexpected response. Cancelling the calling task cancels
-/// the underlying transfer.
+/// the underlying transfer. A change to the source's trusted certificates ends the session at
+/// once, cancelling transfers in flight, and every later request fails as a configuration change.
 nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
     static let requestTimeout: TimeInterval = 30
     static let resourceTimeout: TimeInterval = 60
@@ -25,6 +26,9 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
     private let maximumResponseBytes: Int
     private let cookies: @Sendable (URL) -> [HTTPCookie]
     private let trust: (pluginID: String, store: PluginTrustStore)?
+    private let trustObservation: PluginTrustObservation?
+    /// The source's trust generation when this attempt started.
+    private let trustGeneration: UUID?
 
     /// `cookies` returns the plugin's stored cookies for a URL. `configuration` and
     /// `maximumResponseBytes` exist so tests can install a protocol stub and a small limit.
@@ -45,27 +49,52 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
         hardened.waitsForConnectivity = false
         hardened.timeoutIntervalForRequest = Self.requestTimeout
         hardened.timeoutIntervalForResource = Self.resourceTimeout
-        session = URLSession(configuration: hardened)
+        let session = URLSession(configuration: hardened)
+        self.session = session
         self.maximumResponseBytes = maximumResponseBytes
         self.cookies = cookies
         self.trust = trust
+        if let trust {
+            // A connection authenticated under the old trust must not carry another byte.
+            let observed = trust.store.observeTrustChanges(pluginID: trust.pluginID) {
+                session.invalidateAndCancel()
+            }
+            trustObservation = observed.observation
+            trustGeneration = observed.generation
+        } else {
+            trustObservation = nil
+            trustGeneration = nil
+        }
     }
 
     deinit {
+        trustObservation?.cancel()
         session.invalidateAndCancel()
+    }
+
+    /// False once the source's trusted certificates changed after this attempt started.
+    var isTrustCurrent: Bool {
+        guard let trust, let trustGeneration else { return true }
+        return trust.store.transportGeneration(for: trust.pluginID) == trustGeneration
     }
 
     /// Ends the session now: transfers still running are cancelled and later requests fail.
     func invalidate() {
+        trustObservation?.cancel()
         session.invalidateAndCancel()
     }
 
     func fetch(request: NetRequest) async throws -> NetResponse {
+        guard isTrustCurrent else { throw PluginCompletionExecutionFailure.configurationChanged }
         let urlRequest = try Self.makeRequest(from: request, cookies: cookies)
         let refusal = RedirectRefusal(pluginID: trust?.pluginID, trustStore: trust?.store, recordsPending: false)
         do {
-            return try await transfer(urlRequest, refusal: refusal)
+            let response = try await transfer(urlRequest, refusal: refusal)
+            guard isTrustCurrent else { throw PluginCompletionExecutionFailure.configurationChanged }
+            return response
         } catch {
+            // Whatever ended the transfer, a trust change is what the attempt reports.
+            if !isTrustCurrent { throw PluginCompletionExecutionFailure.configurationChanged }
             if let redirect = refusal.response { return redirect }
             if !Task.isCancelled, let error = refusal.trustError { throw error }
             if Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled {
