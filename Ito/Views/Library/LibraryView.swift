@@ -169,8 +169,8 @@ struct LibraryView: View {
             isPresented: removalConfirmationBinding,
             titleVisibility: .visible,
             presenting: viewModel.pendingRemoval
-        ) { _ in
-            Button("Remove", role: .destructive) { viewModel.confirmRemoval() }
+        ) { item in
+            Button("Remove", role: .destructive) { viewModel.confirmRemoval(item) }
         } message: { item in
             Text("\(item.title) is also removed from your lists. Reading history and progress are kept.")
         }

@@ -126,6 +126,53 @@ final class ItoUITests: XCTestCase {
     }
 
     @MainActor
+    func testLibraryItemRemovedFromContextMenu() throws {
+        let app = launchWithLibraryFixture()
+        let item = app.staticTexts["Disposable Backup Fixture"]
+        item.press(forDuration: 1.2)
+        let menuRemove = app.buttons["Remove from Library"]
+        XCTAssertTrue(menuRemove.waitForExistence(timeout: 10))
+        menuRemove.tap()
+
+        confirmLibraryRemoval(in: app)
+        XCTAssertTrue(waitUntil(timeout: 10) { !item.exists })
+    }
+
+    @MainActor
+    func testLibraryItemRemovedInEditMode() throws {
+        let app = launchWithLibraryFixture()
+        let item = app.staticTexts["Disposable Backup Fixture"]
+        app.buttons["Edit"].tap()
+        let minus = app.buttons["Remove Disposable Backup Fixture"]
+        XCTAssertTrue(minus.waitForExistence(timeout: 10))
+        minus.tap()
+
+        confirmLibraryRemoval(in: app)
+        XCTAssertTrue(waitUntil(timeout: 10) { !item.exists })
+    }
+
+    /// Launches with one disposable library item and shows it on the Library tab.
+    @MainActor
+    private func launchWithLibraryFixture() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-reset-storage", "--ui-test-backup-wipe"]
+        app.launch()
+        let libraryTab = app.tabBars.buttons["Library"]
+        XCTAssertTrue(libraryTab.waitForExistence(timeout: 20))
+        libraryTab.tap()
+        XCTAssertTrue(app.staticTexts["Disposable Backup Fixture"].waitForExistence(timeout: 30))
+        return app
+    }
+
+    @MainActor
+    private func confirmLibraryRemoval(in app: XCUIApplication) {
+        XCTAssertTrue(app.staticTexts["Remove from Library?"].waitForExistence(timeout: 10))
+        let confirm = app.buttons.matching(identifier: "Remove").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        confirm.tap()
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {

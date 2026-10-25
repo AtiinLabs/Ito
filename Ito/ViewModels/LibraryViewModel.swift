@@ -276,9 +276,11 @@ final class LibraryViewModel: ObservableObject {
         pendingRemoval = nil
     }
 
-    func confirmRemoval() {
-        guard let item = pendingRemoval else { return }
-        pendingRemoval = nil
+    /// Removes the item the confirmation dialog presented. The dialog may already have reset
+    /// `pendingRemoval` while dismissing, so the item comes from the dialog, and `remove`
+    /// re-checks that it is still in the library.
+    func confirmRemoval(_ item: LibraryItem) {
+        if pendingRemoval?.id == item.id { pendingRemoval = nil }
         remove(item)
     }
 

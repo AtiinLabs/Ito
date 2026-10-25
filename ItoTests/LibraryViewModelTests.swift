@@ -202,7 +202,7 @@ final class LibraryViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.filteredItems.map(\.id), ["one", "two"])
     }
 
-    func testRemovalNeedsConfirmationAndCancelRemovesNothing() {
+    func testRemovalNeedsConfirmationAndCancelRemovesNothing() async {
         let first = item("one", "One", pluginID: "plugin.one")
         let subject = makeSubject(snapshot: snapshot(items: [first]))
 
@@ -210,12 +210,27 @@ final class LibraryViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.pendingRemoval?.id, "one")
         subject.viewModel.cancelRemoval()
         XCTAssertNil(subject.viewModel.pendingRemoval)
-        subject.viewModel.confirmRemoval()
         XCTAssertTrue(subject.library.removeRequests.isEmpty)
 
         subject.viewModel.requestRemoval(first)
         subject.library.publish(snapshot(items: []))
         XCTAssertNil(subject.viewModel.pendingRemoval)
+        // A confirmation for a series that is no longer in the library does nothing.
+        subject.viewModel.confirmRemoval(first)
+        XCTAssertTrue(subject.library.removeRequests.isEmpty)
+    }
+
+    func testConfirmingAfterTheDialogAlreadyDismissedStillRemovesThePresentedItem() async {
+        let first = item("one", "One", pluginID: "plugin.one")
+        let subject = makeSubject(snapshot: snapshot(items: [first]))
+
+        subject.viewModel.requestRemoval(first)
+        // Some iOS versions set the dialog binding to false before running the button action.
+        subject.viewModel.cancelRemoval()
+        subject.viewModel.confirmRemoval(first)
+
+        await waitUntil { subject.library.removeRequests.count == 1 }
+        XCTAssertEqual(subject.library.removeRequests.first, .init(itemID: "one", pluginID: "plugin.one", mediaKind: .manga))
     }
 
     func testDurableRemoveSuppressesDuplicateAndFollowsAuthoritativePublication() async {
@@ -224,9 +239,9 @@ final class LibraryViewModelTests: XCTestCase {
         let subject = makeSubject(snapshot: snapshot(items: [first, second]))
 
         subject.viewModel.requestRemoval(first)
-        subject.viewModel.confirmRemoval()
+        subject.viewModel.confirmRemoval(first)
         subject.viewModel.requestRemoval(first)
-        subject.viewModel.confirmRemoval()
+        subject.viewModel.confirmRemoval(first)
         XCTAssertNil(subject.viewModel.pendingRemoval)
         await waitUntil { subject.library.removeRequests.count == 1 }
         XCTAssertEqual(subject.library.removeRequests[0], .init(itemID: "one", pluginID: "plugin.one", mediaKind: .manga))
@@ -238,7 +253,7 @@ final class LibraryViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.filteredItems.map(\.id), ["two"])
 
         subject.viewModel.requestRemoval(second)
-        subject.viewModel.confirmRemoval()
+        subject.viewModel.confirmRemoval(second)
         await waitUntil { subject.library.removeRequests.count == 2 }
         subject.library.resolveRemove(at: 0, result: .failure(TestFailure.expected))
         await waitUntil { subject.messages.messages == [.itemRemovalFailed] }
@@ -436,12 +451,37 @@ final class LibraryViewModelTests: XCTestCase {
         XCTAssertEqual(manager.rootSnapshot.items.map(\.id), [itemID])
         XCTAssertEqual(manager.rootSnapshot.categories.count, 1)
         XCTAssertEqual(manager.rootSnapshot.links.map(\.itemId), [itemID])
+        let media = MediaIdentity(pluginId: "plugin", itemId: itemID, mediaKind: .manga)
+        let progress = ReadProgressManager(dbPool: database.dbPool)
+        try await progress.markAsRead(
+            context: progress.captureCompletionContext(media: media, mediaKey: "durable"),
+            chapterId: "chapter-1",
+            chapterNum: 1
+        )
+        try await progress.savePosition(media: media, chapterKey: "chapter-2", position: 9)
+        let historyRecord = ReadingHistoryRecord(
+            libraryItemId: itemID, mediaKey: "durable", title: "Durable", coverUrl: nil,
+            pluginId: "plugin", mediaKind: .manga, chapterKey: "chapter-2", chapterTitle: "Chapter 2"
+        )
+        try await database.dbPool.write { db in try historyRecord.insert(db) }
+
         try await manager.removeItem(itemID: itemID, pluginID: "plugin", mediaKind: .manga)
         XCTAssertTrue(manager.rootSnapshot.items.isEmpty)
-        let durableCount = try await database.dbPool.read { db in
-            try LibraryItem.fetchCount(db)
-        }
-        XCTAssertEqual(durableCount, 0)
+
+        // The series stays removed after a reload; the dialog's promise holds: reading
+        // history and progress are kept.
+        let reloadedLibrary = LibraryManager(dbPool: database.dbPool)
+        try await reloadedLibrary.reload()
+        XCTAssertTrue(reloadedLibrary.rootSnapshot.items.isEmpty)
+        XCTAssertTrue(reloadedLibrary.rootSnapshot.links.isEmpty)
+        let reloadedProgress = ReadProgressManager(dbPool: database.dbPool)
+        try await reloadedProgress.reload()
+        XCTAssertTrue(reloadedProgress.isRead(media: media, chapterId: "chapter-1", chapterNum: 1))
+        XCTAssertEqual(reloadedProgress.lastReadChapter(for: media), "chapter-2")
+        XCTAssertEqual(reloadedProgress.savedPosition(media: media, chapterKey: "chapter-2"), 9)
+        let reloadedHistory = HistoryManager(dbPool: database.dbPool, libraryManager: reloadedLibrary)
+        try await reloadedHistory.reload()
+        XCTAssertEqual(reloadedHistory.history.map(\.record.chapterKey), ["chapter-2"])
     }
 
     private func makeSubject(
