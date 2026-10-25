@@ -568,7 +568,7 @@ struct BackupImporterCapabilityTests {
                     """)
                 try db.execute(
                     sql: "UPDATE backupCapability SET \(column) = ?",
-                    arguments: [Data("malformed-capability-sentinel".utf8)]
+                    arguments: [Data([0xFF, 0xFE, 0xFD])]
                 )
             }
             let rejection = BackupPreflightError.rejected(.invalidCapabilityMetadata(
