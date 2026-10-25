@@ -9,8 +9,8 @@ import ito_runner
 /// ignored, so an attempt never changes the session. Every redirect is refused, so a credentialed
 /// request can never be forwarded to another location; the redirect response itself is returned
 /// to the plugin, which reports it as an unexpected response. Cancelling the calling task cancels
-/// the underlying transfer. A change to the source's trusted certificates ends the session at
-/// once, cancelling transfers in flight, and every later request fails as a configuration change.
+/// the underlying transfer. A change to the source's trusted certificates cancels transfers in
+/// flight at once, and every later request fails as a configuration change.
 nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
     static let requestTimeout: TimeInterval = 30
     static let resourceTimeout: TimeInterval = 60
@@ -29,6 +29,7 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
     private let trustObservation: PluginTrustObservation?
     /// The source's trust generation when this attempt started.
     private let trustGeneration: UUID?
+    private let transfers = TrustBoundTransfers()
 
     /// `cookies` returns the plugin's stored cookies for a URL. `configuration` and
     /// `maximumResponseBytes` exist so tests can install a protocol stub and a small limit.
@@ -55,9 +56,12 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
         self.cookies = cookies
         self.trust = trust
         if let trust {
-            // A connection authenticated under the old trust must not carry another byte.
+            // A connection authenticated under the old trust must not carry another byte. The
+            // session itself is only invalidated by `invalidate()`, never while a request may be
+            // about to start on it.
+            let transfers = transfers
             let observed = trust.store.observeTrustChanges(pluginID: trust.pluginID) {
-                session.invalidateAndCancel()
+                transfers.revoke()
             }
             trustObservation = observed.observation
             trustGeneration = observed.generation
@@ -75,7 +79,7 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
     /// False once the source's trusted certificates changed after this attempt started.
     var isTrustCurrent: Bool {
         guard let trust, let trustGeneration else { return true }
-        return trust.store.transportGeneration(for: trust.pluginID) == trustGeneration
+        return !transfers.isRevoked && trust.store.transportGeneration(for: trust.pluginID) == trustGeneration
     }
 
     /// Ends the session now: transfers still running are cancelled and later requests fail.
@@ -88,8 +92,19 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
         guard isTrustCurrent else { throw PluginCompletionExecutionFailure.configurationChanged }
         let urlRequest = try Self.makeRequest(from: request, cookies: cookies)
         let refusal = RedirectRefusal(pluginID: trust?.pluginID, trustStore: trust?.store, recordsPending: false)
+        let id = UUID()
+        // Registered atomically with a trust change: either the change refuses it here, or it
+        // cancels the registered transfer.
+        guard let running = transfers.start(id, { Task { try await self.transfer(urlRequest, refusal: refusal) } }) else {
+            throw PluginCompletionExecutionFailure.configurationChanged
+        }
+        defer { transfers.finish(id) }
         do {
-            let response = try await transfer(urlRequest, refusal: refusal)
+            let response = try await withTaskCancellationHandler {
+                try await running.value
+            } onCancel: {
+                running.cancel()
+            }
             guard isTrustCurrent else { throw PluginCompletionExecutionFailure.configurationChanged }
             return response
         } catch {
@@ -187,5 +202,42 @@ private nonisolated final class RedirectRefusal: PluginTrustDelegate, @unchecked
         lock.withLock { refused = redirect }
         completionHandler(nil)
         task.cancel()
+    }
+}
+
+/// The transfers of one attempt, and whether the source's trust changed under it. Starting a
+/// transfer and revoking are serialized, so a revocation either refuses a transfer before it
+/// starts or cancels it once registered.
+private nonisolated final class TrustBoundTransfers: @unchecked Sendable {
+    private let lock = NSLock()
+    private var revoked = false
+    private var running: [UUID: Task<NetResponse, any Error>] = [:]
+
+    var isRevoked: Bool {
+        lock.withLock { revoked }
+    }
+
+    /// Starts the transfer `make` creates and registers it, or returns nil after a revocation.
+    func start(_ id: UUID, _ make: () -> Task<NetResponse, any Error>) -> Task<NetResponse, any Error>? {
+        lock.withLock {
+            guard !revoked else { return nil }
+            let task = make()
+            running[id] = task
+            return task
+        }
+    }
+
+    func finish(_ id: UUID) {
+        lock.withLock { running[id] = nil }
+    }
+
+    /// Cancels every running transfer and refuses later ones.
+    func revoke() {
+        let cancelled = lock.withLock { () -> [Task<NetResponse, any Error>] in
+            revoked = true
+            defer { running.removeAll() }
+            return Array(running.values)
+        }
+        cancelled.forEach { $0.cancel() }
     }
 }
