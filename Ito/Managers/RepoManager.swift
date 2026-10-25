@@ -327,11 +327,9 @@ public class RepoManager: ObservableObject {
     @discardableResult
     public func addRepository(url: String) async throws -> RepositoryAdditionResult {
         let normalizedUrl = try normalizedURL(url)
-        AppLogger.database.debug("🌍 [DEBUG-REPO] Attempting to add repository: \(normalizedUrl)")
 
         return try await withRepositoryMutation {
             guard !repositories.contains(where: { $0.url == normalizedUrl }) else {
-                AppLogger.database.debug("🌍 [DEBUG-REPO] Repository already exists: \(normalizedUrl)")
                 return .alreadyPresent
             }
 
@@ -350,10 +348,11 @@ public class RepoManager: ObservableObject {
                 try await dbPool.write { db in try record.insert(db) }
                 repositories.append(repo)
                 repositories.sort { $0.url < $1.url }
-                AppLogger.database.debug("🌍 [DEBUG-REPO] Successfully added repository: \(fetchedIndex.repoName)")
                 return .added
             } catch {
-                AppLogger.database.error("🌍 [DEBUG-REPO] Failed to add repository: \(error)")
+                AppLogger.database.error(
+                    "Repository add failed; category=\(Self.logCategory(error), privacy: .public)"
+                )
                 throw error
             }
         }
@@ -361,7 +360,6 @@ public class RepoManager: ObservableObject {
 
     public func removeRepository(url: String) async throws {
         let normalized = try normalizedURL(url)
-        AppLogger.database.debug("🌍 [DEBUG-REPO] Removing repository: \(normalized)")
         try await withRepositoryMutation {
             _ = try await dbPool.write { db in
                 try RepositoryRecord.deleteOne(db, key: normalized)
@@ -401,7 +399,6 @@ public class RepoManager: ObservableObject {
     }
 
     private func performLockedRefreshAll() async throws {
-        AppLogger.database.debug("🌍 [DEBUG-REPO] Refreshing all repositories...")
         let repositoriesToRefresh = repositories
         var failures: [RepositoryRefreshFailure.Item] = []
 
@@ -409,7 +406,9 @@ public class RepoManager: ObservableObject {
             do {
                 try await storeFreshIndex(for: repo.url)
             } catch {
-                AppLogger.database.error("\("🌍 [DEBUG-REPO] Failed to refresh \(repo.url)"): \(error)")
+                AppLogger.database.error(
+                    "Repository refresh failed; category=\(Self.logCategory(error), privacy: .public)"
+                )
                 failures.append(
                     RepositoryRefreshFailure.Item(
                         repositoryURL: repo.url,
@@ -439,31 +438,34 @@ public class RepoManager: ObservableObject {
             repositories[index].index = newIndex
             repositories[index].lastFetched = fetchedAt
         }
-        AppLogger.database.debug("🌍 [DEBUG-REPO] Refreshed: \(newIndex.repoName)")
         return newIndex
     }
 
     private func fetchIndex(for urlStr: String) async throws -> RepoIndex {
-        AppLogger.database.debug("🌍 [DEBUG-REPO] Fetching index for \(urlStr)")
         guard let url = URL(string: urlStr) else {
-            AppLogger.database.debug("🌍 [DEBUG-REPO] Invalid URL format: \(urlStr)")
             throw URLError(.badURL)
         }
         let indexUrl = url.lastPathComponent == "index.json" ? url : url.appendingPathComponent("index.json")
-        AppLogger.database.debug("🌍 [DEBUG-REPO] Downloading from: \(indexUrl.absoluteString)")
 
         let data = try await indexFetcher(indexUrl)
 
-        do {
-            let decoded = try JSONDecoder().decode(RepoIndex.self, from: data)
-            AppLogger.database.debug("\("🌍 [DEBUG-REPO] Successfully decoded RepoIndex: \(decoded.repoName)") with \(decoded.packages.count) packages")
-            return decoded
-        } catch {
-            AppLogger.database.error("🌍 [DEBUG-REPO] JSON Decoding error: \(error)")
-            if let rawString = String(data: data, encoding: .utf8) {
-                AppLogger.database.debug("\("🌍 [DEBUG-REPO] Raw response data (first 500 chars)"):\n\(String(rawString.prefix(500)))")
-            }
-            throw error
+        return try JSONDecoder().decode(RepoIndex.self, from: data)
+    }
+
+    /// A fixed description of why a repository operation failed. Repository URLs,
+    /// names and response content never reach the log.
+    private static func logCategory(_ error: any Error) -> String {
+        switch error {
+        case is CancellationError:
+            return "cancelled"
+        case let error as URLError:
+            return "network(\(error.code.rawValue))"
+        case is DecodingError:
+            return "decoding"
+        case is DatabaseError:
+            return "database"
+        default:
+            return "other"
         }
     }
 
@@ -551,7 +553,7 @@ public class RepoManager: ObservableObject {
         let computedHash = digest.compactMap { String(format: "%02x", $0) }.joined()
 
         guard computedHash.lowercased() == pkg.sha256.lowercased() else {
-            AppLogger.database.debug("\("Hash mismatch! Expected \(pkg.sha256)"), got \(computedHash)")
+            AppLogger.database.error("Package install refused; downloaded file does not match its index hash")
             throw URLError(.cannotDecodeRawData) // Or a custom error
         }
 
