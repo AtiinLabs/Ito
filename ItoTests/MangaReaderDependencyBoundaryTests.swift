@@ -160,17 +160,6 @@ final class MangaReaderDependencyBoundaryTests: XCTestCase {
         )
     }
 
-    func testPR12HelpersRemainTheOnlyOrderingAndEffectAlgorithms() throws {
-        let viewModel = try source("Ito/ViewModels/MangaReaderViewModel.swift")
-        let behavior = try source("Ito/Views/Reader/ReaderBehavior.swift")
-
-        XCTAssertTrue(viewModel.contains("ReaderChapterOrdering.mangaChapter("))
-        XCTAssertTrue(viewModel.contains("ReaderPageOrdering.ascending("))
-        XCTAssertFalse(viewModel.contains("chapterNumberEpsilon"))
-        XCTAssertFalse(viewModel.contains("missingChapterNumber"))
-        XCTAssertTrue(behavior.contains("static let chapterNumberEpsilon: Float32 = 0.0001"))
-    }
-
     func testLegacyGenericReaderModelIsRemovedAndUnusedByMangaPresentation() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

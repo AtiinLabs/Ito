@@ -117,7 +117,7 @@ final class NovelReaderViewModel: ObservableObject {
         self.chapterLoader = chapterLoader
         self.pluginID = pluginID
         self.entry = entry
-        currentChapter = initialChapter
+        currentChapter = entry.chapters?.first { $0.key == initialChapter.key } ?? initialChapter
         self.dependencies = dependencies
         mediaIdentity = MediaIdentity(pluginId: pluginID, canonicalMediaId: entry.key, mediaKind: entry.kind)
         completionContext = dependencies.progress.captureCompletionContext(
@@ -236,7 +236,8 @@ final class NovelReaderViewModel: ObservableObject {
     }
 
     func goToChapter(_ chapter: Novel.Chapter) {
-        guard isActive else { return }
+        let chapter = entry.chapters?.first { $0.key == chapter.key } ?? chapter
+        guard isActive, !chapter.isPaywalled else { return }
         changeCurrentChapter(to: chapter)
         loadedChapters = []
         restoreAnchor = nil
@@ -341,7 +342,7 @@ final class NovelReaderViewModel: ObservableObject {
     // MARK: - Main chapter load
 
     private func beginMainLoad(for chapter: Novel.Chapter) {
-        guard isActive else { return }
+        guard isActive, !chapter.isPaywalled else { return }
         let token = NovelChapterToken(chapter)
         if mainLoadOperationID != nil,
            token == NovelChapterToken(currentChapter) {
@@ -517,6 +518,7 @@ final class NovelReaderViewModel: ObservableObject {
               !appendFailed,
               let last = loadedChapters.last,
               let next = chapterAfter(last.chapter),
+              !next.isPaywalled,
               // Never append a chapter twice; ordering must not loop back to a loaded one.
               !loadedChapters.contains(where: { $0.chapter.key == next.key }) else { return }
 

@@ -78,7 +78,7 @@ final class MangaReaderViewModel: ObservableObject {
         self.pageLoader = pageLoader
         self.pluginID = pluginID
         self.entry = entry
-        currentChapter = initialChapter
+        currentChapter = entry.chapters?.first { $0.key == initialChapter.key } ?? initialChapter
         self.dependencies = dependencies
         imagePrefetcher = dependencies.makeImagePrefetcher()
         preloadImageCount = dependencies.settings.mangaReaderPreloadImageCount
@@ -265,28 +265,6 @@ final class MangaReaderViewModel: ObservableObject {
 
     // MARK: - Chapter and page navigation
 
-    /// The next chapter, if it is pages too: the reader stops where the series switches to text,
-    /// which opens in the text reader instead.
-    func chapterAfter(_ chapter: Manga.Chapter) -> Manga.Chapter? {
-        ReaderChapterOrdering.mangaChapter(
-            after: chapter,
-            in: entry.chapters,
-            preferredScanlator: currentChapter.scanlator
-        ).flatMap(pagesChapter)
-    }
-
-    func chapterBefore(_ chapter: Manga.Chapter) -> Manga.Chapter? {
-        ReaderChapterOrdering.mangaChapter(
-            before: chapter,
-            in: entry.chapters,
-            preferredScanlator: currentChapter.scanlator
-        ).flatMap(pagesChapter)
-    }
-
-    private func pagesChapter(_ chapter: Manga.Chapter) -> Manga.Chapter? {
-        entry.contentKind(of: chapter) == .images ? chapter : nil
-    }
-
     func setPagedIndex(_ newIndex: Int) {
         guard isActive else { return }
         pagedIndex = newIndex
@@ -458,7 +436,7 @@ final class MangaReaderViewModel: ObservableObject {
     // MARK: - Main chapter loading
 
     private func beginMainLoad(for chapter: Manga.Chapter, opensAtEnd: Bool = false) {
-        guard isActive else { return }
+        guard isActive, !chapter.isPaywalled else { return }
         let token = ChapterToken(chapter)
         if loadPhase == .loading,
            mainLoadOperationID != nil,
@@ -1144,4 +1122,13 @@ final class MangaReaderViewModel: ObservableObject {
             )
         )
     }
+
+#if DEBUG
+    func waitForTestingOperations() async {
+        await mainLoadTask?.value
+        await adjacentPrefetchTask?.value
+        await appendTask?.value
+        await prependTask?.value
+    }
+#endif
 }

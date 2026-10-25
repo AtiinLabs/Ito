@@ -299,26 +299,27 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         }
     }
 
-    /// The chapter Resume opens: the last one opened if it is not finished, otherwise the
-    /// first unread one, otherwise the last.
+    /// The last unfinished chapter, else the first unread one, else the last. A known lock on
+    /// that target is a boundary, not a reason to silently skip ahead.
     var resumeChapter: M.Chapter? {
         guard let chapters = media.chapterList, !chapters.isEmpty else { return nil }
         let identity = mediaIdentity
         if let lastKey = dependencies.progress.lastReadChapter(for: identity),
            let last = chapters.first(where: { $0.key == lastKey }),
            !isRead(last) {
-            return last
+            return last.isPaywalled ? nil : last
         }
         let ascending = chapters.sorted {
             ($0.chapterNumber ?? Float.infinity) < ($1.chapterNumber ?? Float.infinity)
         }
-        return ascending.first {
+        let candidate = ascending.first {
             !dependencies.progress.isRead(
                 media: identity,
                 chapterID: $0.key,
                 chapterNumber: $0.chapterNumber
             )
         } ?? ascending.last
+        return candidate?.isPaywalled == false ? candidate : nil
     }
 
     func isRead(_ chapter: M.Chapter) -> Bool {
@@ -478,7 +479,10 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     func selectChapter(_ chapter: M.Chapter) {
-        readerDestination = routeContext.makeReaderDestination(media, chapter)
+        // A row or Resume action can retain a chapter value from before a metadata refresh.
+        let current = media.chapterList?.first { $0.key == chapter.key } ?? chapter
+        guard !current.isPaywalled else { return }
+        readerDestination = routeContext.makeReaderDestination(media, current)
     }
 
     func dismissReader() {

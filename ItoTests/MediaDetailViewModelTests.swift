@@ -186,6 +186,80 @@ final class MediaDetailViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.resumeChapter?.key, "three")
     }
 
+    func testStartDoesNotSkipAKnownLockedFirstChapter() {
+        let locked = Chapter(key: "locked", chapter: 1, paywalled: true)
+        let subject = makeMangaSubject(media: manga(chapters: [chapter("later", 2), locked]))
+
+        XCTAssertNil(subject.viewModel.resumeChapter)
+        subject.viewModel.selectChapter(locked)
+        XCTAssertNil(subject.viewModel.readerDestination)
+    }
+
+    func testResumeStopsAtLockedSavedOrFirstUnreadChapters() {
+        let locked = Chapter(key: "locked", chapter: 2, paywalled: true)
+        let subject = makeMangaSubject(media: manga(chapters: [chapter("later", 3), locked, chapter("one", 1)]))
+        let identity = subject.viewModel.mediaIdentity
+        subject.progress.readChapterIDs[identity] = ["one"]
+        XCTAssertNil(subject.viewModel.resumeChapter, "Do not skip the locked first unread chapter")
+
+        subject.progress.lastRead[identity] = "locked"
+        XCTAssertNil(subject.viewModel.resumeChapter, "An unfinished saved chapter can become locked")
+        subject.progress.readChapterIDs[identity] = ["one", "locked", "later"]
+        XCTAssertEqual(subject.viewModel.resumeChapter?.key, "later")
+    }
+
+    func testCompletedSeriesDoesNotResumeIntoALockedLastChapter() {
+        let locked = Chapter(key: "locked", chapter: 2, paywalled: true)
+        let subject = makeMangaSubject(media: manga(chapters: [locked, chapter("one", 1)]))
+        subject.progress.readChapterIDs[subject.viewModel.mediaIdentity] = ["one", "locked"]
+        XCTAssertNil(subject.viewModel.resumeChapter)
+    }
+
+    func testRefreshedMetadataPreventsRoutingAnOldUnlockedChapterValue() async {
+        let oldChapter = chapter("one", 1)
+        let subject = makeMangaSubject(media: manga(chapters: [oldChapter]))
+        subject.route.loadResponses = [
+            .value(manga(chapters: [Chapter(key: "one", chapter: 1, paywalled: true)]))
+        ]
+        await subject.viewModel.refresh()
+
+        XCTAssertNil(subject.viewModel.resumeChapter)
+        subject.viewModel.selectChapter(oldChapter)
+        XCTAssertNil(subject.viewModel.readerDestination)
+    }
+
+    func testRefreshedUnlockedMetadataAllowsThePreviouslyLockedChapter() async {
+        let locked = Chapter(key: "one", chapter: 1, paywalled: true)
+        let subject = makeMangaSubject(media: manga(chapters: [locked]))
+        XCTAssertNil(subject.viewModel.resumeChapter)
+        subject.route.loadResponses = [
+            .value(manga(chapters: [Chapter(key: "one", chapter: 1, paywalled: false)]))
+        ]
+        await subject.viewModel.refresh()
+
+        XCTAssertEqual(subject.viewModel.resumeChapter?.key, "one")
+        subject.viewModel.selectChapter(locked)
+        guard case .pages(_, _, _, _, let selected) = subject.viewModel.readerDestination else {
+            return XCTFail("Refreshed availability must restore routing")
+        }
+        XCTAssertEqual(selected.key, "one")
+        XCTAssertFalse(selected.isPaywalled)
+    }
+
+    func testNovelStartAndDirectSelectionDoNotEnterAKnownLockedChapter() {
+        let locked = Chapter(key: "locked", chapter: 1, paywalled: true)
+        let subject = makeNovelSubject(media: novel(chapters: [novelChapter("later", 2), locked]))
+
+        XCTAssertNil(subject.viewModel.resumeChapter)
+        subject.viewModel.selectChapter(locked)
+        XCTAssertNil(subject.viewModel.readerDestination)
+        subject.viewModel.selectChapter(novelChapter("later", 2))
+        guard case .text(_, _, _, _, let selected) = subject.viewModel.readerDestination else {
+            return XCTFail("Direct selection of a readable chapter must remain available")
+        }
+        XCTAssertEqual(selected.key, "later")
+    }
+
     func testResumeEmptyAndStartResumeState() {
         let empty = makeMangaSubject(media: manga(chapters: []))
         XCTAssertNil(empty.viewModel.resumeChapter)

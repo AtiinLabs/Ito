@@ -14,8 +14,8 @@ nonisolated enum ReaderChapterTitle {
 nonisolated enum ReaderChapterOrdering {
     static let chapterNumberEpsilon: Float32 = 0.0001
 
-    /// The next chapter: the closest higher-numbered one, or for an unnumbered chapter the one
-    /// listed above it (lists are newest first). Nil at the end.
+    /// The closest higher-numbered chapter, or the list neighbor for an unnumbered chapter
+    /// (newest first). A known lock on that candidate is a boundary, never skipped.
     static func mangaChapter(
         after chapter: Manga.Chapter,
         in chapters: [Manga.Chapter]?,
@@ -23,7 +23,7 @@ nonisolated enum ReaderChapterOrdering {
     ) -> Manga.Chapter? {
         guard let chapters else { return nil }
         guard let currentNumber = chapter.chapter else {
-            return listNeighbor(of: chapter.key, in: chapters, offset: -1, key: \.key)
+            return unlocked(listNeighbor(of: chapter.key, in: chapters, offset: -1, key: \.key))
         }
         // Unnumbered chapters are left out: their place among numbered ones is unknown.
         guard let nextNumber = chapters.compactMap(\.chapter).filter({
@@ -31,11 +31,11 @@ nonisolated enum ReaderChapterOrdering {
         }).min() else {
             return nil
         }
-        return preferredMangaSource(
+        return unlocked(preferredMangaSource(
             for: nextNumber,
             in: chapters,
             preferredScanlator: preferredScanlator
-        )
+        ))
     }
 
     /// The previous chapter, mirroring `mangaChapter(after:)`.
@@ -46,18 +46,18 @@ nonisolated enum ReaderChapterOrdering {
     ) -> Manga.Chapter? {
         guard let chapters else { return nil }
         guard let currentNumber = chapter.chapter else {
-            return listNeighbor(of: chapter.key, in: chapters, offset: 1, key: \.key)
+            return unlocked(listNeighbor(of: chapter.key, in: chapters, offset: 1, key: \.key))
         }
         guard let previousNumber = chapters.compactMap(\.chapter).filter({
             $0 < currentNumber - chapterNumberEpsilon
         }).max() else {
             return nil
         }
-        return preferredMangaSource(
+        return unlocked(preferredMangaSource(
             for: previousNumber,
             in: chapters,
             preferredScanlator: preferredScanlator
-        )
+        ))
     }
 
     /// The chapter `offset` places from `key` in the list, or nil past either end.
@@ -72,20 +72,21 @@ nonisolated enum ReaderChapterOrdering {
         return chapters.indices.contains(neighbor) ? chapters[neighbor] : nil
     }
 
-    /// The next chapter: the closest higher-numbered one, or for an unnumbered chapter the one
-    /// listed above it (lists are newest first). Nil at the end, never the chapter before.
+    /// The closest higher-numbered chapter, or the list neighbor for an unnumbered chapter.
+    /// A known lock stops navigation; it never selects a farther chapter instead.
     static func novelChapter(
         after chapter: Novel.Chapter,
         in chapters: [Novel.Chapter]?
     ) -> Novel.Chapter? {
         guard let chapters else { return nil }
         guard let currentNumber = chapter.chapter else {
-            return listNeighbor(of: chapter.key, in: chapters, offset: -1, key: \.key)
+            return unlocked(listNeighbor(of: chapter.key, in: chapters, offset: -1, key: \.key))
         }
-        return numbered(chapters)
+        let candidate = numbered(chapters)
             .filter { $0.number > currentNumber + chapterNumberEpsilon }
             .min { $0.number < $1.number }?
             .chapter
+        return unlocked(candidate)
     }
 
     /// The previous chapter, mirroring `novelChapter(after:)`.
@@ -95,12 +96,19 @@ nonisolated enum ReaderChapterOrdering {
     ) -> Novel.Chapter? {
         guard let chapters else { return nil }
         guard let currentNumber = chapter.chapter else {
-            return listNeighbor(of: chapter.key, in: chapters, offset: 1, key: \.key)
+            return unlocked(listNeighbor(of: chapter.key, in: chapters, offset: 1, key: \.key))
         }
-        return numbered(chapters)
+        let candidate = numbered(chapters)
             .filter { $0.number < currentNumber - chapterNumberEpsilon }
             .max { $0.number < $1.number }?
             .chapter
+        return unlocked(candidate)
+    }
+
+    /// Select first, then check access: filtering the list would skip a locked boundary.
+    private static func unlocked(_ chapter: Chapter?) -> Chapter? {
+        guard let chapter, chapter.paywalled != true else { return nil }
+        return chapter
     }
 
     private static func numbered(

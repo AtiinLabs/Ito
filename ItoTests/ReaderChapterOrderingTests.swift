@@ -209,6 +209,46 @@ final class ReaderChapterOrderingTests: XCTestCase {
         XCTAssertEqual(novelAfter(current, in: chapters)?.key, "first-source")
     }
 
+    func testNumberedPaywallsStopMangaAndNovelNavigationWithoutSkipping() {
+        let first = Chapter(key: "first", chapter: 1)
+        let locked = Chapter(key: "locked", chapter: 2, paywalled: true)
+        let last = Chapter(key: "last", chapter: 3)
+        let chapters = [last, locked, first]
+
+        XCTAssertNil(mangaAfter(first, in: chapters))
+        XCTAssertNil(mangaBefore(last, in: chapters))
+        XCTAssertNil(novelAfter(first, in: chapters))
+        XCTAssertNil(novelBefore(last, in: chapters))
+    }
+
+    func testUnnumberedPaywallsStopAtTheImmediateListNeighbor() {
+        let first = Chapter(key: "first")
+        let locked = Chapter(key: "locked", paywalled: true)
+        let last = Chapter(key: "last")
+        let chapters = [last, locked, first]
+
+        XCTAssertNil(mangaAfter(first, in: chapters))
+        XCTAssertNil(mangaBefore(last, in: chapters))
+        XCTAssertNil(novelAfter(first, in: chapters))
+        XCTAssertNil(novelBefore(last, in: chapters))
+    }
+
+    func testLockedPreferredScanlationDoesNotSilentlySwitchSources() {
+        let current = Chapter(key: "current", chapter: 1, scanlator: "preferred")
+        let locked = Chapter(key: "locked", chapter: 2, scanlator: "preferred", paywalled: true)
+        let other = Chapter(key: "other", chapter: 2, scanlator: "other")
+        XCTAssertNil(mangaAfter(current, in: [other, locked, current]))
+    }
+
+    func testRefreshedUnlockedMetadataRestoresTheSameNeighbor() {
+        let current = Chapter(key: "current", chapter: 1)
+        for paywalled in [false, nil] as [Bool?] {
+            let available = Chapter(key: "next", chapter: 2, paywalled: paywalled)
+            XCTAssertEqual(mangaAfter(current, in: [available, current])?.key, "next")
+            XCTAssertEqual(novelAfter(current, in: [available, current])?.key, "next")
+        }
+    }
+
     func testPageOrderingUsesAscendingIndexAndRetainsDuplicatesGapsAndContent() {
         let pages = [
             Page(index: 9, content: .url("nine")),

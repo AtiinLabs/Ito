@@ -982,13 +982,15 @@ final class MangaReaderViewModelTests: XCTestCase {
         _ key: String,
         number: Float32?,
         title: String? = nil,
-        scanlator: String? = nil
+        scanlator: String? = nil,
+        paywalled: Bool? = nil
     ) -> Manga.Chapter {
         Manga.Chapter(
             key: key,
             title: title,
             chapter: number,
-            scanlator: scanlator
+            scanlator: scanlator,
+            paywalled: paywalled
         )
     }
 

@@ -25,7 +25,7 @@ Ito is a free, open-source client for iPhone and iPad. It combines dedicated rea
 ## Features
 
 * **Anime, manga, and novels** — Keep different media types together in one library.
-* **Native reading** — Dedicated manga and novel readers designed for iOS. A source can mark single chapters as text, so a series can mix page volumes with novel volumes; each opens in the reader that fits it.
+* **Native reading** — Dedicated manga and novel readers designed for iOS. A source can mark single chapters as text, so a series can mix page volumes with novel volumes; each opens in the reader that fits it. Known locked chapters stop Start/Resume and adjacent navigation rather than being loaded or skipped.
 * **Native video playback** — Select available video quality, audio tracks, and subtitles.
 * **AniList discovery** — Browse, search, and filter titles using AniList.
 * **Progress tracking** — Connect AniList, MyAnimeList or MangaBaka to track what you read and watch. MangaBaka covers manga and novels.
