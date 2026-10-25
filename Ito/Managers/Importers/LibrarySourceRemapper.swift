@@ -103,11 +103,13 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                 let candidateIDs = ImportedMediaIdentity.localItemIDs(
                     pluginId: newPluginId, canonicalMediaId: media.canonicalMediaId, mediaKind: media.mediaKind
                 )
+                let targetMedia = MediaIdentity(
+                    pluginId: newPluginId, canonicalMediaId: media.canonicalMediaId, mediaKind: media.mediaKind
+                )
                 for id in candidateIDs {
                     if let existing = try LibraryItem.fetchOne(db, key: id),
                        existing.id != mapping.source.id,
-                       existing.pluginId == newPluginId,
-                       existing.effectiveType == media.mediaKind {
+                       existing.mediaIdentity == targetMedia {
                         throw RemapError.destinationExists(id)
                     }
                 }

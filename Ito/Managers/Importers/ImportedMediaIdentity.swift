@@ -38,6 +38,7 @@ enum ImportedMediaIdentity {
     /// plugin's key already holds the raw or `pluginId_key` id, only the kind-scoped id is allowed: at most one
     /// kind of a key may use a non-scoped id, because remaps send every non-scoped id to `newPluginId_key`.
     /// Otherwise `preferred` is kept when free, then the raw key, `pluginId_key` and the kind-scoped id are tried.
+    /// Candidates must decode back to this exact canonical key; raw keys can themselves resemble local prefixes.
     nonisolated static func newItemID(
         preferred: String?,
         pluginId: String,
@@ -46,12 +47,21 @@ enum ImportedMediaIdentity {
         occupant: (String) throws -> (pluginId: String, mediaKind: MediaKind)?
     ) rethrows -> String? {
         let candidates = localItemIDs(pluginId: pluginId, canonicalMediaId: canonicalMediaId, mediaKind: mediaKind)
-        let scopedID = candidates[2]
-        for unscopedID in candidates.dropLast() where try occupant(unscopedID)?.pluginId == pluginId {
-            return try occupant(scopedID) == nil ? scopedID : nil
+        func representsMedia(_ id: String) -> Bool {
+            Self.canonicalMediaId(itemId: id, pluginId: pluginId, mediaKind: mediaKind) == canonicalMediaId
         }
-        for id in [preferred].compactMap({ $0 }) + candidates where try occupant(id) == nil {
-            return id
+        let scopedID = candidates[2]
+        for unscopedID in candidates.dropLast() where representsMedia(unscopedID) {
+            if try occupant(unscopedID)?.pluginId == pluginId {
+                return try representsMedia(scopedID) && occupant(scopedID) == nil ? scopedID : nil
+            }
+        }
+        if let preferred, representsMedia(preferred), try occupant(preferred) == nil {
+            return preferred
+        }
+        for id in candidates where representsMedia(id) {
+            if let preferred, id == preferred { continue }
+            if try occupant(id) == nil { return id }
         }
         return nil
     }

@@ -258,6 +258,53 @@ final class MultiKindDurableIdentityTests: XCTestCase {
         XCTAssertEqual(moved.count, 2)
     }
 
+    func testDestinationPrefixShapedKeysKeepTheirCanonicalIdentityAndResumeState() async throws {
+        for occupiedID in ["q_q_42", "q_42"] {
+            let database = try TestDatabase()
+            defer { database.cleanup() }
+            let source = LibraryItem(
+                id: "p_q_42", title: "Source", coverUrl: nil, pluginId: "p",
+                isAnime: false, pluginType: .manga,
+                rawPayload: try JSONEncoder().encode(Manga(key: "q_42", title: "Source")), anilistId: nil
+            )
+            let occupant = LibraryItem(
+                id: occupiedID, title: "Other", coverUrl: nil,
+                pluginId: occupiedID == "q_42" ? "q" : "r", isAnime: false, pluginType: .manga,
+                rawPayload: try JSONEncoder().encode(Manga(key: "42", title: "Other")), anilistId: nil
+            )
+            try await database.dbPool.write { db in
+                try source.insert(db)
+                try occupant.insert(db)
+            }
+            let progress = ReadProgressManager(dbPool: database.dbPool)
+            try await progress.savePosition(
+                media: MediaIdentity(pluginId: "p", canonicalMediaId: "q_42", mediaKind: .manga),
+                chapterKey: "chapter", position: 12
+            )
+            do {
+                _ = try await LibrarySourceRemapper(dbPool: database.dbPool).remap(
+                    oldPluginId: "p", newPluginId: "q", affectedItemIds: [source.id]
+                )
+            } catch {
+                return XCTFail("An unrelated occupied id must not block the typed identity: \(error)")
+            }
+            let moved = try await database.dbPool.read { db in
+                try XCTUnwrap(try LibraryItem
+                    .filter(Column("pluginId") == "q")
+                    .filter(Column("title") == "Source")
+                    .fetchOne(db))
+            }
+            XCTAssertEqual(moved.mediaIdentity, MediaIdentity(
+                pluginId: "q", canonicalMediaId: "q_42", mediaKind: .manga
+            ))
+            let reloaded = ReadProgressManager(dbPool: database.dbPool)
+            try await reloaded.reload()
+            XCTAssertEqual(reloaded.savedPosition(media: moved.mediaIdentity, chapterKey: "chapter"), 12)
+            let retained = try await database.dbPool.read { db in try LibraryItem.fetchOne(db, key: occupiedID) }
+            XCTAssertEqual(retained, occupant)
+        }
+    }
+
     func testHistoryRecordsRealKindAndActualSavedItemID() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
