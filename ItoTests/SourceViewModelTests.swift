@@ -416,7 +416,9 @@ final class SourceViewModelTests: XCTestCase {
         XCTAssertEqual(context.searchInvocations.last?.pluginType, nil)
         XCTAssertEqual(viewModel.searchEntries.map(\.key), ["m1", "a1"])
 
+        // The source answers the anime scope with a stray manga; only anime is shown.
         context.searchResult = .success(MediaPageResult(entries: [
+            .manga(Manga(key: "m1", title: "Manga 1")),
             .anime(Anime(key: "a1", title: "Anime 1"))
         ], hasNextPage: false))
         viewModel.selectedKind = .anime
@@ -535,6 +537,25 @@ final class SourceViewModelTests: XCTestCase {
 
         XCTAssertEqual(context.searchInvocations.last?.pluginType, .manga)
         XCTAssertEqual(viewModel.searchEntries.map(\.key), ["m1"])
+    }
+
+    func testAManifestRepeatingOneKindIsSingleKindAndSearchesThatKind() async {
+        let context = PR7BSourceRunnerContextSpy()
+        let novelPlugin = pr7bPlugin(id: "plugin.novel", type: .manga, kinds: [.novel, .novel])
+        let viewModel = makeViewModel(
+            plugin: novelPlugin,
+            provider: PR7BSourceRunnerProviderSpy(contexts: [context]),
+            debounce: nil
+        )
+        await viewModel.loadIfNeeded()
+
+        XCTAssertFalse(viewModel.isMultiKind)
+        context.searchResult = .success(MediaPageResult(entries: [.novel(Novel(key: "n1", title: "N1"))], hasNextPage: false))
+        viewModel.performSearch(query: "test")
+        await pr7bWaitUntil { viewModel.searchPhase == .content }
+
+        XCTAssertEqual(context.searchInvocations.last?.pluginType, .novel)
+        XCTAssertEqual(viewModel.searchEntries.map(\.key), ["n1"])
     }
 
     func testWhitespaceOnlySearchReturnsPresentationToHomeWithoutStartingWork() async {

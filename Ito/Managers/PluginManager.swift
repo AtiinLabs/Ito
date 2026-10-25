@@ -10,6 +10,14 @@ public struct InstalledPlugin: Identifiable {
     public let iconData: Data?
 }
 
+extension PluginInfo {
+    /// Each kind the plugin serves once, in declared order. A hand-edited manifest may repeat one.
+    nonisolated var distinctKinds: [MediaKind] {
+        var seen = Set<MediaKind>()
+        return supportedKinds.filter { seen.insert($0).inserted }
+    }
+}
+
 /// Manages the state of installed plugins to provide fast, synchronous O(1) lookups
 /// for the UI (like RepositoriesView) without blocking the main thread parsing ZIP files.
 public class PluginManager: ObservableObject {

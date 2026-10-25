@@ -444,7 +444,7 @@ struct SourceView: View {
     private var scopePicker: some View {
         Picker("Scope", selection: $viewModel.selectedKind) {
             Text("All").tag(MediaKind?.none)
-            ForEach(viewModel.plugin.info.supportedKinds, id: \.self) { kind in
+            ForEach(viewModel.plugin.info.distinctKinds, id: \.self) { kind in
                 Text(kindTitle(kind)).tag(MediaKind?.some(kind))
             }
         }

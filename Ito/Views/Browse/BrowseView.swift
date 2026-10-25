@@ -303,7 +303,7 @@ struct PluginRowView: View {
             Spacer()
 
             HStack(spacing: 4) {
-                ForEach(plugin.info.supportedKinds, id: \.self) { kind in
+                ForEach(plugin.info.distinctKinds, id: \.self) { kind in
                     PluginTypeBadge(type: kind)
                 }
             }

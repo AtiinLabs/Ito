@@ -124,7 +124,7 @@ final class SourceViewModel: ObservableObject {
     }
 
     var isMultiKind: Bool {
-        plugin.info.supportedKinds.count > 1
+        plugin.info.distinctKinds.count > 1
     }
 
     func performSearch(query: String) {
@@ -181,11 +181,7 @@ final class SourceViewModel: ObservableObject {
     }
 
     private func effectiveSearchKind(for kind: MediaKind?) -> MediaKind? {
-        if isMultiKind {
-            return kind
-        } else {
-            return kind ?? plugin.info.type
-        }
+        isMultiKind ? kind : kind ?? plugin.info.distinctKinds.first
     }
 
     var hasActiveSearchQuery: Bool {
@@ -412,7 +408,8 @@ final class SourceViewModel: ObservableObject {
             )
             try Task.checkCancellation()
             guard isCurrentSearch(operationID) else { return }
-            publishSearchPage(page)
+            // A source may answer a scoped search with other kinds; only the chosen kind is shown.
+            publishSearchPage(kind.map { kind in page.entries.filter { $0.kind == kind } } ?? page.entries)
             finishSearch(operationID)
         } catch is CancellationError {
             finishCancelledSearch(operationID)
@@ -430,10 +427,10 @@ final class SourceViewModel: ObservableObject {
         return context
     }
 
-    private func publishSearchPage(_ page: MediaPageResult) {
+    private func publishSearchPage(_ entries: [MediaEntry]) {
         clearSearchResults()
-        searchEntries = page.entries
-        searchPhase = page.entries.isEmpty ? .empty : .content
+        searchEntries = entries
+        searchPhase = entries.isEmpty ? .empty : .content
     }
 
     private func publishSearchFailure(_ error: any Error, operationID: UUID) {
