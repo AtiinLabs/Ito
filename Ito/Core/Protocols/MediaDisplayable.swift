@@ -3,6 +3,7 @@ import Foundation
 
 public protocol MediaDisplayable: Identifiable, Codable, Sendable {
     var key: String { get }
+    var mediaKind: MediaKind { get }
     var title: String { get }
     var cover: String? { get }
     var authors: [String]? { get }   // nil for anime
@@ -16,6 +17,7 @@ public protocol MediaDisplayable: Identifiable, Codable, Sendable {
 }
 
 nonisolated extension Manga: MediaDisplayable {
+    public var mediaKind: MediaKind { .manga }
     public var chapterList: [Manga.Chapter]? { chapters }
     public var studios: [String]? { nil }
     public var displayStatus: String? {
@@ -30,6 +32,7 @@ nonisolated extension Manga: MediaDisplayable {
 }
 
 nonisolated extension Anime: MediaDisplayable {
+    public var mediaKind: MediaKind { .anime }
     public var authors: [String]? { nil }
     public var chapterList: [Anime.Episode]? { episodes }
     public var displayStatus: String? {
@@ -44,6 +47,7 @@ nonisolated extension Anime: MediaDisplayable {
 }
 
 nonisolated extension Novel: MediaDisplayable {
+    public var mediaKind: MediaKind { .novel }
     public var chapterList: [Novel.Chapter]? { chapters }
     public var studios: [String]? { nil }
     public var displayStatus: String? {

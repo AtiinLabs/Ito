@@ -1,6 +1,7 @@
 import Foundation
 import Security
 import Testing
+import ito_runner
 @testable import Ito
 
 @MainActor
@@ -15,7 +16,7 @@ struct TrackerManagerCredentialInjectionTests {
         #expect(subject.manager.providers.map(\.name) == ["AniList", "MyAnimeList", "MangaBaka"])
         #expect(subject.manager.authenticatedProviders.isEmpty)
         #expect(!subject.manager.hasAuthenticatedLink(
-            for: MediaIdentity(pluginId: "legacy", canonicalMediaId: "local-fixture")
+            for: MediaIdentity(pluginId: "legacy", canonicalMediaId: "local-fixture", mediaKind: .manga)
         ))
 
         await subject.manager.bootstrapCredentials()

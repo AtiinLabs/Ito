@@ -1,4 +1,5 @@
 import XCTest
+import ito_runner
 @testable import Ito
 
 @MainActor
@@ -232,7 +233,7 @@ final class TrackerSearchViewModelTests: XCTestCase {
     }
 
     private var mediaIdentity: MediaIdentity {
-        MediaIdentity(pluginId: "plugin.test", canonicalMediaId: "media.test")
+        MediaIdentity(pluginId: "plugin.test", canonicalMediaId: "media.test", mediaKind: .manga)
     }
 
     private func makeViewModel(

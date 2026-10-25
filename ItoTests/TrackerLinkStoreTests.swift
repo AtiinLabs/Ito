@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import Testing
+import ito_runner
 @testable import Ito
 
 @MainActor
@@ -16,8 +17,8 @@ struct TrackerLinkStoreTests {
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: UserDefaults(suiteName: UUID().uuidString)!
         )
-        let first = MediaIdentity(pluginId: "one", canonicalMediaId: "same")
-        let second = MediaIdentity(pluginId: "two", canonicalMediaId: "same")
+        let first = MediaIdentity(pluginId: "one", canonicalMediaId: "same", mediaKind: .manga)
+        let second = MediaIdentity(pluginId: "two", canonicalMediaId: "same", mediaKind: .manga)
 
         try await manager.link(media: first, providerId: "anilist", remoteMediaId: "1")
         try await manager.link(media: first, providerId: "anilist", remoteMediaId: "2")
@@ -47,7 +48,7 @@ struct TrackerLinkStoreTests {
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: UserDefaults(suiteName: UUID().uuidString)!
         )
-        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
         try await manager.link(media: media, providerId: "anilist", remoteMediaId: "old")
         try await database.dbPool.write { db in
             try db.execute(sql: """
@@ -87,7 +88,7 @@ struct TrackerLinkStoreTests {
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: UserDefaults(suiteName: UUID().uuidString)!
         )
-        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
         try await manager.link(media: media, providerId: "anilist", remoteMediaId: "remote")
         try await database.dbPool.write { db in
             try db.execute(sql: """
@@ -122,11 +123,52 @@ struct TrackerLinkStoreTests {
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: UserDefaults(suiteName: UUID().uuidString)!
         )
-        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
 
         try await manager.link(media: media, providerId: "myanimelist", remoteMediaId: "anime:1")
 
         #expect(manager.trackerId(for: media, providerId: "myanimelist") == "anime:1")
         #expect(!manager.hasAuthenticatedLink(for: media))
+    }
+
+    @Test func sameKeyMangaAndNovelTrackAndUnlinkIndependently() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let manager = TrackerManager(
+            dbPool: database.dbPool,
+            credentialStore: FakeTrackerCredentialStore(),
+            malCredentialStore: FakeTrackerCredentialStore(),
+            mangaBakaCredentialStore: FakeTrackerCredentialStore(),
+            legacyTokenStore: FakeLegacyTokenStore(),
+            usernameDefaults: UserDefaults(suiteName: UUID().uuidString)!
+        )
+        let manga = MediaIdentity(pluginId: "source", canonicalMediaId: "key42", mediaKind: .manga)
+        let novel = MediaIdentity(pluginId: "source", canonicalMediaId: "key42", mediaKind: .novel)
+
+        try await manager.link(media: manga, providerId: "anilist", remoteMediaId: "manga-remote")
+        try await manager.link(media: novel, providerId: "anilist", remoteMediaId: "novel-remote")
+
+        #expect(manager.trackerId(for: manga, providerId: "anilist") == "manga-remote")
+        #expect(manager.trackerId(for: novel, providerId: "anilist") == "novel-remote")
+
+        let reloaded = TrackerManager(
+            dbPool: database.dbPool,
+            credentialStore: FakeTrackerCredentialStore(),
+            malCredentialStore: FakeTrackerCredentialStore(),
+            mangaBakaCredentialStore: FakeTrackerCredentialStore(),
+            legacyTokenStore: FakeLegacyTokenStore(),
+            usernameDefaults: UserDefaults(suiteName: UUID().uuidString)!
+        )
+        try await reloaded.reload()
+        #expect(reloaded.trackerId(for: manga, providerId: "anilist") == "manga-remote")
+        #expect(reloaded.trackerId(for: novel, providerId: "anilist") == "novel-remote")
+
+        try await manager.unlink(media: manga, providerId: "anilist")
+        #expect(manager.trackerId(for: manga, providerId: "anilist") == nil)
+        #expect(manager.trackerId(for: novel, providerId: "anilist") == "novel-remote")
+
+        try await reloaded.reload()
+        #expect(reloaded.trackerId(for: manga, providerId: "anilist") == nil)
+        #expect(reloaded.trackerId(for: novel, providerId: "anilist") == "novel-remote")
     }
 }

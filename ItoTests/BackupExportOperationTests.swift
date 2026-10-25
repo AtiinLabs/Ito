@@ -344,7 +344,7 @@ struct BackupExportOperationTests {
                 sql: "INSERT INTO itemCategoryLink (itemId, categoryId, addedAt) VALUES ('plugin_media', 'category', 0)"
             )
             try db.execute(
-                sql: "INSERT INTO readingHistory (id, mediaKey, title, pluginId, chapterKey, readAt) VALUES ('history', 'plugin_media', 'Media', 'plugin', 'chapter', 0)"
+                sql: "INSERT INTO readingHistory (id, mediaKey, title, pluginId, mediaKind, chapterKey, readAt) VALUES ('history', 'plugin_media', 'Media', 'plugin', 'manga', 'chapter', 0)"
             )
             try db.execute(
                 sql: """
@@ -366,13 +366,13 @@ struct BackupExportOperationTests {
                 ]
             )
             try db.execute(
-                sql: "INSERT INTO readProgressKey (pluginId, canonicalMediaId, chapterKey) VALUES ('plugin', 'media', 'chapter')"
+                sql: "INSERT INTO readProgressKey (pluginId, canonicalMediaId, mediaKind, chapterKey) VALUES ('plugin', 'media', 'manga', 'chapter')"
             )
             try db.execute(
-                sql: "INSERT INTO trackerLink (pluginId, canonicalMediaId, providerId, remoteMediaId) VALUES ('plugin', 'media', 'anilist', '1')"
+                sql: "INSERT INTO trackerLink (pluginId, canonicalMediaId, mediaKind, providerId, remoteMediaId) VALUES ('plugin', 'media', 'manga', 'anilist', '1')"
             )
             try db.execute(
-                sql: "INSERT INTO updateBadge (pluginId, canonicalMediaId, count) VALUES ('plugin', 'media', 2)"
+                sql: "INSERT INTO updateBadge (pluginId, canonicalMediaId, mediaKind, count) VALUES ('plugin', 'media', 'manga', 2)"
             )
             try db.execute(
                 sql: "INSERT INTO repository (url) VALUES ('https://example.com/index.json')"

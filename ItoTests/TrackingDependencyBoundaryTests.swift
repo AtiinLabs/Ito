@@ -1,4 +1,5 @@
 import XCTest
+import ito_runner
 @testable import Ito
 
 @MainActor
@@ -55,7 +56,7 @@ final class TrackingDependencyBoundaryTests: XCTestCase {
     }
 
     func testTrackingFactorySnapshotsZeroOneAndMultipleAuthenticatedProviders() {
-        let identity = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+        let identity = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
         let sheetService = TrackerSheetServiceFake()
         let factory = makeFactory(sheetService: sheetService)
 
@@ -90,13 +91,16 @@ final class TrackingDependencyBoundaryTests: XCTestCase {
     }
 
     func testTrackersWithoutAnimeAreOfferedForMangaOnly() {
-        let identity = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+        let identity = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
         var mangaBaka = provider(id: "mangabaka", name: "MangaBaka")
         mangaBaka.tracksAnime = false
         let sheetService = TrackerSheetServiceFake(providers: [provider(id: "anilist", name: "AniList"), mangaBaka])
         let factory = makeFactory(sheetService: sheetService)
 
-        let anime = factory.makeTrackerSheet(mediaIdentity: identity, title: "Title", isAnime: true)
+        let anime = factory.makeTrackerSheet(
+            mediaIdentity: MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .anime),
+            title: "Title", isAnime: true
+        )
         let manga = factory.makeTrackerSheet(mediaIdentity: identity, title: "Title", isAnime: false)
 
         XCTAssertEqual(anime.configuration.providers.map(\.id), ["anilist"])
@@ -112,7 +116,7 @@ final class TrackingDependencyBoundaryTests: XCTestCase {
     }
 
     func testExistingLinkDestinationUsesStableIdentityMediaKindAndNoService() throws {
-        let identity = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+        let identity = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
         let sheetService = TrackerSheetServiceFake(
             providers: [provider(id: "anilist", name: "AniList")],
             remoteIDs: [identity: ["anilist": "remote-9"]]

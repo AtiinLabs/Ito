@@ -159,10 +159,19 @@ public class LibraryManager: ObservableObject {
         )
     }
 
-    // MARK: - Legacy Plugin Toggles Compatibility
+    // MARK: - Saved Media Lookup
 
-    public func isSaved(id: String) -> Bool {
-        return items.contains(where: { $0.id == id || $0.id == "\($0.pluginId)_\(id)" })
+    public func savedItemID(sourceItemID: String, pluginId: String, mediaKind: MediaKind) -> String? {
+        let rawID = ImportedMediaIdentity.canonicalMediaId(itemId: sourceItemID, pluginId: pluginId, mediaKind: mediaKind)
+        let candidateIDs = [
+            sourceItemID,
+            rawID,
+            "\(pluginId)_\(rawID)",
+            "\(pluginId)\u{1F}\(mediaKind.rawValue)\u{1F}\(rawID)"
+        ]
+        return items.first { item in
+            item.pluginId == pluginId && item.effectiveType == mediaKind && candidateIDs.contains(item.id)
+        }?.id
     }
 
     // MARK: - Awaitable Media Detail Mutations
@@ -222,18 +231,26 @@ public class LibraryManager: ObservableObject {
     }
 
     /// Removes a series and its new-chapter badge in one transaction.
-    func removeItemDurably(id: String, pluginId: String) async throws {
-        let candidates = [id, "\(pluginId)_\(id)"].map { ($0, MediaIdentity(pluginId: pluginId, itemId: $0)) }
+    func removeItemDurably(id: String, pluginId: String, mediaKind: MediaKind) async throws {
+        let rawID = ImportedMediaIdentity.canonicalMediaId(itemId: id, pluginId: pluginId, mediaKind: mediaKind)
+        let candidates = [
+            rawID,
+            "\(pluginId)_\(rawID)",
+            "\(pluginId)\u{1F}\(mediaKind.rawValue)\u{1F}\(rawID)"
+        ]
         let publicationClock = publicationClock
         let (publication, removedMedia) = try await dbPool.write { db in
             var removedMedia: [MediaIdentity] = []
-            for (candidateID, media) in candidates {
+            for candidateID in candidates {
                 guard let existing = try LibraryItem.fetchOne(db, key: candidateID),
-                      existing.pluginId == pluginId else { continue }
+                      existing.pluginId == pluginId,
+                      existing.effectiveType == mediaKind else { continue }
                 try existing.delete(db)
+                let media = MediaIdentity(pluginId: pluginId, canonicalMediaId: rawID, mediaKind: mediaKind)
                 try UpdateBadgeRecord
                     .filter(Column("pluginId") == media.pluginId)
                     .filter(Column("canonicalMediaId") == media.canonicalMediaId)
+                    .filter(Column("mediaKind") == media.mediaKind.rawValue)
                     .deleteAll(db)
                 removedMedia.append(media)
             }
@@ -252,22 +269,27 @@ public class LibraryManager: ObservableObject {
         sourceItemID: String,
         item: LibraryItem
     ) async throws -> String {
-        let legacyID = "\(item.pluginId)_\(sourceItemID)"
+        let rawID = ImportedMediaIdentity.canonicalMediaId(itemId: sourceItemID, pluginId: item.pluginId, mediaKind: item.effectiveType)
+        let legacyID = "\(item.pluginId)_\(rawID)"
+        let scopedID = "\(item.pluginId)\u{1F}\(item.effectiveType.rawValue)\u{1F}\(rawID)"
         let publicationClock = publicationClock
         let mutation = try await dbPool.write { db in
-            let sourceItem = try LibraryItem.fetchOne(db, key: sourceItemID)
+            let rawItem = try LibraryItem.fetchOne(db, key: rawID)
             let legacyItem = try LibraryItem.fetchOne(db, key: legacyID)
-            let ownedItem = [sourceItem, legacyItem]
+            let scopedItem = try LibraryItem.fetchOne(db, key: scopedID)
+            let ownedItem = [rawItem, legacyItem, scopedItem]
                 .compactMap { $0 }
-                .first { $0.pluginId == item.pluginId }
+                .first { $0.pluginId == item.pluginId && $0.effectiveType == item.effectiveType }
             let storedItem: LibraryItem
             if let ownedItem {
                 storedItem = ownedItem
             } else {
-                if sourceItem == nil {
-                    storedItem = item
+                if rawItem == nil {
+                    storedItem = item.id == rawID ? item : Self.copy(item, replacingIDWith: rawID)
                 } else if legacyItem == nil {
                     storedItem = Self.copy(item, replacingIDWith: legacyID)
+                } else if scopedItem == nil {
+                    storedItem = Self.copy(item, replacingIDWith: scopedID)
                 } else {
                     throw DurableMutationError.identifierCollision
                 }

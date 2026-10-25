@@ -6,6 +6,7 @@ import ito_runner
 struct MediaDetailLibraryRecord: Equatable {
     let itemID: String
     let pluginID: String
+    let mediaKind: MediaKind
 }
 
 struct MediaDetailLibraryState: Equatable {
@@ -13,9 +14,13 @@ struct MediaDetailLibraryState: Equatable {
     let hasCustomCategories: Bool
 
     func isSaved(media: MediaIdentity, sourceItemID: String) -> Bool {
-        let possibleIDs = [sourceItemID, "\(media.pluginId)_\(sourceItemID)"]
+        let possibleIDs = [
+            sourceItemID,
+            "\(media.pluginId)_\(sourceItemID)",
+            "\(media.pluginId)\u{1F}\(media.mediaKind.rawValue)\u{1F}\(sourceItemID)"
+        ]
         return records.contains {
-            $0.pluginID == media.pluginId && possibleIDs.contains($0.itemID)
+            $0.pluginID == media.pluginId && $0.mediaKind == media.mediaKind && possibleIDs.contains($0.itemID)
         }
     }
 }
@@ -28,7 +33,7 @@ protocol MediaDetailLibraryServing: AnyObject {
     func saveManga(_ manga: Manga, pluginID: String) async throws -> String
     func saveAnime(_ anime: Anime, pluginID: String) async throws -> String
     func saveNovel(_ novel: Novel, pluginID: String) async throws -> String
-    func unsave(sourceItemID: String, pluginID: String) async throws
+    func unsave(sourceItemID: String, pluginID: String, mediaKind: MediaKind) async throws
     func refresh() async throws
 }
 
@@ -36,7 +41,7 @@ extension LibraryManager: MediaDetailLibraryServing {
     var state: MediaDetailLibraryState {
         MediaDetailLibraryState(
             records: items.map {
-                MediaDetailLibraryRecord(itemID: $0.id, pluginID: $0.pluginId)
+                MediaDetailLibraryRecord(itemID: $0.id, pluginID: $0.pluginId, mediaKind: $0.effectiveType)
             },
             hasCustomCategories: categories.contains { !$0.isSystemCategory }
         )
@@ -47,7 +52,7 @@ extension LibraryManager: MediaDetailLibraryServing {
             .map { items, categories in
                 MediaDetailLibraryState(
                     records: items.map {
-                        MediaDetailLibraryRecord(itemID: $0.id, pluginID: $0.pluginId)
+                        MediaDetailLibraryRecord(itemID: $0.id, pluginID: $0.pluginId, mediaKind: $0.effectiveType)
                     },
                     hasCustomCategories: categories.contains { !$0.isSystemCategory }
                 )
@@ -67,8 +72,8 @@ extension LibraryManager: MediaDetailLibraryServing {
         try await saveNovelDurably(novel: novel, pluginId: pluginID)
     }
 
-    func unsave(sourceItemID: String, pluginID: String) async throws {
-        try await removeItemDurably(id: sourceItemID, pluginId: pluginID)
+    func unsave(sourceItemID: String, pluginID: String, mediaKind: MediaKind) async throws {
+        try await removeItemDurably(id: sourceItemID, pluginId: pluginID, mediaKind: mediaKind)
     }
 
     func refresh() async throws {
@@ -160,6 +165,7 @@ final class TrackingMediaDetailAdapter: MediaDetailTrackerServing {
 protocol MediaDetailRelinkServing: AnyObject {
     func relink(
         pluginID: String,
+        mediaKind: MediaKind,
         possibleSourceItemIDs: [String],
         destinationItemID: String,
         title: String,
@@ -171,6 +177,7 @@ protocol MediaDetailRelinkServing: AnyObject {
 extension LibrarySourceRemapper: MediaDetailRelinkServing {
     func relink(
         pluginID: String,
+        mediaKind: MediaKind,
         possibleSourceItemIDs: [String],
         destinationItemID: String,
         title: String,
@@ -179,6 +186,7 @@ extension LibrarySourceRemapper: MediaDetailRelinkServing {
     ) async throws {
         _ = try await relink(
             pluginId: pluginID,
+            mediaKind: mediaKind,
             possibleSourceItemIds: possibleSourceItemIDs,
             destinationItemId: destinationItemID,
             title: title,

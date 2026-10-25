@@ -49,6 +49,7 @@ struct BackupImporterCapabilityTests {
                 title: "Title",
                 coverUrl: nil,
                 pluginId: "plugin",
+                mediaKind: .manga,
                 chapterKey: "chapter",
                 chapterTitle: nil,
                 readAt: date
@@ -80,6 +81,7 @@ struct BackupImporterCapabilityTests {
             try ReadProgressKeyRecord(
                 pluginId: "plugin",
                 canonicalMediaId: "media",
+                mediaKind: .manga,
                 chapterKey: "chapter",
                 markedAt: date,
                 provenance: .runtime
@@ -87,6 +89,7 @@ struct BackupImporterCapabilityTests {
             try ReadProgressNumberRecord(
                 pluginId: "plugin",
                 canonicalMediaId: "media",
+                mediaKind: .manga,
                 chapterNumber: 1,
                 markedAt: date,
                 provenance: .runtime
@@ -94,6 +97,7 @@ struct BackupImporterCapabilityTests {
             try MediaReadProgressRecord(
                 pluginId: "plugin",
                 canonicalMediaId: "media",
+                mediaKind: .manga,
                 lastReadChapterKey: "chapter",
                 updatedAt: date,
                 provenance: .runtime
@@ -101,6 +105,7 @@ struct BackupImporterCapabilityTests {
             try TrackerLinkRecord(
                 pluginId: "plugin",
                 canonicalMediaId: "media",
+                mediaKind: .manga,
                 providerId: "anilist",
                 remoteMediaId: "42",
                 updatedAt: date,
@@ -109,6 +114,7 @@ struct BackupImporterCapabilityTests {
             try UpdateBadgeRecord(
                 pluginId: "plugin",
                 canonicalMediaId: "media",
+                mediaKind: .manga,
                 count: 3,
                 updatedAt: date,
                 provenance: .runtime
@@ -306,6 +312,7 @@ struct BackupImporterCapabilityTests {
             title: "Local",
             coverUrl: nil,
             pluginId: localItem.pluginId,
+            mediaKind: localItem.effectiveType,
             chapterKey: "chapter",
             chapterTitle: nil,
             readAt: date
@@ -355,6 +362,7 @@ struct BackupImporterCapabilityTests {
             title: "Title",
             coverUrl: nil,
             pluginId: "plugin",
+            mediaKind: .manga,
             chapterKey: "chapter",
             chapterTitle: "Chapter",
             readAt: date
@@ -365,6 +373,7 @@ struct BackupImporterCapabilityTests {
             title: first.title,
             coverUrl: first.coverUrl,
             pluginId: first.pluginId,
+            mediaKind: .manga,
             chapterKey: first.chapterKey,
             chapterTitle: first.chapterTitle,
             readAt: first.readAt
@@ -390,6 +399,7 @@ struct BackupImporterCapabilityTests {
                 title: "Local",
                 coverUrl: nil,
                 pluginId: "plugin",
+                mediaKind: .manga,
                 chapterKey: "local",
                 chapterTitle: nil,
                 readAt: date
@@ -625,6 +635,110 @@ struct BackupImporterCapabilityTests {
             url: paperbackFixture.url
         )
         assertForeignRepresentations(paperback)
+    }
+
+    @MainActor
+    @Test func oldNativeBackupWithoutMediaKindInfersKnownAndArchivesUnknownRows() async throws {
+        let fixture = try TemporaryBackupFixture(extension: "itobackup")
+        defer { fixture.cleanup() }
+
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        try fixture.withDatabase { db in
+            try db.create(table: "libraryItem") { t in
+                t.primaryKey("id", .text)
+                t.column("title", .text).notNull()
+                t.column("coverUrl", .text)
+                t.column("pluginId", .text).notNull()
+                t.column("isAnime", .boolean).notNull()
+                t.column("pluginType", .text)
+                t.column("rawPayload", .blob).notNull()
+                t.column("anilistId", .integer)
+            }
+            try db.execute(
+                sql: """
+                    INSERT INTO libraryItem (id, title, pluginId, isAnime, pluginType, rawPayload)
+                    VALUES ('known-item', 'Known', 'test.plugin', 0, 'manga', X'00')
+                    """
+            )
+            // Create old readingHistory table WITHOUT mediaKind column
+            try db.create(table: "readingHistory") { t in
+                t.primaryKey("id", .text)
+                t.column("libraryItemId", .text)
+                t.column("mediaKey", .text).notNull()
+                t.column("title", .text).notNull()
+                t.column("coverUrl", .text)
+                t.column("pluginId", .text).notNull()
+                t.column("chapterKey", .text).notNull()
+                t.column("chapterTitle", .text)
+                t.column("readAt", .datetime).notNull()
+            }
+            // Known row linking to library item
+            try db.execute(
+                sql: """
+                    INSERT INTO readingHistory (id, libraryItemId, mediaKey, title, pluginId, chapterKey, readAt)
+                    VALUES ('known-history', 'known-item', 'known-item', 'Known', 'test.plugin', 'ch1', ?)
+                    """,
+                arguments: [date]
+            )
+            // Unknown / unprovable row
+            try db.execute(
+                sql: """
+                    INSERT INTO readingHistory (id, libraryItemId, mediaKey, title, pluginId, chapterKey, readAt)
+                    VALUES ('unknown-history', NULL, 'unknown-media', 'Unknown', 'orphan.plugin', 'ch1', ?)
+                    """,
+                arguments: [date]
+            )
+        }
+
+        let imported = try await ItoNativeImporter().parse(url: fixture.url)
+        #expect(imported.history.count == 1)
+        #expect(imported.history[0].id == "known-history")
+        #expect(imported.history[0].mediaKind == .manga)
+
+        #expect(imported.legacyStateArchives.count == 1)
+        #expect(imported.legacyStateArchives[0].reason == "kindUnknown")
+        #expect(imported.legacyStateArchives[0].contentClass == .appNonSecret)
+        #expect(imported.representation(of: .legacyStateArchive) == .representedNonempty)
+    }
+
+    @MainActor
+    @Test func newBackupWithInvalidMediaKindIsRejectedStrictly() async throws {
+        let fixture = try TemporaryBackupFixture(extension: "itobackup")
+        defer { fixture.cleanup() }
+
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        try fixture.withDatabase { db in
+            try createMetadataTables(in: db)
+            try BackupMetadataRecord(formatVersion: 1, createdAt: date).insert(db)
+            try BackupCapabilityRecord(component: .readingHistory, representation: .representedNonempty).insert(db)
+            try db.create(table: "readingHistory") { t in
+                t.primaryKey("id", .text)
+                t.column("libraryItemId", .text)
+                t.column("mediaKey", .text).notNull()
+                t.column("title", .text).notNull()
+                t.column("coverUrl", .text)
+                t.column("pluginId", .text).notNull()
+                t.column("mediaKind", .text).notNull()
+                t.column("chapterKey", .text).notNull()
+                t.column("chapterTitle", .text)
+                t.column("readAt", .datetime).notNull()
+            }
+            try db.execute(
+                sql: """
+                    INSERT INTO readingHistory (id, libraryItemId, mediaKey, title, pluginId, mediaKind, chapterKey, readAt)
+                    VALUES ('hist-1', NULL, 'media-1', 'Title', 'plugin', 'not_a_valid_kind', 'ch1', ?)
+                    """,
+                arguments: [date]
+            )
+        }
+
+        await #expect(
+            throws: BackupPreflightError.rejected(
+                .invalidComponentData(component: .readingHistory, code: "invalidMediaKind")
+            )
+        ) {
+            _ = try await ItoNativeImporter().parse(url: fixture.url)
+        }
     }
 
     private func assertForeignRepresentations(_ backup: ImportedBackup) {

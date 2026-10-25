@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import ito_runner
 
 // The restore DAG is intentionally isolated in one owned file for G006 integration.
 // swiftlint:disable file_length
@@ -13,7 +14,11 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         let isPreexisting: Bool
 
         var sourceIdentity: ImportedMediaIdentity.Key {
-            ImportedMediaIdentity.key(itemId: imported.id, pluginId: imported.pluginId)
+            ImportedMediaIdentity.key(
+                itemId: imported.id,
+                pluginId: imported.pluginId,
+                mediaKind: imported.effectiveType
+            )
         }
     }
 
@@ -82,23 +87,27 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
     private struct ReadProgressKey: Hashable {
         let pluginId: String
         let canonicalMediaId: String
+        let mediaKind: MediaKind
         let chapterKey: String
     }
 
     private struct ReadProgressNumberKey: Hashable {
         let pluginId: String
         let canonicalMediaId: String
+        let mediaKind: MediaKind
         let chapterNumber: Double
     }
 
     private struct MediaKey: Hashable {
         let pluginId: String
         let canonicalMediaId: String
+        let mediaKind: MediaKind
     }
 
     private struct TrackerKey: Hashable {
         let pluginId: String
         let canonicalMediaId: String
+        let mediaKind: MediaKind
         let providerId: String
     }
 
@@ -116,6 +125,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
     private struct HistorySemanticKey: Hashable {
         let pluginId: String
         let canonicalMediaId: String
+        let mediaKind: MediaKind
         let chapterKey: String
         let readAt: Date
     }
@@ -816,7 +826,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             ? local.items
             : []
         let localByIdentity = Dictionary(grouping: localItems) {
-            ImportedMediaIdentity.key(itemId: $0.id, pluginId: $0.pluginId)
+            ImportedMediaIdentity.key(itemId: $0.id, pluginId: $0.pluginId, mediaKind: $0.effectiveType)
         }
         var seenImportedIdentities = Set<ImportedMediaIdentity.Key>()
         var dispositions: [ItemDisposition] = []
@@ -824,7 +834,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         for item in backup.items.sorted(by: { $0.id < $1.id }) {
             let identity = ImportedMediaIdentity.key(
                 itemId: item.id,
-                pluginId: item.pluginId
+                pluginId: item.pluginId,
+                mediaKind: item.effectiveType
             )
             guard seenImportedIdentities.insert(identity).inserted else {
                 throw rejection(
@@ -861,7 +872,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                     $0.sourceIdentity,
                     ImportedMediaIdentity.key(
                         itemId: $0.targetId,
-                        pluginId: $0.imported.pluginId
+                        pluginId: $0.imported.pluginId,
+                        mediaKind: $0.imported.effectiveType
                     )
                 )
             }
@@ -932,11 +944,12 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                     let identity = remappedIdentity(
                         pluginId: $0.pluginId,
                         canonicalMediaId: $0.canonicalMediaId,
+                        mediaKind: $0.mediaKind,
                         library: library
                     )
                     return (
                         identity,
-                        "\(identity.pluginId)\u{1F}\(identity.canonicalMediaId)"
+                        "\(identity.pluginId)\u{1F}\(identity.canonicalMediaId)\u{1F}\(identity.mediaKind.rawValue)"
                             + "\u{1F}\($0.chapterKey)"
                     )
                 }
@@ -946,11 +959,12 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                     let identity = remappedIdentity(
                         pluginId: $0.pluginId,
                         canonicalMediaId: $0.canonicalMediaId,
+                        mediaKind: $0.mediaKind,
                         library: library
                     )
                     return (
                         identity,
-                        "\(identity.pluginId)\u{1F}\(identity.canonicalMediaId)"
+                        "\(identity.pluginId)\u{1F}\(identity.canonicalMediaId)\u{1F}\(identity.mediaKind.rawValue)"
                             + "\u{1F}\($0.chapterNumber)"
                     )
                 }
@@ -960,11 +974,12 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                     let identity = remappedIdentity(
                         pluginId: $0.pluginId,
                         canonicalMediaId: $0.canonicalMediaId,
+                        mediaKind: $0.mediaKind,
                         library: library
                     )
                     return (
                         identity,
-                        "\(identity.pluginId)\u{1F}\(identity.canonicalMediaId)"
+                        "\(identity.pluginId)\u{1F}\(identity.canonicalMediaId)\u{1F}\(identity.mediaKind.rawValue)"
                     )
                 }
             )
@@ -975,11 +990,12 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                     let identity = remappedIdentity(
                         pluginId: $0.pluginId,
                         canonicalMediaId: $0.canonicalMediaId,
+                        mediaKind: $0.mediaKind,
                         library: library
                     )
                     return (
                         identity,
-                        "\(identity.pluginId)\u{1F}\(identity.canonicalMediaId)"
+                        "\(identity.pluginId)\u{1F}\(identity.canonicalMediaId)\u{1F}\(identity.mediaKind.rawValue)"
                             + "\u{1F}\($0.providerId)"
                     )
                 }
@@ -991,11 +1007,12 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                     let identity = remappedIdentity(
                         pluginId: $0.pluginId,
                         canonicalMediaId: $0.canonicalMediaId,
+                        mediaKind: $0.mediaKind,
                         library: library
                     )
                     return (
                         identity,
-                        "\(identity.pluginId)\u{1F}\(identity.canonicalMediaId)"
+                        "\(identity.pluginId)\u{1F}\(identity.canonicalMediaId)\u{1F}\(identity.mediaKind.rawValue)"
                     )
                 }
             )
@@ -1163,6 +1180,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             TrackerKey(
                 pluginId: $0.pluginId,
                 canonicalMediaId: $0.canonicalMediaId,
+                mediaKind: $0.mediaKind,
                 providerId: $0.providerId
             )
         })
@@ -1174,8 +1192,10 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                 pluginId: item.pluginId,
                 canonicalMediaId: ImportedMediaIdentity.canonicalMediaId(
                     itemId: item.id,
-                    pluginId: item.pluginId
+                    pluginId: item.pluginId,
+                    mediaKind: item.effectiveType
                 ),
+                mediaKind: item.effectiveType,
                 providerId: "anilist"
             )
             guard keys.insert(key).inserted else {
@@ -1185,6 +1205,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                 TrackerLinkRecord(
                     pluginId: key.pluginId,
                     canonicalMediaId: key.canonicalMediaId,
+                    mediaKind: key.mediaKind,
                     providerId: key.providerId,
                     remoteMediaId: String(anilistId),
                     updatedAt: nil,
@@ -1350,7 +1371,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         let finalItems = try LibraryItem.fetchAll(db)
         let finalById = Dictionary(uniqueKeysWithValues: finalItems.map { ($0.id, $0) })
         let finalByIdentity = Dictionary(grouping: finalItems) {
-            ImportedMediaIdentity.key(itemId: $0.id, pluginId: $0.pluginId)
+            ImportedMediaIdentity.key(itemId: $0.id, pluginId: $0.pluginId, mediaKind: $0.effectiveType)
         }
         let dispositionByImportedId = Dictionary(
             uniqueKeysWithValues: plan.library.dispositions.map {
@@ -1365,7 +1386,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             }
             let historyIdentity = ImportedMediaIdentity.key(
                 itemId: history.mediaKey,
-                pluginId: history.pluginId
+                pluginId: history.pluginId,
+                mediaKind: history.mediaKind
             )
             let replacement: String?
             if let disposition = dispositionByImportedId[pointer],
@@ -1373,7 +1395,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                let finalItem = finalById[disposition.targetId],
                ImportedMediaIdentity.key(
                 itemId: finalItem.id,
-                pluginId: finalItem.pluginId
+                pluginId: finalItem.pluginId,
+                mediaKind: finalItem.effectiveType
                ) == historyIdentity {
                 replacement = disposition.targetId
             } else {
@@ -1481,6 +1504,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             let key = ReadProgressKey(
                 pluginId: rewritten.pluginId,
                 canonicalMediaId: rewritten.canonicalMediaId,
+                mediaKind: rewritten.mediaKind,
                 chapterKey: rewritten.chapterKey
             )
             try mergeSetRecord(
@@ -1490,6 +1514,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                     key: [
                         "pluginId": key.pluginId,
                         "canonicalMediaId": key.canonicalMediaId,
+                        "mediaKind": key.mediaKind.rawValue,
                         "chapterKey": key.chapterKey
                     ]
                 ),
@@ -1503,6 +1528,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             let key = ReadProgressNumberKey(
                 pluginId: rewritten.pluginId,
                 canonicalMediaId: rewritten.canonicalMediaId,
+                mediaKind: rewritten.mediaKind,
                 chapterNumber: rewritten.chapterNumber
             )
             try mergeSetRecord(
@@ -1512,6 +1538,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                     key: [
                         "pluginId": key.pluginId,
                         "canonicalMediaId": key.canonicalMediaId,
+                        "mediaKind": key.mediaKind.rawValue,
                         "chapterNumber": key.chapterNumber
                     ]
                 ),
@@ -1524,7 +1551,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             let rewritten = retarget(record, library: plan.library)
             let key: [String: DatabaseValueConvertible] = [
                 "pluginId": rewritten.pluginId,
-                "canonicalMediaId": rewritten.canonicalMediaId
+                "canonicalMediaId": rewritten.canonicalMediaId,
+                "mediaKind": rewritten.mediaKind.rawValue
             ]
             try mergeScalarRecord(
                 rewritten,
@@ -1552,6 +1580,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             let key: [String: DatabaseValueConvertible] = [
                 "pluginId": rewritten.pluginId,
                 "canonicalMediaId": rewritten.canonicalMediaId,
+                "mediaKind": rewritten.mediaKind.rawValue,
                 "providerId": rewritten.providerId
             ]
             try mergeScalarRecord(
@@ -1579,7 +1608,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             let rewritten = retarget(record, library: plan.library)
             let key: [String: DatabaseValueConvertible] = [
                 "pluginId": rewritten.pluginId,
-                "canonicalMediaId": rewritten.canonicalMediaId
+                "canonicalMediaId": rewritten.canonicalMediaId,
+                "mediaKind": rewritten.mediaKind.rawValue
             ]
             try mergeScalarRecord(
                 rewritten,
@@ -1891,11 +1921,13 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
     private func remappedIdentity(
         pluginId: String,
         canonicalMediaId: String,
+        mediaKind: MediaKind,
         library: LibraryPlan
     ) -> ImportedMediaIdentity.Key {
         let source = ImportedMediaIdentity.Key(
             pluginId: pluginId,
-            canonicalMediaId: canonicalMediaId
+            canonicalMediaId: canonicalMediaId,
+            mediaKind: mediaKind
         )
         return library.targetIdentityBySourceIdentity[source] ?? source
     }
@@ -1939,7 +1971,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                 .map {
                     ImportedMediaIdentity.key(
                         itemId: $0,
-                        pluginId: history.pluginId
+                        pluginId: history.pluginId,
+                        mediaKind: history.mediaKind
                     )
                 }
         )
@@ -1966,11 +1999,13 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         let identity = remappedIdentity(
             pluginId: record.pluginId,
             canonicalMediaId: record.canonicalMediaId,
+            mediaKind: record.mediaKind,
             library: library
         )
         return ReadProgressKeyRecord(
             pluginId: identity.pluginId,
             canonicalMediaId: identity.canonicalMediaId,
+            mediaKind: identity.mediaKind,
             chapterKey: record.chapterKey,
             markedAt: record.markedAt,
             provenance: record.provenance
@@ -1984,11 +2019,13 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         let identity = remappedIdentity(
             pluginId: record.pluginId,
             canonicalMediaId: record.canonicalMediaId,
+            mediaKind: record.mediaKind,
             library: library
         )
         return ReadProgressNumberRecord(
             pluginId: identity.pluginId,
             canonicalMediaId: identity.canonicalMediaId,
+            mediaKind: identity.mediaKind,
             chapterNumber: record.chapterNumber,
             markedAt: record.markedAt,
             provenance: record.provenance
@@ -2002,11 +2039,13 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         let identity = remappedIdentity(
             pluginId: record.pluginId,
             canonicalMediaId: record.canonicalMediaId,
+            mediaKind: record.mediaKind,
             library: library
         )
         return MediaReadProgressRecord(
             pluginId: identity.pluginId,
             canonicalMediaId: identity.canonicalMediaId,
+            mediaKind: identity.mediaKind,
             lastReadChapterKey: record.lastReadChapterKey,
             updatedAt: record.updatedAt,
             provenance: record.provenance,
@@ -2022,11 +2061,13 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         let identity = remappedIdentity(
             pluginId: record.pluginId,
             canonicalMediaId: record.canonicalMediaId,
+            mediaKind: record.mediaKind,
             library: library
         )
         return TrackerLinkRecord(
             pluginId: identity.pluginId,
             canonicalMediaId: identity.canonicalMediaId,
+            mediaKind: identity.mediaKind,
             providerId: record.providerId,
             remoteMediaId: record.remoteMediaId,
             updatedAt: record.updatedAt,
@@ -2041,11 +2082,13 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         let identity = remappedIdentity(
             pluginId: record.pluginId,
             canonicalMediaId: record.canonicalMediaId,
+            mediaKind: record.mediaKind,
             library: library
         )
         return UpdateBadgeRecord(
             pluginId: identity.pluginId,
             canonicalMediaId: identity.canonicalMediaId,
+            mediaKind: identity.mediaKind,
             count: record.count,
             updatedAt: record.updatedAt,
             provenance: record.provenance
@@ -2059,8 +2102,10 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             pluginId: history.pluginId,
             canonicalMediaId: ImportedMediaIdentity.canonicalMediaId(
                 itemId: history.mediaKey,
-                pluginId: history.pluginId
+                pluginId: history.pluginId,
+                mediaKind: history.mediaKind
             ),
+            mediaKind: history.mediaKind,
             chapterKey: history.chapterKey,
             readAt: history.readAt
         )
@@ -2111,8 +2156,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         _ lhs: ReadingHistoryRecord,
         _ rhs: ReadingHistoryRecord
     ) -> Bool {
-        (lhs.pluginId, lhs.mediaKey, lhs.chapterKey, lhs.readAt, lhs.id)
-            < (rhs.pluginId, rhs.mediaKey, rhs.chapterKey, rhs.readAt, rhs.id)
+        (lhs.pluginId, lhs.mediaKind.rawValue, lhs.mediaKey, lhs.chapterKey, lhs.readAt, lhs.id)
+            < (rhs.pluginId, rhs.mediaKind.rawValue, rhs.mediaKey, rhs.chapterKey, rhs.readAt, rhs.id)
     }
 
     private func sourceMappingSort(
@@ -2140,40 +2185,40 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         _ lhs: ReadProgressKeyRecord,
         _ rhs: ReadProgressKeyRecord
     ) -> Bool {
-        (lhs.pluginId, lhs.canonicalMediaId, lhs.chapterKey)
-            < (rhs.pluginId, rhs.canonicalMediaId, rhs.chapterKey)
+        (lhs.pluginId, lhs.mediaKind.rawValue, lhs.canonicalMediaId, lhs.chapterKey)
+            < (rhs.pluginId, rhs.mediaKind.rawValue, rhs.canonicalMediaId, rhs.chapterKey)
     }
 
     private func readProgressNumberSort(
         _ lhs: ReadProgressNumberRecord,
         _ rhs: ReadProgressNumberRecord
     ) -> Bool {
-        (lhs.pluginId, lhs.canonicalMediaId, lhs.chapterNumber)
-            < (rhs.pluginId, rhs.canonicalMediaId, rhs.chapterNumber)
+        (lhs.pluginId, lhs.mediaKind.rawValue, lhs.canonicalMediaId, lhs.chapterNumber)
+            < (rhs.pluginId, rhs.mediaKind.rawValue, rhs.canonicalMediaId, rhs.chapterNumber)
     }
 
     private func mediaReadProgressSort(
         _ lhs: MediaReadProgressRecord,
         _ rhs: MediaReadProgressRecord
     ) -> Bool {
-        (lhs.pluginId, lhs.canonicalMediaId)
-            < (rhs.pluginId, rhs.canonicalMediaId)
+        (lhs.pluginId, lhs.mediaKind.rawValue, lhs.canonicalMediaId)
+            < (rhs.pluginId, rhs.mediaKind.rawValue, rhs.canonicalMediaId)
     }
 
     private func trackerSort(
         _ lhs: TrackerLinkRecord,
         _ rhs: TrackerLinkRecord
     ) -> Bool {
-        (lhs.pluginId, lhs.canonicalMediaId, lhs.providerId)
-            < (rhs.pluginId, rhs.canonicalMediaId, rhs.providerId)
+        (lhs.pluginId, lhs.mediaKind.rawValue, lhs.canonicalMediaId, lhs.providerId)
+            < (rhs.pluginId, rhs.mediaKind.rawValue, rhs.canonicalMediaId, rhs.providerId)
     }
 
     private func updateBadgeSort(
         _ lhs: UpdateBadgeRecord,
         _ rhs: UpdateBadgeRecord
     ) -> Bool {
-        (lhs.pluginId, lhs.canonicalMediaId)
-            < (rhs.pluginId, rhs.canonicalMediaId)
+        (lhs.pluginId, lhs.mediaKind.rawValue, lhs.canonicalMediaId)
+            < (rhs.pluginId, rhs.mediaKind.rawValue, rhs.canonicalMediaId)
     }
 
     private func identityAliasSort(

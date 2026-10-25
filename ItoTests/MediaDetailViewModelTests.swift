@@ -158,7 +158,7 @@ final class MediaDetailViewModelTests: XCTestCase {
 
     func testReadUnreadFiltersAndRowStateUseCanonicalIdentity() {
         let media = manga(chapters: [chapter("one", 1), chapter("two", 2)])
-        let identity = MediaIdentity(pluginId: Self.pluginID, itemId: media.key)
+        let identity = MediaIdentity(pluginId: Self.pluginID, itemId: media.key, mediaKind: .manga)
         let subject = makeMangaSubject(media: media)
         subject.progress.readChapterIDs[identity] = ["one"]
 
@@ -174,7 +174,7 @@ final class MediaDetailViewModelTests: XCTestCase {
         let media = manga(chapters: [
             chapter("three", 3), chapter("one", 1), chapter("two", 2)
         ])
-        let identity = MediaIdentity(pluginId: Self.pluginID, itemId: media.key)
+        let identity = MediaIdentity(pluginId: Self.pluginID, itemId: media.key, mediaKind: .manga)
         let subject = makeMangaSubject(media: media)
         subject.progress.readChapterIDs[identity] = ["one"]
 
@@ -226,10 +226,10 @@ final class MediaDetailViewModelTests: XCTestCase {
     }
 
     func testInitialAndExternalAuthoritativeLibraryStatePublication() async {
-        let identity = MediaIdentity(pluginId: Self.pluginID, itemId: "m1")
+        let identity = MediaIdentity(pluginId: Self.pluginID, itemId: "m1", mediaKind: .manga)
         let subject = makeMangaSubject(
             libraryState: MediaDetailLibraryState(
-                records: [MediaDetailLibraryRecord(itemID: "m1", pluginID: Self.pluginID)],
+                records: [MediaDetailLibraryRecord(itemID: "m1", pluginID: Self.pluginID, mediaKind: .manga)],
                 hasCustomCategories: false
             )
         )
@@ -241,7 +241,7 @@ final class MediaDetailViewModelTests: XCTestCase {
         XCTAssertTrue(subject.viewModel.hasCustomCategories)
 
         subject.library.publish(
-            records: [MediaDetailLibraryRecord(itemID: "m1", pluginID: identity.pluginId)],
+            records: [MediaDetailLibraryRecord(itemID: "m1", pluginID: identity.pluginId, mediaKind: .manga)],
             hasCustomCategories: true
         )
         await Task.yield()
@@ -278,9 +278,24 @@ final class MediaDetailViewModelTests: XCTestCase {
         XCTAssertTrue(novelSubject.viewModel.isSaved)
     }
 
+    func testASavedNovelWithTheSameSourceKeyDoesNotMakeAMangaSavedOrUnsaveIt() async {
+        let subject = makeMangaSubject(libraryState: MediaDetailLibraryState(
+            records: [MediaDetailLibraryRecord(itemID: "m1", pluginID: Self.pluginID, mediaKind: .novel)],
+            hasCustomCategories: false
+        ))
+        XCTAssertFalse(subject.viewModel.isSaved)
+
+        await subject.viewModel.toggleSave()
+
+        XCTAssertTrue(subject.viewModel.isSaved)
+        XCTAssertEqual(subject.library.saveKinds, [.manga])
+        XCTAssertTrue(subject.library.unsaveRequests.isEmpty)
+        XCTAssertTrue(subject.library.state.records.contains { $0.mediaKind == .novel })
+    }
+
     func testDurableUnsaveUpdatesOnlyAfterBoundaryCompletes() async {
         let savedState = MediaDetailLibraryState(
-            records: [MediaDetailLibraryRecord(itemID: "m1", pluginID: Self.pluginID)],
+            records: [MediaDetailLibraryRecord(itemID: "m1", pluginID: Self.pluginID, mediaKind: .manga)],
             hasCustomCategories: false
         )
         let subject = makeMangaSubject(libraryState: savedState)
@@ -512,10 +527,10 @@ final class MediaDetailViewModelTests: XCTestCase {
         subject.route.searchResponses = [.value([selected])]
         subject.route.loadResponses = [.value(hydrated)]
         subject.library.stateOnRefresh = MediaDetailLibraryState(
-            records: [MediaDetailLibraryRecord(itemID: "m2", pluginID: Self.pluginID)],
+            records: [MediaDetailLibraryRecord(itemID: "m2", pluginID: Self.pluginID, mediaKind: .manga)],
             hasCustomCategories: false
         )
-        subject.tracker.states[MediaIdentity(pluginId: Self.pluginID, itemId: "m2")] =
+        subject.tracker.states[MediaIdentity(pluginId: Self.pluginID, itemId: "m2", mediaKind: .manga)] =
             MediaDetailTrackerState(isAvailable: true, isTracked: true, anilistID: "55")
 
         subject.viewModel.openRelink()
@@ -524,7 +539,7 @@ final class MediaDetailViewModelTests: XCTestCase {
 
         XCTAssertEqual(subject.viewModel.media.key, "m2")
         XCTAssertEqual(subject.viewModel.media.title, "Hydrated")
-        XCTAssertEqual(subject.viewModel.mediaIdentity, MediaIdentity(pluginId: Self.pluginID, itemId: "m2"))
+        XCTAssertEqual(subject.viewModel.mediaIdentity, MediaIdentity(pluginId: Self.pluginID, itemId: "m2", mediaKind: .manga))
         XCTAssertNil(subject.viewModel.relinkPresentation)
         XCTAssertEqual(subject.viewModel.detailLoadState, .content)
         XCTAssertTrue(subject.viewModel.isSaved)
@@ -532,7 +547,10 @@ final class MediaDetailViewModelTests: XCTestCase {
         XCTAssertTrue(subject.viewModel.isTracked)
         XCTAssertEqual(subject.relink.requests.count, 1)
         let request = try XCTUnwrap(subject.relink.requests.first)
-        XCTAssertEqual(request.possibleSourceItemIDs, ["m1", "\(Self.pluginID)_m1"])
+        XCTAssertEqual(
+            request.possibleSourceItemIDs,
+            ["m1", "\(Self.pluginID)_m1", "\(Self.pluginID)\u{1F}manga\u{1F}m1"]
+        )
         XCTAssertEqual(request.destinationItemID, "m2")
         XCTAssertEqual(try JSONDecoder().decode(Manga.self, from: request.rawPayload).title, "Hydrated")
         XCTAssertEqual(subject.library.refreshCount, 1)
@@ -574,7 +592,7 @@ final class MediaDetailViewModelTests: XCTestCase {
         subject.route.loadResponses = [.value(selected), .value(selected)]
         subject.relink.suspend = true
         subject.library.stateOnRefresh = MediaDetailLibraryState(
-            records: [MediaDetailLibraryRecord(itemID: "m2", pluginID: Self.pluginID)],
+            records: [MediaDetailLibraryRecord(itemID: "m2", pluginID: Self.pluginID, mediaKind: .manga)],
             hasCustomCategories: false
         )
         subject.viewModel.openRelink()
@@ -600,7 +618,7 @@ final class MediaDetailViewModelTests: XCTestCase {
         subject.route.searchResponses = [.value([selected])]
         subject.theme.cachedResponses = [.suspended, .value(currentTheme)]
         subject.library.stateOnRefresh = MediaDetailLibraryState(
-            records: [MediaDetailLibraryRecord(itemID: "m2", pluginID: Self.pluginID)],
+            records: [MediaDetailLibraryRecord(itemID: "m2", pluginID: Self.pluginID, mediaKind: .manga)],
             hasCustomCategories: false
         )
 
@@ -627,7 +645,7 @@ final class MediaDetailViewModelTests: XCTestCase {
         subject.route.searchResponses = [.value([selected])]
         subject.route.loadResponses = [.value(selected)]
         subject.library.stateOnRefresh = MediaDetailLibraryState(
-            records: [MediaDetailLibraryRecord(itemID: "m2", pluginID: Self.pluginID)],
+            records: [MediaDetailLibraryRecord(itemID: "m2", pluginID: Self.pluginID, mediaKind: .manga)],
             hasCustomCategories: true
         )
         subject.viewModel.openRelink()
@@ -784,7 +802,7 @@ final class MediaDetailViewModelTests: XCTestCase {
         subject.route.searchResponses = [.value([selected])]
         subject.route.loadResponses = [.value(selected)]
         subject.library.stateOnRefresh = MediaDetailLibraryState(
-            records: [MediaDetailLibraryRecord(itemID: "m2", pluginID: Self.pluginID)],
+            records: [MediaDetailLibraryRecord(itemID: "m2", pluginID: Self.pluginID, mediaKind: .manga)],
             hasCustomCategories: false
         )
         subject.viewModel.openRelink()
@@ -793,7 +811,7 @@ final class MediaDetailViewModelTests: XCTestCase {
         await waitUntil { subject.baseline.requests.contains { $0.itemID == "m2" } }
 
         let current = subject.baseline.requests.last
-        XCTAssertEqual(current?.media, MediaIdentity(pluginId: Self.pluginID, itemId: "m2"))
+        XCTAssertEqual(current?.media, MediaIdentity(pluginId: Self.pluginID, itemId: "m2", mediaKind: .manga))
         XCTAssertEqual(current?.knownChapterCount, 2)
     }
 
@@ -848,10 +866,10 @@ final class MediaDetailViewModelTests: XCTestCase {
         subject.route.searchResponses = [.value([selected])]
         subject.route.loadResponses = [.value(selected)]
         subject.library.stateOnRefresh = MediaDetailLibraryState(
-            records: [MediaDetailLibraryRecord(itemID: "m2", pluginID: Self.pluginID)],
+            records: [MediaDetailLibraryRecord(itemID: "m2", pluginID: Self.pluginID, mediaKind: .manga)],
             hasCustomCategories: false
         )
-        subject.tracker.states[MediaIdentity(pluginId: Self.pluginID, itemId: "m2")] =
+        subject.tracker.states[MediaIdentity(pluginId: Self.pluginID, itemId: "m2", mediaKind: .manga)] =
             MediaDetailTrackerState(isAvailable: true, isTracked: true, anilistID: "88")
         subject.viewModel.openRelink()
         await waitUntil { subject.viewModel.relinkSearchState == .results }
@@ -962,7 +980,7 @@ final class MediaDetailViewModelTests: XCTestCase {
         let media = providedMedia ?? manga()
         let state = explicitState ?? MediaDetailLibraryState(
             records: saved
-                ? [MediaDetailLibraryRecord(itemID: media.key, pluginID: Self.pluginID)]
+                ? [MediaDetailLibraryRecord(itemID: media.key, pluginID: Self.pluginID, mediaKind: .manga)]
                 : [],
             hasCustomCategories: customCategories
         )

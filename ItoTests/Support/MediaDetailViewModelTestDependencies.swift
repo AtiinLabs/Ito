@@ -94,7 +94,7 @@ final class MediaDetailLibraryFake: MediaDetailLibraryServing {
     private var pendingSaves: [CheckedContinuation<Void, any Error>] = []
     private var pendingUnsaves: [CheckedContinuation<Void, any Error>] = []
     private(set) var saveKinds: [SaveKind] = []
-    private(set) var unsaveRequests: [(sourceItemID: String, pluginID: String)] = []
+    private(set) var unsaveRequests: [(sourceItemID: String, pluginID: String, mediaKind: MediaKind)] = []
     private(set) var refreshCount = 0
 
     init(
@@ -115,29 +115,29 @@ final class MediaDetailLibraryFake: MediaDetailLibraryServing {
 
     func saveManga(_ manga: Manga, pluginID: String) async throws -> String {
         saveKinds.append(.manga)
-        return try await performSave(itemID: manga.key, pluginID: pluginID)
+        return try await performSave(itemID: manga.key, pluginID: pluginID, mediaKind: .manga)
     }
 
     func saveAnime(_ anime: Anime, pluginID: String) async throws -> String {
         saveKinds.append(.anime)
-        return try await performSave(itemID: anime.key, pluginID: pluginID)
+        return try await performSave(itemID: anime.key, pluginID: pluginID, mediaKind: .anime)
     }
 
     func saveNovel(_ novel: Novel, pluginID: String) async throws -> String {
         saveKinds.append(.novel)
-        return try await performSave(itemID: novel.key, pluginID: pluginID)
+        return try await performSave(itemID: novel.key, pluginID: pluginID, mediaKind: .novel)
     }
 
-    func unsave(sourceItemID: String, pluginID: String) async throws {
-        unsaveRequests.append((sourceItemID, pluginID))
+    func unsave(sourceItemID: String, pluginID: String, mediaKind: MediaKind) async throws {
+        unsaveRequests.append((sourceItemID, pluginID, mediaKind))
         if let unsaveError { throw unsaveError }
         if suspendUnsave {
             try await withCheckedThrowingContinuation { pendingUnsaves.append($0) }
         }
-        let possible = Set([sourceItemID, "\(pluginID)_\(sourceItemID)"])
+        let possible = Set([sourceItemID, "\(pluginID)_\(sourceItemID)", "\(pluginID)\u{1F}\(mediaKind.rawValue)\u{1F}\(sourceItemID)"])
         publish(
             records: state.records.filter {
-                !($0.pluginID == pluginID && possible.contains($0.itemID))
+                !($0.pluginID == pluginID && $0.mediaKind == mediaKind && possible.contains($0.itemID))
             },
             hasCustomCategories: state.hasCustomCategories
         )
@@ -165,14 +165,14 @@ final class MediaDetailLibraryFake: MediaDetailLibraryServing {
         pendingUnsaves.removeFirst().resume(with: result)
     }
 
-    private func performSave(itemID: String, pluginID: String) async throws -> String {
+    private func performSave(itemID: String, pluginID: String, mediaKind: MediaKind) async throws -> String {
         if let saveError { throw saveError }
         if suspendSave {
             try await withCheckedThrowingContinuation { pendingSaves.append($0) }
         }
         let storedItemID = durableSavedItemID ?? itemID
         var records = state.records
-        let record = MediaDetailLibraryRecord(itemID: storedItemID, pluginID: pluginID)
+        let record = MediaDetailLibraryRecord(itemID: storedItemID, pluginID: pluginID, mediaKind: mediaKind)
         if !records.contains(record) { records.append(record) }
         publish(records: records, hasCustomCategories: state.hasCustomCategories)
         return storedItemID
@@ -313,6 +313,7 @@ final class MediaDetailThemeFake: MediaDetailThemeServing {
 final class MediaDetailRelinkFake: MediaDetailRelinkServing {
     struct Request {
         let pluginID: String
+        let mediaKind: MediaKind
         let possibleSourceItemIDs: [String]
         let destinationItemID: String
         let title: String
@@ -328,6 +329,7 @@ final class MediaDetailRelinkFake: MediaDetailRelinkServing {
 
     func relink(
         pluginID: String,
+        mediaKind: MediaKind,
         possibleSourceItemIDs: [String],
         destinationItemID: String,
         title: String,
@@ -337,6 +339,7 @@ final class MediaDetailRelinkFake: MediaDetailRelinkServing {
         requests.append(
             Request(
                 pluginID: pluginID,
+                mediaKind: mediaKind,
                 possibleSourceItemIDs: possibleSourceItemIDs,
                 destinationItemID: destinationItemID,
                 title: title,

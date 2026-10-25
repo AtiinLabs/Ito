@@ -42,15 +42,6 @@ nonisolated extension MediaEntry {
         }
     }
 
-    /// How finishing one of its chapters or episodes is reported to the plugin.
-    var completionKind: PluginCompletionKind {
-        switch self {
-        case .manga: return .manga
-        case .anime: return .anime
-        case .novel: return .novel
-        }
-    }
-
     /// The entry as the kind a caller asked the plugin for. The runner already refuses an update
     /// of another kind, so a mismatch is a plugin failure, never shown.
     func expecting<Value>(_ kind: KeyPath<MediaEntry, Value?>) throws -> Value {

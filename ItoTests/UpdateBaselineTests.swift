@@ -150,6 +150,7 @@ struct UpdateBaselineTests {
                 try UpdateBadgeRecord(
                     pluginId: plugin,
                     canonicalMediaId: mediaID,
+                    mediaKind: .manga,
                     count: count,
                     updatedAt: nil,
                     provenance: .runtime
@@ -161,10 +162,10 @@ struct UpdateBaselineTests {
         try await manager.reload()
 
         #expect(manager.badgeCount(
-            for: MediaIdentity(pluginId: "one", canonicalMediaId: "same")
+            for: MediaIdentity(pluginId: "one", canonicalMediaId: "same", mediaKind: .manga)
         ) == 3)
         #expect(manager.badgeCount(
-            for: MediaIdentity(pluginId: "two", canonicalMediaId: "same")
+            for: MediaIdentity(pluginId: "two", canonicalMediaId: "same", mediaKind: .manga)
         ) == 5)
         // A badge left by a series no longer in the library is not counted.
         #expect(manager.totalBadgeCount == 8)
@@ -177,7 +178,7 @@ struct UpdateBaselineTests {
         library.configure(updateManager: manager)
         #expect(await successfulUpdate(manager, item: item, freshCount: 12) == 2)
 
-        try await library.removeItemDurably(id: item.id, pluginId: item.pluginId)
+        try await library.removeItemDurably(id: item.id, pluginId: item.pluginId, mediaKind: item.effectiveType)
 
         #expect(manager.totalBadgeCount == 0)
         let badgeRows = try await database.dbPool.read { db in try UpdateBadgeRecord.fetchCount(db) }
@@ -207,12 +208,46 @@ struct UpdateBaselineTests {
                 try UpdateBadgeRecord(
                     pluginId: "plugin",
                     canonicalMediaId: "media",
+                    mediaKind: .manga,
                     count: -1,
                     updatedAt: nil,
                     provenance: .runtime
                 ).insert(db)
             }
         }
+    }
+
+    @Test func sameKeyMangaAndNovelMaintainIndependentBadgesAndBaselines() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let library = LibraryManager(dbPool: database.dbPool)
+        let updates = UpdateManager(dbPool: database.dbPool)
+        library.configure(updateManager: updates)
+
+        let mangaID = try await library.saveMangaDurably(manga: Manga(key: "series", title: "Manga Title"), pluginId: "source.multi")
+        let novelID = try await library.saveNovelDurably(novel: Novel(key: "series", title: "Novel Title"), pluginId: "source.multi")
+
+        let mangaItem = try await database.dbPool.read { db in try #require(try LibraryItem.fetchOne(db, key: mangaID)) }
+        let novelItem = try await database.dbPool.read { db in try #require(try LibraryItem.fetchOne(db, key: novelID)) }
+
+        let mangaDelta = await successfulUpdate(updates, item: mangaItem, freshCount: 5)
+        let novelDelta = await successfulUpdate(updates, item: novelItem, freshCount: 2)
+
+        #expect(mangaDelta == 5)
+        #expect(novelDelta == 2)
+        #expect(updates.badgeCount(for: mangaItem.mediaIdentity) == 5)
+        #expect(updates.badgeCount(for: novelItem.mediaIdentity) == 2)
+        #expect(updates.totalBadgeCount == 7)
+
+        try await updates.clearBadge(for: mangaItem.mediaIdentity)
+        #expect(updates.badgeCount(for: mangaItem.mediaIdentity) == 0)
+        #expect(updates.badgeCount(for: novelItem.mediaIdentity) == 2)
+        #expect(updates.totalBadgeCount == 2)
+
+        let reloaded = UpdateManager(dbPool: database.dbPool)
+        try await reloaded.reload()
+        #expect(reloaded.badgeCount(for: mangaItem.mediaIdentity) == 0)
+        #expect(reloaded.badgeCount(for: novelItem.mediaIdentity) == 2)
     }
 
     @Test func repeatedBadgeUpdatesKeepOneLogicalRow() async throws {
@@ -299,7 +334,7 @@ struct UpdateBaselineTests {
     }
 
     private func identity(for item: LibraryItem) -> MediaIdentity {
-        MediaIdentity(pluginId: item.pluginId, itemId: item.id)
+        item.mediaIdentity
     }
 
     private func successfulUpdate(

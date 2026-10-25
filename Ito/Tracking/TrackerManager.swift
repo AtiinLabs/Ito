@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import GRDB
+import ito_runner
 import mal
 import MangaBakaSDK
 import OSLog
@@ -91,7 +92,7 @@ public final class TrackerManager: ObservableObject {
             try TrackerLinkRecord.fetchAll(db)
         }
         trackerMappings = Dictionary(grouping: records) {
-            MediaIdentity(pluginId: $0.pluginId, canonicalMediaId: $0.canonicalMediaId)
+            MediaIdentity(pluginId: $0.pluginId, canonicalMediaId: $0.canonicalMediaId, mediaKind: $0.mediaKind)
         }.mapValues { Dictionary(uniqueKeysWithValues: $0.map { ($0.providerId, $0.remoteMediaId) }) }
     }
 
@@ -180,6 +181,7 @@ public final class TrackerManager: ObservableObject {
             try TrackerLinkRecord(
                 pluginId: media.pluginId,
                 canonicalMediaId: media.canonicalMediaId,
+                mediaKind: media.mediaKind,
                 providerId: providerId,
                 remoteMediaId: remoteMediaId,
                 updatedAt: Date(),
@@ -194,6 +196,7 @@ public final class TrackerManager: ObservableObject {
             try TrackerLinkRecord
                 .filter(Column("pluginId") == media.pluginId)
                 .filter(Column("canonicalMediaId") == media.canonicalMediaId)
+                .filter(Column("mediaKind") == media.mediaKind.rawValue)
                 .filter(Column("providerId") == providerId)
                 .deleteAll(db)
         }

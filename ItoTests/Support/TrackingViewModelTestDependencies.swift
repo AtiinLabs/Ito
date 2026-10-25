@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import XCTest
+import ito_runner
 @testable import Ito
 
 @MainActor
@@ -540,10 +541,7 @@ func trackerTestDestination(
     TrackerDetailsDestination(
         providerID: providerID,
         providerName: providerName,
-        mediaIdentity: mediaIdentity ?? MediaIdentity(
-            pluginId: "plugin.test",
-            canonicalMediaId: "media.test"
-        ),
+        mediaIdentity: mediaIdentity ?? MediaIdentity(pluginId: "plugin.test", canonicalMediaId: "media.test", mediaKind: .manga),
         media: media ?? trackerTestMedia(),
         showCancelButton: showCancelButton,
         isLocallyLinked: isLocallyLinked

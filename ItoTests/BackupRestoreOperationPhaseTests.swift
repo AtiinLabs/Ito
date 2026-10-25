@@ -22,6 +22,7 @@ struct BackupRestoreOperationPhaseTests {
             title: "History",
             coverUrl: nil,
             pluginId: localItem.pluginId,
+            mediaKind: localItem.effectiveType,
             chapterKey: "chapter",
             chapterTitle: nil
         )
@@ -110,6 +111,7 @@ struct BackupRestoreOperationPhaseTests {
             title: "Retained History",
             coverUrl: "https://old.example/cover.jpg",
             pluginId: localItem.pluginId,
+            mediaKind: localItem.effectiveType,
             chapterKey: "chapter-7",
             chapterTitle: "Chapter Seven"
         )
@@ -169,6 +171,7 @@ struct BackupRestoreOperationPhaseTests {
         let localBadge = UpdateBadgeRecord(
             pluginId: "plugin",
             canonicalMediaId: "media",
+            mediaKind: .manga,
             count: 4,
             updatedAt: Date(timeIntervalSince1970: 1),
             provenance: .runtime
@@ -183,6 +186,7 @@ struct BackupRestoreOperationPhaseTests {
                 UpdateBadgeRecord(
                     pluginId: "plugin",
                     canonicalMediaId: "media",
+                    mediaKind: .manga,
                     count: 9,
                     updatedAt: Date(timeIntervalSince1970: 2),
                     provenance: .runtime
@@ -190,6 +194,7 @@ struct BackupRestoreOperationPhaseTests {
                 UpdateBadgeRecord(
                     pluginId: "plugin",
                     canonicalMediaId: "new",
+                    mediaKind: .manga,
                     count: 1,
                     updatedAt: nil,
                     provenance: .runtime
@@ -223,8 +228,8 @@ struct BackupRestoreOperationPhaseTests {
         let mergedState = try await database.dbPool.read { db in
             (
                 try UpdateBadgeRecord.fetchOne(
-                db,
-                key: ["pluginId": "plugin", "canonicalMediaId": "media"]
+                    db,
+                    key: ["pluginId": "plugin", "canonicalMediaId": "media", "mediaKind": MediaKind.manga.rawValue]
                 ),
                 try RepositoryRecord.fetchOne(
                     db,
@@ -263,6 +268,7 @@ struct BackupRestoreOperationPhaseTests {
                     title: "Backup",
                     coverUrl: nil,
                     pluginId: imported.pluginId,
+                    mediaKind: imported.effectiveType,
                     chapterKey: "backup",
                     chapterTitle: nil
                 )
@@ -498,6 +504,7 @@ struct BackupRestoreOperationPhaseTests {
                 MediaReadProgressRecord(
                     pluginId: "plugin",
                     canonicalMediaId: "series",
+                    mediaKind: .manga,
                     lastReadChapterKey: "chapter-4",
                     updatedAt: Date(timeIntervalSince1970: 2),
                     provenance: .runtime,
@@ -746,6 +753,7 @@ struct BackupRestoreOperationPhaseTests {
                     title: "History",
                     coverUrl: nil,
                     pluginId: imported.pluginId,
+                    mediaKind: imported.effectiveType,
                     chapterKey: "chapter",
                     chapterTitle: nil
                 )
@@ -754,6 +762,7 @@ struct BackupRestoreOperationPhaseTests {
                 TrackerLinkRecord(
                     pluginId: "plugin",
                     canonicalMediaId: "media",
+                    mediaKind: .manga,
                     providerId: "anilist",
                     remoteMediaId: "42",
                     updatedAt: nil,
@@ -781,6 +790,7 @@ struct BackupRestoreOperationPhaseTests {
                 key: [
                     "pluginId": "plugin",
                     "canonicalMediaId": "media",
+                    "mediaKind": MediaKind.manga.rawValue,
                     "providerId": "anilist"
                 ]
                 )
@@ -811,6 +821,7 @@ struct BackupRestoreOperationPhaseTests {
                 key: [
                     "pluginId": "plugin",
                     "canonicalMediaId": "media",
+                    "mediaKind": MediaKind.manga.rawValue,
                     "providerId": "anilist"
                 ]
             )?.remoteMediaId == "73"
@@ -989,6 +1000,7 @@ struct BackupRestoreOperationPhaseTests {
                 title: "Local",
                 coverUrl: nil,
                 pluginId: "plugin",
+                mediaKind: .manga,
                 chapterKey: "local",
                 chapterTitle: nil
             ).insert(db)

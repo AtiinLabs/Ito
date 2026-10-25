@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import ito_runner
 @testable import Ito
 
 struct BackupDurableStateContractsTests {
@@ -52,6 +53,7 @@ struct BackupDurableStateContractsTests {
                     title: "Title",
                     coverUrl: nil,
                     pluginId: "plugin",
+                    mediaKind: .manga,
                     chapterKey: "chapter",
                     chapterTitle: nil,
                     readAt: date
@@ -78,6 +80,7 @@ struct BackupDurableStateContractsTests {
                 ReadProgressKeyRecord(
                     pluginId: "plugin",
                     canonicalMediaId: "media",
+                    mediaKind: .manga,
                     chapterKey: "chapter",
                     markedAt: date,
                     provenance: .runtime
@@ -87,6 +90,7 @@ struct BackupDurableStateContractsTests {
                 ReadProgressNumberRecord(
                     pluginId: "plugin",
                     canonicalMediaId: "media",
+                    mediaKind: .manga,
                     chapterNumber: 1,
                     markedAt: date,
                     provenance: .runtime
@@ -96,6 +100,7 @@ struct BackupDurableStateContractsTests {
                 MediaReadProgressRecord(
                     pluginId: "plugin",
                     canonicalMediaId: "media",
+                    mediaKind: .manga,
                     lastReadChapterKey: "chapter",
                     updatedAt: date,
                     provenance: .runtime
@@ -105,6 +110,7 @@ struct BackupDurableStateContractsTests {
                 TrackerLinkRecord(
                     pluginId: "plugin",
                     canonicalMediaId: "media",
+                    mediaKind: .manga,
                     providerId: "tracker",
                     remoteMediaId: "remote",
                     updatedAt: date,
@@ -115,6 +121,7 @@ struct BackupDurableStateContractsTests {
                 UpdateBadgeRecord(
                     pluginId: "plugin",
                     canonicalMediaId: "media",
+                    mediaKind: .manga,
                     count: 1,
                     updatedAt: date,
                     provenance: .runtime
@@ -204,6 +211,7 @@ struct BackupDurableStateContractsTests {
                     title: "Title",
                     coverUrl: nil,
                     pluginId: "plugin",
+                    mediaKind: .manga,
                     chapterKey: "chapter",
                     chapterTitle: nil
                 )

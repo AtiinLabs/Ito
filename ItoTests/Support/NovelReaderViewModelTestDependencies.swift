@@ -156,13 +156,11 @@ final class NovelReaderProgressFake: NovelReaderProgressTracking {
 
     func captureCompletionContext(
         media: MediaIdentity,
-        mediaKey: String,
-        kind: PluginCompletionKind
+        mediaKey: String
     ) -> PluginCompletionContext {
         let context = PluginCompletionContext(
             media: media,
             mediaKey: mediaKey,
-            kind: kind,
             originatingEpoch: originatingEpoch
         )
         capturedContexts.append(context)

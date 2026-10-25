@@ -123,9 +123,14 @@ public class HistoryManager: ObservableObject {
     // MARK: - Add History
 
     public func addManga(_ manga: Manga, chapterKey: String, chapterTitle: String, pluginId: String) {
-        guard settingsStore?.incognitoMode == false else { return }
+        _ = recordManga(manga, chapterKey: chapterKey, chapterTitle: chapterTitle, pluginId: pluginId)
+    }
 
-        let libraryItemId = libraryManager.isSaved(id: manga.key) ? manga.key : nil
+    @discardableResult
+    func recordManga(_ manga: Manga, chapterKey: String, chapterTitle: String, pluginId: String) -> Task<Void, Never>? {
+        guard settingsStore?.incognitoMode == false else { return nil }
+
+        let libraryItemId = libraryManager.savedItemID(sourceItemID: manga.key, pluginId: pluginId, mediaKind: .manga)
 
         let record = ReadingHistoryRecord(
             libraryItemId: libraryItemId,
@@ -133,16 +138,22 @@ public class HistoryManager: ObservableObject {
             title: manga.title,
             coverUrl: manga.cover,
             pluginId: pluginId,
+            mediaKind: .manga,
             chapterKey: chapterKey,
             chapterTitle: chapterTitle
         )
-        insertRecord(record)
+        return insertRecord(record)
     }
 
     public func addNovel(_ novel: Novel, chapterKey: String, chapterTitle: String, pluginId: String) {
-        guard settingsStore?.incognitoMode == false else { return }
+        _ = recordNovel(novel, chapterKey: chapterKey, chapterTitle: chapterTitle, pluginId: pluginId)
+    }
 
-        let libraryItemId = libraryManager.isSaved(id: novel.key) ? novel.key : nil
+    @discardableResult
+    func recordNovel(_ novel: Novel, chapterKey: String, chapterTitle: String, pluginId: String) -> Task<Void, Never>? {
+        guard settingsStore?.incognitoMode == false else { return nil }
+
+        let libraryItemId = libraryManager.savedItemID(sourceItemID: novel.key, pluginId: pluginId, mediaKind: .novel)
 
         let record = ReadingHistoryRecord(
             libraryItemId: libraryItemId,
@@ -150,16 +161,22 @@ public class HistoryManager: ObservableObject {
             title: novel.title,
             coverUrl: novel.cover,
             pluginId: pluginId,
+            mediaKind: .novel,
             chapterKey: chapterKey,
             chapterTitle: chapterTitle
         )
-        insertRecord(record)
+        return insertRecord(record)
     }
 
     public func addAnime(_ anime: Anime, episodeKey: String, episodeTitle: String, pluginId: String) {
-        guard settingsStore?.incognitoMode == false else { return }
+        _ = recordAnime(anime, episodeKey: episodeKey, episodeTitle: episodeTitle, pluginId: pluginId)
+    }
 
-        let libraryItemId = libraryManager.isSaved(id: anime.key) ? anime.key : nil
+    @discardableResult
+    func recordAnime(_ anime: Anime, episodeKey: String, episodeTitle: String, pluginId: String) -> Task<Void, Never>? {
+        guard settingsStore?.incognitoMode == false else { return nil }
+
+        let libraryItemId = libraryManager.savedItemID(sourceItemID: anime.key, pluginId: pluginId, mediaKind: .anime)
 
         let record = ReadingHistoryRecord(
             libraryItemId: libraryItemId,
@@ -167,13 +184,15 @@ public class HistoryManager: ObservableObject {
             title: anime.title,
             coverUrl: anime.cover,
             pluginId: pluginId,
+            mediaKind: .anime,
             chapterKey: episodeKey,
             chapterTitle: episodeTitle
         )
-        insertRecord(record)
+        return insertRecord(record)
     }
 
-    private func insertRecord(_ record: ReadingHistoryRecord) {
+    @discardableResult
+    private func insertRecord(_ record: ReadingHistoryRecord) -> Task<Void, Never> {
         Task {
             do {
                 try await dbPool.write { db in

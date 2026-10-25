@@ -257,9 +257,9 @@ struct UpdateRunTests {
         ])
         #expect(manager.libraryUpdateSnapshot.sourceFailures == manager.sourceFailures)
         #expect(manager.itemsCheckedCurrentRun == 5)
-        #expect(manager.badgeCount(for: MediaIdentity(pluginId: "p", itemId: "a")) == 1)
-        #expect(manager.badgeCount(for: MediaIdentity(pluginId: "p", itemId: "d")) == 3)
-        #expect(manager.badgeCount(for: MediaIdentity(pluginId: "q", itemId: "e")) == 2)
+        #expect(manager.badgeCount(for: MediaIdentity(pluginId: "p", itemId: "a", mediaKind: .manga)) == 1)
+        #expect(manager.badgeCount(for: MediaIdentity(pluginId: "p", itemId: "d", mediaKind: .manga)) == 3)
+        #expect(manager.badgeCount(for: MediaIdentity(pluginId: "q", itemId: "e", mediaKind: .manga)) == 2)
         let stored = try await database.dbPool.read { db in try LibraryItem.fetchAll(db) }
         #expect(stored.allSatisfy { $0.lastCheckedAt == start })
         #expect(stored.first { $0.id == "a" }?.knownChapterCount == 6)

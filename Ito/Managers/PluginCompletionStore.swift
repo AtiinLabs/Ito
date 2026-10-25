@@ -19,11 +19,11 @@ nonisolated final class PluginCompletionStore: Sendable {
         return observation
     }
 
-    func captureContext(media: MediaIdentity, mediaKey: String, kind: PluginCompletionKind) -> PluginCompletionContext {
+    func captureContext(media: MediaIdentity, mediaKey: String) -> PluginCompletionContext {
         let epoch = try? secrets.withConfigurationLock {
             try dbPool.write { db in try PluginCompletionScope.capture(pluginID: media.pluginId, in: db) }
         }
-        return PluginCompletionContext(media: media, mediaKey: mediaKey, kind: kind, originatingEpoch: epoch)
+        return PluginCompletionContext(media: media, mediaKey: mediaKey, originatingEpoch: epoch)
     }
 
     static func enqueue(context: PluginCompletionContext, unitKey: String, now: Date, in db: Database) throws {

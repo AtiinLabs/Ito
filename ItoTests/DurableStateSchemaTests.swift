@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import Testing
+import ito_runner
 @testable import Ito
 
 struct DurableStateSchemaTests {
@@ -17,31 +18,33 @@ struct DurableStateSchemaTests {
         let contracts: [String: TableContract] = [
             "appPreference": .init(columns: ["key", "value"], primaryKey: ["key"], nullable: []),
             "readProgressKey": .init(
-                columns: ["pluginId", "canonicalMediaId", "chapterKey", "markedAt", "provenance"],
-                primaryKey: ["pluginId", "canonicalMediaId", "chapterKey"],
+                columns: ["pluginId", "canonicalMediaId", "mediaKind", "chapterKey", "markedAt", "provenance"],
+                primaryKey: ["pluginId", "mediaKind", "canonicalMediaId", "chapterKey"],
                 nullable: ["markedAt", "provenance"]
             ),
             "readProgressNumber": .init(
-                columns: ["pluginId", "canonicalMediaId", "chapterNumber", "markedAt", "provenance"],
-                primaryKey: ["pluginId", "canonicalMediaId", "chapterNumber"],
+                columns: ["pluginId", "canonicalMediaId", "mediaKind", "chapterNumber", "markedAt", "provenance"],
+                primaryKey: ["pluginId", "mediaKind", "canonicalMediaId", "chapterNumber"],
                 nullable: ["markedAt", "provenance"]
             ),
             "mediaReadProgress": .init(
                 columns: [
-                    "pluginId", "canonicalMediaId", "lastReadChapterKey", "updatedAt", "provenance",
+                    "pluginId", "canonicalMediaId", "mediaKind", "lastReadChapterKey", "updatedAt", "provenance",
                     "lastReadPosition", "readerViewer"
                 ],
-                primaryKey: ["pluginId", "canonicalMediaId"],
+                primaryKey: ["pluginId", "mediaKind", "canonicalMediaId"],
                 nullable: ["updatedAt", "provenance", "lastReadPosition", "readerViewer"]
             ),
             "trackerLink": .init(
-                columns: ["pluginId", "canonicalMediaId", "providerId", "remoteMediaId", "updatedAt", "provenance"],
-                primaryKey: ["pluginId", "canonicalMediaId", "providerId"],
+                columns: [
+                    "pluginId", "canonicalMediaId", "mediaKind", "providerId", "remoteMediaId", "updatedAt", "provenance"
+                ],
+                primaryKey: ["pluginId", "mediaKind", "canonicalMediaId", "providerId"],
                 nullable: ["updatedAt", "provenance"]
             ),
             "updateBadge": .init(
-                columns: ["pluginId", "canonicalMediaId", "count", "updatedAt", "provenance"],
-                primaryKey: ["pluginId", "canonicalMediaId"],
+                columns: ["pluginId", "canonicalMediaId", "mediaKind", "count", "updatedAt", "provenance"],
+                primaryKey: ["pluginId", "mediaKind", "canonicalMediaId"],
                 nullable: ["updatedAt", "provenance"]
             ),
             "repository": .init(columns: ["url", "lastFetched", "indexPayload"], primaryKey: ["url"], nullable: ["lastFetched", "indexPayload"]),
@@ -122,8 +125,8 @@ struct DurableStateSchemaTests {
             }
 
             let requiredIndexes: [(String, String, [String])] = [
-                ("readProgressKey", "idx_readProgressKey_media", ["pluginId", "canonicalMediaId"]),
-                ("readProgressNumber", "idx_readProgressNumber_media", ["pluginId", "canonicalMediaId"]),
+                ("readProgressKey", "idx_readProgressKey_media", ["pluginId", "mediaKind", "canonicalMediaId"]),
+                ("readProgressNumber", "idx_readProgressNumber_media", ["pluginId", "mediaKind", "canonicalMediaId"]),
                 ("trackerLink", "idx_trackerLink_provider", ["providerId", "remoteMediaId"]),
                 ("pluginIdentityAlias", "idx_pluginIdentityAlias_suiteDomain", ["suiteDomain"]),
                 ("legacyDefaultsOutcome", "idx_legacyDefaultsOutcome_inbox", ["sourceDomain", "sourceKey", "fingerprint"])
@@ -211,7 +214,7 @@ struct DurableStateSchemaTests {
         let categoryLink = ItemCategoryLink(itemId: item.id, categoryId: category.id, addedAt: date)
         let history = ReadingHistoryRecord(
             id: "history", libraryItemId: item.id, mediaKey: item.id, title: item.title,
-            coverUrl: nil, pluginId: item.pluginId, chapterKey: "chapter-1", chapterTitle: nil,
+            coverUrl: nil, pluginId: item.pluginId, mediaKind: .manga, chapterKey: "chapter-1", chapterTitle: nil,
             readAt: date
         )
         let theme = ThemeCacheRecord(mediaKey: item.id, dominantHex: "#111111", secondaryHex: "#222222")
@@ -234,7 +237,17 @@ struct DurableStateSchemaTests {
             try category.insert(db)
             try item.insert(db)
             try categoryLink.insert(db)
-            try history.insert(db)
+            try db.execute(
+                sql: """
+                    INSERT INTO readingHistory
+                        (id, libraryItemId, mediaKey, title, coverUrl, pluginId, chapterKey, chapterTitle, readAt)
+                    VALUES (?, ?, ?, ?, NULL, ?, ?, NULL, ?)
+                    """,
+                arguments: [
+                    history.id, history.libraryItemId, history.mediaKey, history.title, history.pluginId,
+                    history.chapterKey, history.readAt
+                ]
+            )
             try theme.insert(db)
             try preference.insert(db)
             try sourceMapping.insert(db)
@@ -255,6 +268,7 @@ struct DurableStateSchemaTests {
             let link = try #require(try TrackerLinkRecord.fetchOne(db))
             #expect(link.pluginId == "plugin.media")
             #expect(link.canonicalMediaId == "42")
+            #expect(link.mediaKind == .manga)
             #expect(link.providerId == "anilist")
             #expect(link.remoteMediaId == "1234")
             #expect(link.provenance == .legacyUnknownTime)
@@ -300,7 +314,7 @@ struct DurableStateSchemaTests {
         try database.dbPool.write { db in
             try makeLibraryItem(id: "plugin_42", pluginId: "plugin", anilistId: 1234).insert(db)
             try TrackerLinkRecord(
-                pluginId: "plugin", canonicalMediaId: "42", providerId: "anilist",
+                pluginId: "plugin", canonicalMediaId: "42", mediaKind: .manga, providerId: "anilist",
                 remoteMediaId: "already-authoritative", updatedAt: Date(), provenance: .runtime
             ).insert(db)
 
@@ -391,27 +405,27 @@ struct DurableStateSchemaTests {
 
         try database.dbPool.write { db in
             try ReadProgressKeyRecord(
-                pluginId: "plugin", canonicalMediaId: "media", chapterKey: "chapter",
+                pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga, chapterKey: "chapter",
                 markedAt: Date(timeIntervalSince1970: 1), provenance: .runtime
             ).save(db)
             try ReadProgressKeyRecord(
-                pluginId: "plugin", canonicalMediaId: "media", chapterKey: "chapter",
+                pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga, chapterKey: "chapter",
                 markedAt: Date(timeIntervalSince1970: 2), provenance: .legacyUnknownTime
             ).save(db)
             try TrackerLinkRecord(
-                pluginId: "plugin", canonicalMediaId: "media", providerId: "anilist",
+                pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga, providerId: "anilist",
                 remoteMediaId: "1", updatedAt: nil, provenance: .legacyUnknownTime
             ).save(db)
             try TrackerLinkRecord(
-                pluginId: "plugin", canonicalMediaId: "media", providerId: "anilist",
+                pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga, providerId: "anilist",
                 remoteMediaId: "2", updatedAt: Date(), provenance: .runtime
             ).save(db)
             try UpdateBadgeRecord(
-                pluginId: "plugin", canonicalMediaId: "media", count: 1,
+                pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga, count: 1,
                 updatedAt: nil, provenance: .legacyUnknownTime
             ).save(db)
             try UpdateBadgeRecord(
-                pluginId: "plugin", canonicalMediaId: "media", count: 4,
+                pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga, count: 4,
                 updatedAt: Date(), provenance: .runtime
             ).save(db)
 
@@ -430,13 +444,22 @@ struct DurableStateSchemaTests {
         try database.dbPool.write { db in
             for provenance in DurableStateProvenance.allCases {
                 try db.execute(
-                    sql: "INSERT INTO readProgressKey (pluginId, canonicalMediaId, chapterKey, provenance) VALUES (?, ?, ?, ?)",
+                    sql: "INSERT INTO readProgressKey (pluginId, canonicalMediaId, mediaKind, chapterKey, provenance) VALUES (?, ?, 'manga', ?, ?)",
                     arguments: ["p", "m", provenance.rawValue, provenance.rawValue]
                 )
             }
-            try db.execute(sql: "INSERT INTO readProgressKey (pluginId, canonicalMediaId, chapterKey, provenance) VALUES ('p', 'm', 'null', NULL)")
+            try db.execute(sql: "INSERT INTO readProgressKey (pluginId, canonicalMediaId, mediaKind, chapterKey, provenance) VALUES ('p', 'm', 'manga', 'null', NULL)")
             #expect(throws: DatabaseError.self) {
-                try db.execute(sql: "INSERT INTO readProgressKey (pluginId, canonicalMediaId, chapterKey, provenance) VALUES ('p', 'm', 'bad', 'imported')")
+                try db.execute(sql: "INSERT INTO readProgressKey (pluginId, canonicalMediaId, mediaKind, chapterKey, provenance) VALUES ('p', 'm', 'manga', 'bad', 'imported')")
+            }
+            for kind in MediaKind.allCases {
+                try db.execute(
+                    sql: "INSERT INTO readProgressKey (pluginId, canonicalMediaId, mediaKind, chapterKey) VALUES ('p', 'm', ?, 'kind')",
+                    arguments: [kind.rawValue]
+                )
+            }
+            #expect(throws: DatabaseError.self) {
+                try db.execute(sql: "INSERT INTO readProgressKey (pluginId, canonicalMediaId, mediaKind, chapterKey) VALUES ('p', 'm', 'comic', 'kind')")
             }
 
             for lifecycle in LegacyInboxLifecycleStatus.allCases {
@@ -509,7 +532,7 @@ struct DurableStateSchemaTests {
                 try db.execute(sql: "UPDATE backupMetadata SET formatVersion = 0 WHERE id = 1")
             }
             #expect(throws: DatabaseError.self) {
-                try db.execute(sql: "INSERT INTO updateBadge (pluginId, canonicalMediaId, count) VALUES ('p', 'm', -1)")
+                try db.execute(sql: "INSERT INTO updateBadge (pluginId, canonicalMediaId, mediaKind, count) VALUES ('p', 'm', 'manga', -1)")
             }
         }
     }

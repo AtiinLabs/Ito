@@ -229,7 +229,7 @@ final class LibraryViewModelTests: XCTestCase {
         subject.viewModel.confirmRemoval()
         XCTAssertNil(subject.viewModel.pendingRemoval)
         await waitUntil { subject.library.removeRequests.count == 1 }
-        XCTAssertEqual(subject.library.removeRequests[0], .init(itemID: "one", pluginID: "plugin.one"))
+        XCTAssertEqual(subject.library.removeRequests[0], .init(itemID: "one", pluginID: "plugin.one", mediaKind: .manga))
         XCTAssertEqual(subject.viewModel.filteredItems.map(\.id), ["one", "two"])
         subject.library.resolveRemove(at: 0, result: .success(()))
         await waitUntil { subject.viewModel.removingItemIDs.isEmpty }
@@ -248,8 +248,8 @@ final class LibraryViewModelTests: XCTestCase {
     func testBadgesUseExactMediaIdentityPublishAndDoNotClearWhileEditing() async {
         let first = item("same", "One", pluginID: "plugin.one")
         let second = item("same", "Two", pluginID: "plugin.two")
-        let firstIdentity = MediaIdentity(pluginId: "plugin.one", itemId: "same")
-        let secondIdentity = MediaIdentity(pluginId: "plugin.two", itemId: "same")
+        let firstIdentity = MediaIdentity(pluginId: "plugin.one", itemId: "same", mediaKind: .manga)
+        let secondIdentity = MediaIdentity(pluginId: "plugin.two", itemId: "same", mediaKind: .manga)
         let subject = makeSubject(snapshot: snapshot(items: [first, second]))
         subject.updates.publish(badges: [firstIdentity: 2, secondIdentity: 4])
 
@@ -436,7 +436,7 @@ final class LibraryViewModelTests: XCTestCase {
         XCTAssertEqual(manager.rootSnapshot.items.map(\.id), [itemID])
         XCTAssertEqual(manager.rootSnapshot.categories.count, 1)
         XCTAssertEqual(manager.rootSnapshot.links.map(\.itemId), [itemID])
-        try await manager.removeItem(itemID: itemID, pluginID: "plugin")
+        try await manager.removeItem(itemID: itemID, pluginID: "plugin", mediaKind: .manga)
         XCTAssertTrue(manager.rootSnapshot.items.isEmpty)
         let durableCount = try await database.dbPool.read { db in
             try LibraryItem.fetchCount(db)
@@ -570,6 +570,7 @@ private final class FakeLibraryRoot: LibraryRootServing {
     struct RemoveRequest: Equatable {
         let itemID: String
         let pluginID: String
+        let mediaKind: MediaKind
     }
 
     private let subject: CurrentValueSubject<LibraryRootSnapshot, Never>
@@ -589,8 +590,8 @@ private final class FakeLibraryRoot: LibraryRootServing {
         subject.send(snapshot)
     }
 
-    func removeItem(itemID: String, pluginID: String) async throws {
-        removeRequests.append(.init(itemID: itemID, pluginID: pluginID))
+    func removeItem(itemID: String, pluginID: String, mediaKind: MediaKind) async throws {
+        removeRequests.append(.init(itemID: itemID, pluginID: pluginID, mediaKind: mediaKind))
         try await withCheckedThrowingContinuation { continuation in
             removeContinuations.append(continuation)
         }

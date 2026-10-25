@@ -43,7 +43,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             PluginCompletionContext(
                 media: mediaIdentity,
                 mediaKey: "novel",
-                kind: .novel,
                 originatingEpoch: "epoch"
             )
         )
@@ -904,7 +903,7 @@ final class NovelReaderViewModelTests: XCTestCase {
     }
 
     private var mediaIdentity: MediaIdentity {
-        MediaIdentity(pluginId: "plugin.test", itemId: "novel")
+        MediaIdentity(pluginId: "plugin.test", itemId: "novel", mediaKind: .novel)
     }
 
     func testAMangasTextVolumeIsReadAsThatMangaAndStopsAtItsPageVolumes() async {

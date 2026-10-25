@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import Testing
+import ito_runner
 @testable import Ito
 
 /// An unverified-origin manga context; these tests exercise local progress only.
@@ -8,7 +9,6 @@ private nonisolated func completionContext(for media: MediaIdentity) -> PluginCo
     PluginCompletionContext(
         media: media,
         mediaKey: media.canonicalMediaId,
-        kind: .manga,
         originatingEpoch: nil
     )
 }
@@ -19,8 +19,8 @@ struct ReadProgressStoreTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let manager = ReadProgressManager(dbPool: database.dbPool)
-        let first = MediaIdentity(pluginId: "plugin.one", canonicalMediaId: "same")
-        let second = MediaIdentity(pluginId: "plugin.two", canonicalMediaId: "same")
+        let first = MediaIdentity(pluginId: "plugin.one", canonicalMediaId: "same", mediaKind: .manga)
+        let second = MediaIdentity(pluginId: "plugin.two", canonicalMediaId: "same", mediaKind: .manga)
 
         try await manager.markAsRead(context: completionContext(for: first), chapterId: "chapter-a", chapterNum: 1.5)
         #expect(manager.isRead(media: first, chapterId: "other-key", chapterNum: 1.5))
@@ -37,7 +37,7 @@ struct ReadProgressStoreTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let manager = ReadProgressManager(dbPool: database.dbPool)
-        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
 
         try await manager.markAsRead(context: completionContext(for: media), chapterId: "chapter", chapterNum: 2)
         try await manager.markAsRead(context: completionContext(for: media), chapterId: "chapter", chapterNum: 2)
@@ -58,13 +58,14 @@ struct ReadProgressStoreTests {
         let updates = UpdateManager(dbPool: database.dbPool)
         let manager = ReadProgressManager(dbPool: database.dbPool)
         manager.configure(updateManager: updates)
-        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
         let pluginId = media.pluginId
         let canonicalMediaId = media.canonicalMediaId
         try await database.dbPool.write { db in
             try UpdateBadgeRecord(
                 pluginId: pluginId,
                 canonicalMediaId: canonicalMediaId,
+                mediaKind: media.mediaKind,
                 count: 4,
                 updatedAt: Date(),
                 provenance: .runtime
@@ -98,7 +99,7 @@ struct ReadProgressStoreTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let manager = ReadProgressManager(dbPool: database.dbPool)
-        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
         try await database.dbPool.write { db in
             try db.execute(sql: """
                 CREATE TRIGGER fail_read_number
@@ -133,7 +134,7 @@ struct ReadProgressStoreTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let manager = ReadProgressManager(dbPool: database.dbPool)
-        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
 
         try await manager.savePosition(media: media, chapterKey: "chapter-3", position: 12)
 
@@ -151,7 +152,7 @@ struct ReadProgressStoreTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let manager = ReadProgressManager(dbPool: database.dbPool)
-        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
 
         // A series with no reading state starts it at the chapter marked read.
         try await manager.markAsRead(context: completionContext(for: media), chapterId: "chapter-1", chapterNum: 1)
@@ -175,7 +176,7 @@ struct ReadProgressStoreTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let manager = ReadProgressManager(dbPool: database.dbPool)
-        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
 
         // No reading state yet: choosing a mode starts it at the chapter being read.
         try await manager.saveReaderViewer(4, media: media, chapterKey: "chapter-1")
@@ -202,13 +203,13 @@ struct ReadProgressStoreTests {
         let record = try queue.write { db in
             try db.execute(sql: """
                 CREATE TABLE mediaReadProgress (
-                    pluginId TEXT NOT NULL, canonicalMediaId TEXT NOT NULL,
+                    pluginId TEXT NOT NULL, canonicalMediaId TEXT NOT NULL, mediaKind TEXT NOT NULL,
                     lastReadChapterKey TEXT NOT NULL, updatedAt DATETIME, provenance TEXT
                 )
                 """)
             try db.execute(sql: """
-                INSERT INTO mediaReadProgress (pluginId, canonicalMediaId, lastReadChapterKey)
-                VALUES ('plugin', 'media', 'chapter')
+                INSERT INTO mediaReadProgress (pluginId, canonicalMediaId, mediaKind, lastReadChapterKey)
+                VALUES ('plugin', 'media', 'manga', 'chapter')
                 """)
             return try MediaReadProgressRecord.fetchOne(db)
         }
@@ -220,7 +221,7 @@ struct ReadProgressStoreTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let manager = ReadProgressManager(dbPool: database.dbPool)
-        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media")
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
 
         try await manager.markReadUpTo(media: media, maxChapterNum: maxChapterNum)
 

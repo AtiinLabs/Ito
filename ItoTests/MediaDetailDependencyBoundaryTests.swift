@@ -1,5 +1,6 @@
 import Combine
 import XCTest
+import ito_runner
 @testable import Ito
 
 @MainActor
@@ -102,7 +103,7 @@ final class MediaDetailDependencyBoundaryTests: XCTestCase {
     }
 
     func testPR9TrackingAdapterReusesSheetStateBoundary() async throws {
-        let identity = MediaIdentity(pluginId: "plugin", itemId: "media")
+        let identity = MediaIdentity(pluginId: "plugin", itemId: "media", mediaKind: .manga)
         let provider = TrackerProviderPresentation(
             identifier: "anilist",
             name: "AniList",
@@ -134,13 +135,13 @@ final class MediaDetailDependencyBoundaryTests: XCTestCase {
     }
 
     func testAnimeIsNotTrackableWhenOnlyAMangaTrackerIsSignedIn() {
-        let identity = MediaIdentity(pluginId: "plugin", itemId: "media")
+        let identity = MediaIdentity(pluginId: "plugin", itemId: "media", mediaKind: .anime)
         var mangaBaka = TrackerProviderPresentation(identifier: "mangabaka", name: "MangaBaka", isAuthenticated: true, username: nil)
         mangaBaka.tracksAnime = false
         let adapter = TrackingMediaDetailAdapter(sheetService: TrackerSheetServiceFake(providers: [mangaBaka]))
 
         XCTAssertFalse(adapter.state(for: identity, isAnime: true).isAvailable)
-        XCTAssertTrue(adapter.state(for: identity, isAnime: false).isAvailable)
+        XCTAssertTrue(adapter.state(for: MediaIdentity(pluginId: "plugin", itemId: "media", mediaKind: .manga), isAnime: false).isAvailable)
     }
 
     func testTypedMessagesRedactSourceIdentityWhilePreservingMoveAction() throws {

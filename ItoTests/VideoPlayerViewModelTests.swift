@@ -525,9 +525,8 @@ final class VideoPlayerViewModelTests: XCTestCase {
         XCTAssertEqual(
             subject.progress.requests[0].context,
             PluginCompletionContext(
-                media: MediaIdentity(pluginId: "plugin.test", itemId: "anime"),
+                media: MediaIdentity(pluginId: "plugin.test", itemId: "anime", mediaKind: .anime),
                 mediaKey: "anime",
-                kind: .anime,
                 originatingEpoch: "epoch"
             )
         )

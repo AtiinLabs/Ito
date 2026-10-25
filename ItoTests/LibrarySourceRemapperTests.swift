@@ -53,6 +53,7 @@ struct LibrarySourceRemapperTests {
             title: source.title,
             coverUrl: source.coverUrl,
             pluginId: oldPluginId,
+            mediaKind: .manga,
             chapterKey: "chapter-1",
             chapterTitle: "Chapter 1"
         )
@@ -63,6 +64,7 @@ struct LibrarySourceRemapperTests {
             title: source.title,
             coverUrl: source.coverUrl,
             pluginId: oldPluginId,
+            mediaKind: .manga,
             chapterKey: "chapter-2",
             chapterTitle: "Chapter 2"
         )
@@ -78,6 +80,7 @@ struct LibrarySourceRemapperTests {
             try ReadProgressKeyRecord(
                 pluginId: oldPluginId,
                 canonicalMediaId: sourceId,
+                mediaKind: .manga,
                 chapterKey: "chapter-key",
                 markedAt: checkedAt,
                 provenance: .runtime
@@ -85,6 +88,7 @@ struct LibrarySourceRemapperTests {
             try ReadProgressNumberRecord(
                 pluginId: oldPluginId,
                 canonicalMediaId: sourceId,
+                mediaKind: .manga,
                 chapterNumber: 4.5,
                 markedAt: checkedAt,
                 provenance: .runtime
@@ -92,6 +96,7 @@ struct LibrarySourceRemapperTests {
             try MediaReadProgressRecord(
                 pluginId: oldPluginId,
                 canonicalMediaId: sourceId,
+                mediaKind: .manga,
                 lastReadChapterKey: "resume-key",
                 updatedAt: updatedAt,
                 provenance: .runtime
@@ -99,6 +104,7 @@ struct LibrarySourceRemapperTests {
             try TrackerLinkRecord(
                 pluginId: oldPluginId,
                 canonicalMediaId: sourceId,
+                mediaKind: .manga,
                 providerId: "anilist",
                 remoteMediaId: "42",
                 updatedAt: updatedAt,
@@ -107,6 +113,7 @@ struct LibrarySourceRemapperTests {
             try UpdateBadgeRecord(
                 pluginId: oldPluginId,
                 canonicalMediaId: sourceId,
+                mediaKind: .manga,
                 count: 3,
                 updatedAt: updatedAt,
                 provenance: .runtime
@@ -190,6 +197,7 @@ struct LibrarySourceRemapperTests {
             title: source.title,
             coverUrl: nil,
             pluginId: source.pluginId,
+            mediaKind: .manga,
             chapterKey: "chapter",
             chapterTitle: nil
         )
@@ -201,6 +209,7 @@ struct LibrarySourceRemapperTests {
             try ReadProgressKeyRecord(
                 pluginId: "old",
                 canonicalMediaId: "series",
+                mediaKind: .manga,
                 chapterKey: "chapter",
                 markedAt: nil,
                 provenance: .runtime
@@ -208,6 +217,7 @@ struct LibrarySourceRemapperTests {
             try ReadProgressNumberRecord(
                 pluginId: "old",
                 canonicalMediaId: "series",
+                mediaKind: .manga,
                 chapterNumber: 1,
                 markedAt: nil,
                 provenance: .runtime
@@ -215,6 +225,7 @@ struct LibrarySourceRemapperTests {
             try MediaReadProgressRecord(
                 pluginId: "old",
                 canonicalMediaId: "series",
+                mediaKind: .manga,
                 lastReadChapterKey: "old-resume",
                 updatedAt: nil,
                 provenance: .runtime
@@ -222,6 +233,7 @@ struct LibrarySourceRemapperTests {
             try MediaReadProgressRecord(
                 pluginId: "new",
                 canonicalMediaId: "series",
+                mediaKind: .manga,
                 lastReadChapterKey: "destination-resume",
                 updatedAt: nil,
                 provenance: .runtime
@@ -229,6 +241,7 @@ struct LibrarySourceRemapperTests {
             try TrackerLinkRecord(
                 pluginId: "old",
                 canonicalMediaId: "series",
+                mediaKind: .manga,
                 providerId: "anilist",
                 remoteMediaId: "1",
                 updatedAt: nil,
@@ -237,6 +250,7 @@ struct LibrarySourceRemapperTests {
             try UpdateBadgeRecord(
                 pluginId: "old",
                 canonicalMediaId: "series",
+                mediaKind: .manga,
                 count: 2,
                 updatedAt: nil,
                 provenance: .runtime
@@ -310,6 +324,7 @@ struct LibrarySourceRemapperTests {
             title: source.title,
             coverUrl: nil,
             pluginId: source.pluginId,
+            mediaKind: .manga,
             chapterKey: "chapter",
             chapterTitle: nil,
             readAt: readAt
@@ -452,11 +467,13 @@ struct LibrarySourceRemapperTests {
     @Test func importedMediaIdentityUsesExactLeadingPrefixSemantics() {
         #expect(ImportedMediaIdentity.canonicalMediaId(
             itemId: "old_old_series",
-            pluginId: "old"
+            pluginId: "old",
+            mediaKind: .manga
         ) == "old_series")
         #expect(ImportedMediaIdentity.canonicalMediaId(
             itemId: "prefix_old_series",
-            pluginId: "old"
+            pluginId: "old",
+            mediaKind: .manga
         ) == "prefix_old_series")
 
         let mismatchedPluginHistory = ReadingHistoryRecord(
@@ -466,13 +483,15 @@ struct LibrarySourceRemapperTests {
             title: "History",
             coverUrl: nil,
             pluginId: "different",
+            mediaKind: .manga,
             chapterKey: "chapter",
             chapterTitle: nil
         )
         #expect(!ImportedMediaIdentity.historyIdentifiers(
             mismatchedPluginHistory,
             match: "series",
-            pluginId: "old"
+            pluginId: "old",
+            mediaKind: .manga
         ))
     }
 
@@ -491,6 +510,7 @@ struct LibrarySourceRemapperTests {
             title: source.title,
             coverUrl: nil,
             pluginId: pluginId,
+            mediaKind: .manga,
             chapterKey: "chapter",
             chapterTitle: "Chapter"
         )
@@ -502,6 +522,7 @@ struct LibrarySourceRemapperTests {
             try ReadProgressKeyRecord(
                 pluginId: pluginId,
                 canonicalMediaId: sourceId,
+                mediaKind: .manga,
                 chapterKey: "key",
                 markedAt: nil,
                 provenance: .runtime
@@ -509,6 +530,7 @@ struct LibrarySourceRemapperTests {
             try ReadProgressNumberRecord(
                 pluginId: pluginId,
                 canonicalMediaId: sourceId,
+                mediaKind: .manga,
                 chapterNumber: 2,
                 markedAt: nil,
                 provenance: .runtime
@@ -516,6 +538,7 @@ struct LibrarySourceRemapperTests {
             try MediaReadProgressRecord(
                 pluginId: pluginId,
                 canonicalMediaId: sourceId,
+                mediaKind: .manga,
                 lastReadChapterKey: "key",
                 updatedAt: nil,
                 provenance: .runtime
@@ -523,6 +546,7 @@ struct LibrarySourceRemapperTests {
             try TrackerLinkRecord(
                 pluginId: pluginId,
                 canonicalMediaId: sourceId,
+                mediaKind: .manga,
                 providerId: "anilist",
                 remoteMediaId: "42",
                 updatedAt: nil,
@@ -531,6 +555,7 @@ struct LibrarySourceRemapperTests {
             try UpdateBadgeRecord(
                 pluginId: pluginId,
                 canonicalMediaId: sourceId,
+                mediaKind: .manga,
                 count: 3,
                 updatedAt: nil,
                 provenance: .runtime
@@ -539,6 +564,7 @@ struct LibrarySourceRemapperTests {
 
         let result = try await LibrarySourceRemapper(dbPool: database.dbPool).relink(
             pluginId: pluginId,
+            mediaKind: .manga,
             possibleSourceItemIds: [sourceId],
             destinationItemId: destinationId,
             title: "Hydrated",
@@ -593,6 +619,7 @@ struct LibrarySourceRemapperTests {
                 title: source.title,
                 coverUrl: nil,
                 pluginId: pluginId,
+                mediaKind: .manga,
                 chapterKey: "chapter",
                 chapterTitle: nil
             ).insert(db)
@@ -600,6 +627,7 @@ struct LibrarySourceRemapperTests {
                 try TrackerLinkRecord(
                     pluginId: pluginId,
                     canonicalMediaId: canonicalMediaId,
+                    mediaKind: .manga,
                     providerId: "anilist",
                     remoteMediaId: canonicalMediaId,
                     updatedAt: nil,
@@ -609,6 +637,7 @@ struct LibrarySourceRemapperTests {
             try ReadProgressKeyRecord(
                 pluginId: pluginId,
                 canonicalMediaId: source.id,
+                mediaKind: .manga,
                 chapterKey: "key",
                 markedAt: nil,
                 provenance: .runtime
@@ -616,6 +645,7 @@ struct LibrarySourceRemapperTests {
             try ReadProgressNumberRecord(
                 pluginId: pluginId,
                 canonicalMediaId: source.id,
+                mediaKind: .manga,
                 chapterNumber: 1,
                 markedAt: nil,
                 provenance: .runtime
@@ -623,6 +653,7 @@ struct LibrarySourceRemapperTests {
             try MediaReadProgressRecord(
                 pluginId: pluginId,
                 canonicalMediaId: source.id,
+                mediaKind: .manga,
                 lastReadChapterKey: "key",
                 updatedAt: nil,
                 provenance: .runtime
@@ -630,6 +661,7 @@ struct LibrarySourceRemapperTests {
             try UpdateBadgeRecord(
                 pluginId: pluginId,
                 canonicalMediaId: source.id,
+                mediaKind: .manga,
                 count: 1,
                 updatedAt: nil,
                 provenance: .runtime
@@ -640,6 +672,7 @@ struct LibrarySourceRemapperTests {
         await #expect(throws: LibrarySourceRemapper.RemapError.self) {
             _ = try await LibrarySourceRemapper(dbPool: database.dbPool).relink(
                 pluginId: pluginId,
+                mediaKind: .manga,
                 possibleSourceItemIds: [source.id],
                 destinationItemId: "destination",
                 title: "Destination",
@@ -663,6 +696,7 @@ struct LibrarySourceRemapperTests {
             title: "History",
             coverUrl: nil,
             pluginId: "old",
+            mediaKind: .manga,
             chapterKey: "chapter",
             chapterTitle: nil
         )
@@ -756,6 +790,120 @@ struct LibrarySourceRemapperTests {
         }
 
         #expect(await aliasSpy.writes.isEmpty)
+    }
+
+    @Test func remapAndRelinkIsolatesByMediaKindWithoutCrosswrites() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+
+        let oldPluginId = "source.shared"
+        let newPluginId = "source.migrated"
+        let rawMediaId = "42"
+        let mangaItemId = "source.shared\u{1F}manga\u{1F}42"
+        let novelItemId = "source.shared\u{1F}novel\u{1F}42"
+
+        let mangaItem = LibraryItem(
+            id: mangaItemId,
+            title: "Manga Title",
+            coverUrl: nil,
+            pluginId: oldPluginId,
+            isAnime: false,
+            pluginType: .manga,
+            rawPayload: Data([1]),
+            anilistId: nil
+        )
+        let novelItem = LibraryItem(
+            id: novelItemId,
+            title: "Novel Title",
+            coverUrl: nil,
+            pluginId: oldPluginId,
+            isAnime: false,
+            pluginType: .novel,
+            rawPayload: Data([2]),
+            anilistId: nil
+        )
+
+        let mangaHistory = ReadingHistoryRecord(
+            id: "manga-history",
+            libraryItemId: mangaItemId,
+            mediaKey: rawMediaId,
+            title: "Manga",
+            coverUrl: nil,
+            pluginId: oldPluginId,
+            mediaKind: .manga,
+            chapterKey: "ch-manga-1",
+            chapterTitle: "Chapter 1"
+        )
+        let novelHistory = ReadingHistoryRecord(
+            id: "novel-history",
+            libraryItemId: novelItemId,
+            mediaKey: rawMediaId,
+            title: "Novel",
+            coverUrl: nil,
+            pluginId: oldPluginId,
+            mediaKind: .novel,
+            chapterKey: "ch-novel-1",
+            chapterTitle: "Chapter 1"
+        )
+
+        try await database.dbPool.write { db in
+            try mangaItem.insert(db)
+            try novelItem.insert(db)
+            try mangaHistory.insert(db)
+            try novelHistory.insert(db)
+            try ReadProgressKeyRecord(
+                pluginId: oldPluginId,
+                canonicalMediaId: rawMediaId,
+                mediaKind: .manga,
+                chapterKey: "ch-manga-1",
+                markedAt: nil,
+                provenance: .runtime
+            ).insert(db)
+            try ReadProgressKeyRecord(
+                pluginId: oldPluginId,
+                canonicalMediaId: rawMediaId,
+                mediaKind: .novel,
+                chapterKey: "ch-novel-1",
+                markedAt: nil,
+                provenance: .runtime
+            ).insert(db)
+        }
+
+        let result = try await LibrarySourceRemapper(dbPool: database.dbPool).remap(
+            oldPluginId: oldPluginId,
+            newPluginId: newPluginId,
+            affectedItemIds: [mangaItemId]
+        )
+        #expect(result == .init(remappedItemCount: 1, movedLinkCount: 0, movedHistoryCount: 1))
+
+        let expectedMangaDestId = "source.migrated\u{1F}manga\u{1F}42"
+        try await database.dbPool.read { db in
+            #expect(try LibraryItem.fetchOne(db, key: mangaItemId) == nil)
+            #expect(try LibraryItem.fetchOne(db, key: expectedMangaDestId) != nil)
+
+            let persistedNovel = try LibraryItem.fetchOne(db, key: novelItemId)
+            #expect(persistedNovel?.pluginId == oldPluginId)
+
+            let fetchedMangaHist = try #require(try ReadingHistoryRecord.fetchOne(db, key: "manga-history"))
+            #expect(fetchedMangaHist.pluginId == newPluginId)
+            #expect(fetchedMangaHist.libraryItemId == expectedMangaDestId)
+
+            let fetchedNovelHist = try #require(try ReadingHistoryRecord.fetchOne(db, key: "novel-history"))
+            #expect(fetchedNovelHist.pluginId == oldPluginId)
+            #expect(fetchedNovelHist.libraryItemId == novelItemId)
+
+            let mangaProgress = try ReadProgressKeyRecord
+                .filter(Column("pluginId") == newPluginId)
+                .filter(Column("mediaKind") == MediaKind.manga.rawValue)
+                .fetchOne(db)
+            #expect(mangaProgress != nil)
+
+            let novelProgress = try ReadProgressKeyRecord
+                .filter(Column("pluginId") == oldPluginId)
+                .filter(Column("mediaKind") == MediaKind.novel.rawValue)
+                .fetchOne(db)
+            #expect(novelProgress != nil)
+        }
     }
 
     private struct AliasWriteStubFailure: Error {}

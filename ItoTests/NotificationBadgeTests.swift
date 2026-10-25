@@ -59,7 +59,7 @@ struct NotificationBadgeTests {
         }
         #expect(await iconBadge.next() == 2)
 
-        try await updates.clearBadge(for: MediaIdentity(pluginId: item.pluginId, itemId: item.id))
+        try await updates.clearBadge(for: MediaIdentity(pluginId: item.pluginId, itemId: item.id, mediaKind: .manga))
         #expect(await iconBadge.next() == 0)
     }
 }

@@ -513,7 +513,7 @@ private struct ExecutorHarness {
 
     init(
         wasm: [UInt8],
-        kind: PluginCompletionKind = .manga,
+        kind: MediaKind = .manga,
         locate: (@MainActor @Sendable (String) throws -> URL)? = nil,
         networkConfiguration: (@Sendable () -> URLSessionConfiguration)? = nil,
         onNetworkCreated: (@Sendable () -> Void)? = nil
@@ -529,9 +529,8 @@ private struct ExecutorHarness {
         try makeTestPluginArchiveData(id: "plugin.fixture", version: "1.0", wasm: Data(wasm)).write(to: archiveURL)
 
         let context = store.captureContext(
-            media: MediaIdentity(pluginId: "plugin.fixture", canonicalMediaId: "library-1"),
-            mediaKey: "media-key",
-            kind: kind
+            media: MediaIdentity(pluginId: "plugin.fixture", canonicalMediaId: "library-1", mediaKind: kind),
+            mediaKey: "media-key"
         )
         let queuedAt = Date()
         try await database.dbPool.write { db in

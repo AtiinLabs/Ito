@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import ito_runner
 
 nonisolated enum PluginCompletionKind: String, Codable, Sendable, CaseIterable {
     case manga, novel, anime
@@ -9,7 +10,13 @@ nonisolated struct PluginCompletionContext: Hashable, Sendable {
     let media: MediaIdentity
     /// The original source key, not a canonical local library row ID.
     let mediaKey: String
-    let kind: PluginCompletionKind
+    var kind: PluginCompletionKind {
+        switch media.mediaKind {
+        case .manga: return .manga
+        case .anime: return .anime
+        case .novel: return .novel
+        }
+    }
     /// Nil is an unverified origin and must never mean "use current configuration".
     let originatingEpoch: String?
 }
@@ -90,7 +97,6 @@ nonisolated struct PluginCompletionSummary: Equatable, Sendable, Identifiable {
 protocol PluginCompletionScopeCapturing {
     func captureCompletionContext(
         media: MediaIdentity,
-        mediaKey: String,
-        kind: PluginCompletionKind
+        mediaKey: String
     ) -> PluginCompletionContext
 }

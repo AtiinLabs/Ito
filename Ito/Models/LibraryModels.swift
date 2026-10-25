@@ -58,9 +58,13 @@ public struct LibraryItem: Codable, Identifiable, Hashable, Sendable, FetchableR
     public var lastUpdatedAt: Date?
     public var knownChapterCount: Int?
 
-    public var effectiveType: MediaKind {
+    public nonisolated var effectiveType: MediaKind {
         if let pt = pluginType { return pt }
         return isAnime ? .anime : .manga
+    }
+
+    public nonisolated var mediaIdentity: MediaIdentity {
+        MediaIdentity(pluginId: pluginId, itemId: id, mediaKind: effectiveType)
     }
 
     public enum Columns {
@@ -117,6 +121,7 @@ public struct ReadingHistoryRecord: Codable, Identifiable, Hashable, Sendable, F
     public var title: String
     public var coverUrl: String?
     public var pluginId: String
+    public var mediaKind: MediaKind
     public var chapterKey: String
     public var chapterTitle: String?
     public var readAt: Date
@@ -128,6 +133,7 @@ public struct ReadingHistoryRecord: Codable, Identifiable, Hashable, Sendable, F
         title: String,
         coverUrl: String?,
         pluginId: String,
+        mediaKind: MediaKind,
         chapterKey: String,
         chapterTitle: String?,
         readAt: Date = Date()
@@ -138,6 +144,7 @@ public struct ReadingHistoryRecord: Codable, Identifiable, Hashable, Sendable, F
         self.title = title
         self.coverUrl = coverUrl
         self.pluginId = pluginId
+        self.mediaKind = mediaKind
         self.chapterKey = chapterKey
         self.chapterTitle = chapterTitle
         self.readAt = readAt
@@ -150,6 +157,7 @@ public struct ReadingHistoryRecord: Codable, Identifiable, Hashable, Sendable, F
         public static let title = Column(CodingKeys.title)
         public static let coverUrl = Column(CodingKeys.coverUrl)
         public static let pluginId = Column(CodingKeys.pluginId)
+        public static let mediaKind = Column(CodingKeys.mediaKind)
         public static let chapterKey = Column(CodingKeys.chapterKey)
         public static let chapterTitle = Column(CodingKeys.chapterTitle)
         public static let readAt = Column(CodingKeys.readAt)

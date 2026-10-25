@@ -83,11 +83,10 @@ final class VideoPlayerViewModel: ObservableObject {
         self.anime = anime
         self.episode = episode
         self.dependencies = dependencies
-        mediaIdentity = MediaIdentity(pluginId: pluginID, itemId: anime.key)
+        mediaIdentity = MediaIdentity(pluginId: pluginID, canonicalMediaId: anime.key, mediaKind: .anime)
         completionContext = dependencies.progress.captureCompletionContext(
             media: mediaIdentity,
-            mediaKey: anime.key,
-            kind: .anime
+            mediaKey: anime.key
         )
         playbackCoordinator = dependencies.makePlaybackCoordinator()
     }

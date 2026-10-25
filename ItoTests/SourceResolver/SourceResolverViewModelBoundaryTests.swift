@@ -514,7 +514,7 @@ extension SourceResolverViewModelTests {
         await waitUntil { trackerLinker.linked.count == 1 }
 
         XCTAssertEqual(trackerLinker.linked.count, 1)
-        XCTAssertEqual(trackerLinker.linked.first?.media, MediaIdentity(pluginId: "p1", itemId: "m1"))
+        XCTAssertEqual(trackerLinker.linked.first?.media, MediaIdentity(pluginId: "p1", itemId: "m1", mediaKind: .manga))
         XCTAssertEqual(trackerLinker.linked.first?.remoteMediaID, "42")
     }
 
@@ -533,7 +533,7 @@ extension SourceResolverViewModelTests {
             )
         ])
         let trackerLinker = SourceResolverTrackerLinkerSpy()
-        let identity = MediaIdentity(pluginId: "p1", itemId: "m1")
+        let identity = MediaIdentity(pluginId: "p1", itemId: "m1", mediaKind: .manga)
         trackerLinker.existingIDs[identity] = "99"
         let vm = SourceResolverViewModel(
             media: makeDiscoverMedia(),

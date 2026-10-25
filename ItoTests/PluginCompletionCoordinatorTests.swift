@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import GRDB
 import Testing
+import ito_runner
 @testable import Ito
 
 /// When the oldest queued intents were created.
@@ -453,9 +454,8 @@ private final class CoordinatorFixture {
     /// Queues a chapter completion for `plugin` under the account it is configured for now.
     func enqueue(_ plugin: String, _ unit: String, at date: Date? = nil) throws {
         let context = store.captureContext(
-            media: MediaIdentity(pluginId: plugin, canonicalMediaId: "library-\(plugin)"),
-            mediaKey: "media-\(plugin)",
-            kind: .manga
+            media: MediaIdentity(pluginId: plugin, canonicalMediaId: "library-\(plugin)", mediaKind: .manga),
+            mediaKey: "media-\(plugin)"
         )
         let queuedAt = date ?? scheduler.now()
         try database.dbPool.write { db in

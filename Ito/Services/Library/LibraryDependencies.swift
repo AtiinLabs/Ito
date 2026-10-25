@@ -14,7 +14,7 @@ protocol LibraryRootServing: AnyObject {
     var rootSnapshot: LibraryRootSnapshot { get }
     var rootSnapshotPublisher: AnyPublisher<LibraryRootSnapshot, Never> { get }
 
-    func removeItem(itemID: String, pluginID: String) async throws
+    func removeItem(itemID: String, pluginID: String, mediaKind: MediaKind) async throws
 }
 
 extension LibraryManager: LibraryRootServing {
@@ -43,8 +43,8 @@ extension LibraryManager: LibraryRootServing {
         .eraseToAnyPublisher()
     }
 
-    func removeItem(itemID: String, pluginID: String) async throws {
-        try await removeItemDurably(id: itemID, pluginId: pluginID)
+    func removeItem(itemID: String, pluginID: String, mediaKind: MediaKind) async throws {
+        try await removeItemDurably(id: itemID, pluginId: pluginID, mediaKind: mediaKind)
     }
 }
 
@@ -467,7 +467,7 @@ private final class UnavailableLibraryDependency: LibraryRootServing,
         Just(libraryPluginSnapshot).eraseToAnyPublisher()
     }
 
-    func removeItem(itemID: String, pluginID: String) async throws {
+    func removeItem(itemID: String, pluginID: String, mediaKind: MediaKind) async throws {
         _ = itemID
         _ = pluginID
         throw UnavailableLibraryDependencyError.unavailable

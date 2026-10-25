@@ -1,6 +1,7 @@
 import Combine
 import GRDB
 import XCTest
+import ito_runner
 @testable import Ito
 
 @MainActor
@@ -314,6 +315,7 @@ private func pr11bHistoryRecord(id: String, readAt: TimeInterval) -> ReadingHist
         title: "Title \(id)",
         coverUrl: nil,
         pluginId: "plugin",
+        mediaKind: .manga,
         chapterKey: "chapter-\(id)",
         chapterTitle: "Chapter \(id)",
         readAt: Date(timeIntervalSince1970: readAt)

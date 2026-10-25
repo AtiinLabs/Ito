@@ -257,6 +257,7 @@ public struct PaperbackImporter: BackupImporter {
                     title: "Unknown Title", // Recovered natively by UI later
                     coverUrl: nil,
                     pluginId: resolvedPluginId,
+                    mediaKind: .manga,
                     chapterKey: chap.chapterId,
                     chapterTitle: chap.name ?? "Chapter \(chap.chapNum)",
                     readAt: decodeCocoaTime(prog.time) ?? Date()

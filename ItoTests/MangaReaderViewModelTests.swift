@@ -799,7 +799,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         let a = makeChapter("a", number: 1, title: nil, scanlator: "Group")
         let b = makeChapter("b", number: 2, title: "Second")
         let subject = makeSubject(chapters: [a, b], initial: a, cover: "cover")
-        let identity = MediaIdentity(pluginId: "plugin.test", itemId: "manga")
+        let identity = MediaIdentity(pluginId: "plugin.test", itemId: "manga", mediaKind: .manga)
         subject.tracker.anilistIDs[identity] = "123"
         subject.metadata.names["plugin.test"] = "Plugin Name"
 

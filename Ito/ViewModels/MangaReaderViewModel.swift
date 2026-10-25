@@ -81,8 +81,8 @@ final class MangaReaderViewModel: ObservableObject {
         self.dependencies = dependencies
         imagePrefetcher = dependencies.makeImagePrefetcher()
         preloadImageCount = dependencies.settings.mangaReaderPreloadImageCount
-        mediaIdentity = MediaIdentity(pluginId: pluginID, itemId: entry.key)
-        completionContext = dependencies.progress.captureCompletionContext(media: mediaIdentity, mediaKey: entry.key, kind: entry.completionKind)
+        mediaIdentity = MediaIdentity(pluginId: pluginID, canonicalMediaId: entry.key, mediaKind: entry.kind)
+        completionContext = dependencies.progress.captureCompletionContext(media: mediaIdentity, mediaKey: entry.key)
         overrideViewer = dependencies.progress.savedViewer(media: mediaIdentity) ?? .Default
     }
 

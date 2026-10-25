@@ -39,8 +39,9 @@ final class LibraryPublicationOrderTests: XCTestCase {
         XCTAssertEqual([animeID, novelID], ["anime", "novel"])
         XCTAssertEqual(persisted.map(\.id), ["anime", "novel"])
         XCTAssertEqual(manager.items.map(\.id).sorted(), ["anime", "novel"])
-        XCTAssertTrue(isSaved("anime", manager: manager))
-        XCTAssertTrue(isSaved("novel", manager: manager))
+        XCTAssertTrue(isSaved("anime", kind: .anime, manager: manager))
+        XCTAssertTrue(isSaved("novel", kind: .novel, manager: manager))
+        XCTAssertFalse(isSaved("novel", kind: .manga, manager: manager))
         XCTAssertEqual(linkPairs(manager.links), ["anime|uncategorized", "novel|uncategorized"])
     }
 
@@ -74,18 +75,18 @@ final class LibraryPublicationOrderTests: XCTestCase {
         }
         let stalePreRemovePublication = await scheduler.nextPublication()
 
-        try await manager.removeItemDurably(id: "remove-me", pluginId: "plugin.test")
+        try await manager.removeItemDurably(id: "remove-me", pluginId: "plugin.test", mediaKind: .manga)
 
         let stored = try await database.dbPool.read { db in
             try LibraryItem.fetchOne(db, key: "remove-me")
         }
         XCTAssertNil(stored)
         XCTAssertFalse(manager.items.contains { $0.id == "remove-me" })
-        XCTAssertFalse(isSaved("remove-me", manager: manager))
+        XCTAssertFalse(isSaved("remove-me", kind: .manga, manager: manager))
         XCTAssertFalse(manager.links.contains { $0.itemId == "remove-me" })
         stalePreRemovePublication.run()
         XCTAssertFalse(manager.items.contains { $0.id == "remove-me" })
-        XCTAssertFalse(isSaved("remove-me", manager: manager))
+        XCTAssertFalse(isSaved("remove-me", kind: .manga, manager: manager))
         XCTAssertFalse(manager.links.contains { $0.itemId == "remove-me" })
     }
 
@@ -129,10 +130,10 @@ final class LibraryPublicationOrderTests: XCTestCase {
         externalDelete.run()
         XCTAssertFalse(manager.items.contains { $0.id == external.id })
 
-        try await manager.removeItemDurably(id: "durable", pluginId: "plugin.test")
+        try await manager.removeItemDurably(id: "durable", pluginId: "plugin.test", mediaKind: .manga)
         let removeObservation = await scheduler.nextPublication()
         removeObservation.run()
-        XCTAssertFalse(isSaved("durable", manager: manager))
+        XCTAssertFalse(isSaved("durable", kind: .manga, manager: manager))
 
         let restored = makeItem(id: "durable", pluginId: "plugin.test")
         try await database.dbPool.write { db in
@@ -144,7 +145,7 @@ final class LibraryPublicationOrderTests: XCTestCase {
         }
         let externalRestore = await scheduler.nextPublication()
         externalRestore.run()
-        XCTAssertTrue(isSaved("durable", manager: manager))
+        XCTAssertTrue(isSaved("durable", kind: .manga, manager: manager))
         XCTAssertTrue(manager.links.contains {
             $0.itemId == restored.id && $0.categoryId == uncategorized.id
         })
@@ -324,9 +325,9 @@ final class LibraryPublicationOrderTests: XCTestCase {
         )
     }
 
-    private func isSaved(_ id: String, manager: LibraryManager) -> Bool {
+    private func isSaved(_ id: String, kind: MediaKind, manager: LibraryManager) -> Bool {
         manager.state.isSaved(
-            media: MediaIdentity(pluginId: "plugin.test", itemId: id),
+            media: MediaIdentity(pluginId: "plugin.test", itemId: id, mediaKind: kind),
             sourceItemID: id
         )
     }

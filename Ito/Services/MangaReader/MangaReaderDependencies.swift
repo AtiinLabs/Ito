@@ -265,10 +265,9 @@ private final class UnavailableMangaReaderDependencies:
 
     func captureCompletionContext(
         media: MediaIdentity,
-        mediaKey: String,
-        kind: PluginCompletionKind
+        mediaKey: String
     ) -> PluginCompletionContext {
-        PluginCompletionContext(media: media, mediaKey: mediaKey, kind: kind, originatingEpoch: nil)
+        PluginCompletionContext(media: media, mediaKey: mediaKey, originatingEpoch: nil)
     }
 
     func markChapterRead(

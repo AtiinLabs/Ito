@@ -2,6 +2,7 @@ import OSLog
 import Foundation
 import GRDB
 import Combine
+import ito_runner
 
 /// A singleton that manages the SQLite database pool and migrations.
 public final class AppDatabase: Sendable {
@@ -533,6 +534,11 @@ public final class AppDatabase: Sendable {
             try PluginCompletionSchema.create(in: db)
         }
 
+        // MARK: - v15: Kind-aware durable media identity
+        migrator.registerMigration("v15") { db in
+            try migrateKindAwareDurableIdentity(in: db)
+        }
+
         return migrator
     }
 
@@ -619,6 +625,410 @@ public final class AppDatabase: Sendable {
 
         if verified {
             _ = try AppPreference.deleteOne(db, key: "ito_repositories")
+        }
+    }
+
+    nonisolated static func migrateKindAwareDurableIdentity(
+        in db: Database,
+        capturedAt: Date = Date()
+    ) throws {
+        let resolver = try LegacyMediaKindResolver(db: db)
+
+        // 1. readProgressKey
+        if try db.tableExists("readProgressKey") {
+            try db.execute(sql: """
+                CREATE TABLE readProgressKey_v15 (
+                    pluginId TEXT NOT NULL,
+                    canonicalMediaId TEXT NOT NULL,
+                    mediaKind TEXT NOT NULL CHECK(mediaKind IN ('manga', 'novel', 'anime')),
+                    chapterKey TEXT NOT NULL,
+                    markedAt DATETIME,
+                    provenance TEXT CHECK(provenance IS NULL OR provenance IN ('runtime', 'legacyUnknownTime')),
+                    PRIMARY KEY (pluginId, mediaKind, canonicalMediaId, chapterKey)
+                );
+                """)
+            let rows = try Row.fetchAll(db, sql: "SELECT * FROM readProgressKey")
+            for row in rows {
+                let kind: MediaKind?
+                if row.hasColumn("mediaKind"),
+                   let raw = row["mediaKind"] as String?,
+                   let parsed = MediaKind(rawValue: raw) {
+                    kind = parsed
+                } else if let pluginId = row["pluginId"] as String?,
+                          let canonicalMediaId = row["canonicalMediaId"] as String? {
+                    kind = resolver.resolve(pluginID: pluginId, canonicalMediaID: canonicalMediaId)
+                } else {
+                    kind = nil
+                }
+
+                if let kind {
+                    try db.execute(
+                        sql: """
+                            INSERT OR REPLACE INTO readProgressKey_v15
+                                (pluginId, canonicalMediaId, mediaKind, chapterKey, markedAt, provenance)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                            """,
+                        arguments: [
+                            row["pluginId"] as String,
+                            row["canonicalMediaId"] as String,
+                            kind.rawValue,
+                            row["chapterKey"] as String,
+                            row["markedAt"] as Date?,
+                            row["provenance"] as String?
+                        ]
+                    )
+                } else {
+                    let archive = try LegacyMediaKindResolver.archiveRecord(table: "readProgressKey", row: row, capturedAt: capturedAt)
+                    try archive.insert(db, onConflict: .ignore)
+                }
+            }
+            try db.execute(sql: "DROP TABLE readProgressKey")
+            try db.execute(sql: "ALTER TABLE readProgressKey_v15 RENAME TO readProgressKey")
+            try db.create(index: "idx_readProgressKey_media", on: "readProgressKey", columns: ["pluginId", "mediaKind", "canonicalMediaId"])
+        } else {
+            try db.create(table: "readProgressKey") { t in
+                t.column("pluginId", .text).notNull()
+                t.column("canonicalMediaId", .text).notNull()
+                t.column("mediaKind", .text).notNull().check(sql: "mediaKind IN ('manga', 'novel', 'anime')")
+                t.column("chapterKey", .text).notNull()
+                t.column("markedAt", .datetime)
+                t.column("provenance", .text)
+                t.primaryKey(["pluginId", "mediaKind", "canonicalMediaId", "chapterKey"])
+                t.check(sql: "provenance IS NULL OR provenance IN ('runtime', 'legacyUnknownTime')")
+            }
+            try db.create(index: "idx_readProgressKey_media", on: "readProgressKey", columns: ["pluginId", "mediaKind", "canonicalMediaId"])
+        }
+
+        // 2. readProgressNumber
+        if try db.tableExists("readProgressNumber") {
+            try db.execute(sql: """
+                CREATE TABLE readProgressNumber_v15 (
+                    pluginId TEXT NOT NULL,
+                    canonicalMediaId TEXT NOT NULL,
+                    mediaKind TEXT NOT NULL CHECK(mediaKind IN ('manga', 'novel', 'anime')),
+                    chapterNumber REAL NOT NULL,
+                    markedAt DATETIME,
+                    provenance TEXT CHECK(provenance IS NULL OR provenance IN ('runtime', 'legacyUnknownTime')),
+                    PRIMARY KEY (pluginId, mediaKind, canonicalMediaId, chapterNumber)
+                );
+                """)
+            let rows = try Row.fetchAll(db, sql: "SELECT * FROM readProgressNumber")
+            for row in rows {
+                let kind: MediaKind?
+                if row.hasColumn("mediaKind"),
+                   let raw = row["mediaKind"] as String?,
+                   let parsed = MediaKind(rawValue: raw) {
+                    kind = parsed
+                } else if let pluginId = row["pluginId"] as String?,
+                          let canonicalMediaId = row["canonicalMediaId"] as String? {
+                    kind = resolver.resolve(pluginID: pluginId, canonicalMediaID: canonicalMediaId)
+                } else {
+                    kind = nil
+                }
+
+                if let kind {
+                    try db.execute(
+                        sql: """
+                            INSERT OR REPLACE INTO readProgressNumber_v15
+                                (pluginId, canonicalMediaId, mediaKind, chapterNumber, markedAt, provenance)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                            """,
+                        arguments: [
+                            row["pluginId"] as String,
+                            row["canonicalMediaId"] as String,
+                            kind.rawValue,
+                            row["chapterNumber"] as Double,
+                            row["markedAt"] as Date?,
+                            row["provenance"] as String?
+                        ]
+                    )
+                } else {
+                    let archive = try LegacyMediaKindResolver.archiveRecord(table: "readProgressNumber", row: row, capturedAt: capturedAt)
+                    try archive.insert(db, onConflict: .ignore)
+                }
+            }
+            try db.execute(sql: "DROP TABLE readProgressNumber")
+            try db.execute(sql: "ALTER TABLE readProgressNumber_v15 RENAME TO readProgressNumber")
+            try db.create(index: "idx_readProgressNumber_media", on: "readProgressNumber", columns: ["pluginId", "mediaKind", "canonicalMediaId"])
+        } else {
+            try db.create(table: "readProgressNumber") { t in
+                t.column("pluginId", .text).notNull()
+                t.column("canonicalMediaId", .text).notNull()
+                t.column("mediaKind", .text).notNull().check(sql: "mediaKind IN ('manga', 'novel', 'anime')")
+                t.column("chapterNumber", .double).notNull()
+                t.column("markedAt", .datetime)
+                t.column("provenance", .text)
+                t.primaryKey(["pluginId", "mediaKind", "canonicalMediaId", "chapterNumber"])
+                t.check(sql: "provenance IS NULL OR provenance IN ('runtime', 'legacyUnknownTime')")
+            }
+            try db.create(index: "idx_readProgressNumber_media", on: "readProgressNumber", columns: ["pluginId", "mediaKind", "canonicalMediaId"])
+        }
+
+        // 3. mediaReadProgress
+        if try db.tableExists("mediaReadProgress") {
+            try db.execute(sql: """
+                CREATE TABLE mediaReadProgress_v15 (
+                    pluginId TEXT NOT NULL,
+                    canonicalMediaId TEXT NOT NULL,
+                    mediaKind TEXT NOT NULL CHECK(mediaKind IN ('manga', 'novel', 'anime')),
+                    lastReadChapterKey TEXT NOT NULL,
+                    updatedAt DATETIME,
+                    provenance TEXT CHECK(provenance IS NULL OR provenance IN ('runtime', 'legacyUnknownTime')),
+                    lastReadPosition REAL,
+                    readerViewer INTEGER,
+                    PRIMARY KEY (pluginId, mediaKind, canonicalMediaId)
+                );
+                """)
+            let rows = try Row.fetchAll(db, sql: "SELECT * FROM mediaReadProgress")
+            for row in rows {
+                let kind: MediaKind?
+                if row.hasColumn("mediaKind"),
+                   let raw = row["mediaKind"] as String?,
+                   let parsed = MediaKind(rawValue: raw) {
+                    kind = parsed
+                } else if let pluginId = row["pluginId"] as String?,
+                          let canonicalMediaId = row["canonicalMediaId"] as String? {
+                    kind = resolver.resolve(pluginID: pluginId, canonicalMediaID: canonicalMediaId)
+                } else {
+                    kind = nil
+                }
+
+                if let kind {
+                    let lastReadPos: Double? = row.hasColumn("lastReadPosition") ? row["lastReadPosition"] : nil
+                    let readerViewer: Int? = row.hasColumn("readerViewer") ? row["readerViewer"] : nil
+                    try db.execute(
+                        sql: """
+                            INSERT OR REPLACE INTO mediaReadProgress_v15
+                                (pluginId, canonicalMediaId, mediaKind, lastReadChapterKey, updatedAt, provenance, lastReadPosition, readerViewer)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                        arguments: [
+                            row["pluginId"] as String,
+                            row["canonicalMediaId"] as String,
+                            kind.rawValue,
+                            row["lastReadChapterKey"] as String,
+                            row["updatedAt"] as Date?,
+                            row["provenance"] as String?,
+                            lastReadPos,
+                            readerViewer
+                        ]
+                    )
+                } else {
+                    let archive = try LegacyMediaKindResolver.archiveRecord(table: "mediaReadProgress", row: row, capturedAt: capturedAt)
+                    try archive.insert(db, onConflict: .ignore)
+                }
+            }
+            try db.execute(sql: "DROP TABLE mediaReadProgress")
+            try db.execute(sql: "ALTER TABLE mediaReadProgress_v15 RENAME TO mediaReadProgress")
+        } else {
+            try db.create(table: "mediaReadProgress") { t in
+                t.column("pluginId", .text).notNull()
+                t.column("canonicalMediaId", .text).notNull()
+                t.column("mediaKind", .text).notNull().check(sql: "mediaKind IN ('manga', 'novel', 'anime')")
+                t.column("lastReadChapterKey", .text).notNull()
+                t.column("updatedAt", .datetime)
+                t.column("provenance", .text)
+                t.column("lastReadPosition", .double)
+                t.column("readerViewer", .integer)
+                t.primaryKey(["pluginId", "mediaKind", "canonicalMediaId"])
+                t.check(sql: "provenance IS NULL OR provenance IN ('runtime', 'legacyUnknownTime')")
+            }
+        }
+
+        // 4. trackerLink
+        if try db.tableExists("trackerLink") {
+            try db.execute(sql: """
+                CREATE TABLE trackerLink_v15 (
+                    pluginId TEXT NOT NULL,
+                    canonicalMediaId TEXT NOT NULL,
+                    mediaKind TEXT NOT NULL CHECK(mediaKind IN ('manga', 'novel', 'anime')),
+                    providerId TEXT NOT NULL,
+                    remoteMediaId TEXT NOT NULL,
+                    updatedAt DATETIME,
+                    provenance TEXT CHECK(provenance IS NULL OR provenance IN ('runtime', 'legacyUnknownTime')),
+                    PRIMARY KEY (pluginId, mediaKind, canonicalMediaId, providerId)
+                );
+                """)
+            let rows = try Row.fetchAll(db, sql: "SELECT * FROM trackerLink")
+            for row in rows {
+                let kind: MediaKind?
+                if row.hasColumn("mediaKind"),
+                   let raw = row["mediaKind"] as String?,
+                   let parsed = MediaKind(rawValue: raw) {
+                    kind = parsed
+                } else if let pluginId = row["pluginId"] as String?,
+                          let canonicalMediaId = row["canonicalMediaId"] as String? {
+                    kind = resolver.resolve(pluginID: pluginId, canonicalMediaID: canonicalMediaId)
+                } else {
+                    kind = nil
+                }
+
+                if let kind {
+                    try db.execute(
+                        sql: """
+                            INSERT OR REPLACE INTO trackerLink_v15
+                                (pluginId, canonicalMediaId, mediaKind, providerId, remoteMediaId, updatedAt, provenance)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """,
+                        arguments: [
+                            row["pluginId"] as String,
+                            row["canonicalMediaId"] as String,
+                            kind.rawValue,
+                            row["providerId"] as String,
+                            row["remoteMediaId"] as String,
+                            row["updatedAt"] as Date?,
+                            row["provenance"] as String?
+                        ]
+                    )
+                } else {
+                    let archive = try LegacyMediaKindResolver.archiveRecord(table: "trackerLink", row: row, capturedAt: capturedAt)
+                    try archive.insert(db, onConflict: .ignore)
+                }
+            }
+            try db.execute(sql: "DROP TABLE trackerLink")
+            try db.execute(sql: "ALTER TABLE trackerLink_v15 RENAME TO trackerLink")
+            try db.create(index: "idx_trackerLink_provider", on: "trackerLink", columns: ["providerId", "remoteMediaId"])
+        } else {
+            try db.create(table: "trackerLink") { t in
+                t.column("pluginId", .text).notNull()
+                t.column("canonicalMediaId", .text).notNull()
+                t.column("mediaKind", .text).notNull().check(sql: "mediaKind IN ('manga', 'novel', 'anime')")
+                t.column("providerId", .text).notNull()
+                t.column("remoteMediaId", .text).notNull()
+                t.column("updatedAt", .datetime)
+                t.column("provenance", .text)
+                t.primaryKey(["pluginId", "mediaKind", "canonicalMediaId", "providerId"])
+                t.check(sql: "provenance IS NULL OR provenance IN ('runtime', 'legacyUnknownTime')")
+            }
+            try db.create(index: "idx_trackerLink_provider", on: "trackerLink", columns: ["providerId", "remoteMediaId"])
+        }
+
+        // 5. updateBadge
+        if try db.tableExists("updateBadge") {
+            try db.execute(sql: """
+                CREATE TABLE updateBadge_v15 (
+                    pluginId TEXT NOT NULL,
+                    canonicalMediaId TEXT NOT NULL,
+                    mediaKind TEXT NOT NULL CHECK(mediaKind IN ('manga', 'novel', 'anime')),
+                    count INTEGER NOT NULL CHECK(count >= 0),
+                    updatedAt DATETIME,
+                    provenance TEXT CHECK(provenance IS NULL OR provenance IN ('runtime', 'legacyUnknownTime')),
+                    PRIMARY KEY (pluginId, mediaKind, canonicalMediaId)
+                );
+                """)
+            let rows = try Row.fetchAll(db, sql: "SELECT * FROM updateBadge")
+            for row in rows {
+                let kind: MediaKind?
+                if row.hasColumn("mediaKind"),
+                    let raw = row["mediaKind"] as String?,
+                    let parsed = MediaKind(rawValue: raw) {
+                    kind = parsed
+                } else if let pluginId = row["pluginId"] as String?,
+                          let canonicalMediaId = row["canonicalMediaId"] as String? {
+                    kind = resolver.resolve(pluginID: pluginId, canonicalMediaID: canonicalMediaId)
+                } else {
+                    kind = nil
+                }
+
+                if let kind {
+                    try db.execute(
+                        sql: """
+                            INSERT OR REPLACE INTO updateBadge_v15
+                                (pluginId, canonicalMediaId, mediaKind, count, updatedAt, provenance)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                            """,
+                        arguments: [
+                            row["pluginId"] as String,
+                            row["canonicalMediaId"] as String,
+                            kind.rawValue,
+                            row["count"] as Int,
+                            row["updatedAt"] as Date?,
+                            row["provenance"] as String?
+                        ]
+                    )
+                } else {
+                    let archive = try LegacyMediaKindResolver.archiveRecord(table: "updateBadge", row: row, capturedAt: capturedAt)
+                    try archive.insert(db, onConflict: .ignore)
+                }
+            }
+            try db.execute(sql: "DROP TABLE updateBadge")
+            try db.execute(sql: "ALTER TABLE updateBadge_v15 RENAME TO updateBadge")
+        } else {
+            try db.create(table: "updateBadge") { t in
+                t.column("pluginId", .text).notNull()
+                t.column("canonicalMediaId", .text).notNull()
+                t.column("mediaKind", .text).notNull().check(sql: "mediaKind IN ('manga', 'novel', 'anime')")
+                t.column("count", .integer).notNull().check { $0 >= 0 }
+                t.column("updatedAt", .datetime)
+                t.column("provenance", .text)
+                t.primaryKey(["pluginId", "mediaKind", "canonicalMediaId"])
+                t.check(sql: "provenance IS NULL OR provenance IN ('runtime', 'legacyUnknownTime')")
+            }
+        }
+
+        // 6. readingHistory
+        if try db.tableExists("readingHistory") {
+            try db.execute(sql: """
+                CREATE TABLE readingHistory_v15 (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    libraryItemId TEXT,
+                    mediaKey TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    coverUrl TEXT,
+                    pluginId TEXT NOT NULL,
+                    mediaKind TEXT NOT NULL CHECK(mediaKind IN ('manga', 'novel', 'anime')),
+                    chapterKey TEXT NOT NULL,
+                    chapterTitle TEXT,
+                    readAt DATETIME NOT NULL
+                );
+                """)
+            let rows = try Row.fetchAll(db, sql: "SELECT * FROM readingHistory")
+            for row in rows {
+                let kind = resolver.resolveHistory(row)
+                if let kind {
+                    try db.execute(
+                        sql: """
+                            INSERT OR REPLACE INTO readingHistory_v15
+                                (id, libraryItemId, mediaKey, title, coverUrl, pluginId, mediaKind, chapterKey, chapterTitle, readAt)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                        arguments: [
+                            row["id"] as String,
+                            row.hasColumn("libraryItemId") ? (row["libraryItemId"] as String?) : nil,
+                            row["mediaKey"] as String,
+                            row["title"] as String,
+                            row.hasColumn("coverUrl") ? (row["coverUrl"] as String?) : nil,
+                            row["pluginId"] as String,
+                            kind.rawValue,
+                            row["chapterKey"] as String,
+                            row.hasColumn("chapterTitle") ? (row["chapterTitle"] as String?) : nil,
+                            row["readAt"] as Date
+                        ]
+                    )
+                } else {
+                    let archive = try LegacyMediaKindResolver.archiveRecord(table: "readingHistory", row: row, capturedAt: capturedAt)
+                    try archive.insert(db, onConflict: .ignore)
+                }
+            }
+            try db.execute(sql: "DROP TABLE readingHistory")
+            try db.execute(sql: "ALTER TABLE readingHistory_v15 RENAME TO readingHistory")
+            try db.create(index: "idx_history_mediaKey_readAt", on: "readingHistory", columns: ["mediaKey", "readAt"])
+            try db.create(index: "idx_history_media_kind", on: "readingHistory", columns: ["pluginId", "mediaKind", "mediaKey"])
+        } else {
+            try db.create(table: "readingHistory") { t in
+                t.primaryKey("id", .text)
+                t.column("libraryItemId", .text)
+                t.column("mediaKey", .text).notNull()
+                t.column("title", .text).notNull()
+                t.column("coverUrl", .text)
+                t.column("pluginId", .text).notNull()
+                t.column("mediaKind", .text).notNull().check(sql: "mediaKind IN ('manga', 'novel', 'anime')")
+                t.column("chapterKey", .text).notNull()
+                t.column("chapterTitle", .text)
+                t.column("readAt", .datetime).notNull()
+            }
+            try db.create(index: "idx_history_mediaKey_readAt", on: "readingHistory", columns: ["mediaKey", "readAt"])
+            try db.create(index: "idx_history_media_kind", on: "readingHistory", columns: ["pluginId", "mediaKind", "mediaKey"])
         }
     }
 }

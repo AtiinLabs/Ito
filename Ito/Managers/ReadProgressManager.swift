@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import GRDB
+import ito_runner
 
 @MainActor
 public final class ReadProgressManager: ObservableObject, PluginCompletionScopeCapturing {
@@ -32,11 +33,10 @@ public final class ReadProgressManager: ObservableObject, PluginCompletionScopeC
 
     func captureCompletionContext(
         media: MediaIdentity,
-        mediaKey: String,
-        kind: PluginCompletionKind
+        mediaKey: String
     ) -> PluginCompletionContext {
-        completionStore?.captureContext(media: media, mediaKey: mediaKey, kind: kind)
-            ?? PluginCompletionContext(media: media, mediaKey: mediaKey, kind: kind, originatingEpoch: nil)
+        completionStore?.captureContext(media: media, mediaKey: mediaKey)
+            ?? PluginCompletionContext(media: media, mediaKey: mediaKey, originatingEpoch: nil)
     }
 
     public func reload() async throws {
@@ -48,15 +48,15 @@ public final class ReadProgressManager: ObservableObject, PluginCompletionScopeC
         }
 
         readChapters = Dictionary(grouping: snapshot.0) {
-            MediaIdentity(pluginId: $0.pluginId, canonicalMediaId: $0.canonicalMediaId)
+            MediaIdentity(pluginId: $0.pluginId, canonicalMediaId: $0.canonicalMediaId, mediaKind: $0.mediaKind)
         }.mapValues { Set($0.map(\.chapterKey)) }
         readChapterNumbers = Dictionary(grouping: snapshot.1) {
-            MediaIdentity(pluginId: $0.pluginId, canonicalMediaId: $0.canonicalMediaId)
+            MediaIdentity(pluginId: $0.pluginId, canonicalMediaId: $0.canonicalMediaId, mediaKind: $0.mediaKind)
         }.mapValues { Set($0.map { Float($0.chapterNumber) }) }
         lastReadChapter = Dictionary(
             uniqueKeysWithValues: snapshot.2.map {
                 (
-                    MediaIdentity(pluginId: $0.pluginId, canonicalMediaId: $0.canonicalMediaId),
+                    MediaIdentity(pluginId: $0.pluginId, canonicalMediaId: $0.canonicalMediaId, mediaKind: $0.mediaKind),
                     $0.lastReadChapterKey
                 )
             }
@@ -65,7 +65,7 @@ public final class ReadProgressManager: ObservableObject, PluginCompletionScopeC
             uniqueKeysWithValues: snapshot.2.compactMap { record in
                 record.lastReadPosition.map {
                     (
-                        MediaIdentity(pluginId: record.pluginId, canonicalMediaId: record.canonicalMediaId),
+                        MediaIdentity(pluginId: record.pluginId, canonicalMediaId: record.canonicalMediaId, mediaKind: record.mediaKind),
                         $0
                     )
                 }
@@ -75,7 +75,7 @@ public final class ReadProgressManager: ObservableObject, PluginCompletionScopeC
             uniqueKeysWithValues: snapshot.2.compactMap { record in
                 record.readerViewer.map {
                     (
-                        MediaIdentity(pluginId: record.pluginId, canonicalMediaId: record.canonicalMediaId),
+                        MediaIdentity(pluginId: record.pluginId, canonicalMediaId: record.canonicalMediaId, mediaKind: record.mediaKind),
                         $0
                     )
                 }
@@ -94,11 +94,16 @@ public final class ReadProgressManager: ObservableObject, PluginCompletionScopeC
         try await dbPool.write { db in
             let existing = try MediaReadProgressRecord.fetchOne(
                 db,
-                key: ["pluginId": media.pluginId, "canonicalMediaId": media.canonicalMediaId]
+                key: [
+                    "pluginId": media.pluginId,
+                    "canonicalMediaId": media.canonicalMediaId,
+                    "mediaKind": media.mediaKind.rawValue
+                ]
             )
             try MediaReadProgressRecord(
                 pluginId: media.pluginId,
                 canonicalMediaId: media.canonicalMediaId,
+                mediaKind: media.mediaKind,
                 lastReadChapterKey: chapterKey,
                 updatedAt: now,
                 provenance: .runtime,
@@ -134,7 +139,8 @@ public final class ReadProgressManager: ObservableObject, PluginCompletionScopeC
         let chapter = try await dbPool.write { db -> String in
             let key: [String: DatabaseValueConvertible] = [
                 "pluginId": media.pluginId,
-                "canonicalMediaId": media.canonicalMediaId
+                "canonicalMediaId": media.canonicalMediaId,
+                "mediaKind": media.mediaKind.rawValue
             ]
             if var existing = try MediaReadProgressRecord.fetchOne(db, key: key) {
                 existing.readerViewer = viewer
@@ -144,6 +150,7 @@ public final class ReadProgressManager: ObservableObject, PluginCompletionScopeC
             try MediaReadProgressRecord(
                 pluginId: media.pluginId,
                 canonicalMediaId: media.canonicalMediaId,
+                mediaKind: media.mediaKind,
                 lastReadChapterKey: chapterKey,
                 updatedAt: now,
                 provenance: .runtime,
@@ -168,6 +175,7 @@ public final class ReadProgressManager: ObservableObject, PluginCompletionScopeC
             try ReadProgressKeyRecord(
                 pluginId: media.pluginId,
                 canonicalMediaId: media.canonicalMediaId,
+                mediaKind: media.mediaKind,
                 chapterKey: chapterId,
                 markedAt: now,
                 provenance: .runtime
@@ -176,6 +184,7 @@ public final class ReadProgressManager: ObservableObject, PluginCompletionScopeC
                 try ReadProgressNumberRecord(
                     pluginId: media.pluginId,
                     canonicalMediaId: media.canonicalMediaId,
+                    mediaKind: media.mediaKind,
                     chapterNumber: Double(chapterNum),
                     markedAt: now,
                     provenance: .runtime
@@ -186,12 +195,14 @@ public final class ReadProgressManager: ObservableObject, PluginCompletionScopeC
             // Only a series with no reading state yet starts one at this chapter.
             let key: [String: DatabaseValueConvertible] = [
                 "pluginId": media.pluginId,
-                "canonicalMediaId": media.canonicalMediaId
+                "canonicalMediaId": media.canonicalMediaId,
+                "mediaKind": media.mediaKind.rawValue
             ]
             if try MediaReadProgressRecord.fetchOne(db, key: key) == nil {
                 try MediaReadProgressRecord(
                     pluginId: media.pluginId,
                     canonicalMediaId: media.canonicalMediaId,
+                    mediaKind: media.mediaKind,
                     lastReadChapterKey: chapterId,
                     updatedAt: now,
                     provenance: .runtime
@@ -245,6 +256,7 @@ public final class ReadProgressManager: ObservableObject, PluginCompletionScopeC
                 try ReadProgressNumberRecord(
                     pluginId: media.pluginId,
                     canonicalMediaId: media.canonicalMediaId,
+                    mediaKind: media.mediaKind,
                     chapterNumber: Double(number),
                     markedAt: now,
                     provenance: .runtime
@@ -253,6 +265,7 @@ public final class ReadProgressManager: ObservableObject, PluginCompletionScopeC
             try UpdateBadgeRecord
                 .filter(Column("pluginId") == media.pluginId)
                 .filter(Column("canonicalMediaId") == media.canonicalMediaId)
+                .filter(Column("mediaKind") == media.mediaKind.rawValue)
                 .deleteAll(db)
         }
 

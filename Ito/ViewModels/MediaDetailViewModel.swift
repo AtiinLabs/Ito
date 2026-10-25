@@ -199,7 +199,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         self.messagePresenter = messagePresenter
         self.presentationLogger = presentationLogger
 
-        let identity = MediaIdentity(pluginId: pluginID, itemId: media.key)
+        let identity = MediaIdentity(pluginId: pluginID, canonicalMediaId: media.key, mediaKind: media.mediaKind)
         let libraryState = dependencies.library.state
         isSaved = libraryState.isSaved(media: identity, sourceItemID: media.key)
         hasCustomCategories = libraryState.hasCustomCategories
@@ -234,7 +234,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     var mediaIdentity: MediaIdentity {
-        MediaIdentity(pluginId: pluginID, itemId: media.key)
+        MediaIdentity(pluginId: pluginID, canonicalMediaId: media.key, mediaKind: media.mediaKind)
     }
 
     var isDetailLoading: Bool {
@@ -384,7 +384,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
                 savedItemID = nil
                 try await dependencies.library.unsave(
                     sourceItemID: sourceKey,
-                    pluginID: pluginID
+                    pluginID: pluginID,
+                    mediaKind: sourceMedia.mediaKind
                 )
             }
             guard isCurrentLibraryMutation(
@@ -529,7 +530,12 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             let payload = try JSONEncoder().encode(hydrated)
             try await dependencies.relink.relink(
                 pluginID: pluginID,
-                possibleSourceItemIDs: [oldKey, "\(pluginID)_\(oldKey)"],
+                mediaKind: hydrated.mediaKind,
+                possibleSourceItemIDs: [
+                    oldKey,
+                    "\(pluginID)_\(oldKey)",
+                    "\(pluginID)\u{1F}\(hydrated.mediaKind.rawValue)\u{1F}\(oldKey)"
+                ],
                 destinationItemID: selectedKey,
                 title: hydrated.title,
                 coverURL: hydrated.cover,
@@ -714,7 +720,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         guard isSaved else { return }
         let identity = mediaIdentity
         let count = media.chapterList?.distinctChapterCount ?? 0
-        let signature = "\(identity.pluginId)|\(identity.canonicalMediaId)|\(count)"
+        let signature = "\(identity.pluginId)|\(identity.mediaKind.rawValue)|\(identity.canonicalMediaId)|\(count)"
         guard !completedBaselineSignatures.contains(signature) else { return }
         baselineTask?.cancel()
         let operationID = UUID()

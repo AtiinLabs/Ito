@@ -2,6 +2,7 @@ import Foundation
 import GRDB
 import Security
 import Testing
+import ito_runner
 @testable import Ito
 
 @MainActor
@@ -11,9 +12,9 @@ struct PluginCompletionStoreTests {
     @Test func markingReadSavesProgressAndQueuesOneIntentWithTheOriginalKeys() async throws {
         let fixture = try CompletionFixture()
         defer { fixture.cleanup() }
-        let media = MediaIdentity(pluginId: "komga", canonicalMediaId: "local-canonical-1")
+        let media = MediaIdentity(pluginId: "komga", canonicalMediaId: "local-canonical-1", mediaKind: .manga)
         let context = fixture.manager.captureCompletionContext(
-            media: media, mediaKey: "/series/42?lang=EN fr", kind: .manga
+            media: media, mediaKey: "/series/42?lang=EN fr"
         )
 
         try await fixture.manager.markAsRead(context: context, chapterId: "Ch/1 ✓", chapterNum: 1)
@@ -38,8 +39,8 @@ struct PluginCompletionStoreTests {
     @Test func markingAnEpisodeWatchedQueuesAnAnimeIntent() async throws {
         let fixture = try CompletionFixture()
         defer { fixture.cleanup() }
-        let media = MediaIdentity(pluginId: "anime.source", canonicalMediaId: "canon")
-        let context = fixture.manager.captureCompletionContext(media: media, mediaKey: "show-9", kind: .anime)
+        let media = MediaIdentity(pluginId: "anime.source", canonicalMediaId: "canon", mediaKind: .anime)
+        let context = fixture.manager.captureCompletionContext(media: media, mediaKey: "show-9")
 
         try await fixture.manager.markAsWatched(context: context, episodeId: "ep-3", episodeNum: 3)
 
@@ -53,8 +54,8 @@ struct PluginCompletionStoreTests {
     @Test func aFailedQueueWriteRollsBackEveryLocalProgressRow() async throws {
         let fixture = try CompletionFixture()
         defer { fixture.cleanup() }
-        let media = MediaIdentity(pluginId: "komga", canonicalMediaId: "series")
-        let context = fixture.manager.captureCompletionContext(media: media, mediaKey: "series", kind: .manga)
+        let media = MediaIdentity(pluginId: "komga", canonicalMediaId: "series", mediaKind: .manga)
+        let context = fixture.manager.captureCompletionContext(media: media, mediaKey: "series")
         try await fixture.database.dbPool.write { db in
             try db.execute(sql: """
                 CREATE TRIGGER rejectCompletionInsert BEFORE INSERT ON pluginCompletionOutbox
@@ -87,9 +88,9 @@ struct PluginCompletionStoreTests {
     @Test func aResumedSeriesStillQueuesWithoutMovingTheReadingPlace() async throws {
         let fixture = try CompletionFixture()
         defer { fixture.cleanup() }
-        let media = MediaIdentity(pluginId: "komga", canonicalMediaId: "series")
+        let media = MediaIdentity(pluginId: "komga", canonicalMediaId: "series", mediaKind: .manga)
         try await fixture.manager.savePosition(media: media, chapterKey: "chapter-5", position: 7)
-        let context = fixture.manager.captureCompletionContext(media: media, mediaKey: "series", kind: .manga)
+        let context = fixture.manager.captureCompletionContext(media: media, mediaKey: "series")
 
         try await fixture.manager.markAsRead(context: context, chapterId: "chapter-2", chapterNum: 2)
 
@@ -112,8 +113,8 @@ struct PluginCompletionStoreTests {
     @Test func markingAnAlreadyAcknowledgedChapterAgainQueuesAFreshDelivery() async throws {
         let fixture = try CompletionFixture()
         defer { fixture.cleanup() }
-        let media = MediaIdentity(pluginId: "komga", canonicalMediaId: "series")
-        let context = fixture.manager.captureCompletionContext(media: media, mediaKey: "series", kind: .manga)
+        let media = MediaIdentity(pluginId: "komga", canonicalMediaId: "series", mediaKind: .manga)
+        let context = fixture.manager.captureCompletionContext(media: media, mediaKey: "series")
         try await fixture.manager.markAsRead(context: context, chapterId: "chapter-1", chapterNum: 1)
         try await fixture.acknowledgeEverything(at: fixture.time(10))
         #expect(try await fixture.rows().isEmpty)
@@ -130,8 +131,8 @@ struct PluginCompletionStoreTests {
         let fixture = try CompletionFixture()
         defer { fixture.cleanup() }
         let bare = ReadProgressManager(dbPool: fixture.database.dbPool)
-        let media = MediaIdentity(pluginId: "komga", canonicalMediaId: "series")
-        let context = bare.captureCompletionContext(media: media, mediaKey: "series", kind: .manga)
+        let media = MediaIdentity(pluginId: "komga", canonicalMediaId: "series", mediaKind: .manga)
+        let context = bare.captureCompletionContext(media: media, mediaKey: "series")
         #expect(context.originatingEpoch == nil)
 
         try await bare.markAsRead(context: context, chapterId: "chapter-1", chapterNum: 1)
@@ -157,8 +158,8 @@ struct PluginCompletionStoreTests {
         let fixture = try CompletionFixture()
         defer { fixture.cleanup() }
         let context = PluginCompletionContext(
-            media: MediaIdentity(pluginId: "komga", canonicalMediaId: "series"),
-            mediaKey: "series", kind: .manga, originatingEpoch: nil
+            media: MediaIdentity(pluginId: "komga", canonicalMediaId: "series", mediaKind: .manga),
+            mediaKey: "series", originatingEpoch: nil
         )
 
         try await fixture.enqueue(context, unit: "ch-1", at: fixture.time(1))
@@ -180,9 +181,9 @@ struct PluginCompletionStoreTests {
                 BEGIN SELECT RAISE(ABORT, 'rejected'); END
                 """)
         }
-        let media = MediaIdentity(pluginId: "brand.new", canonicalMediaId: "series")
+        let media = MediaIdentity(pluginId: "brand.new", canonicalMediaId: "series", mediaKind: .novel)
 
-        let context = fixture.manager.captureCompletionContext(media: media, mediaKey: "series", kind: .novel)
+        let context = fixture.manager.captureCompletionContext(media: media, mediaKey: "series")
         try await fixture.manager.markAsRead(context: context, chapterId: "chapter-1")
 
         #expect(context.originatingEpoch == nil)
@@ -448,7 +449,7 @@ struct PluginCompletionStoreTests {
         let old = fixture.capture("komga")
         try await fixture.enqueue(old, unit: "ch-1", at: fixture.time(1))
         try await fixture.enqueue(
-            PluginCompletionContext(media: old.media, mediaKey: old.mediaKey, kind: .manga, originatingEpoch: nil),
+            PluginCompletionContext(media: old.media, mediaKey: old.mediaKey, originatingEpoch: nil),
             unit: "ch-2", at: fixture.time(2)
         )
         let kavita = fixture.capture("kavita")
@@ -865,9 +866,9 @@ struct PluginCompletionStoreTests {
     @Test func keysAreStoredVerbatimAndComparedExactly() async throws {
         let fixture = try CompletionFixture()
         defer { fixture.cleanup() }
-        let media = MediaIdentity(pluginId: "komga", canonicalMediaId: "imported:1234")
+        let media = MediaIdentity(pluginId: "komga", canonicalMediaId: "imported:1234", mediaKind: .novel)
         let context = PluginCompletionContext(
-            media: media, mediaKey: " /Series/ÄÖ%2F?x=1 ", kind: .novel, originatingEpoch: fixture.capture("komga").originatingEpoch
+            media: media, mediaKey: " /Series/ÄÖ%2F?x=1 ", originatingEpoch: fixture.capture("komga").originatingEpoch
         )
 
         for unit in ["Ch-1", "ch-1", "ch-1 ", "ch-1", ""] {
@@ -885,10 +886,10 @@ struct PluginCompletionStoreTests {
         let fixture = try CompletionFixture()
         defer { fixture.cleanup() }
         let epoch = fixture.capture("komga").originatingEpoch
-        let media = MediaIdentity(pluginId: "komga", canonicalMediaId: "canon")
-        for (key, kind) in [("a", PluginCompletionKind.manga), ("b", .manga), ("a", .novel)] {
+        for (key, kind) in [("a", MediaKind.manga), ("b", .manga), ("a", .novel)] {
+            let media = MediaIdentity(pluginId: "komga", canonicalMediaId: "canon", mediaKind: kind)
             try await fixture.enqueue(
-                PluginCompletionContext(media: media, mediaKey: key, kind: kind, originatingEpoch: epoch),
+                PluginCompletionContext(media: media, mediaKey: key, originatingEpoch: epoch),
                 unit: "ch-1", at: fixture.time(1)
             )
         }
@@ -979,9 +980,8 @@ private struct CompletionFixture {
 
     func capture(_ pluginID: String, mediaKey: String = "series") -> PluginCompletionContext {
         store.captureContext(
-            media: MediaIdentity(pluginId: pluginID, canonicalMediaId: "canonical-\(pluginID)"),
-            mediaKey: mediaKey,
-            kind: .manga
+            media: MediaIdentity(pluginId: pluginID, canonicalMediaId: "canonical-\(pluginID)", mediaKind: .manga),
+            mediaKey: mediaKey
         )
     }
 

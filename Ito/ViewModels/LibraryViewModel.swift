@@ -296,7 +296,7 @@ final class LibraryViewModel: ObservableObject {
         let library = dependencies.library
         removalTasks[item.id] = Task { @MainActor [weak self, library] in
             do {
-                try await library.removeItem(itemID: item.id, pluginID: item.pluginId)
+                try await library.removeItem(itemID: item.id, pluginID: item.pluginId, mediaKind: item.effectiveType)
                 self?.publishRemovalCompletion(
                     itemID: item.id,
                     operationID: operationID,
@@ -428,7 +428,7 @@ final class LibraryViewModel: ObservableObject {
     }
 
     private func mediaIdentity(for item: LibraryItem) -> MediaIdentity {
-        MediaIdentity(pluginId: item.pluginId, itemId: item.id)
+        item.mediaIdentity
     }
 
     private static func layoutStyle(from rawValue: Int) -> LibraryLayoutStyle {

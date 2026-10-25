@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import ito_runner
 @testable import Ito
 
 enum CategoryHistoryTestFailure: Error {
@@ -350,6 +351,7 @@ func pr11bHistoryEntry(id: String, readAt: TimeInterval) -> HistoryEntry {
             title: "Title \(id)",
             coverUrl: nil,
             pluginId: "plugin",
+            mediaKind: .manga,
             chapterKey: "chapter-\(id)",
             chapterTitle: "Chapter \(id)",
             readAt: Date(timeIntervalSince1970: readAt)

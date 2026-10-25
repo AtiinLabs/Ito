@@ -2,6 +2,7 @@ import CoreFoundation
 import CryptoKit
 import Foundation
 import GRDB
+import ito_runner
 
 // swiftlint:disable file_length
 
@@ -694,7 +695,8 @@ public final class LegacyDefaultsMigrator: @unchecked Sendable {
             let historyID = Self.digest(Data(idMaterial.utf8))
             let canonicalMediaID = ImportedMediaIdentity.canonicalMediaId(
                 itemId: entry.item.id,
-                pluginId: entry.item.pluginId
+                pluginId: entry.item.pluginId,
+                mediaKind: entry.item.effectiveType
             )
             let record = ReadingHistoryRecord(
                 id: historyID,
@@ -703,6 +705,7 @@ public final class LegacyDefaultsMigrator: @unchecked Sendable {
                 title: entry.item.title,
                 coverUrl: entry.item.coverUrl,
                 pluginId: entry.item.pluginId,
+                mediaKind: entry.item.effectiveType,
                 chapterKey: entry.chapterTitle ?? "legacy-history-\(historyID)",
                 chapterTitle: entry.chapterTitle,
                 readAt: entry.lastReadAt
@@ -735,10 +738,11 @@ public final class LegacyDefaultsMigrator: @unchecked Sendable {
                                         capture: capture, in: db); continue
                 }
                 let record = ReadProgressKeyRecord(pluginId: identity.pluginId, canonicalMediaId: identity.canonicalMediaId,
-                                                   chapterKey: chapter, markedAt: nil, provenance: .legacyUnknownTime)
+                                                   mediaKind: identity.mediaKind, chapterKey: chapter, markedAt: nil,
+                                                   provenance: .legacyUnknownTime)
                 try record.insert(db, onConflict: .ignore)
                 try normalizedOutcome(path: path, kind: "readProgressKey",
-                                      identity: "\(identity.pluginId)/\(identity.canonicalMediaId)/\(chapter)",
+                                      identity: "\(identity.pluginId)/\(identity.canonicalMediaId)/\(identity.mediaKind.rawValue)/\(chapter)",
                                       payload: Data(chapter.utf8), capture: capture, in: db)
             }
         }
@@ -758,11 +762,12 @@ public final class LegacyDefaultsMigrator: @unchecked Sendable {
                 }
                 let record = ReadProgressNumberRecord(pluginId: identity.pluginId,
                                                       canonicalMediaId: identity.canonicalMediaId,
+                                                      mediaKind: identity.mediaKind,
                                                       chapterNumber: Double(number), markedAt: nil,
                                                       provenance: .legacyUnknownTime)
                 try record.insert(db, onConflict: .ignore)
                 try normalizedOutcome(path: path, kind: "readProgressNumber",
-                                      identity: "\(identity.pluginId)/\(identity.canonicalMediaId)/\(number)",
+                                      identity: "\(identity.pluginId)/\(identity.canonicalMediaId)/\(identity.mediaKind.rawValue)/\(number)",
                                       payload: try Self.sortedJSON(number), capture: capture, in: db)
             }
         }
@@ -781,18 +786,18 @@ public final class LegacyDefaultsMigrator: @unchecked Sendable {
                 continue
             }
             let incoming = MediaReadProgressRecord(pluginId: identity.pluginId, canonicalMediaId: identity.canonicalMediaId,
-                                                   lastReadChapterKey: chapter, updatedAt: nil,
+                                                   mediaKind: identity.mediaKind, lastReadChapterKey: chapter, updatedAt: nil,
                                                    provenance: .legacyUnknownTime)
             if let existing = try MediaReadProgressRecord.fetchOne(
                 db,
-                sql: "SELECT * FROM mediaReadProgress WHERE pluginId = ? AND canonicalMediaId = ?",
-                arguments: [identity.pluginId, identity.canonicalMediaId]
+                sql: "SELECT * FROM mediaReadProgress WHERE pluginId = ? AND canonicalMediaId = ? AND mediaKind = ?",
+                arguments: [identity.pluginId, identity.canonicalMediaId, identity.mediaKind.rawValue]
             ), existing.lastReadChapterKey != chapter {
                 try archivedOutcome(path: path, capture: capture, reason: "resumeConflict", in: db)
             } else {
                 try incoming.insert(db, onConflict: .ignore)
                 try normalizedOutcome(path: path, kind: "mediaReadProgress",
-                                      identity: "\(identity.pluginId)/\(identity.canonicalMediaId)",
+                                      identity: "\(identity.pluginId)/\(identity.canonicalMediaId)/\(identity.mediaKind.rawValue)",
                                       payload: Data(chapter.utf8), capture: capture, in: db)
             }
         }
@@ -839,18 +844,18 @@ public final class LegacyDefaultsMigrator: @unchecked Sendable {
         }
         let existing = try TrackerLinkRecord.fetchOne(
             db,
-            sql: "SELECT * FROM trackerLink WHERE pluginId = ? AND canonicalMediaId = ? AND providerId = ?",
-            arguments: [identity.pluginId, identity.canonicalMediaId, provider]
+            sql: "SELECT * FROM trackerLink WHERE pluginId = ? AND canonicalMediaId = ? AND mediaKind = ? AND providerId = ?",
+            arguments: [identity.pluginId, identity.canonicalMediaId, identity.mediaKind.rawValue, provider]
         )
         if let existing, existing.remoteMediaId != remoteID {
             try archivedOutcome(path: path, capture: capture, reason: "trackerConflict", in: db)
         } else {
             let record = TrackerLinkRecord(pluginId: identity.pluginId, canonicalMediaId: identity.canonicalMediaId,
-                                           providerId: provider, remoteMediaId: remoteID, updatedAt: nil,
-                                           provenance: .legacyUnknownTime)
+                                           mediaKind: identity.mediaKind, providerId: provider, remoteMediaId: remoteID,
+                                           updatedAt: nil, provenance: .legacyUnknownTime)
             try record.insert(db, onConflict: .ignore)
             try normalizedOutcome(path: path, kind: "trackerLink",
-                                  identity: "\(identity.pluginId)/\(identity.canonicalMediaId)/\(provider)",
+                                  identity: "\(identity.pluginId)/\(identity.canonicalMediaId)/\(identity.mediaKind.rawValue)/\(provider)",
                                   payload: Data(remoteID.utf8), capture: capture, in: db)
         }
     }
@@ -871,17 +876,18 @@ public final class LegacyDefaultsMigrator: @unchecked Sendable {
             }
             let existing = try UpdateBadgeRecord.fetchOne(
                 db,
-                sql: "SELECT * FROM updateBadge WHERE pluginId = ? AND canonicalMediaId = ?",
-                arguments: [identity.pluginId, identity.canonicalMediaId]
+                sql: "SELECT * FROM updateBadge WHERE pluginId = ? AND canonicalMediaId = ? AND mediaKind = ?",
+                arguments: [identity.pluginId, identity.canonicalMediaId, identity.mediaKind.rawValue]
             )
             if let existing, existing.count != count {
                 try archivedOutcome(path: path, capture: capture, reason: "badgeConflict", in: db)
             } else {
                 let record = UpdateBadgeRecord(pluginId: identity.pluginId, canonicalMediaId: identity.canonicalMediaId,
-                                               count: count, updatedAt: nil, provenance: .legacyUnknownTime)
+                                               mediaKind: identity.mediaKind, count: count, updatedAt: nil,
+                                               provenance: .legacyUnknownTime)
                 try record.insert(db, onConflict: .ignore)
                 try normalizedOutcome(path: path, kind: "updateBadge",
-                                      identity: "\(identity.pluginId)/\(identity.canonicalMediaId)",
+                                      identity: "\(identity.pluginId)/\(identity.canonicalMediaId)/\(identity.mediaKind.rawValue)",
                                       payload: try Self.sortedJSON(count), capture: capture, in: db)
             }
         }
@@ -963,27 +969,46 @@ public final class LegacyDefaultsMigrator: @unchecked Sendable {
     ) throws -> Set<MediaIdentity> {
         var candidates: Set<MediaIdentity> = []
 
-        func addMatchingMediaEvidence(pluginID: String, mediaID: String) {
+        func addMatchingMediaEvidence(pluginID: String, mediaID: String, mediaKind: MediaKind) {
             let evidenceCanonical = ImportedMediaIdentity.canonicalMediaId(
-                itemId: mediaID, pluginId: pluginID
+                itemId: mediaID,
+                pluginId: pluginID,
+                mediaKind: mediaKind
             )
             let legacyCanonical = ImportedMediaIdentity.canonicalMediaId(
-                itemId: legacyMediaID, pluginId: pluginID
+                itemId: legacyMediaID,
+                pluginId: pluginID,
+                mediaKind: mediaKind
             )
             guard evidenceCanonical == legacyCanonical else { return }
-            candidates.insert(MediaIdentity(pluginId: pluginID, canonicalMediaId: evidenceCanonical))
+            candidates.insert(MediaIdentity(pluginId: pluginID, canonicalMediaId: evidenceCanonical, mediaKind: mediaKind))
         }
 
         for item in try LibraryItem.fetchAll(db) {
-            addMatchingMediaEvidence(pluginID: item.pluginId, mediaID: item.id)
+            addMatchingMediaEvidence(pluginID: item.pluginId, mediaID: item.id, mediaKind: item.effectiveType)
         }
         for history in try ReadingHistoryRecord.fetchAll(db) {
-            addMatchingMediaEvidence(pluginID: history.pluginId, mediaID: history.mediaKey)
+            addMatchingMediaEvidence(pluginID: history.pluginId, mediaID: history.mediaKey, mediaKind: history.mediaKind)
             if let libraryItemID = history.libraryItemId {
-                addMatchingMediaEvidence(pluginID: history.pluginId, mediaID: libraryItemID)
+                addMatchingMediaEvidence(pluginID: history.pluginId, mediaID: libraryItemID, mediaKind: history.mediaKind)
+            }
+        }
+        if try db.tableExists(SourceMappingRecord.databaseTableName) {
+            for mapping in try SourceMappingRecord.fetchAll(db) {
+                let kind: MediaKind = mapping.mediaType == .anime ? .anime : .manga
+                addMatchingMediaEvidence(pluginID: mapping.pluginId, mediaID: mapping.pluginMediaKey, mediaKind: kind)
             }
         }
 
+        if !candidates.isEmpty {
+            return candidates
+        }
+
+        // Prefix evidence names the plugin only; its kind is known only when the plugin declares exactly one.
+        let kindResolver = try LegacyMediaKindResolver(db: db)
+        func kinds(of pluginID: String) -> [MediaKind] {
+            kindResolver.declaredKind(ofPlugin: pluginID).map { [$0] } ?? MediaKind.allCases
+        }
         let identities = try PluginIdentityRecord.fetchAll(db)
         let aliases = try PluginIdentityAliasRecord.fetchAll(db)
         let aliasesByPlugin = Dictionary(grouping: aliases, by: \.pluginId)
@@ -995,16 +1020,26 @@ public final class LegacyDefaultsMigrator: @unchecked Sendable {
             prefixes.formUnion((aliasesByPlugin[identity.pluginId] ?? []).map(\.aliasValue))
             for prefix in prefixes {
                 if let canonicalMediaID = Self.prefixedMediaID(legacyMediaID, prefix: prefix) {
-                    candidates.insert(MediaIdentity(pluginId: identity.pluginId,
-                                                    canonicalMediaId: canonicalMediaID))
+                    for kind in kinds(of: identity.pluginId) {
+                        candidates.insert(MediaIdentity(
+                            pluginId: identity.pluginId,
+                            canonicalMediaId: canonicalMediaID,
+                            mediaKind: kind
+                        ))
+                    }
                 }
             }
         }
 
         for alias in try PluginMigrationAliasRecord.fetchAll(db) {
             if let canonicalMediaID = Self.prefixedMediaID(legacyMediaID, prefix: alias.foreignId) {
-                candidates.insert(MediaIdentity(pluginId: alias.pluginId,
-                                                canonicalMediaId: canonicalMediaID))
+                for kind in kinds(of: alias.pluginId) {
+                    candidates.insert(MediaIdentity(
+                        pluginId: alias.pluginId,
+                        canonicalMediaId: canonicalMediaID,
+                        mediaKind: kind
+                    ))
+                }
             }
         }
         return candidates
@@ -1081,7 +1116,7 @@ public final class LegacyDefaultsMigrator: @unchecked Sendable {
 
     private func candidateData(for legacyMediaID: String, in db: Database) throws -> Data {
         let candidates = try identityCandidates(for: legacyMediaID, in: db).sorted {
-            ($0.pluginId, $0.canonicalMediaId) < ($1.pluginId, $1.canonicalMediaId)
+            ($0.pluginId, $0.canonicalMediaId, $0.mediaKind.rawValue) < ($1.pluginId, $1.canonicalMediaId, $1.mediaKind.rawValue)
         }
         return try Self.sortedJSON(candidates)
     }

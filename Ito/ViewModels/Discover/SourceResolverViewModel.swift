@@ -255,12 +255,13 @@ public final class SourceResolverViewModel: ObservableObject {
         guard let route = sourceRoute,
               let anilistID = route.anilistID else { return }
         let itemKey = route.media.key()
-        let legacyID = "\(route.pluginID)_\(itemKey)"
-        guard items.contains(where: {
-            $0.id == itemKey || ($0.pluginId == route.pluginID && $0.id == legacyID)
-        }) else { return }
-
-        let mediaIdentity = MediaIdentity(pluginId: route.pluginID, itemId: itemKey)
+        let mediaKind: MediaKind
+        switch route.media {
+        case .manga: mediaKind = .manga
+        case .anime: mediaKind = .anime
+        }
+        let mediaIdentity = MediaIdentity(pluginId: route.pluginID, canonicalMediaId: itemKey, mediaKind: mediaKind)
+        guard items.contains(where: { $0.mediaIdentity == mediaIdentity }) else { return }
         guard trackerLinker.anilistTrackerID(for: mediaIdentity) == nil,
               linkingMediaIdentity != mediaIdentity else { return }
 

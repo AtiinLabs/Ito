@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import GRDB
+import ito_runner
 
 public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable {
     nonisolated struct Result: Equatable, Sendable {
@@ -75,7 +76,8 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                 let destinationId = ImportedMediaIdentity.destinationId(
                     sourceItemId: sourceId,
                     oldPluginId: oldPluginId,
-                    newPluginId: newPluginId
+                    newPluginId: newPluginId,
+                    mediaKind: source.effectiveType
                 )
                 guard destinationId != sourceId else {
                     throw RemapError.noOpMapping(itemId: sourceId)
@@ -101,11 +103,13 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
 
             for history in oldHistory {
                 let matches = mappings.filter {
-                    ImportedMediaIdentity.historyIdentifiers(
-                        history,
-                        match: $0.source.id,
-                        pluginId: oldPluginId
-                    )
+                    $0.source.effectiveType == history.mediaKind
+                        && ImportedMediaIdentity.historyIdentifiers(
+                            history,
+                            match: $0.source.id,
+                            pluginId: oldPluginId,
+                            mediaKind: $0.source.effectiveType
+                        )
                 }
                 guard matches.count <= 1 else {
                     throw RemapError.ambiguousHistoryAssociation(
@@ -121,14 +125,21 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
             for mapping in mappings {
                 let sourceCanonicalId = ImportedMediaIdentity.canonicalMediaId(
                     itemId: mapping.source.id,
-                    pluginId: oldPluginId
+                    pluginId: oldPluginId,
+                    mediaKind: mapping.source.effectiveType
+                )
+                let destinationCanonicalId = ImportedMediaIdentity.canonicalMediaId(
+                    itemId: mapping.destinationId,
+                    pluginId: newPluginId,
+                    mediaKind: mapping.source.effectiveType
                 )
                 try preflightScopedState(
                     db: db,
                     oldPluginId: oldPluginId,
                     newPluginId: newPluginId,
+                    mediaKind: mapping.source.effectiveType,
                     sourceCanonicalMediaId: sourceCanonicalId,
-                    destinationCanonicalMediaId: sourceCanonicalId
+                    destinationCanonicalMediaId: destinationCanonicalId
                 )
             }
 
@@ -174,7 +185,8 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
             for mapping in mappings {
                 let canonicalMediaId = ImportedMediaIdentity.canonicalMediaId(
                     itemId: mapping.source.id,
-                    pluginId: oldPluginId
+                    pluginId: oldPluginId,
+                    mediaKind: mapping.source.effectiveType
                 )
                 for table in [
                     "readProgressKey",
@@ -187,9 +199,9 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                         sql: """
                             UPDATE \(table)
                             SET pluginId = ?
-                            WHERE pluginId = ? AND canonicalMediaId = ?
+                            WHERE pluginId = ? AND canonicalMediaId = ? AND mediaKind = ?
                             """,
-                        arguments: [newPluginId, oldPluginId, canonicalMediaId]
+                        arguments: [newPluginId, oldPluginId, canonicalMediaId, mapping.source.effectiveType.rawValue]
                     )
                 }
             }
@@ -210,6 +222,7 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
         db: Database,
         oldPluginId: String,
         newPluginId: String,
+        mediaKind: MediaKind,
         sourceCanonicalMediaId: String,
         destinationCanonicalMediaId: String
     ) throws {
@@ -217,13 +230,13 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
         for table in scalarTables {
             let sourceExists = try Bool.fetchOne(
                 db,
-                sql: "SELECT EXISTS(SELECT 1 FROM \(table) WHERE pluginId = ? AND canonicalMediaId = ?)",
-                arguments: [oldPluginId, sourceCanonicalMediaId]
+                sql: "SELECT EXISTS(SELECT 1 FROM \(table) WHERE pluginId = ? AND canonicalMediaId = ? AND mediaKind = ?)",
+                arguments: [oldPluginId, sourceCanonicalMediaId, mediaKind.rawValue]
             ) ?? false
             let destinationExists = try Bool.fetchOne(
                 db,
-                sql: "SELECT EXISTS(SELECT 1 FROM \(table) WHERE pluginId = ? AND canonicalMediaId = ?)",
-                arguments: [newPluginId, destinationCanonicalMediaId]
+                sql: "SELECT EXISTS(SELECT 1 FROM \(table) WHERE pluginId = ? AND canonicalMediaId = ? AND mediaKind = ?)",
+                arguments: [newPluginId, destinationCanonicalMediaId, mediaKind.rawValue]
             ) ?? false
             if sourceExists && destinationExists {
                 throw RemapError.mediaStateDestinationCollision(
@@ -247,17 +260,22 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                         FROM \(table) source
                         JOIN \(table) destination
                           ON destination.\(logicalKey) = source.\(logicalKey)
+                         AND destination.mediaKind = source.mediaKind
                         WHERE source.pluginId = ?
                           AND source.canonicalMediaId = ?
+                          AND source.mediaKind = ?
                           AND destination.pluginId = ?
                           AND destination.canonicalMediaId = ?
+                          AND destination.mediaKind = ?
                     )
                     """,
                 arguments: [
                     oldPluginId,
                     sourceCanonicalMediaId,
+                    mediaKind.rawValue,
                     newPluginId,
-                    destinationCanonicalMediaId
+                    destinationCanonicalMediaId,
+                    mediaKind.rawValue
                 ]
             ) ?? false
             if collision {
@@ -271,6 +289,7 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
 
     func relink(
         pluginId: String,
+        mediaKind: MediaKind,
         possibleSourceItemIds: [String],
         destinationItemId: String,
         title: String,
@@ -280,7 +299,7 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
         try await dbPool.write { db in
             guard let source = try possibleSourceItemIds.lazy.compactMap({
                 try LibraryItem.fetchOne(db, key: $0)
-            }).first else {
+            }).first(where: { $0.effectiveType == mediaKind }) else {
                 throw RemapError.sourceNotFound(possibleSourceItemIds.joined(separator: ","))
             }
             guard source.pluginId == pluginId else {
@@ -299,16 +318,19 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
 
             let sourceCanonicalMediaId = ImportedMediaIdentity.canonicalMediaId(
                 itemId: source.id,
-                pluginId: pluginId
+                pluginId: pluginId,
+                mediaKind: mediaKind
             )
             let destinationCanonicalMediaId = ImportedMediaIdentity.canonicalMediaId(
                 itemId: destinationItemId,
-                pluginId: pluginId
+                pluginId: pluginId,
+                mediaKind: mediaKind
             )
             try preflightScopedState(
                 db: db,
                 oldPluginId: pluginId,
                 newPluginId: pluginId,
+                mediaKind: mediaKind,
                 sourceCanonicalMediaId: sourceCanonicalMediaId,
                 destinationCanonicalMediaId: destinationCanonicalMediaId
             )
@@ -319,7 +341,7 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                 coverUrl: coverUrl,
                 pluginId: pluginId,
                 isAnime: source.isAnime,
-                pluginType: source.pluginType,
+                pluginType: source.pluginType ?? mediaKind,
                 rawPayload: rawPayload,
                 anilistId: source.anilistId,
                 status: source.status,
@@ -336,12 +358,14 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
 
             let histories = try ReadingHistoryRecord
                 .filter(ReadingHistoryRecord.Columns.pluginId == pluginId)
+                .filter(ReadingHistoryRecord.Columns.mediaKind == mediaKind.rawValue)
                 .fetchAll(db)
                 .filter {
                     ImportedMediaIdentity.historyIdentifiers(
                         $0,
                         match: source.id,
-                        pluginId: pluginId
+                        pluginId: pluginId,
+                        mediaKind: mediaKind
                     )
                 }
             for history in histories {
@@ -366,9 +390,9 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                     sql: """
                         UPDATE \(table)
                         SET canonicalMediaId = ?
-                        WHERE pluginId = ? AND canonicalMediaId = ?
+                        WHERE pluginId = ? AND canonicalMediaId = ? AND mediaKind = ?
                         """,
-                    arguments: [destinationCanonicalMediaId, pluginId, sourceCanonicalMediaId]
+                    arguments: [destinationCanonicalMediaId, pluginId, sourceCanonicalMediaId, mediaKind.rawValue]
                 )
             }
 

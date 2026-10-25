@@ -1,11 +1,12 @@
 import XCTest
+import ito_runner
 @testable import Ito
 
 @MainActor
 final class TrackerProviderSelectionViewModelTests: XCTestCase {
     private func configuration(anilistRemoteID: String?, isAnime: Bool = true) -> TrackerSheetConfiguration {
         TrackerSheetConfiguration(
-            mediaIdentity: MediaIdentity(pluginId: "plugin.test", canonicalMediaId: "media.test"),
+            mediaIdentity: MediaIdentity(pluginId: "plugin.test", canonicalMediaId: "media.test", mediaKind: isAnime ? .anime : .manga),
             title: "Title",
             isAnime: isAnime,
             providers: [

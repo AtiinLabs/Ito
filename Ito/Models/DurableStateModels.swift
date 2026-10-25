@@ -1,22 +1,27 @@
 import Foundation
 import GRDB
+import ito_runner
 
 nonisolated public struct MediaIdentity: Codable, Hashable, Sendable {
     public let pluginId: String
     public let canonicalMediaId: String
+    public let mediaKind: MediaKind
 
-    public init(pluginId: String, canonicalMediaId: String) {
+    public init(pluginId: String, canonicalMediaId: String, mediaKind: MediaKind) {
         self.pluginId = pluginId
         self.canonicalMediaId = canonicalMediaId
+        self.mediaKind = mediaKind
     }
 
-    public init(pluginId: String, itemId: String) {
+    public init(pluginId: String, itemId: String, mediaKind: MediaKind) {
         self.init(
             pluginId: pluginId,
             canonicalMediaId: ImportedMediaIdentity.canonicalMediaId(
                 itemId: itemId,
-                pluginId: pluginId
-            )
+                pluginId: pluginId,
+                mediaKind: mediaKind
+            ),
+            mediaKind: mediaKind
         )
     }
 }
@@ -30,6 +35,7 @@ public struct ReadProgressKeyRecord: Codable, Hashable, Sendable, FetchableRecor
     public static let databaseTableName = "readProgressKey"
     public let pluginId: String
     public let canonicalMediaId: String
+    public let mediaKind: MediaKind
     public let chapterKey: String
     public var markedAt: Date?
     public var provenance: DurableStateProvenance?
@@ -39,6 +45,7 @@ public struct ReadProgressNumberRecord: Codable, Hashable, Sendable, FetchableRe
     public static let databaseTableName = "readProgressNumber"
     public let pluginId: String
     public let canonicalMediaId: String
+    public let mediaKind: MediaKind
     public let chapterNumber: Double
     public var markedAt: Date?
     public var provenance: DurableStateProvenance?
@@ -48,6 +55,7 @@ public struct MediaReadProgressRecord: Codable, Hashable, Sendable, FetchableRec
     public static let databaseTableName = "mediaReadProgress"
     public let pluginId: String
     public let canonicalMediaId: String
+    public let mediaKind: MediaKind
     public var lastReadChapterKey: String
     public var updatedAt: Date?
     public var provenance: DurableStateProvenance?
@@ -62,6 +70,7 @@ public struct TrackerLinkRecord: Codable, Hashable, Sendable, FetchableRecord, P
     public static let databaseTableName = "trackerLink"
     public let pluginId: String
     public let canonicalMediaId: String
+    public let mediaKind: MediaKind
     public let providerId: String
     public var remoteMediaId: String
     public var updatedAt: Date?
@@ -72,6 +81,7 @@ public struct UpdateBadgeRecord: Codable, Hashable, Sendable, FetchableRecord, P
     public static let databaseTableName = "updateBadge"
     public let pluginId: String
     public let canonicalMediaId: String
+    public let mediaKind: MediaKind
     public var count: Int
     public var updatedAt: Date?
     public var provenance: DurableStateProvenance?

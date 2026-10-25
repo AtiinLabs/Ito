@@ -302,8 +302,8 @@ struct PluginSettingsStoreTests {
                         (id, title, pluginId, isAnime, rawPayload)
                     VALUES ('library-item', 'Library', 'library-plugin', 0, X'7B7D');
                     INSERT INTO readingHistory
-                        (id, mediaKey, title, pluginId, chapterKey, readAt)
-                    VALUES ('history-item', 'media', 'History', 'history-plugin', 'chapter', ?);
+                        (id, mediaKey, title, pluginId, mediaKind, chapterKey, readAt)
+                    VALUES ('history-item', 'media', 'History', 'history-plugin', 'manga', 'chapter', ?);
                     INSERT INTO pluginMigrationAlias (foreignId, pluginId, updatedAt)
                     VALUES ('foreign-plugin', 'alias-target-plugin', ?)
                     """,

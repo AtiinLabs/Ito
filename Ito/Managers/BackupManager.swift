@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import GRDB
+import ito_runner
 import OSLog
 import SystemConfiguration
 
@@ -57,7 +58,11 @@ nonisolated struct BackupMergeOperation: Sendable {
 
             for (index, disposition) in dispositions.enumerated() {
                 let item = disposition.importedItem
-                let key = ImportedMediaIdentity.key(itemId: item.id, pluginId: item.pluginId)
+                let key = ImportedMediaIdentity.key(
+                    itemId: item.id,
+                    pluginId: item.pluginId,
+                    mediaKind: item.effectiveType
+                )
                 direct[item.id, default: []].append(index)
                 canonical[key, default: []].append(index)
                 for alias in Set([item.id, key.canonicalMediaId, "\(item.pluginId)_\(key.canonicalMediaId)"]) {
@@ -81,7 +86,11 @@ nonisolated struct BackupMergeOperation: Sendable {
         func disposition(for history: ReadingHistoryRecord) -> ItemDisposition? {
             var matches = Set<Int>()
             for identifier in [history.libraryItemId, history.mediaKey].compactMap({ $0 }) {
-                let key = ImportedMediaIdentity.key(itemId: identifier, pluginId: history.pluginId)
+                let key = ImportedMediaIdentity.key(
+                    itemId: identifier,
+                    pluginId: history.pluginId,
+                    mediaKind: history.mediaKind
+                )
                 matches.formUnion(canonical[key] ?? [])
             }
             guard matches.count == 1, let match = matches.first else { return nil }
@@ -94,7 +103,7 @@ nonisolated struct BackupMergeOperation: Sendable {
 
         init(_ items: [LibraryItem]) {
             itemsByIdentity = Dictionary(grouping: items) {
-                ImportedMediaIdentity.key(itemId: $0.id, pluginId: $0.pluginId)
+                ImportedMediaIdentity.key(itemId: $0.id, pluginId: $0.pluginId, mediaKind: $0.effectiveType)
             }
         }
 
@@ -102,7 +111,11 @@ nonisolated struct BackupMergeOperation: Sendable {
             var itemIds = Set<String>()
             var identityByItemId: [String: ImportedMediaIdentity.Key] = [:]
             for identifier in [history.libraryItemId, history.mediaKey].compactMap({ $0 }) {
-                let key = ImportedMediaIdentity.key(itemId: identifier, pluginId: history.pluginId)
+                let key = ImportedMediaIdentity.key(
+                    itemId: identifier,
+                    pluginId: history.pluginId,
+                    mediaKind: history.mediaKind
+                )
                 for item in itemsByIdentity[key] ?? [] {
                     itemIds.insert(item.id)
                     identityByItemId[item.id] = key
@@ -269,7 +282,11 @@ nonisolated struct BackupMergeOperation: Sendable {
             let localItemIdentityIndex = LibraryItemIdentityIndex(localItems)
             var semanticKeys = Set(persistedHistory.map { history in
                 let identity = localItemIdentityIndex.uniqueIdentity(for: history)
-                    ?? ImportedMediaIdentity.key(itemId: history.mediaKey, pluginId: history.pluginId)
+                    ?? ImportedMediaIdentity.key(
+                        itemId: history.mediaKey,
+                        pluginId: history.pluginId,
+                        mediaKind: history.mediaKind
+                    )
                 return HistorySemanticKey(
                     mediaIdentity: identity,
                     chapterKey: history.chapterKey,
@@ -305,7 +322,8 @@ nonisolated struct BackupMergeOperation: Sendable {
                 let semanticKey = HistorySemanticKey(
                     mediaIdentity: ImportedMediaIdentity.key(
                         itemId: disposition.importedItem.id,
-                        pluginId: disposition.importedItem.pluginId
+                        pluginId: disposition.importedItem.pluginId,
+                        mediaKind: disposition.importedItem.effectiveType
                     ),
                     chapterKey: history.chapterKey,
                     readAt: history.readAt
@@ -351,12 +369,13 @@ nonisolated struct BackupMergeOperation: Sendable {
         localItems: [LibraryItem]
     ) throws -> [ItemDisposition] {
         let localIndex = Dictionary(grouping: localItems) {
-            ImportedMediaIdentity.key(itemId: $0.id, pluginId: $0.pluginId)
+            ImportedMediaIdentity.key(itemId: $0.id, pluginId: $0.pluginId, mediaKind: $0.effectiveType)
         }
         return try importedItems.map { importedItem in
             let identity = ImportedMediaIdentity.key(
                 itemId: importedItem.id,
-                pluginId: importedItem.pluginId
+                pluginId: importedItem.pluginId,
+                mediaKind: importedItem.effectiveType
             )
             let matches = localIndex[identity] ?? []
             guard matches.count <= 1 else {

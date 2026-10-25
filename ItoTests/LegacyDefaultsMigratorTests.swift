@@ -140,7 +140,7 @@ struct LegacyDefaultsMigratorTests {
         try fixture.database.dbPool.write { db in
             for item in items { try item.insert(db) }
             try UpdateBadgeRecord(
-                pluginId: "one", canonicalMediaId: "conflict", count: 9,
+                pluginId: "one", canonicalMediaId: "conflict", mediaKind: .manga, count: 9,
                 updatedAt: nil, provenance: .runtime
             ).insert(db)
         }
@@ -701,11 +701,21 @@ struct LegacyDefaultsMigratorTests {
         }
     }
 
-    @Test func registryAndImporterAliasPrefixesUniquelyAttributeMediaState() throws {
+    @Test(arguments: [MediaKind?.none, .novel])
+    func aliasPrefixesAttributeMediaStateOnlyWhenThePluginDeclaresOneKind(declaredKind: MediaKind?) throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         try fixture.database.dbPool.write { db in
+            if let declaredKind {
+                try RepositoryRecord(
+                    url: "https://example.com/index.json",
+                    lastFetched: now,
+                    indexPayload: try JSONSerialization.data(withJSONObject: [
+                        "packages": [["id": "canonical.plugin", "type": declaredKind.rawValue]]
+                    ])
+                ).insert(db)
+            }
             try PluginIdentityRecord(
                 pluginId: "canonical.plugin",
                 manifestId: "manifest.plugin",
@@ -736,11 +746,24 @@ struct LegacyDefaultsMigratorTests {
         try fixture.migrator().migrate()
 
         try fixture.database.dbPool.read { db in
+            let unresolved = try LegacyUnscopedMediaStateRecord.order(Column("legacyMediaId")).fetchAll(db)
+            guard let declaredKind else {
+                #expect(try UpdateBadgeRecord.fetchCount(db) == 0)
+                #expect(unresolved.map(\.legacyMediaId) == ["filename.plugin_first", "foreign.plugin_second"])
+                for (record, canonicalMediaID) in zip(unresolved, ["first", "second"]) {
+                    let candidates = try JSONDecoder().decode([MediaIdentity].self, from: record.candidates)
+                    #expect(Set(candidates) == Set(MediaKind.allCases.map {
+                        MediaIdentity(pluginId: "canonical.plugin", canonicalMediaId: canonicalMediaID, mediaKind: $0)
+                    }))
+                }
+                return
+            }
             let badges = try UpdateBadgeRecord.order(Column("canonicalMediaId")).fetchAll(db)
             #expect(badges.map(\.pluginId) == ["canonical.plugin", "canonical.plugin"])
             #expect(badges.map(\.canonicalMediaId) == ["first", "second"])
+            #expect(badges.map(\.mediaKind) == [declaredKind, declaredKind])
             #expect(badges.map(\.count) == [2, 3])
-            #expect(try LegacyUnscopedMediaStateRecord.fetchCount(db) == 0)
+            #expect(unresolved.isEmpty)
         }
     }
 
@@ -828,6 +851,7 @@ private final class Fixture {
             title: "History",
             coverUrl: nil,
             pluginId: pluginID,
+            mediaKind: .manga,
             chapterKey: "chapter",
             chapterTitle: nil,
             readAt: Date(timeIntervalSince1970: 1_700_000_000)

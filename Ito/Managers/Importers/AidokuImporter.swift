@@ -223,6 +223,7 @@ public struct AidokuImporter: BackupImporter {
                     title: "Unknown Title", // We recover title asynchronously via DB later or UI
                     coverUrl: nil,
                     pluginId: resolvedPluginId,
+                    mediaKind: .manga,
                     chapterKey: hist.chapterId,
                     chapterTitle: "Chapter \(hist.progress ?? 0)",
                     readAt: hist.dateRead

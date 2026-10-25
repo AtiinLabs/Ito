@@ -119,11 +119,10 @@ final class NovelReaderViewModel: ObservableObject {
         self.entry = entry
         currentChapter = initialChapter
         self.dependencies = dependencies
-        mediaIdentity = MediaIdentity(pluginId: pluginID, itemId: entry.key)
+        mediaIdentity = MediaIdentity(pluginId: pluginID, canonicalMediaId: entry.key, mediaKind: entry.kind)
         completionContext = dependencies.progress.captureCompletionContext(
             media: mediaIdentity,
-            mediaKey: entry.key,
-            kind: entry.completionKind
+            mediaKey: entry.key
         )
 
         let settings = dependencies.settings.novelReaderSettings
