@@ -35,14 +35,16 @@ final class MultiKindDurableIdentityTests: XCTestCase {
             novel: Novel(key: "42", title: "Novel 42"), pluginId: "source.multi"
         )
 
-        XCTAssertEqual(manager.savedItemID(sourceItemID: "42", pluginId: "source.multi", mediaKind: .manga), mangaID)
-        XCTAssertEqual(manager.savedItemID(sourceItemID: "42", pluginId: "source.multi", mediaKind: .novel), novelID)
-        XCTAssertNil(manager.savedItemID(sourceItemID: "42", pluginId: "source.multi", mediaKind: .anime))
+        let manga = MediaIdentity(pluginId: "source.multi", canonicalMediaId: "42", mediaKind: .manga)
+        let novel = MediaIdentity(pluginId: "source.multi", canonicalMediaId: "42", mediaKind: .novel)
+        XCTAssertEqual(manager.savedItemID(media: manga), mangaID)
+        XCTAssertEqual(manager.savedItemID(media: novel), novelID)
+        XCTAssertNil(manager.savedItemID(media: MediaIdentity(pluginId: "source.multi", canonicalMediaId: "42", mediaKind: .anime)))
 
-        try await manager.removeItemDurably(id: "42", pluginId: "source.multi", mediaKind: .manga)
+        try await manager.removeItemDurably(media: manga)
 
-        XCTAssertNil(manager.savedItemID(sourceItemID: "42", pluginId: "source.multi", mediaKind: .manga))
-        XCTAssertEqual(manager.savedItemID(sourceItemID: "42", pluginId: "source.multi", mediaKind: .novel), novelID)
+        XCTAssertNil(manager.savedItemID(media: manga))
+        XCTAssertEqual(manager.savedItemID(media: novel), novelID)
 
         let remaining = try await database.dbPool.read { db in
             try LibraryItem.filter(Column("pluginId") == "source.multi").fetchAll(db)
@@ -50,6 +52,40 @@ final class MultiKindDurableIdentityTests: XCTestCase {
         XCTAssertEqual(remaining.count, 1)
         XCTAssertEqual(remaining.first?.effectiveType, .novel)
         XCTAssertEqual(remaining.first?.id, novelID)
+    }
+
+    func testRawKeysShapedLikeLocalIdsStayDistinctThroughSaveLookupAndUnsave() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let manager = LibraryManager(dbPool: database.dbPool, observationScheduler: ManualLibraryObservationScheduler())
+        // The plugin's own key happens to look like a legacy `pluginId_key` library id.
+        let prefixedID = try await manager.saveMangaDurably(
+            manga: Manga(key: "q_42", title: "Prefixed"), pluginId: "q"
+        )
+        let plainID = try await manager.saveMangaDurably(
+            manga: Manga(key: "42", title: "Plain"), pluginId: "q"
+        )
+
+        XCTAssertNotEqual(prefixedID, plainID)
+        let stored = try await database.dbPool.read { db in
+            try LibraryItem.filter(Column("pluginId") == "q").fetchAll(db)
+        }
+        XCTAssertEqual(
+            Dictionary(uniqueKeysWithValues: stored.map { ($0.mediaIdentity.canonicalMediaId, $0.title) }),
+            ["q_42": "Prefixed", "42": "Plain"]
+        )
+        let prefixed = MediaIdentity(pluginId: "q", canonicalMediaId: "q_42", mediaKind: .manga)
+        let plain = MediaIdentity(pluginId: "q", canonicalMediaId: "42", mediaKind: .manga)
+        XCTAssertEqual(manager.savedItemID(media: prefixed), prefixedID)
+        XCTAssertEqual(manager.savedItemID(media: plain), plainID)
+        XCTAssertTrue(manager.state.isSaved(media: prefixed))
+
+        // Unsaving one leaves the other saved.
+        try await manager.unsave(media: prefixed)
+        XCTAssertNil(manager.savedItemID(media: prefixed))
+        XCTAssertFalse(manager.state.isSaved(media: prefixed))
+        XCTAssertEqual(manager.savedItemID(media: plain), plainID)
+        XCTAssertTrue(manager.state.isSaved(media: plain))
     }
 
     func testReadProgressAndPositionsDistinguishSameKeyDifferentKinds() async throws {

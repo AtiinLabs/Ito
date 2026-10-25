@@ -66,10 +66,7 @@ final class MediaDetailLibraryBoundaryTests: XCTestCase {
         XCTAssertEqual(manager.links.map(\.itemId), ["m1"])
         XCTAssertEqual(manager.links.map(\.categoryId), [uncategorized.id])
         XCTAssertTrue(
-            manager.state.isSaved(
-                media: MediaIdentity(pluginId: "plugin.test", itemId: "m1", mediaKind: .manga),
-                sourceItemID: "m1"
-            )
+            manager.state.isSaved(media: MediaIdentity(pluginId: "plugin.test", canonicalMediaId: "m1", mediaKind: .manga))
         )
     }
 
@@ -100,10 +97,7 @@ final class MediaDetailLibraryBoundaryTests: XCTestCase {
         XCTAssertEqual(count, 0)
         XCTAssertFalse(manager.items.contains { $0.id == "a1" })
         XCTAssertFalse(
-            manager.state.isSaved(
-                media: MediaIdentity(pluginId: "plugin.test", itemId: "a1", mediaKind: .anime),
-                sourceItemID: "a1"
-            )
+            manager.state.isSaved(media: MediaIdentity(pluginId: "plugin.test", canonicalMediaId: "a1", mediaKind: .anime))
         )
     }
 
@@ -126,10 +120,7 @@ final class MediaDetailLibraryBoundaryTests: XCTestCase {
         }
         XCTAssertEqual(stored.map(\.id), ["plugin.second_shared", "shared"])
         XCTAssertTrue(
-            manager.state.isSaved(
-                media: MediaIdentity(pluginId: "plugin.second", itemId: "shared", mediaKind: .manga),
-                sourceItemID: "shared"
-            )
+            manager.state.isSaved(media: MediaIdentity(pluginId: "plugin.second", canonicalMediaId: "shared", mediaKind: .manga))
         )
     }
 
@@ -141,7 +132,7 @@ final class MediaDetailLibraryBoundaryTests: XCTestCase {
             pluginId: "plugin.test"
         )
 
-        try await manager.removeItemDurably(id: "n1", pluginId: "plugin.test", mediaKind: .novel)
+        try await manager.unsave(media: MediaIdentity(pluginId: "plugin.test", canonicalMediaId: "n1", mediaKind: .novel))
 
         let stored = try await database.dbPool.read { db in
             try LibraryItem.fetchOne(db, key: "n1")
@@ -168,7 +159,7 @@ final class MediaDetailLibraryBoundaryTests: XCTestCase {
         }
 
         do {
-            try await manager.removeItemDurably(id: "m1", pluginId: "plugin.test", mediaKind: .manga)
+            try await manager.unsave(media: MediaIdentity(pluginId: "plugin.test", canonicalMediaId: "m1", mediaKind: .manga))
             XCTFail("Expected durable unsave failure")
         } catch {}
 

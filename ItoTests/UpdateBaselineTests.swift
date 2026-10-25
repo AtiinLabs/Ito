@@ -178,7 +178,7 @@ struct UpdateBaselineTests {
         library.configure(updateManager: manager)
         #expect(await successfulUpdate(manager, item: item, freshCount: 12) == 2)
 
-        try await library.removeItemDurably(id: item.id, pluginId: item.pluginId, mediaKind: item.effectiveType)
+        try await library.removeItemDurably(itemID: item.id, pluginId: item.pluginId, mediaKind: item.effectiveType)
 
         #expect(manager.totalBadgeCount == 0)
         let badgeRows = try await database.dbPool.read { db in try UpdateBadgeRecord.fetchCount(db) }

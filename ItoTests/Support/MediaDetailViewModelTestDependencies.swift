@@ -94,7 +94,7 @@ final class MediaDetailLibraryFake: MediaDetailLibraryServing {
     private var pendingSaves: [CheckedContinuation<Void, any Error>] = []
     private var pendingUnsaves: [CheckedContinuation<Void, any Error>] = []
     private(set) var saveKinds: [SaveKind] = []
-    private(set) var unsaveRequests: [(sourceItemID: String, pluginID: String, mediaKind: MediaKind)] = []
+    private(set) var unsaveRequests: [MediaIdentity] = []
     private(set) var refreshCount = 0
 
     init(
@@ -128,16 +128,15 @@ final class MediaDetailLibraryFake: MediaDetailLibraryServing {
         return try await performSave(itemID: novel.key, pluginID: pluginID, mediaKind: .novel)
     }
 
-    func unsave(sourceItemID: String, pluginID: String, mediaKind: MediaKind) async throws {
-        unsaveRequests.append((sourceItemID, pluginID, mediaKind))
+    func unsave(media: MediaIdentity) async throws {
+        unsaveRequests.append(media)
         if let unsaveError { throw unsaveError }
         if suspendUnsave {
             try await withCheckedThrowingContinuation { pendingUnsaves.append($0) }
         }
-        let possible = Set([sourceItemID, "\(pluginID)_\(sourceItemID)", "\(pluginID)\u{1F}\(mediaKind.rawValue)\u{1F}\(sourceItemID)"])
         publish(
             records: state.records.filter {
-                !($0.pluginID == pluginID && $0.mediaKind == mediaKind && possible.contains($0.itemID))
+                MediaIdentity(pluginId: $0.pluginID, itemId: $0.itemID, mediaKind: $0.mediaKind) != media
             },
             hasCustomCategories: state.hasCustomCategories
         )

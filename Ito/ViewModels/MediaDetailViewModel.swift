@@ -201,7 +201,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
 
         let identity = MediaIdentity(pluginId: pluginID, canonicalMediaId: media.key, mediaKind: media.mediaKind)
         let libraryState = dependencies.library.state
-        isSaved = libraryState.isSaved(media: identity, sourceItemID: media.key)
+        isSaved = libraryState.isSaved(media: identity)
         hasCustomCategories = libraryState.hasCustomCategories
         let trackerState = dependencies.tracker.state(for: identity, isAnime: media is Anime)
         isTrackingAvailable = trackerState.isAvailable
@@ -382,11 +382,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
                 savedItemID = try await save(sourceMedia)
             } else {
                 savedItemID = nil
-                try await dependencies.library.unsave(
-                    sourceItemID: sourceKey,
-                    pluginID: pluginID,
-                    mediaKind: sourceMedia.mediaKind
-                )
+                try await dependencies.library.unsave(media: sourceIdentity)
             }
             guard isCurrentLibraryMutation(
                 operationID,
@@ -796,7 +792,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     private func applyLibraryState(_ state: MediaDetailLibraryState) {
-        isSaved = state.isSaved(media: mediaIdentity, sourceItemID: media.key)
+        isSaved = state.isSaved(media: mediaIdentity)
         hasCustomCategories = state.hasCustomCategories
     }
 

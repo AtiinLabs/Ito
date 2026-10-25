@@ -44,7 +44,7 @@ extension LibraryManager: LibraryRootServing {
     }
 
     func removeItem(itemID: String, pluginID: String, mediaKind: MediaKind) async throws {
-        try await removeItemDurably(id: itemID, pluginId: pluginID, mediaKind: mediaKind)
+        try await removeItemDurably(itemID: itemID, pluginId: pluginID, mediaKind: mediaKind)
     }
 }
 

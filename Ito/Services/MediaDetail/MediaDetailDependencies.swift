@@ -13,14 +13,11 @@ struct MediaDetailLibraryState: Equatable {
     let records: [MediaDetailLibraryRecord]
     let hasCustomCategories: Bool
 
-    func isSaved(media: MediaIdentity, sourceItemID: String) -> Bool {
-        let possibleIDs = [
-            sourceItemID,
-            "\(media.pluginId)_\(sourceItemID)",
-            "\(media.pluginId)\u{1F}\(media.mediaKind.rawValue)\u{1F}\(sourceItemID)"
-        ]
-        return records.contains {
-            $0.pluginID == media.pluginId && $0.mediaKind == media.mediaKind && possibleIDs.contains($0.itemID)
+    /// Whether this media is saved. Stored ids are decoded to their media; the plugin's key is
+    /// never treated as a stored id, even when it looks like one.
+    func isSaved(media: MediaIdentity) -> Bool {
+        records.contains {
+            MediaIdentity(pluginId: $0.pluginID, itemId: $0.itemID, mediaKind: $0.mediaKind) == media
         }
     }
 }
@@ -33,7 +30,7 @@ protocol MediaDetailLibraryServing: AnyObject {
     func saveManga(_ manga: Manga, pluginID: String) async throws -> String
     func saveAnime(_ anime: Anime, pluginID: String) async throws -> String
     func saveNovel(_ novel: Novel, pluginID: String) async throws -> String
-    func unsave(sourceItemID: String, pluginID: String, mediaKind: MediaKind) async throws
+    func unsave(media: MediaIdentity) async throws
     func refresh() async throws
 }
 
@@ -72,8 +69,8 @@ extension LibraryManager: MediaDetailLibraryServing {
         try await saveNovelDurably(novel: novel, pluginId: pluginID)
     }
 
-    func unsave(sourceItemID: String, pluginID: String, mediaKind: MediaKind) async throws {
-        try await removeItemDurably(id: sourceItemID, pluginId: pluginID, mediaKind: mediaKind)
+    func unsave(media: MediaIdentity) async throws {
+        try await removeItemDurably(media: media)
     }
 
     func refresh() async throws {

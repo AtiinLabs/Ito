@@ -130,7 +130,9 @@ public class HistoryManager: ObservableObject {
     func recordManga(_ manga: Manga, chapterKey: String, chapterTitle: String, pluginId: String) -> Task<Void, Never>? {
         guard settingsStore?.incognitoMode == false else { return nil }
 
-        let libraryItemId = libraryManager.savedItemID(sourceItemID: manga.key, pluginId: pluginId, mediaKind: .manga)
+        let libraryItemId = libraryManager.savedItemID(
+            media: MediaIdentity(pluginId: pluginId, canonicalMediaId: manga.key, mediaKind: .manga)
+        )
 
         let record = ReadingHistoryRecord(
             libraryItemId: libraryItemId,
@@ -153,7 +155,9 @@ public class HistoryManager: ObservableObject {
     func recordNovel(_ novel: Novel, chapterKey: String, chapterTitle: String, pluginId: String) -> Task<Void, Never>? {
         guard settingsStore?.incognitoMode == false else { return nil }
 
-        let libraryItemId = libraryManager.savedItemID(sourceItemID: novel.key, pluginId: pluginId, mediaKind: .novel)
+        let libraryItemId = libraryManager.savedItemID(
+            media: MediaIdentity(pluginId: pluginId, canonicalMediaId: novel.key, mediaKind: .novel)
+        )
 
         let record = ReadingHistoryRecord(
             libraryItemId: libraryItemId,
@@ -176,7 +180,9 @@ public class HistoryManager: ObservableObject {
     func recordAnime(_ anime: Anime, episodeKey: String, episodeTitle: String, pluginId: String) -> Task<Void, Never>? {
         guard settingsStore?.incognitoMode == false else { return nil }
 
-        let libraryItemId = libraryManager.savedItemID(sourceItemID: anime.key, pluginId: pluginId, mediaKind: .anime)
+        let libraryItemId = libraryManager.savedItemID(
+            media: MediaIdentity(pluginId: pluginId, canonicalMediaId: anime.key, mediaKind: .anime)
+        )
 
         let record = ReadingHistoryRecord(
             libraryItemId: libraryItemId,

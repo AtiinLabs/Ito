@@ -161,17 +161,10 @@ public class LibraryManager: ObservableObject {
 
     // MARK: - Saved Media Lookup
 
-    public func savedItemID(sourceItemID: String, pluginId: String, mediaKind: MediaKind) -> String? {
-        let rawID = ImportedMediaIdentity.canonicalMediaId(itemId: sourceItemID, pluginId: pluginId, mediaKind: mediaKind)
-        let candidateIDs = [
-            sourceItemID,
-            rawID,
-            "\(pluginId)_\(rawID)",
-            "\(pluginId)\u{1F}\(mediaKind.rawValue)\u{1F}\(rawID)"
-        ]
-        return items.first { item in
-            item.pluginId == pluginId && item.effectiveType == mediaKind && candidateIDs.contains(item.id)
-        }?.id
+    /// The library item saved for this media, matched by identity. The media key is the plugin's
+    /// own key: it is never decoded as a local id, even when it looks like one.
+    public func savedItemID(media: MediaIdentity) -> String? {
+        items.first { $0.mediaIdentity == media }?.id
     }
 
     // MARK: - Awaitable Media Detail Mutations
@@ -179,7 +172,7 @@ public class LibraryManager: ObservableObject {
     func saveMangaDurably(manga: Manga, pluginId: String) async throws -> String {
         let payload = try JSONEncoder().encode(manga)
         return try await saveItemDurably(
-            sourceItemID: manga.key,
+            media: MediaIdentity(pluginId: pluginId, canonicalMediaId: manga.key, mediaKind: .manga),
             item: LibraryItem(
                 id: manga.key,
                 title: manga.title,
@@ -197,7 +190,7 @@ public class LibraryManager: ObservableObject {
     func saveAnimeDurably(anime: Anime, pluginId: String) async throws -> String {
         let payload = try JSONEncoder().encode(anime)
         return try await saveItemDurably(
-            sourceItemID: anime.key,
+            media: MediaIdentity(pluginId: pluginId, canonicalMediaId: anime.key, mediaKind: .anime),
             item: LibraryItem(
                 id: anime.key,
                 title: anime.title,
@@ -215,7 +208,7 @@ public class LibraryManager: ObservableObject {
     func saveNovelDurably(novel: Novel, pluginId: String) async throws -> String {
         let payload = try JSONEncoder().encode(novel)
         return try await saveItemDurably(
-            sourceItemID: novel.key,
+            media: MediaIdentity(pluginId: pluginId, canonicalMediaId: novel.key, mediaKind: .novel),
             item: LibraryItem(
                 id: novel.key,
                 title: novel.title,
@@ -230,19 +223,37 @@ public class LibraryManager: ObservableObject {
         )
     }
 
-    /// Removes a series and its new-chapter badge in one transaction.
-    func removeItemDurably(id: String, pluginId: String, mediaKind: MediaKind) async throws {
-        let rawID = ImportedMediaIdentity.canonicalMediaId(itemId: id, pluginId: pluginId, mediaKind: mediaKind)
-        let candidates = ImportedMediaIdentity.localItemIDs(pluginId: pluginId, canonicalMediaId: rawID, mediaKind: mediaKind)
+    /// Removes the saved item of this media and its new-chapter badge in one transaction.
+    func removeItemDurably(media: MediaIdentity) async throws {
+        let candidates = ImportedMediaIdentity.localItemIDs(
+            pluginId: media.pluginId,
+            canonicalMediaId: media.canonicalMediaId,
+            mediaKind: media.mediaKind
+        )
+        try await removeItemsDurably { db in
+            try candidates.compactMap { try LibraryItem.fetchOne(db, key: $0) }
+                .filter { $0.mediaIdentity == media }
+        }
+    }
+
+    /// Removes the library item stored under exactly this id, when it still belongs to this
+    /// source and kind, and its new-chapter badge in one transaction.
+    func removeItemDurably(itemID: String, pluginId: String, mediaKind: MediaKind) async throws {
+        try await removeItemsDurably { db in
+            guard let existing = try LibraryItem.fetchOne(db, key: itemID),
+                  existing.pluginId == pluginId,
+                  existing.effectiveType == mediaKind else { return [] }
+            return [existing]
+        }
+    }
+
+    private func removeItemsDurably(_ select: @escaping @Sendable (Database) throws -> [LibraryItem]) async throws {
         let publicationClock = publicationClock
         let (publication, removedMedia) = try await dbPool.write { db in
             var removedMedia: [MediaIdentity] = []
-            for candidateID in candidates {
-                guard let existing = try LibraryItem.fetchOne(db, key: candidateID),
-                      existing.pluginId == pluginId,
-                      existing.effectiveType == mediaKind else { continue }
+            for existing in try select(db) {
                 try existing.delete(db)
-                let media = MediaIdentity(pluginId: pluginId, canonicalMediaId: rawID, mediaKind: mediaKind)
+                let media = existing.mediaIdentity
                 try UpdateBadgeRecord
                     .filter(Column("pluginId") == media.pluginId)
                     .filter(Column("canonicalMediaId") == media.canonicalMediaId)
@@ -262,14 +273,13 @@ public class LibraryManager: ObservableObject {
     }
 
     private func saveItemDurably(
-        sourceItemID: String,
+        media: MediaIdentity,
         item: LibraryItem
     ) async throws -> String {
-        let rawID = ImportedMediaIdentity.canonicalMediaId(itemId: sourceItemID, pluginId: item.pluginId, mediaKind: item.effectiveType)
         let candidateIDs = ImportedMediaIdentity.localItemIDs(
-            pluginId: item.pluginId,
-            canonicalMediaId: rawID,
-            mediaKind: item.effectiveType
+            pluginId: media.pluginId,
+            canonicalMediaId: media.canonicalMediaId,
+            mediaKind: media.mediaKind
         )
         let publicationClock = publicationClock
         let mutation = try await dbPool.write { db in
@@ -277,18 +287,20 @@ public class LibraryManager: ObservableObject {
             for id in candidateIDs {
                 occupants[id] = try LibraryItem.fetchOne(db, key: id)
             }
+            // Only an item of exactly this media is reused; another media of the same source
+            // and kind may hold one of the candidate ids.
             let ownedItem = candidateIDs
                 .compactMap { occupants[$0] }
-                .first { $0.pluginId == item.pluginId && $0.effectiveType == item.effectiveType }
+                .first { $0.mediaIdentity == media }
             let storedItem: LibraryItem
             if let ownedItem {
                 storedItem = ownedItem
             } else {
                 guard let id = ImportedMediaIdentity.newItemID(
                     preferred: nil,
-                    pluginId: item.pluginId,
-                    canonicalMediaId: rawID,
-                    mediaKind: item.effectiveType,
+                    pluginId: media.pluginId,
+                    canonicalMediaId: media.canonicalMediaId,
+                    mediaKind: media.mediaKind,
                     occupant: { occupants[$0].map { ($0.pluginId, $0.effectiveType) } }
                 ) else {
                     throw DurableMutationError.identifierCollision
