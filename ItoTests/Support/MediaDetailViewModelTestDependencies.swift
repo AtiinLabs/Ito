@@ -361,7 +361,6 @@ final class MediaDetailRelinkFake: MediaDetailRelinkServing {
 @MainActor
 final class MediaDetailBaselineFake: MediaDetailBaselineAdvancing {
     struct Request {
-        let itemID: String
         let media: MediaIdentity
         let knownChapterCount: Int
     }
@@ -370,18 +369,8 @@ final class MediaDetailBaselineFake: MediaDetailBaselineAdvancing {
     private(set) var requests: [Request] = []
     private(set) var refreshCount = 0
 
-    func advanceBaseline(
-        itemID: String,
-        media: MediaIdentity,
-        knownChapterCount: Int
-    ) async throws {
-        requests.append(
-            Request(
-                itemID: itemID,
-                media: media,
-                knownChapterCount: knownChapterCount
-            )
-        )
+    func advanceBaseline(media: MediaIdentity, knownChapterCount: Int) async throws {
+        requests.append(Request(media: media, knownChapterCount: knownChapterCount))
         if let error { throw error }
     }
 

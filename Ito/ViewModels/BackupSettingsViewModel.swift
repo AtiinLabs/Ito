@@ -850,6 +850,8 @@ final class BackupSettingsViewModel: ObservableObject {
             return "Ito is still preparing your library. Try again in a moment."
         case BackupMergeError.ambiguousLocalIdentity:
             return "A series in the backup matches more than one series in your library, so nothing was merged."
+        case BackupMergeError.noFreeLibraryID:
+            return "A series in the backup could not be given a place in your library, so nothing was merged."
         case BackupMergeError.invalidReplacementCategoryReference:
             return "A series in the backup belongs to a list that could not be found, so nothing was merged."
         default:

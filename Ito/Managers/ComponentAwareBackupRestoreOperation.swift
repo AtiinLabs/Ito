@@ -830,6 +830,11 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         }
         var seenImportedIdentities = Set<ImportedMediaIdentity.Key>()
         var dispositions: [ItemDisposition] = []
+        // Ids already taken, so a new item never lands on (and replaces) a different series.
+        var occupants = Dictionary(
+            localItems.map { ($0.id, (pluginId: $0.pluginId, mediaKind: $0.effectiveType)) },
+            uniquingKeysWith: { first, _ in first }
+        )
 
         for item in backup.items.sorted(by: { $0.id < $1.id }) {
             let identity = ImportedMediaIdentity.key(
@@ -854,13 +859,26 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                     )
                 )
             }
-            dispositions.append(
-                ItemDisposition(
-                    imported: item,
-                    targetId: localMatches.first?.id ?? item.id,
-                    isPreexisting: !localMatches.isEmpty
+            if let match = localMatches.first {
+                dispositions.append(ItemDisposition(imported: item, targetId: match.id, isPreexisting: true))
+                continue
+            }
+            guard let targetId = ImportedMediaIdentity.newItemID(
+                preferred: item.id,
+                pluginId: identity.pluginId,
+                canonicalMediaId: identity.canonicalMediaId,
+                mediaKind: identity.mediaKind,
+                occupant: { occupants[$0] }
+            ) else {
+                throw rejection(
+                    .mediaIdentityCollision(
+                        pluginId: identity.pluginId,
+                        canonicalMediaId: identity.canonicalMediaId
+                    )
                 )
-            )
+            }
+            occupants[targetId] = (pluginId: identity.pluginId, mediaKind: identity.mediaKind)
+            dispositions.append(ItemDisposition(imported: item, targetId: targetId, isPreexisting: false))
         }
 
         let targetIdByImportedId = Dictionary(

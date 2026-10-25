@@ -198,27 +198,11 @@ extension LibrarySourceRemapper: MediaDetailRelinkServing {
 
 @MainActor
 protocol MediaDetailBaselineAdvancing: AnyObject {
-    func advanceBaseline(
-        itemID: String,
-        media: MediaIdentity,
-        knownChapterCount: Int
-    ) async throws
+    func advanceBaseline(media: MediaIdentity, knownChapterCount: Int) async throws
     func refresh() async throws
 }
 
 extension UpdateManager: MediaDetailBaselineAdvancing {
-    func advanceBaseline(
-        itemID: String,
-        media: MediaIdentity,
-        knownChapterCount: Int
-    ) async throws {
-        try await advanceBaseline(
-            for: itemID,
-            media: media,
-            knownChapterCount: knownChapterCount
-        )
-    }
-
     func refresh() async throws {
         try await reload()
     }

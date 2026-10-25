@@ -777,7 +777,6 @@ final class MediaDetailViewModelTests: XCTestCase {
         saved.viewModel.start()
         saved.viewModel.start()
         await waitUntil { saved.baseline.requests.count == 1 }
-        XCTAssertEqual(saved.baseline.requests.first?.itemID, "m1")
         XCTAssertEqual(saved.baseline.requests.first?.media, saved.viewModel.mediaIdentity)
         XCTAssertEqual(saved.baseline.requests.first?.knownChapterCount, 2)
         saved.viewModel.appear()
@@ -808,10 +807,11 @@ final class MediaDetailViewModelTests: XCTestCase {
         subject.viewModel.openRelink()
         await waitUntil { subject.viewModel.relinkSearchState == .results }
         await subject.viewModel.performRelink(with: selected)
-        await waitUntil { subject.baseline.requests.contains { $0.itemID == "m2" } }
+        let relinked = MediaIdentity(pluginId: Self.pluginID, itemId: "m2", mediaKind: .manga)
+        await waitUntil { subject.baseline.requests.contains { $0.media == relinked } }
 
         let current = subject.baseline.requests.last
-        XCTAssertEqual(current?.media, MediaIdentity(pluginId: Self.pluginID, itemId: "m2", mediaKind: .manga))
+        XCTAssertEqual(current?.media, relinked)
         XCTAssertEqual(current?.knownChapterCount, 2)
     }
 

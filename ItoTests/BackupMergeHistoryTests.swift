@@ -543,12 +543,13 @@ struct BackupMergeHistoryTests {
         }
     }
 
-    @Test func sameKeyDifferentKindItemsMergeWithoutCollision() async throws {
+    @Test func backupItemOfAnotherKindSavedUnderTheLocalItemsIdMergesBesideIt() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
 
+        // Each device saved its series under the bare key, as LibraryManager does.
         let mangaItem = LibraryItem(
-            id: "test.plugin\u{1F}manga\u{1F}42",
+            id: "42",
             title: "Manga 42",
             coverUrl: nil,
             pluginId: "test.plugin",
@@ -558,7 +559,7 @@ struct BackupMergeHistoryTests {
             anilistId: nil
         )
         let novelItem = LibraryItem(
-            id: "test.plugin\u{1F}novel\u{1F}42",
+            id: "42",
             title: "Novel 42",
             coverUrl: nil,
             pluginId: "test.plugin",
@@ -598,15 +599,20 @@ struct BackupMergeHistoryTests {
         #expect(result.insertedHistoryCount == 1)
         #expect(result.skippedDuplicateHistoryCount == 0)
 
+        let novelTargetID = "test.plugin\u{1F}novel\u{1F}42"
         try await database.dbPool.read { db in
-            let items = try LibraryItem.fetchAll(db)
-            #expect(items.count == 2)
-            #expect(Set(items.map(\.id)) == [mangaItem.id, novelItem.id])
+            #expect(try LibraryItem.fetchOne(db, key: "42") == mangaItem)
+            let mergedNovel = try #require(try LibraryItem.fetchOne(db, key: novelTargetID))
+            #expect(mergedNovel.title == novelItem.title)
+            #expect(mergedNovel.effectiveType == .novel)
+            #expect(try LibraryItem.fetchCount(db) == 2)
 
             let histories = try ReadingHistoryRecord.fetchAll(db)
             #expect(histories.count == 2)
-            #expect(histories.first(where: { $0.id == "manga-history" })?.mediaKind == .manga)
-            #expect(histories.first(where: { $0.id == "novel-history" })?.mediaKind == .novel)
+            #expect(try ReadingHistoryRecord.fetchOne(db, key: "manga-history") == mangaHistory)
+            let mergedHistory = try #require(try ReadingHistoryRecord.fetchOne(db, key: "novel-history"))
+            #expect(mergedHistory.libraryItemId == novelTargetID)
+            #expect(mergedHistory.mediaKind == .novel)
         }
     }
 

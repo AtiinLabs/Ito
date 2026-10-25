@@ -48,32 +48,23 @@ nonisolated public enum TaggedDatabaseValue: Codable, Equatable, Sendable {
         case "text":
             self = .text(try container.decode(String.self, forKey: .value))
         case "blob":
-            self = .blob(try container.decode(String.self, forKey: .value))
-        default:
-            self = .null
-        }
-    }
-
-    public var databaseValue: DatabaseValue {
-        switch self {
-        case .null:
-            return .null
-        case .integer(let v):
-            return v.databaseValue
-        case .float(let v):
-            return v.databaseValue
-        case .text(let v):
-            return v.databaseValue
-        case .blob(let v):
-            if let data = Data(base64Encoded: v) {
-                return data.databaseValue
+            let encoded = try container.decode(String.self, forKey: .value)
+            guard Data(base64Encoded: encoded) != nil else {
+                throw DecodingError.dataCorruptedError(forKey: .value, in: container, debugDescription: "Invalid base64 blob")
             }
-            return .null
+            self = .blob(encoded)
+        default:
+            throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Unknown value type")
         }
     }
 }
 
 nonisolated public struct LegacyMediaKindResolver: Sendable {
+    /// The tables whose rows v15 keys by kind, and whose kindless rows may be archived as `kindUnknown`.
+    public static let kindScopedTables: Set<String> = [
+        "readProgressKey", "readProgressNumber", "mediaReadProgress", "trackerLink", "updateBadge", "readingHistory"
+    ]
+
     private struct EvidenceKey: Hashable {
         let pluginId: String
         let mediaId: String
@@ -102,10 +93,10 @@ nonisolated public struct LegacyMediaKindResolver: Sendable {
         if try db.tableExists("libraryItem") {
             let rows = try Row.fetchAll(db, sql: "SELECT id, pluginId, pluginType, isAnime FROM libraryItem")
             for row in rows {
-                guard let id = row["id"] as String?,
-                      let pluginId = row["pluginId"] as String? else { continue }
-                let pluginType = row["pluginType"] as String?
-                let isAnime = (row["isAnime"] as Int?) ?? 0
+                guard let id: String = Self.value(row, "id"),
+                      let pluginId: String = Self.value(row, "pluginId") else { continue }
+                let pluginType: String? = Self.value(row, "pluginType")
+                let isAnime: Int = Self.value(row, "isAnime") ?? 0
                 let kind: MediaKind = (pluginType.flatMap { MediaKind(rawValue: $0) }) ?? (isAnime != 0 ? .anime : .manga)
                 itemsById[id] = (pluginId: pluginId, kind: kind)
                 addEvidence(pluginId: pluginId, mediaId: id, kind: kind)
@@ -120,9 +111,9 @@ nonisolated public struct LegacyMediaKindResolver: Sendable {
         if try db.tableExists("sourceMapping") {
             let rows = try Row.fetchAll(db, sql: "SELECT pluginId, pluginMediaKey, mediaType FROM sourceMapping")
             for row in rows {
-                guard let pluginId = row["pluginId"] as String?,
-                      let pluginMediaKey = row["pluginMediaKey"] as String?,
-                      let mediaType = row["mediaType"] as String?,
+                guard let pluginId: String = Self.value(row, "pluginId"),
+                      let pluginMediaKey: String = Self.value(row, "pluginMediaKey"),
+                      let mediaType: String = Self.value(row, "mediaType"),
                       let kind = MediaKind(rawValue: mediaType) else { continue }
                 addEvidence(pluginId: pluginId, mediaId: pluginMediaKey, kind: kind)
             }
@@ -132,13 +123,13 @@ nonisolated public struct LegacyMediaKindResolver: Sendable {
         if try db.tableExists("pluginCompletionOutbox") {
             let rows = try Row.fetchAll(db, sql: "SELECT pluginId, canonicalMediaId, mediaKey, kind FROM pluginCompletionOutbox")
             for row in rows {
-                guard let pluginId = row["pluginId"] as String?,
-                      let kindStr = row["kind"] as String?,
+                guard let pluginId: String = Self.value(row, "pluginId"),
+                      let kindStr: String = Self.value(row, "kind"),
                       let kind = MediaKind(rawValue: kindStr) else { continue }
-                if let canonicalMediaId = row["canonicalMediaId"] as String? {
+                if let canonicalMediaId: String = Self.value(row, "canonicalMediaId") {
                     addEvidence(pluginId: pluginId, mediaId: canonicalMediaId, kind: kind)
                 }
-                if let mediaKey = row["mediaKey"] as String? {
+                if let mediaKey: String = Self.value(row, "mediaKey") {
                     addEvidence(pluginId: pluginId, mediaId: mediaKey, kind: kind)
                 }
             }
@@ -189,6 +180,14 @@ nonisolated public struct LegacyMediaKindResolver: Sendable {
         }
     }
 
+    /// The column's value when present and of type `T`; nil for a missing column, NULL, or another type, where
+    /// GRDB's `row[column] as T?` would trap on backup data.
+    public static func value<T: DatabaseValueConvertible>(_ row: Row, _ column: String) -> T? {
+        guard row.hasColumn(column) else { return nil }
+        let databaseValue: DatabaseValue = row[column]
+        return T.fromDatabaseValue(databaseValue)
+    }
+
     public static func canonicalize(id: String, pluginId: String) -> String {
         let prefix1F = "\(pluginId)\u{1F}"
         if id.hasPrefix(prefix1F) {
@@ -220,22 +219,17 @@ nonisolated public struct LegacyMediaKindResolver: Sendable {
     }
 
     public func resolveHistory(_ row: Row) -> MediaKind? {
-        if row.hasColumn("mediaKind"),
-           let raw = row["mediaKind"] as String?,
-           let kind = MediaKind(rawValue: raw) {
+        if let raw: String = Self.value(row, "mediaKind"), let kind = MediaKind(rawValue: raw) {
             return kind
         }
-        guard let pluginId = row["pluginId"] as String?, !pluginId.isEmpty else { return nil }
-        if row.hasColumn("libraryItemId"),
-           let libraryItemId = row["libraryItemId"] as String?,
+        guard let pluginId: String = Self.value(row, "pluginId"), !pluginId.isEmpty else { return nil }
+        if let libraryItemId: String = Self.value(row, "libraryItemId"),
            !libraryItemId.isEmpty,
            let item = libraryItemsById[libraryItemId],
            item.pluginId == pluginId {
             return item.kind
         }
-        if row.hasColumn("mediaKey"),
-           let mediaKey = row["mediaKey"] as String?,
-           !mediaKey.isEmpty {
+        if let mediaKey: String = Self.value(row, "mediaKey"), !mediaKey.isEmpty {
             return resolve(pluginID: pluginId, canonicalMediaID: mediaKey)
         }
         return nil
@@ -272,24 +266,24 @@ nonisolated public struct LegacyMediaKindResolver: Sendable {
         let fingerprint = SHA256.hash(data: payload).map { String(format: "%02x", $0) }.joined()
 
         let sourceKey: String
-        if table == "readingHistory", row.hasColumn("id"), let id = row["id"] as String?, !id.isEmpty {
+        if table == "readingHistory", let id: String = value(row, "id"), !id.isEmpty {
             sourceKey = id
         } else if row.hasColumn("pluginId"), row.hasColumn("canonicalMediaId") {
-            let pId = (row["pluginId"] as String?) ?? ""
-            let cId = (row["canonicalMediaId"] as String?) ?? ""
+            let pId: String = value(row, "pluginId") ?? ""
+            let cId: String = value(row, "canonicalMediaId") ?? ""
             if table == "readProgressKey", row.hasColumn("chapterKey") {
-                let ch = (row["chapterKey"] as String?) ?? ""
+                let ch: String = value(row, "chapterKey") ?? ""
                 sourceKey = "\(pId)/\(cId)/\(ch)"
             } else if table == "readProgressNumber", row.hasColumn("chapterNumber") {
-                let num: String = (row["chapterNumber"] as Double?).map { String($0) } ?? ""
+                let num: String = (value(row, "chapterNumber") as Double?).map { String($0) } ?? ""
                 sourceKey = "\(pId)/\(cId)/\(num)"
             } else if table == "trackerLink", row.hasColumn("providerId") {
-                let prov = (row["providerId"] as String?) ?? ""
+                let prov: String = value(row, "providerId") ?? ""
                 sourceKey = "\(pId)/\(cId)/\(prov)"
             } else {
                 sourceKey = "\(pId)/\(cId)"
             }
-        } else if row.hasColumn("id"), let id = row["id"] as String?, !id.isEmpty {
+        } else if let id: String = value(row, "id"), !id.isEmpty {
             sourceKey = id
         } else {
             let components = columnNames.compactMap { col -> String? in

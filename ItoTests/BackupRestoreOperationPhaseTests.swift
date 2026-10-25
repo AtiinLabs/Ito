@@ -92,10 +92,8 @@ struct BackupRestoreOperationPhaseTests {
         )
     }
 
-    @Test(arguments: [BackupRestoreMode.wipe, .merge])
-    func reusedLibraryRowIdDoesNotCrossAttachRetainedHistory(
-        mode: BackupRestoreMode
-    ) async throws {
+    @Test func wipeRestoringAnotherSeriesUnderAReusedRowIdDoesNotCrossAttachRetainedHistory() async throws {
+        let mode = BackupRestoreMode.wipe
         let database = try TestDatabase()
         defer { database.cleanup() }
         let reusedId = "old_media"
@@ -158,6 +156,44 @@ struct BackupRestoreOperationPhaseTests {
         #expect(retainedHistory.libraryItemId == nil)
         #expect(state.1?.pluginId == replacement.pluginId)
         #expect(state.1?.pluginId != retainedHistory.pluginId)
+    }
+
+    @Test(arguments: [ConflictResolution?.none, .keepBackup])
+    func mergeKeepsBothSeriesWhenABackupSeriesReusesALocalRowId(resolution: ConflictResolution?) async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let reusedId = "old_media"
+        let localItem = item(id: reusedId, title: "Local", pluginId: "old")
+        let history = ReadingHistoryRecord(
+            id: "retained-history",
+            libraryItemId: reusedId,
+            mediaKey: reusedId,
+            title: "Retained History",
+            coverUrl: nil,
+            pluginId: localItem.pluginId,
+            mediaKind: localItem.effectiveType,
+            chapterKey: "chapter-7",
+            chapterTitle: nil
+        )
+        try await database.dbPool.write { db in
+            try localItem.insert(db)
+            try history.insert(db)
+        }
+        let replacement = item(id: reusedId, title: "Replacement", pluginId: "new")
+
+        let report = try await operation(database).restore(
+            representedBackup(components: [.libraryCore], items: [replacement]),
+            mode: .merge,
+            operationId: "reused-id-merge",
+            resolvedConflicts: resolution.map { [reusedId: $0] } ?? [:]
+        )
+
+        #expect(report.outcomes.first { $0.component == .libraryCore }?.inserted == 1)
+        try await database.dbPool.read { db throws in
+            #expect(try LibraryItem.fetchOne(db, key: reusedId) == localItem)
+            #expect(try LibraryItem.fetchOne(db, key: "new_old_media")?.title == "Replacement")
+            #expect(try ReadingHistoryRecord.fetchOne(db, key: history.id)?.libraryItemId == reusedId)
+        }
     }
 
     @Test func mergeIsLocalWinsWithDeterministicCounts() async throws {
@@ -826,6 +862,33 @@ struct BackupRestoreOperationPhaseTests {
                 ]
             )?.remoteMediaId == "73"
         })
+    }
+
+    @Test(arguments: [ConflictResolution?.none, .keepBackup])
+    func backupItemOfAnotherKindUnderTheLocalItemsIdIsRestoredBesideIt(
+        resolution: ConflictResolution?
+    ) async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let localManga = item(id: "media", title: "Manga")
+        try await database.dbPool.write { db in try localManga.insert(db) }
+        var backupNovel = item(id: "media", title: "Novel")
+        backupNovel.pluginType = .novel
+
+        let report = try await operation(database).restore(
+            representedBackup(components: [.libraryCore], items: [backupNovel]),
+            mode: .merge,
+            operationId: "same-id-other-kind",
+            resolvedConflicts: resolution.map { ["media": $0] } ?? [:]
+        )
+
+        #expect(report.outcomes.first { $0.component == .libraryCore }?.inserted == 1)
+        try await database.dbPool.read { db in
+            #expect(try LibraryItem.fetchOne(db, key: "media") == localManga)
+            let restored = try #require(try LibraryItem.fetchOne(db, key: "plugin\u{1F}novel\u{1F}media"))
+            #expect(restored.title == "Novel")
+            #expect(restored.effectiveType == .novel)
+        }
     }
 
     @Test func sourceAwareArchivesAreIdempotentAndKeepDistinctSources() async throws {

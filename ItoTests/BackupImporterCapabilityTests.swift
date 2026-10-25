@@ -741,6 +741,74 @@ struct BackupImporterCapabilityTests {
         }
     }
 
+    @MainActor
+    @Test func olderCapabilityBackupRepresentsTheArchiveItCreatesForUnprovableRows() async throws {
+        let fixture = try TemporaryBackupFixture(extension: "itobackup")
+        defer { fixture.cleanup() }
+        try fixture.withDatabase { db in
+            try createMetadataTables(in: db)
+            try BackupMetadataRecord(formatVersion: 1, createdAt: Date(timeIntervalSince1970: 1)).insert(db)
+            try BackupCapabilityRecord(component: .readProgressAndResume, representation: .representedNonempty)
+                .insert(db)
+            try createKindlessReadProgressKeyTable(in: db)
+            try db.execute(sql: "INSERT INTO readProgressKey VALUES ('orphan.plugin', 'media', 'chapter', NULL, 'runtime')")
+        }
+
+        let imported = try await ItoNativeImporter().parse(url: fixture.url)
+
+        #expect(imported.readProgressKeys.isEmpty)
+        #expect(imported.legacyStateArchives.map(\.sourceKey) == ["orphan.plugin/media/chapter"])
+        #expect(imported.representation(of: .legacyStateArchive) == .representedNonempty)
+        #expect(imported.representation(of: .readProgressAndResume) == .representedEmpty)
+    }
+
+    /// Old kindless rows are rejected like current ones when malformed, including values of the wrong type,
+    /// which GRDB's typed row reads would otherwise trap on.
+    @MainActor
+    @Test(arguments: [
+        "(42, 'media', 'chapter', NULL, 'runtime')",
+        "(NULL, 'media', 'chapter', NULL, 'runtime')",
+        "('plugin', 'media', 'chapter', NULL, 'imported')",
+        "('plugin', 'media', NULL, NULL, 'runtime')"
+    ])
+    func malformedOldStateRowsRejectTheBackup(values: String) async throws {
+        let fixture = try TemporaryBackupFixture(extension: "itobackup")
+        defer { fixture.cleanup() }
+        try fixture.withDatabase { db in
+            try db.create(table: "libraryItem") { t in
+                t.primaryKey("id", .text)
+                t.column("title", .text).notNull()
+                t.column("coverUrl", .text)
+                t.column("pluginId", .text).notNull()
+                t.column("isAnime", .boolean).notNull()
+                t.column("pluginType", .text)
+                t.column("rawPayload", .blob).notNull()
+                t.column("anilistId", .integer)
+            }
+            try db.execute(
+                sql: """
+                    INSERT INTO libraryItem (id, title, pluginId, isAnime, pluginType, rawPayload)
+                    VALUES ('media', 'Media', 'plugin', 0, 'manga', X'00')
+                    """
+            )
+            try createKindlessReadProgressKeyTable(in: db)
+            try db.execute(sql: "INSERT INTO readProgressKey VALUES \(values)")
+        }
+
+        await #expect(
+            throws: BackupPreflightError.rejected(
+                .invalidComponentData(component: .readProgressAndResume, code: "invalidReadProgressKeyRow")
+            )
+        ) {
+            _ = try await ItoNativeImporter().parse(url: fixture.url)
+        }
+    }
+
+    /// A pre-v15 readProgressKey table; untyped columns keep stored values as written.
+    private func createKindlessReadProgressKeyTable(in db: Database) throws {
+        try db.execute(sql: "CREATE TABLE readProgressKey (pluginId, canonicalMediaId, chapterKey, markedAt, provenance)")
+    }
+
     private func assertForeignRepresentations(_ backup: ImportedBackup) {
         #expect(backup.representedComponents == [.libraryCore, .readingHistory])
         #expect(backup.representation(of: .libraryCore) == .representedEmpty)

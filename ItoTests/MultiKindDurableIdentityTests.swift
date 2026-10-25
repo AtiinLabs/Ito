@@ -153,6 +153,43 @@ final class MultiKindDurableIdentityTests: XCTestCase {
         try await reloaded.reload()
         XCTAssertEqual(reloaded.badgeCount(for: mangaItem.mediaIdentity), 0)
         XCTAssertEqual(reloaded.badgeCount(for: novelItem.mediaIdentity), 7)
+
+        let mangaCountBefore = try await database.dbPool.read { db in
+            try LibraryItem.fetchOne(db, key: mangaID)?.knownChapterCount
+        }
+        try await updates.advanceBaseline(media: novelItem.mediaIdentity, knownChapterCount: 100)
+        let counts = try await database.dbPool.read { db in
+            (
+                try LibraryItem.fetchOne(db, key: mangaID)?.knownChapterCount,
+                try LibraryItem.fetchOne(db, key: novelID)?.knownChapterCount
+            )
+        }
+        XCTAssertEqual(counts.0, mangaCountBefore)
+        XCTAssertEqual(counts.1, 100)
+    }
+
+    func testSameKeyKindsSavedByTheLibraryRemapToDistinctDestinations() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let library = LibraryManager(dbPool: database.dbPool, observationScheduler: ManualLibraryObservationScheduler())
+        let mangaID = try await library.saveMangaDurably(manga: Manga(key: "42", title: "Manga 42"), pluginId: "source.multi")
+        let novelID = try await library.saveNovelDurably(novel: Novel(key: "42", title: "Novel 42"), pluginId: "source.multi")
+
+        let result = try await LibrarySourceRemapper(dbPool: database.dbPool).remap(
+            oldPluginId: "source.multi",
+            newPluginId: "source.next",
+            affectedItemIds: [mangaID, novelID]
+        )
+
+        XCTAssertEqual(result.remappedItemCount, 2)
+        let remapped = try await database.dbPool.read { db in
+            try LibraryItem.filter(Column("pluginId") == "source.next").fetchAll(db)
+        }
+        XCTAssertEqual(remapped.count, 2)
+        XCTAssertEqual(Set(remapped.map(\.mediaIdentity)), [
+            MediaIdentity(pluginId: "source.next", canonicalMediaId: "42", mediaKind: .manga),
+            MediaIdentity(pluginId: "source.next", canonicalMediaId: "42", mediaKind: .novel)
+        ])
     }
 
     func testHistoryRecordsRealKindAndActualSavedItemID() async throws {

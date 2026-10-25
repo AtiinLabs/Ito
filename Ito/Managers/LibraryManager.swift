@@ -233,11 +233,7 @@ public class LibraryManager: ObservableObject {
     /// Removes a series and its new-chapter badge in one transaction.
     func removeItemDurably(id: String, pluginId: String, mediaKind: MediaKind) async throws {
         let rawID = ImportedMediaIdentity.canonicalMediaId(itemId: id, pluginId: pluginId, mediaKind: mediaKind)
-        let candidates = [
-            rawID,
-            "\(pluginId)_\(rawID)",
-            "\(pluginId)\u{1F}\(mediaKind.rawValue)\u{1F}\(rawID)"
-        ]
+        let candidates = ImportedMediaIdentity.localItemIDs(pluginId: pluginId, canonicalMediaId: rawID, mediaKind: mediaKind)
         let publicationClock = publicationClock
         let (publication, removedMedia) = try await dbPool.write { db in
             var removedMedia: [MediaIdentity] = []
@@ -270,29 +266,34 @@ public class LibraryManager: ObservableObject {
         item: LibraryItem
     ) async throws -> String {
         let rawID = ImportedMediaIdentity.canonicalMediaId(itemId: sourceItemID, pluginId: item.pluginId, mediaKind: item.effectiveType)
-        let legacyID = "\(item.pluginId)_\(rawID)"
-        let scopedID = "\(item.pluginId)\u{1F}\(item.effectiveType.rawValue)\u{1F}\(rawID)"
+        let candidateIDs = ImportedMediaIdentity.localItemIDs(
+            pluginId: item.pluginId,
+            canonicalMediaId: rawID,
+            mediaKind: item.effectiveType
+        )
         let publicationClock = publicationClock
         let mutation = try await dbPool.write { db in
-            let rawItem = try LibraryItem.fetchOne(db, key: rawID)
-            let legacyItem = try LibraryItem.fetchOne(db, key: legacyID)
-            let scopedItem = try LibraryItem.fetchOne(db, key: scopedID)
-            let ownedItem = [rawItem, legacyItem, scopedItem]
-                .compactMap { $0 }
+            var occupants: [String: LibraryItem] = [:]
+            for id in candidateIDs {
+                occupants[id] = try LibraryItem.fetchOne(db, key: id)
+            }
+            let ownedItem = candidateIDs
+                .compactMap { occupants[$0] }
                 .first { $0.pluginId == item.pluginId && $0.effectiveType == item.effectiveType }
             let storedItem: LibraryItem
             if let ownedItem {
                 storedItem = ownedItem
             } else {
-                if rawItem == nil {
-                    storedItem = item.id == rawID ? item : Self.copy(item, replacingIDWith: rawID)
-                } else if legacyItem == nil {
-                    storedItem = Self.copy(item, replacingIDWith: legacyID)
-                } else if scopedItem == nil {
-                    storedItem = Self.copy(item, replacingIDWith: scopedID)
-                } else {
+                guard let id = ImportedMediaIdentity.newItemID(
+                    preferred: nil,
+                    pluginId: item.pluginId,
+                    canonicalMediaId: rawID,
+                    mediaKind: item.effectiveType,
+                    occupant: { occupants[$0].map { ($0.pluginId, $0.effectiveType) } }
+                ) else {
                     throw DurableMutationError.identifierCollision
                 }
+                storedItem = item.id == id ? item : Self.copy(item, replacingIDWith: id)
                 try storedItem.insert(db)
                 if let uncategorized = try LibraryCategory
                     .filter(Column("isSystemCategory") == true)

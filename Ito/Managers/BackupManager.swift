@@ -15,6 +15,7 @@ nonisolated enum BackupMergeError: Error, Equatable {
         itemId: String,
         categoryId: String
     )
+    case noFreeLibraryID(pluginId: String, canonicalMediaId: String)
 }
 
 nonisolated struct BackupMergeResult: Sendable, Equatable {
@@ -371,6 +372,11 @@ nonisolated struct BackupMergeOperation: Sendable {
         let localIndex = Dictionary(grouping: localItems) {
             ImportedMediaIdentity.key(itemId: $0.id, pluginId: $0.pluginId, mediaKind: $0.effectiveType)
         }
+        // Ids already taken, so a new item never lands on (and replaces) a different series.
+        var occupants = Dictionary(
+            localItems.map { ($0.id, (pluginId: $0.pluginId, mediaKind: $0.effectiveType)) },
+            uniquingKeysWith: { first, _ in first }
+        )
         return try importedItems.map { importedItem in
             let identity = ImportedMediaIdentity.key(
                 itemId: importedItem.id,
@@ -385,11 +391,23 @@ nonisolated struct BackupMergeOperation: Sendable {
                     localItemIds: matches.map(\.id).sorted()
                 )
             }
-            return ItemDisposition(
-                importedItem: importedItem,
-                targetId: matches.first?.id ?? importedItem.id,
-                isPreexisting: !matches.isEmpty
-            )
+            if let match = matches.first {
+                return ItemDisposition(importedItem: importedItem, targetId: match.id, isPreexisting: true)
+            }
+            guard let targetId = ImportedMediaIdentity.newItemID(
+                preferred: importedItem.id,
+                pluginId: identity.pluginId,
+                canonicalMediaId: identity.canonicalMediaId,
+                mediaKind: identity.mediaKind,
+                occupant: { occupants[$0] }
+            ) else {
+                throw BackupMergeError.noFreeLibraryID(
+                    pluginId: identity.pluginId,
+                    canonicalMediaId: identity.canonicalMediaId
+                )
+            }
+            occupants[targetId] = (pluginId: identity.pluginId, mediaKind: identity.mediaKind)
+            return ItemDisposition(importedItem: importedItem, targetId: targetId, isPreexisting: false)
         }
     }
 

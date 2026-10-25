@@ -726,15 +726,10 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         let operationID = UUID()
         baselineOperationID = operationID
         let baseline = dependencies.baseline
-        let itemID = media.key
         logStarted(kind: .baseline, operationID: operationID)
         baselineTask = Task { [weak self, baseline] in
             do {
-                try await baseline.advanceBaseline(
-                    itemID: itemID,
-                    media: identity,
-                    knownChapterCount: count
-                )
+                try await baseline.advanceBaseline(media: identity, knownChapterCount: count)
                 guard self?.baselineOperationID == operationID,
                       self?.mediaIdentity == identity else {
                     self?.logFinished(

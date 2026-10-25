@@ -37,11 +37,37 @@ public struct ItoNativeImporter: BackupImporter {
             var legacyStateArchives = try fetchArchives(in: db)
             let capturedAt = metadata?.createdAt ?? Date()
             let resolver = try LegacyMediaKindResolver(db: db)
-            let history = try fetchReadingHistory(
-                in: db,
-                resolver: resolver,
+            func stateRows<Record: FetchableRecord & TableRecord>(
+                _ type: Record.Type,
+                _ component: BackupComponent,
+                rowCode: String
+            ) throws -> [Record] {
+                try fetchKindScoped(
+                    type,
+                    component: component,
+                    rowCode: rowCode,
+                    identityColumns: ["pluginId", "canonicalMediaId"],
+                    resolveKind: { row in
+                        guard let pluginId: String = LegacyMediaKindResolver.value(row, "pluginId"),
+                              let mediaId: String = LegacyMediaKindResolver.value(row, "canonicalMediaId") else {
+                            return nil
+                        }
+                        return resolver.resolve(pluginID: pluginId, canonicalMediaID: mediaId)
+                    },
+                    capturedAt: capturedAt,
+                    archives: &legacyStateArchives,
+                    in: db
+                )
+            }
+            let history = try fetchKindScoped(
+                ReadingHistoryRecord.self,
+                component: .readingHistory,
+                rowCode: "invalidReadingHistoryRow",
+                identityColumns: ["id", "pluginId", "mediaKey"],
+                resolveKind: resolver.resolveHistory,
                 capturedAt: capturedAt,
-                archives: &legacyStateArchives
+                archives: &legacyStateArchives,
+                in: db
             )
             let sourceMappings = try capabilities.contains {
                 $0.component == .sourceMappings
@@ -50,36 +76,18 @@ public struct ItoNativeImporter: BackupImporter {
                 ? fetchSourceMappings(in: db)
                 : []
             let preferences = try fetchIfPresent(AppPreference.self, in: db)
-            let readProgressKeys = try fetchReadProgressKeys(
-                in: db,
-                resolver: resolver,
-                capturedAt: capturedAt,
-                archives: &legacyStateArchives
+            let readProgressKeys = try stateRows(
+                ReadProgressKeyRecord.self, .readProgressAndResume, rowCode: "invalidReadProgressKeyRow"
             )
-            let readProgressNumbers = try fetchReadProgressNumbers(
-                in: db,
-                resolver: resolver,
-                capturedAt: capturedAt,
-                archives: &legacyStateArchives
+            let readProgressNumbers = try stateRows(
+                ReadProgressNumberRecord.self, .readProgressAndResume, rowCode: "invalidReadProgressNumberRow"
             )
-            let mediaReadProgress = try fetchMediaReadProgress(
-                in: db,
-                resolver: resolver,
-                capturedAt: capturedAt,
-                archives: &legacyStateArchives
+            let mediaReadProgress = try stateRows(
+                MediaReadProgressRecord.self, .readProgressAndResume, rowCode: "invalidMediaReadProgressRow"
             )
-            var trackerLinks = try fetchTrackerLinks(
-                in: db,
-                resolver: resolver,
-                capturedAt: capturedAt,
-                archives: &legacyStateArchives
-            )
-            let updateBadges = try fetchUpdateBadges(
-                in: db,
-                resolver: resolver,
-                capturedAt: capturedAt,
-                archives: &legacyStateArchives
-            )
+            var trackerLinks = try stateRows(TrackerLinkRecord.self, .trackerLinks, rowCode: "invalidTrackerLinkRow")
+            let updateBadges = try stateRows(UpdateBadgeRecord.self, .updateBadges, rowCode: "invalidUpdateBadgeRow")
+            legacyStateArchives = Self.uniqueArchives(legacyStateArchives)
             var repositories = try fetchIfPresent(RepositoryRecord.self, in: db)
             let importerAliases = try fetchIfPresent(
                 PluginMigrationAliasRecord.self,
@@ -155,6 +163,12 @@ public struct ItoNativeImporter: BackupImporter {
                         break
                     }
                     return cap
+                }
+                if !legacyStateArchives.isEmpty,
+                   !capabilities.contains(where: { $0.component == .legacyStateArchive }) {
+                    capabilities.append(
+                        BackupCapabilityRecord(component: .legacyStateArchive, representation: .representedNonempty)
+                    )
                 }
             }
 
@@ -309,7 +323,11 @@ public struct ItoNativeImporter: BackupImporter {
                     throw invalidArchiveClassification()
                 }
             case .opaquePluginState:
-                if archive.reason == "kindUnknown" && archive.contentClass == .appNonSecret {
+                // Rows archived for lacking a provable kind are app state from the six kind-scoped tables.
+                if archive.reason == "kindUnknown",
+                   archive.contentClass == .appNonSecret,
+                   archive.valueType == "databaseRow",
+                   LegacyMediaKindResolver.kindScopedTables.contains(archive.sourceDomain) {
                     break
                 }
                 guard archive.contentClass == .opaquePluginState else {
@@ -367,381 +385,64 @@ public struct ItoNativeImporter: BackupImporter {
         return links
     }
 
-    nonisolated private func fetchReadingHistory(
-        in db: Database,
-        resolver: LegacyMediaKindResolver,
+    /// Reads one kind-scoped table. Rows with a `mediaKind` column decode as stored. Older kindless rows take the
+    /// kind `resolveKind` proves and are otherwise archived unchanged. A row whose identity or fields are malformed
+    /// rejects the backup, whichever format it has.
+    nonisolated private func fetchKindScoped<Record: FetchableRecord & TableRecord>(
+        _: Record.Type,
+        component: BackupComponent,
+        rowCode: String,
+        identityColumns: [String],
+        resolveKind: (Row) -> MediaKind?,
         capturedAt: Date,
-        archives: inout [LegacyStateArchiveRecord]
-    ) throws -> [ReadingHistoryRecord] {
-        let table = ReadingHistoryRecord.databaseTableName
+        archives: inout [LegacyStateArchiveRecord],
+        in db: Database
+    ) throws -> [Record] {
+        let table = Record.databaseTableName
         guard try db.tableExists(table) else { return [] }
-        if try hasColumns(["mediaKind"], in: table, db: db) {
-            let rows = try Row.fetchAll(db, sql: "SELECT * FROM \(table)")
-            return try rows.map { row in
-                guard let rawKind = row["mediaKind"] as String?,
-                      let kind = MediaKind(rawValue: rawKind) else {
-                    throw BackupPreflightError.rejected(
-                        .invalidComponentData(component: .readingHistory, code: "invalidMediaKind")
-                    )
-                }
-                do {
-                    return try ReadingHistoryRecord(row: row)
-                } catch {
-                    throw BackupPreflightError.rejected(
-                        .invalidComponentData(component: .readingHistory, code: "invalidReadingHistoryRow")
-                    )
-                }
-            }
-        } else {
-            let rows = try Row.fetchAll(db, sql: "SELECT * FROM \(table)")
-            var history: [ReadingHistoryRecord] = []
-            for row in rows {
-                if let kind = resolver.resolveHistory(row) {
-                    guard let id = row["id"] as String?,
-                          let mediaKey = row["mediaKey"] as String?,
-                          let title = row["title"] as String?,
-                          let pluginId = row["pluginId"] as String?,
-                          let chapterKey = row["chapterKey"] as String?,
-                          let readAt = row["readAt"] as Date? else {
-                        throw BackupPreflightError.rejected(
-                            .invalidComponentData(component: .readingHistory, code: "invalidReadingHistoryRow")
-                        )
-                    }
-                    history.append(
-                        ReadingHistoryRecord(
-                            id: id,
-                            libraryItemId: row["libraryItemId"] as String?,
-                            mediaKey: mediaKey,
-                            title: title,
-                            coverUrl: row["coverUrl"] as String?,
-                            pluginId: pluginId,
-                            mediaKind: kind,
-                            chapterKey: chapterKey,
-                            chapterTitle: row["chapterTitle"] as String?,
-                            readAt: readAt
-                        )
-                    )
-                } else {
-                    let archived = try LegacyMediaKindResolver.archiveRecord(
-                        table: table,
-                        row: row,
-                        capturedAt: capturedAt
-                    )
-                    archives.append(archived)
-                }
-            }
-            return history
+        let storesKind = try hasColumns(["mediaKind"], in: table, db: db)
+        func rejected(_ code: String) -> BackupPreflightError {
+            .rejected(.invalidComponentData(component: component, code: code))
         }
-    }
-
-    nonisolated private func fetchReadProgressKeys(
-        in db: Database,
-        resolver: LegacyMediaKindResolver,
-        capturedAt: Date,
-        archives: inout [LegacyStateArchiveRecord]
-    ) throws -> [ReadProgressKeyRecord] {
-        let table = ReadProgressKeyRecord.databaseTableName
-        guard try db.tableExists(table) else { return [] }
-        if try hasColumns(["mediaKind"], in: table, db: db) {
-            let rows = try Row.fetchAll(db, sql: "SELECT * FROM \(table)")
-            return try rows.map { row in
-                guard let rawKind = row["mediaKind"] as String?,
-                       let kind = MediaKind(rawValue: rawKind) else {
-                    throw BackupPreflightError.rejected(
-                        .invalidComponentData(component: .readProgressAndResume, code: "invalidMediaKind")
-                    )
+        var records: [Record] = []
+        for row in try Row.fetchAll(db, sql: "SELECT * FROM \(table)") {
+            let kindedRow: Row
+            if storesKind {
+                guard let rawKind: String = LegacyMediaKindResolver.value(row, "mediaKind"),
+                      MediaKind(rawValue: rawKind) != nil else {
+                    throw rejected("invalidMediaKind")
                 }
-                do {
-                    return try ReadProgressKeyRecord(row: row)
-                } catch {
-                    throw BackupPreflightError.rejected(
-                        .invalidComponentData(component: .readProgressAndResume, code: "invalidReadProgressKeyRow")
-                    )
+                kindedRow = row
+            } else {
+                guard identityColumns.allSatisfy({ (LegacyMediaKindResolver.value(row, $0) as String?) != nil }) else {
+                    throw rejected(rowCode)
                 }
-            }
-        } else {
-            let rows = try Row.fetchAll(db, sql: "SELECT * FROM \(table)")
-            var records: [ReadProgressKeyRecord] = []
-            for row in rows {
-                guard let pluginId = row["pluginId"] as String?,
-                      let canonicalMediaId = row["canonicalMediaId"] as String? else {
+                guard let kind = resolveKind(row) else {
+                    archives.append(
+                        try LegacyMediaKindResolver.archiveRecord(table: table, row: row, capturedAt: capturedAt)
+                    )
                     continue
                 }
-                if let kind = resolver.resolve(pluginID: pluginId, canonicalMediaID: canonicalMediaId) {
-                    guard let chapterKey = row["chapterKey"] as String? else { continue }
-                    let markedAt = row["markedAt"] as Date?
-                    let provStr = row["provenance"] as String?
-                    let provenance = provStr.flatMap { DurableStateProvenance(rawValue: $0) }
-                    records.append(
-                        ReadProgressKeyRecord(
-                            pluginId: pluginId,
-                            canonicalMediaId: canonicalMediaId,
-                            mediaKind: kind,
-                            chapterKey: chapterKey,
-                            markedAt: markedAt,
-                            provenance: provenance
-                        )
-                    )
-                } else {
-                    let archived = try LegacyMediaKindResolver.archiveRecord(
-                        table: table,
-                        row: row,
-                        capturedAt: capturedAt
-                    )
-                    archives.append(archived)
+                var columns: [String: (any DatabaseValueConvertible)?] = [:]
+                for (column, value) in row {
+                    columns[column] = value
                 }
+                columns["mediaKind"] = kind.rawValue
+                kindedRow = Row(columns)
             }
-            return records
+            do {
+                records.append(try Record(row: kindedRow))
+            } catch {
+                throw rejected(rowCode)
+            }
         }
+        return records
     }
 
-    nonisolated private func fetchReadProgressNumbers(
-        in db: Database,
-        resolver: LegacyMediaKindResolver,
-        capturedAt: Date,
-        archives: inout [LegacyStateArchiveRecord]
-    ) throws -> [ReadProgressNumberRecord] {
-        let table = ReadProgressNumberRecord.databaseTableName
-        guard try db.tableExists(table) else { return [] }
-        if try hasColumns(["mediaKind"], in: table, db: db) {
-            let rows = try Row.fetchAll(db, sql: "SELECT * FROM \(table)")
-            return try rows.map { row in
-                guard let rawKind = row["mediaKind"] as String?,
-                      let kind = MediaKind(rawValue: rawKind) else {
-                    throw BackupPreflightError.rejected(
-                        .invalidComponentData(component: .readProgressAndResume, code: "invalidMediaKind")
-                    )
-                }
-                do {
-                    return try ReadProgressNumberRecord(row: row)
-                } catch {
-                    throw BackupPreflightError.rejected(
-                        .invalidComponentData(component: .readProgressAndResume, code: "invalidReadProgressNumberRow")
-                    )
-                }
-            }
-        } else {
-            let rows = try Row.fetchAll(db, sql: "SELECT * FROM \(table)")
-            var records: [ReadProgressNumberRecord] = []
-            for row in rows {
-                guard let pluginId = row["pluginId"] as String?,
-                      let canonicalMediaId = row["canonicalMediaId"] as String? else {
-                    continue
-                }
-                if let kind = resolver.resolve(pluginID: pluginId, canonicalMediaID: canonicalMediaId) {
-                    guard let chapterNumber = row["chapterNumber"] as Double? else { continue }
-                    let markedAt = row["markedAt"] as Date?
-                    let provStr = row["provenance"] as String?
-                    let provenance = provStr.flatMap { DurableStateProvenance(rawValue: $0) }
-                    records.append(
-                        ReadProgressNumberRecord(
-                            pluginId: pluginId,
-                            canonicalMediaId: canonicalMediaId,
-                            mediaKind: kind,
-                            chapterNumber: chapterNumber,
-                            markedAt: markedAt,
-                            provenance: provenance
-                        )
-                    )
-                } else {
-                    let archived = try LegacyMediaKindResolver.archiveRecord(
-                        table: table,
-                        row: row,
-                        capturedAt: capturedAt
-                    )
-                    archives.append(archived)
-                }
-            }
-            return records
-        }
-    }
-
-    nonisolated private func fetchMediaReadProgress(
-        in db: Database,
-        resolver: LegacyMediaKindResolver,
-        capturedAt: Date,
-        archives: inout [LegacyStateArchiveRecord]
-    ) throws -> [MediaReadProgressRecord] {
-        let table = MediaReadProgressRecord.databaseTableName
-        guard try db.tableExists(table) else { return [] }
-        if try hasColumns(["mediaKind"], in: table, db: db) {
-            let rows = try Row.fetchAll(db, sql: "SELECT * FROM \(table)")
-            return try rows.map { row in
-                guard let rawKind = row["mediaKind"] as String?,
-                      let kind = MediaKind(rawValue: rawKind) else {
-                    throw BackupPreflightError.rejected(
-                        .invalidComponentData(component: .readProgressAndResume, code: "invalidMediaKind")
-                    )
-                }
-                do {
-                    return try MediaReadProgressRecord(row: row)
-                } catch {
-                    throw BackupPreflightError.rejected(
-                        .invalidComponentData(component: .readProgressAndResume, code: "invalidMediaReadProgressRow")
-                    )
-                }
-            }
-        } else {
-            let rows = try Row.fetchAll(db, sql: "SELECT * FROM \(table)")
-            var records: [MediaReadProgressRecord] = []
-            for row in rows {
-                guard let pluginId = row["pluginId"] as String?,
-                      let canonicalMediaId = row["canonicalMediaId"] as String? else {
-                    continue
-                }
-                if let kind = resolver.resolve(pluginID: pluginId, canonicalMediaID: canonicalMediaId) {
-                    guard let lastReadChapterKey = row["lastReadChapterKey"] as String? else { continue }
-                    let updatedAt = row["updatedAt"] as Date?
-                    let provStr = row["provenance"] as String?
-                    let provenance = provStr.flatMap { DurableStateProvenance(rawValue: $0) }
-                    let lastReadPosition = row["lastReadPosition"] as Double?
-                    let readerViewer = row["readerViewer"] as Int?
-                    records.append(
-                        MediaReadProgressRecord(
-                            pluginId: pluginId,
-                            canonicalMediaId: canonicalMediaId,
-                            mediaKind: kind,
-                            lastReadChapterKey: lastReadChapterKey,
-                            updatedAt: updatedAt,
-                            provenance: provenance,
-                            lastReadPosition: lastReadPosition,
-                            readerViewer: readerViewer
-                        )
-                    )
-                } else {
-                    let archived = try LegacyMediaKindResolver.archiveRecord(
-                        table: table,
-                        row: row,
-                        capturedAt: capturedAt
-                    )
-                    archives.append(archived)
-                }
-            }
-            return records
-        }
-    }
-
-    nonisolated private func fetchTrackerLinks(
-        in db: Database,
-        resolver: LegacyMediaKindResolver,
-        capturedAt: Date,
-        archives: inout [LegacyStateArchiveRecord]
-    ) throws -> [TrackerLinkRecord] {
-        let table = TrackerLinkRecord.databaseTableName
-        guard try db.tableExists(table) else { return [] }
-        if try hasColumns(["mediaKind"], in: table, db: db) {
-            let rows = try Row.fetchAll(db, sql: "SELECT * FROM \(table)")
-            return try rows.map { row in
-                guard let rawKind = row["mediaKind"] as String?,
-                      let kind = MediaKind(rawValue: rawKind) else {
-                    throw BackupPreflightError.rejected(
-                        .invalidComponentData(component: .trackerLinks, code: "invalidMediaKind")
-                    )
-                }
-                do {
-                    return try TrackerLinkRecord(row: row)
-                } catch {
-                    throw BackupPreflightError.rejected(
-                        .invalidComponentData(component: .trackerLinks, code: "invalidTrackerLinkRow")
-                    )
-                }
-            }
-        } else {
-            let rows = try Row.fetchAll(db, sql: "SELECT * FROM \(table)")
-            var records: [TrackerLinkRecord] = []
-            for row in rows {
-                guard let pluginId = row["pluginId"] as String?,
-                      let canonicalMediaId = row["canonicalMediaId"] as String? else {
-                    continue
-                }
-                if let kind = resolver.resolve(pluginID: pluginId, canonicalMediaID: canonicalMediaId) {
-                    guard let providerId = row["providerId"] as String?,
-                          let remoteMediaId = row["remoteMediaId"] as String? else { continue }
-                    let updatedAt = row["updatedAt"] as Date?
-                    let provStr = row["provenance"] as String?
-                    let provenance = provStr.flatMap { DurableStateProvenance(rawValue: $0) }
-                    records.append(
-                        TrackerLinkRecord(
-                            pluginId: pluginId,
-                            canonicalMediaId: canonicalMediaId,
-                            mediaKind: kind,
-                            providerId: providerId,
-                            remoteMediaId: remoteMediaId,
-                            updatedAt: updatedAt,
-                            provenance: provenance
-                        )
-                    )
-                } else {
-                    let archived = try LegacyMediaKindResolver.archiveRecord(
-                        table: table,
-                        row: row,
-                        capturedAt: capturedAt
-                    )
-                    archives.append(archived)
-                }
-            }
-            return records
-        }
-    }
-
-    nonisolated private func fetchUpdateBadges(
-        in db: Database,
-        resolver: LegacyMediaKindResolver,
-        capturedAt: Date,
-        archives: inout [LegacyStateArchiveRecord]
-    ) throws -> [UpdateBadgeRecord] {
-        let table = UpdateBadgeRecord.databaseTableName
-        guard try db.tableExists(table) else { return [] }
-        if try hasColumns(["mediaKind"], in: table, db: db) {
-            let rows = try Row.fetchAll(db, sql: "SELECT * FROM \(table)")
-            return try rows.map { row in
-                guard let rawKind = row["mediaKind"] as String?,
-                      let kind = MediaKind(rawValue: rawKind) else {
-                    throw BackupPreflightError.rejected(
-                        .invalidComponentData(component: .updateBadges, code: "invalidMediaKind")
-                    )
-                }
-                do {
-                    return try UpdateBadgeRecord(row: row)
-                } catch {
-                    throw BackupPreflightError.rejected(
-                        .invalidComponentData(component: .updateBadges, code: "invalidUpdateBadgeRow")
-                    )
-                }
-            }
-        } else {
-            let rows = try Row.fetchAll(db, sql: "SELECT * FROM \(table)")
-            var records: [UpdateBadgeRecord] = []
-            for row in rows {
-                guard let pluginId = row["pluginId"] as String?,
-                      let canonicalMediaId = row["canonicalMediaId"] as String? else {
-                    continue
-                }
-                if let kind = resolver.resolve(pluginID: pluginId, canonicalMediaID: canonicalMediaId) {
-                    guard let count = row["count"] as Int? else { continue }
-                    let updatedAt = row["updatedAt"] as Date?
-                    let provStr = row["provenance"] as String?
-                    let provenance = provStr.flatMap { DurableStateProvenance(rawValue: $0) }
-                    records.append(
-                        UpdateBadgeRecord(
-                            pluginId: pluginId,
-                            canonicalMediaId: canonicalMediaId,
-                            mediaKind: kind,
-                            count: count,
-                            updatedAt: updatedAt,
-                            provenance: provenance
-                        )
-                    )
-                } else {
-                    let archived = try LegacyMediaKindResolver.archiveRecord(
-                        table: table,
-                        row: row,
-                        capturedAt: capturedAt
-                    )
-                    archives.append(archived)
-                }
-            }
-            return records
+    nonisolated private static func uniqueArchives(_ archives: [LegacyStateArchiveRecord]) -> [LegacyStateArchiveRecord] {
+        var seen = Set<[String]>()
+        return archives.filter {
+            seen.insert([$0.sourceDomain, $0.sourceKey, $0.contentClass.rawValue, $0.valueType, $0.fingerprint]).inserted
         }
     }
 

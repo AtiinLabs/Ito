@@ -34,7 +34,7 @@ struct UpdateBaselineTests {
         #expect(manager.badgeCount(for: identity(for: item)) == 3)
 
         // Opening the series clears it.
-        try await manager.advanceBaseline(for: item.id, media: identity(for: item), knownChapterCount: 13)
+        try await manager.advanceBaseline(media: identity(for: item), knownChapterCount: 13)
         #expect(manager.badgeCount(for: identity(for: item)) == 0)
         let reloaded = UpdateManager(dbPool: database.dbPool)
         try await reloaded.reload()
