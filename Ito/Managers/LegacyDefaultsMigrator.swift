@@ -995,8 +995,11 @@ public final class LegacyDefaultsMigrator: @unchecked Sendable {
         }
         if try db.tableExists(SourceMappingRecord.databaseTableName) {
             for mapping in try SourceMappingRecord.fetchAll(db) {
-                let kind: MediaKind = mapping.mediaType == .anime ? .anime : .manga
-                addMatchingMediaEvidence(pluginID: mapping.pluginId, mediaID: mapping.pluginMediaKey, mediaKind: kind)
+                addMatchingMediaEvidence(
+                    pluginID: mapping.pluginId,
+                    mediaID: mapping.pluginMediaKey,
+                    mediaKind: mapping.mediaType.mediaKind
+                )
             }
         }
 

@@ -264,13 +264,11 @@ public final class SourceResolverViewModel: ObservableObject {
     private func linkAniListIfNeeded(items: [LibraryItem]) {
         guard let route = sourceRoute,
               let anilistID = route.anilistID else { return }
-        let itemKey = route.media.key()
-        let mediaKind: MediaKind
-        switch route.media {
-        case .manga: mediaKind = .manga
-        case .anime: mediaKind = .anime
-        }
-        let mediaIdentity = MediaIdentity(pluginId: route.pluginID, canonicalMediaId: itemKey, mediaKind: mediaKind)
+        let mediaIdentity = MediaIdentity(
+            pluginId: route.pluginID,
+            canonicalMediaId: route.media.key(),
+            mediaKind: route.media.mediaType.mediaKind
+        )
         guard items.contains(where: { $0.mediaIdentity == mediaIdentity }) else { return }
         guard trackerLinker.anilistTrackerID(for: mediaIdentity) == nil,
               linkingMediaIdentity != mediaIdentity else { return }
