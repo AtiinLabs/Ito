@@ -75,7 +75,7 @@ actor AppNetModule: NetModule {
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
         config.urlCredentialStorage = nil
-        self.sessions = PluginSessionPool(configuration: config, trust: trust)
+        self.sessions = PluginSessionPool(configuration: Self.uncached(config), trust: trust)
         self.cloudflare = LiveAppNetCloudflareHandler()
         self.retryLogger = OSLogAppNetRetryLogger()
         self.pluginID = pluginID
@@ -91,12 +91,21 @@ actor AppNetModule: NetModule {
         cookieJar: PluginCookieJar,
         trust: PluginTrustStore? = nil
     ) {
-        self.sessions = PluginSessionPool(configuration: configuration, trust: trust)
+        self.sessions = PluginSessionPool(configuration: Self.uncached(configuration), trust: trust)
         self.cloudflare = cloudflare
         self.retryLogger = retryLogger
         self.pluginID = pluginID
         self.cookieJar = cookieJar
         self.trust = trust
+    }
+
+    /// A cached answer skips the TLS handshake, so a changed or revoked pin would never be
+    /// checked; plugin requests therefore neither read nor write any response cache.
+    private static func uncached(_ configuration: URLSessionConfiguration) -> URLSessionConfiguration {
+        let config = (configuration.copy() as? URLSessionConfiguration) ?? .default
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return config
     }
 
     func fetch(request: NetRequest) async throws -> NetResponse {
