@@ -82,18 +82,50 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                 guard destinationId != sourceId else {
                     throw RemapError.noOpMapping(itemId: sourceId)
                 }
-                guard try LibraryItem.fetchOne(db, key: destinationId) == nil else {
-                    throw RemapError.destinationExists(destinationId)
-                }
                 mappings.append(Mapping(source: source, destinationId: destinationId))
             }
 
-            let mappingsByDestination = Dictionary(grouping: mappings, by: \.destinationId)
-            if let collision = mappingsByDestination.first(where: { $0.value.count > 1 }) {
+            let mappingsByIdentity = Dictionary(grouping: mappings, by: { $0.source.mediaIdentity })
+            if let collision = mappingsByIdentity.values.first(where: { $0.count > 1 }),
+               let preferredID = collision.first?.destinationId {
                 throw RemapError.intraBatchDestinationCollision(
-                    destinationId: collision.key,
-                    sourceItemIds: collision.value.map(\.source.id).sorted()
+                    destinationId: preferredID,
+                    sourceItemIds: collision.map(\.source.id).sorted()
                 )
+            }
+
+            // Reserve each destination before considering the next item. At most one kind of
+            // a source key may use an unscoped id, even when it arrived through another remap.
+            var reserved: [String: (pluginId: String, mediaKind: MediaKind)] = [:]
+            for index in mappings.indices {
+                let mapping = mappings[index]
+                let media = mapping.source.mediaIdentity
+                let candidateIDs = ImportedMediaIdentity.localItemIDs(
+                    pluginId: newPluginId, canonicalMediaId: media.canonicalMediaId, mediaKind: media.mediaKind
+                )
+                for id in candidateIDs {
+                    if let existing = try LibraryItem.fetchOne(db, key: id),
+                       existing.id != mapping.source.id,
+                       existing.pluginId == newPluginId,
+                       existing.effectiveType == media.mediaKind {
+                        throw RemapError.destinationExists(id)
+                    }
+                }
+                guard let destinationID = try ImportedMediaIdentity.newItemID(
+                    preferred: mapping.destinationId,
+                    pluginId: newPluginId,
+                    canonicalMediaId: media.canonicalMediaId,
+                    mediaKind: media.mediaKind,
+                    occupant: { id in
+                        if let claimed = reserved[id] { return claimed }
+                        if oldPluginId == newPluginId, id == mapping.source.id { return nil }
+                        return try LibraryItem.fetchOne(db, key: id).map { ($0.pluginId, $0.effectiveType) }
+                    }
+                ) else {
+                    throw RemapError.destinationExists(candidateIDs[2])
+                }
+                reserved[destinationID] = (newPluginId, media.mediaKind)
+                mappings[index] = Mapping(source: mapping.source, destinationId: destinationID)
             }
 
             let oldHistory = try ReadingHistoryRecord

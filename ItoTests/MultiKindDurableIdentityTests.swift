@@ -192,6 +192,72 @@ final class MultiKindDurableIdentityTests: XCTestCase {
         ])
     }
 
+    func testRemappingIntoAnotherKindOfTheSameKeyKeepsBothSeriesRemappable() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let library = LibraryManager(dbPool: database.dbPool, observationScheduler: ManualLibraryObservationScheduler())
+        _ = try await library.saveAnimeDurably(
+            anime: Anime(key: "42", title: "Target Anime"), pluginId: "target"
+        )
+        let mangaID = try await library.saveMangaDurably(
+            manga: Manga(key: "42", title: "Source Manga"), pluginId: "source"
+        )
+        let remapper = LibrarySourceRemapper(dbPool: database.dbPool)
+        _ = try await remapper.remap(oldPluginId: "source", newPluginId: "target", affectedItemIds: [mangaID])
+        let targetItems = try await database.dbPool.read { db in
+            try LibraryItem.filter(Column("pluginId") == "target").fetchAll(db)
+        }
+        XCTAssertEqual(Set(targetItems.map(\.mediaIdentity)), [
+            MediaIdentity(pluginId: "target", canonicalMediaId: "42", mediaKind: .anime),
+            MediaIdentity(pluginId: "target", canonicalMediaId: "42", mediaKind: .manga)
+        ])
+
+        do {
+            _ = try await remapper.remap(
+                oldPluginId: "target",
+                newPluginId: "final",
+                affectedItemIds: targetItems.map(\.id)
+            )
+        } catch {
+            return XCTFail("Both kinds must remain remappable: \(error)")
+        }
+        let finalItems = try await database.dbPool.read { db in try LibraryItem.fetchAll(db) }
+        XCTAssertEqual(Set(finalItems.map(\.mediaIdentity)), [
+            MediaIdentity(pluginId: "final", canonicalMediaId: "42", mediaKind: .anime),
+            MediaIdentity(pluginId: "final", canonicalMediaId: "42", mediaKind: .manga)
+        ])
+        XCTAssertEqual(Set(finalItems.map(\.title)), ["Target Anime", "Source Manga"])
+    }
+
+    func testPreviouslyRemappedUnscopedKindsCanMoveTogetherWithoutCollision() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        // A previous remap could leave two kinds under raw and legacy ids.
+        let manga = LibraryItem(
+            id: "42", title: "Manga", coverUrl: nil, pluginId: "old",
+            isAnime: false, pluginType: .manga,
+            rawPayload: try JSONEncoder().encode(Manga(key: "42", title: "Manga")), anilistId: nil
+        )
+        let novel = LibraryItem(
+            id: "old_42", title: "Novel", coverUrl: nil, pluginId: "old",
+            isAnime: false, pluginType: .novel,
+            rawPayload: try JSONEncoder().encode(Novel(key: "42", title: "Novel")), anilistId: nil
+        )
+        try await database.dbPool.write { db in
+            try manga.insert(db)
+            try novel.insert(db)
+        }
+        _ = try await LibrarySourceRemapper(dbPool: database.dbPool).remap(
+            oldPluginId: "old", newPluginId: "new", affectedItemIds: [manga.id, novel.id]
+        )
+        let moved = try await database.dbPool.read { db in try LibraryItem.fetchAll(db) }
+        XCTAssertEqual(Set(moved.map(\.mediaIdentity)), [
+            MediaIdentity(pluginId: "new", canonicalMediaId: "42", mediaKind: .manga),
+            MediaIdentity(pluginId: "new", canonicalMediaId: "42", mediaKind: .novel)
+        ])
+        XCTAssertEqual(moved.count, 2)
+    }
+
     func testHistoryRecordsRealKindAndActualSavedItemID() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }

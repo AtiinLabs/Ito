@@ -56,8 +56,8 @@ enum ImportedMediaIdentity {
         return nil
     }
 
-    /// Keeps the source id's form: a kind-scoped id (which exists only to separate kinds sharing a key) stays
-    /// scoped under the new plugin, and every other id takes the `newPluginId_` prefix.
+    /// The preferred remap id: scoped source ids stay scoped, others take `newPluginId_key`.
+    /// The remapper may scope it further when another kind already owns the target key.
     nonisolated static func destinationId(
         sourceItemId: String,
         oldPluginId: String,
