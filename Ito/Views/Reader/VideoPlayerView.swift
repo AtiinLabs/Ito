@@ -63,13 +63,12 @@ struct VideoPlayerView: View {
         }
         .alert(
             "Continue Watching?",
+            // The buttons answer the offer; closing the alert by itself never closes the player.
+            // Some iOS versions reset this binding before running the tapped button's action,
+            // so a setter that closed the player would close it on Continue and Start Over too.
             isPresented: Binding(
                 get: { viewModel.resumeOffer != nil },
-                // Dismissed without an answer (Cancel, escape gesture, keyboard): nothing is
-                // playing and the player has no controls yet, so close it.
-                set: { isPresented in
-                    if !isPresented, viewModel.resumeOffer != nil { dismiss() }
-                }
+                set: { _ in }
             )
         ) {
             Button("Continue from \(Self.formattedTime(viewModel.resumeOffer ?? 0))") {
@@ -78,7 +77,11 @@ struct VideoPlayerView: View {
             Button("Start Over") {
                 viewModel.resolveResumeOffer(continueWatching: false)
             }
-            Button("Cancel", role: .cancel) {}
+            // Nothing is playing and the player has no controls yet, so Cancel (also the
+            // escape gesture and keyboard) closes it.
+            Button("Cancel", role: .cancel) {
+                close()
+            }
         } message: {
             Text("You stopped this episode at \(Self.formattedTime(viewModel.resumeOffer ?? 0)).")
         }
