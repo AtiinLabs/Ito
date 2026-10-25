@@ -572,7 +572,7 @@ public class RepoManager: ObservableObject {
         }
         try data.write(to: destUrl, options: .atomic)
 
-        AppLogger.database.debug("Successfully installed \(pkg.name)")
+        AppLogger.database.debug("Package installed")
 
         do {
             try await pluginStatePublisher?.publishInstalledPluginState()
