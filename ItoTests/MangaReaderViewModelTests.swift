@@ -77,10 +77,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         await waitForReader { subject.viewModel.loadPhase == .content }
 
         XCTAssertEqual(subject.viewModel.continuousPageIndex, 1)
-        XCTAssertEqual(
-            subject.viewModel.scrollTarget,
-            MangaScrollRequest(pageID: "a#1", animated: false)
-        )
+        assertScrollRequest(subject.viewModel.scrollTarget, pageID: "a#1")
     }
 
     func testInitialContinuousLoadPublishesSingleSortedSegment() async {
@@ -489,10 +486,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.segments.map { $0.chapter.key }, ["a", "b"])
         XCTAssertEqual(subject.viewModel.segments[0].pages.map(\.index), [2, 5])
         XCTAssertEqual(subject.viewModel.continuousPageIndex, 3)
-        XCTAssertEqual(
-            subject.viewModel.scrollTarget,
-            MangaScrollRequest(pageID: "b#1", animated: false, alignmentY: 1.37, waitsForLayout: true)
-        )
+        assertScrollRequest(subject.viewModel.scrollTarget, pageID: "b#1", alignmentY: 1.37, waitsForLayout: true)
     }
 
     func testContinuousDropsChaptersFarBehindTheReader() async {
@@ -520,10 +514,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         )
         // The reader stays on the same page after the chapter above it is dropped.
         XCTAssertEqual(subject.viewModel.flatPages[subject.viewModel.continuousPageIndex].id, "c4#1")
-        XCTAssertEqual(
-            subject.viewModel.scrollTarget,
-            MangaScrollRequest(pageID: "c4#1", animated: false, alignmentY: 0.62, waitsForLayout: true)
-        )
+        assertScrollRequest(subject.viewModel.scrollTarget, pageID: "c4#1", alignmentY: 0.62, waitsForLayout: true)
     }
 
     func testContinuousPrependFailureCleansOperationAndAllowsRetry() async {
@@ -723,10 +714,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         mapped.viewModel.setPagedIndex(1)
         mapped.viewModel.setViewerOverride(.Vertical)
         XCTAssertEqual(mapped.viewModel.continuousPageIndex, 1)
-        XCTAssertEqual(
-            mapped.viewModel.scrollTarget,
-            MangaScrollRequest(pageID: "a#1", animated: false)
-        )
+        assertScrollRequest(mapped.viewModel.scrollTarget, pageID: "a#1")
 
         let fallback = makeSubject(chapters: [makeChapter("a", number: 1)])
         fallback.loader.enqueue(.pages([page(2), page(4)]), for: "a")
@@ -734,10 +722,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         await waitForReader { fallback.viewModel.loadPhase == .content }
         fallback.viewModel.setViewerOverride(.Vertical)
         XCTAssertEqual(fallback.viewModel.continuousPageIndex, 0)
-        XCTAssertEqual(
-            fallback.viewModel.scrollTarget,
-            MangaScrollRequest(pageID: "a#0", animated: false)
-        )
+        assertScrollRequest(fallback.viewModel.scrollTarget, pageID: "a#0")
     }
 
     func testModeChangeWithoutAvailablePagesReloadsAndRejectsOldModeResult() async {
@@ -954,6 +939,23 @@ final class MangaReaderViewModelTests: XCTestCase {
     }
 
     // MARK: - Fixtures
+
+    /// Compares what a scroll request asks for; every request has its own identity.
+    func assertScrollRequest(
+        _ request: MangaScrollRequest?,
+        pageID: String,
+        animated: Bool = false,
+        alignmentY: CGFloat = 0,
+        waitsForLayout: Bool = false,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard let request else { return XCTFail("Expected a scroll request", file: file, line: line) }
+        XCTAssertEqual(request.pageID, pageID, file: file, line: line)
+        XCTAssertEqual(request.animated, animated, file: file, line: line)
+        XCTAssertEqual(request.alignmentY, alignmentY, accuracy: 0.0001, file: file, line: line)
+        XCTAssertEqual(request.waitsForLayout, waitsForLayout, file: file, line: line)
+    }
 
     func makeSubject(
         chapters: [Manga.Chapter],

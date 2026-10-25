@@ -63,7 +63,8 @@ final class MangaReaderViewModel: ObservableObject {
     /// Continuous pages on screen; the topmost is the current page.
     private var visiblePageIDs: Set<String> = []
     private var visiblePageOrder: [String] = []
-    private var continuousScrollAlignmentY: CGFloat = 0
+    /// Where the logical current page sits in the viewport, kept for chapter-window mutations.
+    private(set) var continuousScrollAlignmentY: CGFloat = 0
 
     nonisolated deinit {}
 
@@ -402,8 +403,9 @@ final class MangaReaderViewModel: ObservableObject {
             chapterOpened(flatPage.chapter)
         }
         savePage(flatPage.chapterPosition, in: flatPage.chapter)
-        if visibilityChanged {
-            prefetchContinuousImages(around: topIndex, allPages: flatPages)
+        if visibilityChanged, let bottomIndex = validIDs.compactMap({ flatPageIndexByID[$0] }).max() {
+            // Several short strips can be on screen at once: preload past the last of them.
+            prefetchContinuousImages(around: bottomIndex, allPages: flatPages)
         }
     }
 

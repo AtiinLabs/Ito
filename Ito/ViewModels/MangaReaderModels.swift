@@ -34,6 +34,9 @@ struct FlatPage: Identifiable {
 
 /// A request for the continuous reader to scroll to a page, by `FlatPage.id`.
 struct MangaScrollRequest: Equatable {
+    /// Distinguishes requests with the same payload, so a lifecycle check never mistakes a new
+    /// request for an earlier one.
+    let id = UUID()
     let pageID: String
     /// Footer page buttons animate; position restores and corrections jump.
     let animated: Bool

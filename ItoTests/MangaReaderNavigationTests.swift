@@ -57,16 +57,13 @@ extension MangaReaderViewModelTests {
         )
         let target = coordinator.update(shifted, viewModel: subject.viewModel)
 
-        XCTAssertEqual(
+        assertScrollRequest(
             target,
-            MangaScrollRequest(
-                pageID: "a#1",
-                animated: false,
-                alignmentY: MangaContinuousScrollPositionCoordinator.alignmentY(
-                    viewportTop: -350,
-                    pageHeight: 1_400,
-                    viewportHeight: 844
-                )
+            pageID: "a#1",
+            alignmentY: MangaContinuousScrollPositionCoordinator.alignmentY(
+                viewportTop: -350,
+                pageHeight: 1_400,
+                viewportHeight: 844
             )
         )
     }
@@ -256,10 +253,7 @@ extension MangaReaderViewModelTests {
         subject.viewModel.goToNextChapter()
 
         XCTAssertEqual(subject.viewModel.segments.map { $0.chapter.key }, ["a", "b"])
-        XCTAssertEqual(
-            subject.viewModel.scrollTarget,
-            MangaScrollRequest(pageID: "b#0", animated: false)
-        )
+        assertScrollRequest(subject.viewModel.scrollTarget, pageID: "b#0")
         XCTAssertEqual(subject.loader.callCount(for: "b"), 1)
     }
 
