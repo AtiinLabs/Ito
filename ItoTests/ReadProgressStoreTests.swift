@@ -73,7 +73,11 @@ struct ReadProgressStoreTests {
         }
         try await updates.reload()
 
-        try await manager.markReadUpTo(media: media, maxChapterNum: 3.5)
+        try await manager.markReadUpTo(
+            media: media,
+            maxChapterNum: 3.5,
+            availableChapterNumbers: []
+        )
 
         #expect(manager.readChapterNumbers(for: media) == [1, 2, 3, 3.5])
         #expect(updates.badgeCount(for: media) == 0)
@@ -83,16 +87,151 @@ struct ReadProgressStoreTests {
         }
     }
 
+    @Test func trackerSyncIncludesExistingZeroAndFractionalChaptersAndPreservesPosition() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let manager = ReadProgressManager(dbPool: database.dbPool)
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
+        let sourceNumbers: [Float] = [0, 0.5, 1, 1.5, 59, 60, 60.5]
+        try await manager.savePosition(media: media, chapterKey: "reading-later", position: 17)
+
+        try await manager.markReadUpTo(
+            media: media,
+            maxChapterNum: 60,
+            availableChapterNumbers: Set(sourceNumbers)
+        )
+
+        for number in sourceNumbers where number <= 60 {
+            #expect(manager.isRead(media: media, chapterId: "chapter-\(number)", chapterNum: number))
+        }
+        #expect(!manager.isRead(media: media, chapterId: "later", chapterNum: 60.5))
+        #expect(!manager.isRead(media: media, chapterId: "undiscovered", chapterNum: 0.25))
+        let reloaded = ReadProgressManager(dbPool: database.dbPool)
+        try await reloaded.reload()
+        for number in sourceNumbers where number <= 60 {
+            #expect(reloaded.isRead(media: media, chapterId: "chapter-\(number)", chapterNum: number))
+        }
+        #expect(!reloaded.isRead(media: media, chapterId: "later", chapterNum: 60.5))
+        #expect(reloaded.lastReadChapter(for: media) == "reading-later")
+        #expect(reloaded.savedPosition(media: media, chapterKey: "reading-later") == 17)
+    }
+
     @Test func markUpToZeroIsNoOp() async throws {
-        try await expectMarkUpToNoOp(maxChapterNum: 0)
+        try await expectMarkUpToNoOp(
+            maxChapterNum: 0,
+            availableChapterNumbers: [0, 0.5, 1, 2]
+        )
     }
 
     @Test func markUpToNegativeIsNoOp() async throws {
-        try await expectMarkUpToNoOp(maxChapterNum: -2)
+        try await expectMarkUpToNoOp(
+            maxChapterNum: -2,
+            availableChapterNumbers: [-2, -1, 0, 1]
+        )
     }
 
     @Test func markUpToFractionalBelowOneIsNoOp() async throws {
-        try await expectMarkUpToNoOp(maxChapterNum: 0.5)
+        try await expectMarkUpToNoOp(
+            maxChapterNum: 0.5,
+            availableChapterNumbers: [0, 0.5, 1]
+        )
+    }
+
+    @Test func markUpToPreservesExistingLocalMarksAndIgnoresNonFiniteNumbers() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let manager = ReadProgressManager(dbPool: database.dbPool)
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
+
+        // Seed existing local marks for chapter 0, a fraction, and a key-only chapter
+        try await manager.markAsRead(context: completionContext(for: media), chapterId: "ch-0", chapterNum: 0)
+        try await manager.markAsRead(context: completionContext(for: media), chapterId: "ch-0.25", chapterNum: 0.25)
+        try await manager.markAsRead(context: completionContext(for: media), chapterId: "ch-special", chapterNum: nil)
+        try await manager.savePosition(media: media, chapterKey: "ch-special", position: 42)
+
+        let availableWithNonFinite: Set<Float> = [0.5, 1.5, Float.nan, Float.infinity, -Float.infinity]
+        try await manager.markReadUpTo(
+            media: media,
+            maxChapterNum: 2,
+            availableChapterNumbers: availableWithNonFinite
+        )
+
+        // Local 0 and 0.25 remain marked read
+        #expect(manager.isRead(media: media, chapterId: "ch-0", chapterNum: 0))
+        #expect(manager.isRead(media: media, chapterId: "ch-0.25", chapterNum: 0.25))
+        #expect(manager.isRead(media: media, chapterId: "ch-special", chapterNum: nil))
+        // Whole numbers 1, 2 and available <= 2 (0.5, 1.5) are marked
+        #expect(manager.isRead(media: media, chapterId: "ch-1", chapterNum: 1))
+        #expect(manager.isRead(media: media, chapterId: "ch-2", chapterNum: 2))
+        #expect(manager.isRead(media: media, chapterId: "ch-0.5", chapterNum: 0.5))
+        #expect(manager.isRead(media: media, chapterId: "ch-1.5", chapterNum: 1.5))
+        // Non-finite ignored; 0.75 not fabricated
+        #expect(!manager.isRead(media: media, chapterId: "ch-0.75", chapterNum: 0.75))
+        let liveNumbersAreFinite = manager.readChapterNumbers(for: media).allSatisfy(\.isFinite)
+        #expect(liveNumbersAreFinite)
+        // Position untouched
+        #expect(manager.lastReadChapter(for: media) == "ch-special")
+        #expect(manager.savedPosition(media: media, chapterKey: "ch-special") == 42)
+
+        let reloaded = ReadProgressManager(dbPool: database.dbPool)
+        try await reloaded.reload()
+        #expect(reloaded.isRead(media: media, chapterId: "ch-0", chapterNum: 0))
+        #expect(reloaded.isRead(media: media, chapterId: "ch-0.25", chapterNum: 0.25))
+        #expect(reloaded.isRead(media: media, chapterId: "ch-special", chapterNum: nil))
+        #expect(reloaded.isRead(media: media, chapterId: "ch-1", chapterNum: 1))
+        #expect(reloaded.isRead(media: media, chapterId: "ch-2", chapterNum: 2))
+        #expect(reloaded.isRead(media: media, chapterId: "ch-0.5", chapterNum: 0.5))
+        #expect(reloaded.isRead(media: media, chapterId: "ch-1.5", chapterNum: 1.5))
+        #expect(!reloaded.isRead(media: media, chapterId: "ch-0.75", chapterNum: 0.75))
+        let reloadedNumbersAreFinite = reloaded.readChapterNumbers(for: media).allSatisfy(\.isFinite)
+        #expect(reloadedNumbersAreFinite)
+        #expect(reloaded.lastReadChapter(for: media) == "ch-special")
+        #expect(reloaded.savedPosition(media: media, chapterKey: "ch-special") == 42)
+    }
+
+    @Test func markUpToFailureRollsBackNumberRecordsAndBadgesAndDoesNotPublish() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let manager = ReadProgressManager(dbPool: database.dbPool)
+        let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
+
+        try await database.dbPool.write { db in
+            try UpdateBadgeRecord(
+                pluginId: media.pluginId,
+                canonicalMediaId: media.canonicalMediaId,
+                mediaKind: media.mediaKind,
+                count: 5,
+                updatedAt: Date(),
+                provenance: .runtime
+            ).insert(db)
+        }
+
+        try await database.dbPool.write { db in
+            try db.execute(sql: """
+                CREATE TRIGGER fail_read_number_mark_up_to
+                BEFORE INSERT ON readProgressNumber
+                WHEN (SELECT COUNT(*) FROM readProgressNumber) >= 1
+                BEGIN
+                    SELECT RAISE(ABORT, 'injected markReadUpTo number failure');
+                END
+                """)
+        }
+
+        await #expect(throws: (any Error).self) {
+            try await manager.markReadUpTo(
+                media: media,
+                maxChapterNum: 3,
+                availableChapterNumbers: [0.5, 1.5]
+            )
+        }
+
+        #expect(manager.readChapterNumbers(for: media).isEmpty)
+        try await database.dbPool.read { db in
+            let numberCount = try ReadProgressNumberRecord.fetchCount(db)
+            let badgeCount = try UpdateBadgeRecord.fetchCount(db)
+            #expect(numberCount == 0)
+            #expect(badgeCount == 1)
+        }
     }
 
     @Test func databaseFailureDoesNotPublishOrLeavePartialRows() async throws {
@@ -217,13 +356,20 @@ struct ReadProgressStoreTests {
         #expect(record?.lastReadPosition == nil)
     }
 
-    private func expectMarkUpToNoOp(maxChapterNum: Float) async throws {
+    private func expectMarkUpToNoOp(
+        maxChapterNum: Float,
+        availableChapterNumbers: Set<Float> = []
+    ) async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let manager = ReadProgressManager(dbPool: database.dbPool)
         let media = MediaIdentity(pluginId: "plugin", canonicalMediaId: "media", mediaKind: .manga)
 
-        try await manager.markReadUpTo(media: media, maxChapterNum: maxChapterNum)
+        try await manager.markReadUpTo(
+            media: media,
+            maxChapterNum: maxChapterNum,
+            availableChapterNumbers: availableChapterNumbers
+        )
 
         #expect(manager.readChapterNumbers(for: media).isEmpty)
         let rowCounts = try await database.dbPool.read { db in

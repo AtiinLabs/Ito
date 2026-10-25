@@ -179,7 +179,11 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     private var baselineOperationID: UUID?
     private var trackerProgressOperationID: UUID?
     private var completedBaselineSignatures = Set<String>()
-    private var lastSynchronizedTrackerProgress: [MediaIdentity: Float] = [:]
+    private struct TrackerProgressSnapshot: Equatable {
+        let maximumChapterNumber: Float
+        let availableChapterNumbers: Set<Float>
+    }
+    private var lastSynchronizedTrackerProgress: [MediaIdentity: TrackerProgressSnapshot] = [:]
     private var hasStarted = false
     private var isAppeared = false
     private var cancellables = Set<AnyCancellable>()
@@ -445,7 +449,14 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
               let progress else { return }
         let value = Float(progress)
         let identity = mediaIdentity
-        guard lastSynchronizedTrackerProgress[identity] != value else { return }
+        let snapshot = TrackerProgressSnapshot(
+            maximumChapterNumber: value,
+            availableChapterNumbers: Set((media.chapterList ?? []).lazy.compactMap(\.chapterNumber).filter {
+                $0.isFinite && $0 <= value
+            })
+        )
+        // The same tracker maximum can cover newly discovered chapter 0 or fractional releases.
+        guard lastSynchronizedTrackerProgress[identity] != snapshot else { return }
         trackerProgressTask?.cancel()
         let operationID = UUID()
         trackerProgressOperationID = operationID
@@ -454,13 +465,14 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             do {
                 try await progressService.markReadUpTo(
                     media: identity,
-                    maximumChapterNumber: value
+                    maximumChapterNumber: snapshot.maximumChapterNumber,
+                    availableChapterNumbers: snapshot.availableChapterNumbers
                 )
                 guard self?.trackerProgressOperationID == operationID,
                       self?.mediaIdentity == identity else { return }
                 self?.trackerProgressOperationID = nil
                 self?.trackerProgressTask = nil
-                self?.lastSynchronizedTrackerProgress[identity] = value
+                self?.lastSynchronizedTrackerProgress[identity] = snapshot
                 self?.objectWillChange.send()
             } catch is CancellationError {
                 guard self?.trackerProgressOperationID == operationID else { return }
@@ -1036,4 +1048,10 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             )
         )
     }
+
+#if DEBUG
+    func waitForTrackerProgressForTesting() async {
+        await trackerProgressTask?.value
+    }
+#endif
 }

@@ -188,6 +188,7 @@ final class MediaDetailProgressFake: MediaDetailProgressServing {
     struct MarkRequest {
         let media: MediaIdentity
         let maximum: Float
+        let availableChapterNumbers: Set<Float>
     }
 
     private let subject = PassthroughSubject<Void, Never>()
@@ -220,8 +221,16 @@ final class MediaDetailProgressFake: MediaDetailProgressServing {
         readChapterNumbers[media] ?? []
     }
 
-    func markReadUpTo(media: MediaIdentity, maximumChapterNumber: Float) async throws {
-        markRequests.append(MarkRequest(media: media, maximum: maximumChapterNumber))
+    func markReadUpTo(
+        media: MediaIdentity,
+        maximumChapterNumber: Float,
+        availableChapterNumbers: Set<Float>
+    ) async throws {
+        markRequests.append(MarkRequest(
+            media: media,
+            maximum: maximumChapterNumber,
+            availableChapterNumbers: availableChapterNumbers
+        ))
         if let markError { throw markError }
         subject.send()
     }

@@ -240,17 +240,22 @@ public final class ReadProgressManager: ObservableObject, PluginCompletionScopeC
         return chapterNum.map { readChapterNumbers[media]?.contains($0) == true } ?? false
     }
 
-    public func markReadUpTo(media: MediaIdentity, maxChapterNum: Float) async throws {
+    public func markReadUpTo(
+        media: MediaIdentity,
+        maxChapterNum: Float,
+        availableChapterNumbers: Set<Float>
+    ) async throws {
         guard maxChapterNum.isFinite, maxChapterNum >= 1 else {
             return
         }
 
         let now = Date()
-        let numbers: Set<Float> = {
-            var values = Set((1...Int(maxChapterNum)).map(Float.init))
-            values.insert(maxChapterNum)
-            return values
-        }()
+        var collected = Set((1...Int(maxChapterNum)).lazy.map(Float.init))
+        collected.insert(maxChapterNum)
+        for number in availableChapterNumbers where number.isFinite && number <= maxChapterNum {
+            collected.insert(number)
+        }
+        let numbers = collected
         try await dbPool.write { db in
             for number in numbers {
                 try ReadProgressNumberRecord(

@@ -85,7 +85,11 @@ protocol MediaDetailProgressServing: AnyObject {
     func isRead(media: MediaIdentity, chapterID: String, chapterNumber: Float?) -> Bool
     func lastReadChapter(for media: MediaIdentity) -> String?
     func readChapterNumbers(for media: MediaIdentity) -> Set<Float>
-    func markReadUpTo(media: MediaIdentity, maximumChapterNumber: Float) async throws
+    func markReadUpTo(
+        media: MediaIdentity,
+        maximumChapterNumber: Float,
+        availableChapterNumbers: Set<Float>
+    ) async throws
     func refresh() async throws
 }
 
@@ -104,9 +108,14 @@ extension ReadProgressManager: MediaDetailProgressServing {
 
     func markReadUpTo(
         media: MediaIdentity,
-        maximumChapterNumber: Float
+        maximumChapterNumber: Float,
+        availableChapterNumbers: Set<Float>
     ) async throws {
-        try await markReadUpTo(media: media, maxChapterNum: maximumChapterNumber)
+        try await markReadUpTo(
+            media: media,
+            maxChapterNum: maximumChapterNumber,
+            availableChapterNumbers: availableChapterNumbers
+        )
     }
 
     func refresh() async throws {
