@@ -39,9 +39,17 @@ struct ReaderView: View {
                 preloadCount: Binding(
                     get: { viewModel.preloadImageCount },
                     set: { viewModel.setPreloadImageCount($0) }
+                ),
+                wordLookupEnabled: Binding(
+                    get: { viewModel.isWordLookupEnabled },
+                    set: { viewModel.setWordLookupEnabled($0) }
                 )
             )
         }
+        .background(MangaWordLookupDictionaryPresenter(lookup: viewModel.wordLookup))
+        // Outlines belong to the page they were read on.
+        .onChange(of: viewModel.pagedIndex) { _ in viewModel.wordLookup.end() }
+        .onChange(of: viewModel.currentChapter.key) { _ in viewModel.wordLookup.end() }
         .task { viewModel.start() }
         .onAppear { viewModel.appear() }
         .onDisappear { viewModel.disappear() }
@@ -150,8 +158,12 @@ struct ReaderView: View {
             }
 
             ForEach(Array(viewModel.pagedPages.enumerated()), id: \.offset) { position, page in
-                pageImage(for: page, number: position + 1)
-                    .tag(position)
+                pageImage(
+                    for: page,
+                    number: position + 1,
+                    id: "\(viewModel.currentChapter.key)#\(position)"
+                )
+                .tag(position)
             }
 
             if let next = viewModel.chapterAfter(viewModel.currentChapter) {
@@ -194,7 +206,11 @@ struct ReaderView: View {
                                 chapterDivider(for: flatPage.chapter)
                             }
 
-                            pageImage(for: flatPage.page, number: flatPage.chapterPosition + 1)
+                            pageImage(
+                                for: flatPage.page,
+                                number: flatPage.chapterPosition + 1,
+                                id: flatPage.id
+                            )
                                 .background(MangaContinuousPageGeometryReporter(pageID: flatPage.id))
                                 .id(flatPage.id)
                         }
@@ -327,15 +343,18 @@ struct ReaderView: View {
     }
 
     /// `number` is the page's place in its chapter, read out for image pages; text pages read
-    /// their own text.
+    /// their own text. `id` names the page for word lookup.
     @ViewBuilder
-    private func pageImage(for page: Page, number: Int) -> some View {
+    private func pageImage(for page: Page, number: Int, id: String) -> some View {
         switch page.content {
         case .url(let urlString):
             MangaImage(
                 urlStr: urlString,
                 headers: page.headers,
                 onImageTap: toggleUI,
+                wordLookup: viewModel.isWordLookupEnabled
+                    ? MangaPageWordLookup(pageID: id, model: viewModel.wordLookup)
+                    : nil,
                 imageLabel: "Page \(number)"
             )
         case .text(let text):
@@ -358,6 +377,7 @@ struct ReaderSettingsView: View {
     @Binding var viewer: Manga.Viewer
     let defaultViewer: Manga.Viewer
     @Binding var preloadCount: Int
+    @Binding var wordLookupEnabled: Bool
 
     @Environment(\.dismiss) var dismiss
 
@@ -383,6 +403,13 @@ struct ReaderSettingsView: View {
                                 .tag(option.rawValue)
                         }
                     }
+                }
+
+                Section(
+                    header: Text("Dictionary"),
+                    footer: Text("Long-press a page to outline its English words, then tap a word to see its definition.")
+                ) {
+                    Toggle("Look Up Words", isOn: $wordLookupEnabled)
                 }
 
                 Section(footer: Text(automaticModeDescription)) {}
@@ -599,6 +626,8 @@ struct MangaImage: View {
     /// When set, the loaded image can be pinched and double-tapped to zoom, and a single tap
     /// calls this. Loading and error states are never zoomable, so Try Again stays tappable.
     var onImageTap: (() -> Void)?
+    /// When set with `onImageTap`, a long press outlines the page's words for dictionary lookup.
+    var wordLookup: MangaPageWordLookup?
     /// What VoiceOver reads for the loaded image.
     var imageLabel = "Illustration"
 
@@ -609,7 +638,7 @@ struct MangaImage: View {
         if let url = URL(string: urlStr) {
             LazyImage(request: ImageRequest(urlRequest: createRequest(url: url))) { state in
                 if let image = state.image {
-                    loadedImage(image)
+                    loadedImage(image, platformImage: state.imageContainer?.image)
                 } else if state.error != nil {
                     VStack(spacing: 12) {
                         Image(systemName: "exclamationmark.triangle")
@@ -648,9 +677,18 @@ struct MangaImage: View {
     }
 
     @ViewBuilder
-    private func loadedImage(_ image: Image) -> some View {
-        if let onImageTap {
-            ZoomablePage(onTap: onImageTap) {
+    private func loadedImage(_ image: Image, platformImage: UIImage?) -> some View {
+        if let onImageTap, let wordLookup {
+            MangaWordLookupPage(
+                image: image,
+                platformImage: platformImage,
+                imageLabel: imageLabel,
+                pageID: wordLookup.pageID,
+                onTap: onImageTap,
+                lookup: wordLookup.model
+            )
+        } else if let onImageTap {
+            ZoomablePage(onTap: onImageTap, onLongPress: nil) {
                 image.resizable().scaledToFit()
             }
             .accessibilityLabel(imageLabel)

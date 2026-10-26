@@ -72,6 +72,9 @@ private struct MainTabContentView: View {
                 }
                 .padding(.top, 8)
             }
+            if UITestLaunchConfiguration.current.mangaReaderEnabled {
+                UITestMangaReaderFixtureButton(dependencies: appScope.dependencies.mangaReader)
+            }
             #endif
         }
     }

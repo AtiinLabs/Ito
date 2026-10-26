@@ -382,7 +382,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         }
         if backup.metadata != nil,
            backup.representation(of: .scalarAppPreferences) == .representedNonempty {
-            let catalog = Set(AppPreferenceCatalogEntry.allCases.map(\.rawValue))
+            let formatVersion = backup.metadata?.formatVersion ?? 1
+            let catalog = AppPreferenceCatalogEntry.catalog(forFormatVersion: formatVersion)
             guard preferenceKeys == catalog,
                   Set(backup.preferences.map(\.key)) == catalog else {
                 throw rejection(
@@ -583,8 +584,10 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
     }
 
     private func validatePreferences(_ backup: ImportedBackup) throws {
+        let backupFormatVersion = backup.metadata?.formatVersion ?? 1
         for key in backup.representedPreferenceKeys {
-            guard let entry = AppPreferenceCatalogEntry(rawValue: key) else {
+            guard let entry = AppPreferenceCatalogEntry(rawValue: key),
+                  entry.introducedFormatVersion <= backupFormatVersion else {
                 throw rejection(
                     .invalidKeyData(
                         component: .scalarAppPreferences,
@@ -1464,6 +1467,19 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                 }
             } else {
                 try preference.insert(db)
+                outcomes[.scalarAppPreferences]?.inserted += 1
+            }
+        }
+        // A full catalog from an older format lacks the keys added since; give those their
+        // defaults so the replaced catalog stays complete.
+        if plan.mode == .wipe, let formatVersion = plan.backup.metadata?.formatVersion,
+           plan.backup.representation(of: .scalarAppPreferences) == .representedNonempty {
+            for entry in AppPreferenceCatalogEntry.allCases
+            where entry.introducedFormatVersion > formatVersion {
+                try db.execute(
+                    sql: "INSERT INTO appPreference (key, value) VALUES (?, ?)",
+                    arguments: [entry.rawValue, entry.canonicalDefaultJSON]
+                )
                 outcomes[.scalarAppPreferences]?.inserted += 1
             }
         }

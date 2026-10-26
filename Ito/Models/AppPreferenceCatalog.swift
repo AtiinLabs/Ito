@@ -84,6 +84,7 @@ nonisolated public enum AppPreferenceKeys {
     public static let incognitoMode = "Ito.IncognitoMode"
     public static let autoSyncTrackersToLocal = "Ito.AutoSyncTrackersToLocal"
     public static let diskCacheLimitGB = "Ito.DiskCacheLimitGB"
+    public static let mangaWordLookup = "Ito.MangaWordLookup"
 }
 
 nonisolated public enum AppPreferenceCatalog {
@@ -112,6 +113,7 @@ nonisolated public enum AppPreferenceCatalog {
     public static let diskCacheLimitGB = AppPreferenceKey<Double>(name: AppPreferenceKeys.diskCacheLimitGB, defaultValue: 10) {
         $0.isFinite && $0.rounded() == $0 && (1...50).contains($0)
     }
+    public static let mangaWordLookup = boolean(AppPreferenceKeys.mangaWordLookup, defaultValue: true)
 
     private static func boolean(_ name: String, defaultValue: Bool) -> AppPreferenceKey<Bool> {
         AppPreferenceKey(name: name, defaultValue: defaultValue) { _ in true }
@@ -146,13 +148,35 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
     case incognitoMode = "Ito.IncognitoMode"
     case autoSyncTrackersToLocal = "Ito.AutoSyncTrackersToLocal"
     case diskCacheLimitGB = "Ito.DiskCacheLimitGB"
+    case mangaWordLookup = "Ito.MangaWordLookup"
+
+    /// The backup format that first carried this key. Backups list exactly the keys of their
+    /// format, so a key added later must raise `BackupExportOperation.currentFormatVersion`.
+    public var introducedFormatVersion: Int {
+        switch self {
+        case .libraryLayoutStyle, .alwaysShowCategoryPicker, .backgroundUpdatesEnabled,
+             .updateInterval, .skipCompleted, .updateNotifications, .wifiOnlyUpdates,
+             .discordRPCEnabled, .discordRPCURL, .appTheme, .novelFontSize,
+             .novelLineSpacing, .novelFontFamily, .novelTheme, .novelIsPaging,
+             .novelPrefetchChapters, .preloadImageCount, .incognitoMode,
+             .autoSyncTrackersToLocal, .diskCacheLimitGB:
+            return 1
+        case .mangaWordLookup:
+            return 2
+        }
+    }
+
+    /// The keys a backup of `version` carries.
+    public static func catalog(forFormatVersion version: Int) -> Set<String> {
+        Set(allCases.filter { $0.introducedFormatVersion <= version }.map(\.rawValue))
+    }
 
     public var acceptedSource: LegacyPreferenceSourceType {
         switch self {
         case .alwaysShowCategoryPicker, .backgroundUpdatesEnabled, .skipCompleted,
              .updateNotifications, .wifiOnlyUpdates, .discordRPCEnabled,
              .novelIsPaging, .novelPrefetchChapters, .incognitoMode,
-             .autoSyncTrackersToLocal:
+             .autoSyncTrackersToLocal, .mangaWordLookup:
             return .booleanNSNumber
         case .libraryLayoutStyle, .updateInterval, .preloadImageCount:
             return .integerNSNumber
@@ -170,7 +194,8 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
              .wifiOnlyUpdates, .discordRPCEnabled, .novelIsPaging, .incognitoMode:
             encode(false)
         case .updateInterval: encode(4)
-        case .updateNotifications, .novelPrefetchChapters, .autoSyncTrackersToLocal:
+        case .updateNotifications, .novelPrefetchChapters, .autoSyncTrackersToLocal,
+             .mangaWordLookup:
             encode(true)
         case .discordRPCURL: encode("ws://127.0.0.1:3000")
         case .appTheme, .novelFontFamily, .novelTheme: encode("System")
@@ -247,7 +272,7 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
         case .alwaysShowCategoryPicker, .backgroundUpdatesEnabled, .skipCompleted,
              .updateNotifications, .wifiOnlyUpdates, .discordRPCEnabled,
              .novelIsPaging, .novelPrefetchChapters, .incognitoMode,
-             .autoSyncTrackersToLocal:
+             .autoSyncTrackersToLocal, .mangaWordLookup:
             return value is Bool
         }
     }

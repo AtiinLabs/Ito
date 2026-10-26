@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 
 nonisolated public struct BackupExportOperation: Sendable {
-    public static let currentFormatVersion = 1
+    public static let currentFormatVersion = 2
 
     public enum Phase: Equatable, Sendable {
         case didCreateSnapshot

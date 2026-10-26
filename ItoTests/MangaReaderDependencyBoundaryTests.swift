@@ -57,6 +57,8 @@ final class MangaReaderDependencyBoundaryTests: XCTestCase {
             presence: subject.presence,
             pluginMetadata: subject.metadata,
             makeImagePrefetcher: { subject.imagePrefetcher },
+            textRecognizer: subject.textRecognizer,
+            dictionary: subject.dictionary,
             presentationLogger: subject.logger
         )
         let factory = MediaDetailReaderViewFactory(

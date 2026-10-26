@@ -31,7 +31,7 @@ struct BackupImporterCapabilityTests {
         try await database.dbPool.write { db in
             // The backup holds only the rows seeded here, not the migrated system list.
             try db.execute(sql: "DELETE FROM libraryCategory")
-            try BackupMetadataRecord(formatVersion: 1, createdAt: date).insert(db)
+            try BackupMetadataRecord(formatVersion: BackupExportOperation.currentFormatVersion, createdAt: date).insert(db)
             for component in BackupComponent.allCases {
                 try BackupCapabilityRecord(
                     component: component,
@@ -173,7 +173,7 @@ struct BackupImporterCapabilityTests {
             standardApplicationDomain: "moe.itoapp.ito"
         ).parse(url: database.databaseURL)
 
-        #expect(backup.metadata?.formatVersion == 1)
+        #expect(backup.metadata?.formatVersion == BackupExportOperation.currentFormatVersion)
         #expect(backup.representedComponents == BackupComponent.allCases)
         #expect(backup.categories.count == 1)
         #expect(backup.items.count == 1)
@@ -622,6 +622,28 @@ struct BackupImporterCapabilityTests {
         #expect(emptyBackup.preferences.isEmpty)
         #expect(emptyBackup.representedPreferenceKeys.isEmpty)
         #expect(emptyBackup.representation(of: .scalarAppPreferences) == .representedEmpty)
+    }
+
+    @Test func nativeBackupFromFormatOneParsesWithTheCatalogOfItsTime() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let formatOneKeys = AppPreferenceCatalogEntry.catalog(forFormatVersion: 1)
+        try await database.dbPool.write { db in
+            try db.execute(sql: "DELETE FROM libraryCategory")
+            try BackupMetadataRecord(formatVersion: 1, createdAt: date).insert(db)
+            try BackupCapabilityRecord(
+                component: .scalarAppPreferences,
+                representation: .representedNonempty
+            ).insert(db)
+            for entry in AppPreferenceCatalogEntry.allCases where formatOneKeys.contains(entry.rawValue) {
+                try AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON).insert(db)
+            }
+        }
+
+        let backup = try await ItoNativeImporter().parse(url: database.databaseURL)
+
+        #expect(!formatOneKeys.contains(AppPreferenceKeys.mangaWordLookup))
+        #expect(Set(backup.preferences.map(\.key)) == formatOneKeys)
     }
 
     @Test func nativeCredentialArchiveIsRejectedWithoutIncludingItsValue() async throws {

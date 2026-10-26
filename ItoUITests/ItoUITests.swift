@@ -151,6 +151,129 @@ final class ItoUITests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: 10) { !item.exists })
     }
 
+    @MainActor
+    func testLongPressOutlinesPageWordsAndATappedWordOpensTheDictionary() throws {
+        let app = launchWithMangaReaderFixture()
+        let page = app.images["Page 1"]
+        let header = app.staticTexts["Lookup Fixture"]
+        XCTAssertTrue(header.exists)
+
+        page.press(forDuration: 1.2)
+        let hello = app.buttons["HELLO"]
+        XCTAssertTrue(hello.waitForExistence(timeout: 30))
+        XCTAssertTrue(app.buttons["WORLD"].exists)
+        // Lifting the finger after the long press is not also a tap: the controls stay. The
+        // controls fade out over 0.2 s, so check after that.
+        XCTAssertFalse(waitUntil(timeout: 1) { !header.exists })
+
+        hello.tap()
+        // The system dictionary opens at the word's plain form.
+        let entry = app.navigationBars["hello"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 10))
+        app.buttons["DDUIDone"].tap()
+        // Closing it returns to the reader, still outlined for the next word.
+        XCTAssertTrue(waitUntil(timeout: 10) { !entry.exists && hello.isHittable })
+        XCTAssertTrue(header.exists)
+
+        app.buttons["WORLD"].tap()
+        let secondEntry = app.navigationBars["world"]
+        XCTAssertTrue(secondEntry.waitForExistence(timeout: 10))
+        app.swipeDown(velocity: .fast)
+        XCTAssertTrue(waitUntil(timeout: 10) { !secondEntry.exists && hello.isHittable })
+
+        // A tap beside the words leaves lookup without toggling the controls.
+        page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)).tap()
+        XCTAssertTrue(waitUntil(timeout: 10) { !hello.exists })
+        XCTAssertFalse(waitUntil(timeout: 1) { !header.exists })
+    }
+
+    @MainActor
+    func testWebtoonPagesStillScrollAndLookUpWords() throws {
+        let app = launchWithMangaReaderFixture()
+        app.buttons["Reading Mode"].tap()
+        app.buttons["Webtoon"].tap()
+
+        // Dragging a page scrolls the strip; the long press does not hold on to the drag.
+        let secondPage = app.images["Page 2"]
+        XCTAssertTrue(app.images["Page 1"].waitForExistence(timeout: 10))
+        app.images["Page 1"].swipeUp(velocity: .fast)
+        XCTAssertTrue(waitUntil(timeout: 10) { secondPage.exists && secondPage.isHittable })
+
+        secondPage.press(forDuration: 1.2)
+        XCTAssertTrue(app.buttons["GOODBYE"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.buttons["MOON"].exists)
+    }
+
+    @MainActor
+    func testReaderPageTapAndSwipeStillWorkWithWordLookupOn() throws {
+        let app = launchWithMangaReaderFixture()
+        let header = app.staticTexts["Lookup Fixture"]
+
+        app.images["Page 1"].tap()
+        XCTAssertTrue(waitUntil(timeout: 10) { !header.exists })
+
+        app.images["Page 1"].swipeLeft()
+        XCTAssertTrue(app.images["Page 2"].waitForExistence(timeout: 10))
+        XCTAssertTrue(waitUntil(timeout: 10) { app.images["Page 2"].isHittable })
+    }
+
+    @MainActor
+    func testLookupCanBeTurnedOffAndBackOnInReaderSettings() throws {
+        let app = launchWithMangaReaderFixture()
+        app.buttons["Reader Settings"].tap()
+        let toggle = app.switches["Look Up Words"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertTrue(waitUntil(timeout: 10) { toggle.value as? String == "0" })
+        app.buttons["Done"].tap()
+
+        app.images["Page 1"].press(forDuration: 1.2)
+        XCTAssertFalse(waitUntil(timeout: 2) { app.buttons["HELLO"].exists })
+        // A long press with lookup off may hide the controls, like any other page tap.
+        if !app.buttons["Reader Settings"].isHittable { app.images["Page 1"].tap() }
+        app.buttons["Reader Settings"].tap()
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        XCTAssertEqual(toggle.value as? String, "0")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertTrue(waitUntil(timeout: 10) { toggle.value as? String == "1" })
+        app.buttons["Done"].tap()
+        app.images["Page 1"].press(forDuration: 1.2)
+        XCTAssertTrue(app.buttons["HELLO"].waitForExistence(timeout: 30))
+    }
+
+    @MainActor
+    func testDoubleTapZoomKeepsLookupAlignedWithThePage() throws {
+        let app = launchWithMangaReaderFixture()
+        let page = app.images["Page 1"]
+        page.press(forDuration: 1.2)
+        let world = app.buttons["WORLD"]
+        XCTAssertTrue(world.waitForExistence(timeout: 30))
+        let unzoomedWidth = world.frame.width
+        page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)).tap()
+        XCTAssertTrue(waitUntil(timeout: 10) { !world.exists })
+
+        page.doubleTap()
+        page.press(forDuration: 1.2)
+        XCTAssertTrue(world.waitForExistence(timeout: 30))
+        // The word's hit area must grow with the page, rather than stay on an unscaled overlay.
+        XCTAssertGreaterThan(world.frame.width, unzoomedWidth * 1.5)
+        world.tap()
+        XCTAssertTrue(app.navigationBars["world"].waitForExistence(timeout: 10))
+    }
+
+    /// Launches with the two-page reader fixture open on its first page.
+    @MainActor
+    private func launchWithMangaReaderFixture() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-reset-storage", "--ui-test-manga-reader"]
+        app.launch()
+        let open = app.buttons["open-manga-reader-fixture"]
+        XCTAssertTrue(open.waitForExistence(timeout: 20))
+        open.tap()
+        XCTAssertTrue(app.images["Page 1"].waitForExistence(timeout: 20))
+        return app
+    }
+
     /// Launches with one disposable library item and shows it on the Library tab.
     @MainActor
     private func launchWithLibraryFixture() -> XCUIApplication {

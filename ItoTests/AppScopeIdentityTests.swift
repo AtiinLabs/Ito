@@ -352,7 +352,17 @@ final class AppScopeIdentityTests: XCTestCase {
             UITestLaunchConfiguration(
                 resetsStorage: true,
                 repositoryDeepLinkEnabled: false,
-                backupWipeEnabled: false
+                backupWipeEnabled: false,
+                mangaReaderEnabled: false
+            ).isEnabled
+        )
+        // The reader fixture alone also runs on fixture storage.
+        XCTAssertTrue(
+            UITestLaunchConfiguration(
+                resetsStorage: false,
+                repositoryDeepLinkEnabled: false,
+                backupWipeEnabled: false,
+                mangaReaderEnabled: true
             ).isEnabled
         )
     }

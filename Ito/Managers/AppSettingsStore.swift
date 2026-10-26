@@ -61,6 +61,7 @@ public final class AppSettingsStore: ObservableObject {
     @Published public private(set) var incognitoMode = AppPreferenceCatalog.incognitoMode.defaultValue
     @Published public private(set) var autoSyncTrackersToLocal = AppPreferenceCatalog.autoSyncTrackersToLocal.defaultValue
     @Published public private(set) var diskCacheLimitGB = AppPreferenceCatalog.diskCacheLimitGB.defaultValue
+    @Published public private(set) var mangaWordLookup = AppPreferenceCatalog.mangaWordLookup.defaultValue
     @Published public private(set) var loadIssues: [AppSettingsLoadIssue] = []
 
     private let persistence: any AppSettingsPersistence
@@ -155,6 +156,7 @@ public final class AppSettingsStore: ObservableObject {
         incognitoMode = snapshot.incognitoMode
         autoSyncTrackersToLocal = snapshot.autoSyncTrackersToLocal
         diskCacheLimitGB = snapshot.diskCacheLimitGB
+        mangaWordLookup = snapshot.mangaWordLookup
         loadIssues = issues
     }
 }
@@ -184,6 +186,7 @@ private struct AppSettingsSnapshot: Sendable {
     let incognitoMode: Bool
     let autoSyncTrackersToLocal: Bool
     let diskCacheLimitGB: Double
+    let mangaWordLookup: Bool
 
     static func resolve(
         _ preferences: [AppPreference]
@@ -226,7 +229,8 @@ private struct AppSettingsSnapshot: Sendable {
                 preloadImageCount: value(AppPreferenceCatalog.preloadImageCount),
                 incognitoMode: value(AppPreferenceCatalog.incognitoMode),
                 autoSyncTrackersToLocal: value(AppPreferenceCatalog.autoSyncTrackersToLocal),
-                diskCacheLimitGB: value(AppPreferenceCatalog.diskCacheLimitGB)
+                diskCacheLimitGB: value(AppPreferenceCatalog.diskCacheLimitGB),
+                mangaWordLookup: value(AppPreferenceCatalog.mangaWordLookup)
             ),
             repairs,
             issues

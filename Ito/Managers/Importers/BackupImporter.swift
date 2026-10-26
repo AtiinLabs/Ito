@@ -226,7 +226,7 @@ nonisolated public struct ImportedBackup: Sendable {
     }
 
     public func validateCapabilityMetadata() throws {
-        if let metadata, metadata.formatVersion < 1 {
+        if let metadata, metadata.formatVersion < 1 || metadata.formatVersion > BackupExportOperation.currentFormatVersion {
             throw BackupPreflightError.rejected(
                 .invalidCapabilityMetadata(component: nil, code: "invalidFormatVersion")
             )

@@ -682,9 +682,9 @@ struct AppPreferenceCatalogTests {
         let invalid: [Any]
     }
 
-    @Test func allTwentyCatalogEntriesHaveExactDefaultsBridgesAndValidation() throws {
+    @Test func allTwentyOneCatalogEntriesHaveExactDefaultsBridgesAndValidation() throws {
         let fixtures = catalogFixtures
-        #expect(fixtures.count == 20)
+        #expect(fixtures.count == 21)
         #expect(Set(fixtures.map(\.entry)) == Set(AppPreferenceCatalogEntry.allCases))
 
         for fixture in fixtures {
@@ -781,7 +781,8 @@ struct AppPreferenceCatalogTests {
             .init(entry: .preloadImageCount, source: .integerNSNumber, defaultJSON: "5", accepted: [0, 3, 5, 10, 15, 20].map(NSNumber.init(value:)), invalid: [NSNumber(value: -1), NSNumber(value: 1), NSNumber(value: 20.5), NSNumber(value: true)]),
             .init(entry: .incognitoMode, source: .booleanNSNumber, defaultJSON: "false", accepted: [NSNumber(value: false), NSNumber(value: true)], invalid: boolInvalid),
             .init(entry: .autoSyncTrackersToLocal, source: .booleanNSNumber, defaultJSON: "true", accepted: [NSNumber(value: false), NSNumber(value: true)], invalid: boolInvalid),
-            .init(entry: .diskCacheLimitGB, source: .numericNSNumber, defaultJSON: "10", accepted: [NSNumber(value: 1), NSNumber(value: 50)], invalid: numericInvalid + [NSNumber(value: 0), NSNumber(value: 2.5), NSNumber(value: 51)])
+            .init(entry: .diskCacheLimitGB, source: .numericNSNumber, defaultJSON: "10", accepted: [NSNumber(value: 1), NSNumber(value: 50)], invalid: numericInvalid + [NSNumber(value: 0), NSNumber(value: 2.5), NSNumber(value: 51)]),
+            .init(entry: .mangaWordLookup, source: .booleanNSNumber, defaultJSON: "true", accepted: [NSNumber(value: false), NSNumber(value: true)], invalid: boolInvalid)
         ]
     }
 
@@ -807,6 +808,7 @@ struct AppPreferenceCatalogTests {
         case .incognitoMode: AppPreferenceKeys.incognitoMode
         case .autoSyncTrackersToLocal: AppPreferenceKeys.autoSyncTrackersToLocal
         case .diskCacheLimitGB: AppPreferenceKeys.diskCacheLimitGB
+        case .mangaWordLookup: AppPreferenceKeys.mangaWordLookup
         }
     }
 
@@ -832,6 +834,7 @@ struct AppPreferenceCatalogTests {
         case .incognitoMode: try assertRoundTrip(AppPreferenceCatalog.incognitoMode)
         case .autoSyncTrackersToLocal: try assertRoundTrip(AppPreferenceCatalog.autoSyncTrackersToLocal)
         case .diskCacheLimitGB: try assertRoundTrip(AppPreferenceCatalog.diskCacheLimitGB)
+        case .mangaWordLookup: try assertRoundTrip(AppPreferenceCatalog.mangaWordLookup)
         }
     }
 

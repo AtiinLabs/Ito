@@ -6,7 +6,7 @@ import Testing
 
 @MainActor
 struct AppSettingsStoreTests {
-    @Test func materializesAllTwentyDocumentedDefaultsWithTypedState() async throws {
+    @Test func materializesAllTwentyOneDocumentedDefaultsWithTypedState() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let store = AppSettingsStore(dbPool: database.dbPool)
@@ -33,6 +33,7 @@ struct AppSettingsStoreTests {
         #expect(store.incognitoMode == false)
         #expect(store.autoSyncTrackersToLocal)
         #expect(store.diskCacheLimitGB == 10)
+        #expect(store.mangaWordLookup)
         #expect(store.loadIssues.isEmpty)
 
         let rows = try await database.dbPool.read { db in try AppPreference.fetchAll(db) }
@@ -40,7 +41,7 @@ struct AppSettingsStoreTests {
         #expect(Set(rows.map(\.key)) == Set(AppPreferenceCatalogEntry.allCases.map(\.rawValue)))
     }
 
-    @Test func allTwentyTypedWritesRoundTripThroughGRDB() async throws {
+    @Test func allTwentyOneTypedWritesRoundTripThroughGRDB() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let store = AppSettingsStore(dbPool: database.dbPool)
@@ -66,6 +67,7 @@ struct AppSettingsStoreTests {
         try await store.set(true, for: AppPreferenceCatalog.incognitoMode)
         try await store.set(false, for: AppPreferenceCatalog.autoSyncTrackersToLocal)
         try await store.set(50, for: AppPreferenceCatalog.diskCacheLimitGB)
+        try await store.set(false, for: AppPreferenceCatalog.mangaWordLookup)
 
         let reloaded = AppSettingsStore(dbPool: database.dbPool)
         try await reloaded.reload()
@@ -89,6 +91,7 @@ struct AppSettingsStoreTests {
         #expect(reloaded.incognitoMode)
         #expect(reloaded.autoSyncTrackersToLocal == false)
         #expect(reloaded.diskCacheLimitGB == 50)
+        #expect(reloaded.mangaWordLookup == false)
     }
 
     @Test func writeDoesNotPublishUntilPersistenceCommits() async throws {
@@ -162,7 +165,7 @@ struct AppSettingsStoreTests {
         let repaired = try await database.dbPool.read { db in
             try AppPreference.fetchAll(db)
         }
-        #expect(repaired.count == 20)
+        #expect(repaired.count == AppPreferenceCatalogEntry.allCases.count)
         #expect(try #require(repaired.first {
             $0.key == AppPreferenceKeys.updateInterval
         }).decodedValue(for: AppPreferenceCatalog.updateInterval) == .fourHours)

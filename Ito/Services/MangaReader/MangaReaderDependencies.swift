@@ -1,4 +1,6 @@
+import CoreGraphics
 import Foundation
+import ImageIO
 import Nuke
 import ito_runner
 
@@ -99,7 +101,9 @@ extension TrackerManager: MangaReaderTrackerUpdating {
 @MainActor
 protocol MangaReaderSettingsAccessing: AnyObject {
     var mangaReaderPreloadImageCount: Int { get }
+    var mangaReaderWordLookupEnabled: Bool { get }
     func setMangaReaderPreloadImageCount(_ value: Int) async throws
+    func setMangaReaderWordLookupEnabled(_ value: Bool) async throws
 }
 
 extension AppSettingsStore: MangaReaderSettingsAccessing {
@@ -107,9 +111,17 @@ extension AppSettingsStore: MangaReaderSettingsAccessing {
         preloadImageCount.rawValue
     }
 
+    var mangaReaderWordLookupEnabled: Bool {
+        mangaWordLookup
+    }
+
     func setMangaReaderPreloadImageCount(_ value: Int) async throws {
         guard let preference = ImagePreloadCountPreference(rawValue: value) else { return }
         try await set(preference, for: AppPreferenceCatalog.preloadImageCount)
+    }
+
+    func setMangaReaderWordLookupEnabled(_ value: Bool) async throws {
+        try await set(value, for: AppPreferenceCatalog.mangaWordLookup)
     }
 }
 
@@ -212,6 +224,8 @@ struct PreparedMangaReaderDependencies {
     let presence: any MangaReaderPresencePresenting
     let pluginMetadata: any MangaReaderPluginMetadataProviding
     let makeImagePrefetcher: () -> any MangaReaderImagePrefetching
+    let textRecognizer: any PageTextRecognizing
+    let dictionary: any DictionaryDefinitionChecking
     let presentationLogger: any PresentationEventLogging
 
     static func production(
@@ -231,6 +245,8 @@ struct PreparedMangaReaderDependencies {
             presence: discordRPCManager,
             pluginMetadata: pluginManager,
             makeImagePrefetcher: { NukeMangaReaderImagePrefetcher() },
+            textRecognizer: VisionPageTextRecognizer(),
+            dictionary: SystemDictionary(),
             presentationLogger: presentationLogger
         )
     }
@@ -245,8 +261,18 @@ struct PreparedMangaReaderDependencies {
             presence: unavailable,
             pluginMetadata: unavailable,
             makeImagePrefetcher: { unavailable },
+            textRecognizer: UnavailablePageTextRecognizer(),
+            dictionary: unavailable,
             presentationLogger: OSLogPresentationEventLogger()
         )
+    }
+}
+
+private nonisolated struct UnavailablePageTextRecognizer: PageTextRecognizing {
+    func words(in image: CGImage, orientation: CGImagePropertyOrientation) async throws -> [RecognizedWord] {
+        _ = image
+        _ = orientation
+        return []
     }
 }
 
@@ -258,9 +284,14 @@ private final class UnavailableMangaReaderDependencies:
     MangaReaderSettingsAccessing,
     MangaReaderPresencePresenting,
     MangaReaderPluginMetadataProviding,
-    MangaReaderImagePrefetching {
+    MangaReaderImagePrefetching,
+    DictionaryDefinitionChecking {
     var mangaReaderPreloadImageCount: Int {
         AppPreferenceCatalog.preloadImageCount.defaultValue.rawValue
+    }
+
+    var mangaReaderWordLookupEnabled: Bool {
+        AppPreferenceCatalog.mangaWordLookup.defaultValue
     }
 
     func captureCompletionContext(
@@ -327,6 +358,15 @@ private final class UnavailableMangaReaderDependencies:
 
     func setMangaReaderPreloadImageCount(_ value: Int) async throws {
         _ = value
+    }
+
+    func setMangaReaderWordLookupEnabled(_ value: Bool) async throws {
+        _ = value
+    }
+
+    func hasDefinition(for term: String) -> Bool {
+        _ = term
+        return false
     }
 
     func presentMangaReaderPresence(_ presence: MangaReaderPresence) {

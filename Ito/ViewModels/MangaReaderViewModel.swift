@@ -12,6 +12,9 @@ final class MangaReaderViewModel: ObservableObject {
     @Published private(set) var loadPhase: MangaReaderLoadPhase = .idle
     @Published private(set) var overrideViewer: Manga.Viewer = .Default
     @Published private(set) var preloadImageCount: Int
+    /// Long-pressing a page outlines its words for dictionary lookup.
+    @Published private(set) var isWordLookupEnabled: Bool
+    let wordLookup: MangaWordLookupViewModel
 
     @Published private(set) var pagedPages: [Page] = []
     @Published private(set) var pagedIndex = 0
@@ -82,6 +85,11 @@ final class MangaReaderViewModel: ObservableObject {
         self.dependencies = dependencies
         imagePrefetcher = dependencies.makeImagePrefetcher()
         preloadImageCount = dependencies.settings.mangaReaderPreloadImageCount
+        isWordLookupEnabled = dependencies.settings.mangaReaderWordLookupEnabled
+        wordLookup = MangaWordLookupViewModel(
+            recognizer: dependencies.textRecognizer,
+            dictionary: dependencies.dictionary
+        )
         mediaIdentity = MediaIdentity(pluginId: pluginID, canonicalMediaId: entry.key, mediaKind: entry.kind)
         completionContext = dependencies.progress.captureCompletionContext(media: mediaIdentity, mediaKey: entry.key)
         overrideViewer = dependencies.progress.savedViewer(media: mediaIdentity) ?? .Default
@@ -148,15 +156,6 @@ final class MangaReaderViewModel: ObservableObject {
         return chapterBefore(first.chapter)
     }
 
-    static func isPagedViewer(_ viewer: Manga.Viewer) -> Bool {
-        switch viewer {
-        case .Ltr, .Rtl, .Default:
-            return true
-        case .Vertical, .Webtoon:
-            return false
-        }
-    }
-
     // MARK: - Presentation lifecycle
 
     func start() {
@@ -188,6 +187,7 @@ final class MangaReaderViewModel: ObservableObject {
     func disappear() {
         guard isActive else { return }
         isActive = false
+        wordLookup.end()
         hasPresentedPresence = false
         sessionID = UUID()
         contentGeneration &+= 1
@@ -244,23 +244,31 @@ final class MangaReaderViewModel: ObservableObject {
 
     func setPreloadImageCount(_ value: Int) {
         guard ImagePreloadCountPreference(rawValue: value) != nil else { return }
+        writeSettings { try await $0.setMangaReaderPreloadImageCount(value) }
+    }
+
+    func setWordLookupEnabled(_ enabled: Bool) {
+        if !enabled { wordLookup.end() }
+        writeSettings { try await $0.setMangaReaderWordLookupEnabled(enabled) }
+    }
+
+    private func writeSettings(
+        _ write: @escaping @MainActor (any MangaReaderSettingsAccessing) async throws -> Void
+    ) {
         let settings = dependencies.settings
         let session = sessionID
         let preceding = settingsWriteTask
-        let task = Task { @MainActor [weak self, settings] in
+        settingsWriteTask = Task { @MainActor [weak self, settings] in
             await preceding?.value
             guard let self, self.isActive, self.sessionID == session,
                   !Task.isCancelled else { return }
-            do {
-                try await settings.setMangaReaderPreloadImageCount(value)
-            } catch {
-                // The existing Reader intentionally has no visible settings-write error.
-            }
+            // Failed writes keep showing the stored values, as with the other reader settings.
+            try? await write(settings)
             guard self.isActive, self.sessionID == session,
                   !Task.isCancelled else { return }
             self.preloadImageCount = settings.mangaReaderPreloadImageCount
+            self.isWordLookupEnabled = settings.mangaReaderWordLookupEnabled
         }
-        settingsWriteTask = task
     }
 
     // MARK: - Chapter and page navigation
@@ -1129,6 +1137,7 @@ final class MangaReaderViewModel: ObservableObject {
         await adjacentPrefetchTask?.value
         await appendTask?.value
         await prependTask?.value
+        await settingsWriteTask?.value
     }
 #endif
 }

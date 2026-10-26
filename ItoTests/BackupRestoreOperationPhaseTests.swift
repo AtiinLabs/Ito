@@ -715,6 +715,176 @@ struct BackupRestoreOperationPhaseTests {
         #expect(preferences.1 == unknown)
     }
 
+    @Test func wipeRestoreOfFormat1BackupResetsLocalMangaWordLookupToTrueAndKeepsCatalogComplete() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let falseLookup = try AppPreference(key: AppPreferenceCatalog.mangaWordLookup, value: false)
+        try await database.dbPool.write { db in
+            try falseLookup.insert(db)
+        }
+        let v1Entries = AppPreferenceCatalogEntry.allCases.filter { $0.introducedFormatVersion <= 1 }
+        let preferences = v1Entries.map { entry in
+            AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON)
+        }
+        let backup = representedBackup(
+            formatVersion: 1,
+            components: [.scalarAppPreferences],
+            preferences: preferences
+        )
+
+        _ = try await operation(database).restore(
+            backup,
+            mode: .wipe,
+            operationId: "v1-wipe-restore"
+        )
+
+        let allPrefs = try await database.dbPool.read { db in
+            try AppPreference.fetchAll(db)
+        }
+        #expect(allPrefs.count == AppPreferenceCatalogEntry.allCases.count)
+        #expect(Set(allPrefs.map(\.key)) == Set(AppPreferenceCatalogEntry.allCases.map(\.rawValue)))
+        let restoredLookup = try await database.dbPool.read { db in
+            try AppPreference.fetchOne(db, key: AppPreferenceKeys.mangaWordLookup)
+        }
+        #expect(try restoredLookup?.decodedValue(for: AppPreferenceCatalog.mangaWordLookup) == true)
+    }
+
+    @Test func mergeRestoreOfFormat1BackupPreservesLocalMangaWordLookupFalse() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let falseLookup = try AppPreference(key: AppPreferenceCatalog.mangaWordLookup, value: false)
+        try await database.dbPool.write { db in
+            try falseLookup.insert(db)
+        }
+        let v1Entries = AppPreferenceCatalogEntry.allCases.filter { $0.introducedFormatVersion <= 1 }
+        let preferences = v1Entries.map { entry in
+            AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON)
+        }
+        let backup = representedBackup(
+            formatVersion: 1,
+            components: [.scalarAppPreferences],
+            preferences: preferences
+        )
+
+        _ = try await operation(database).restore(
+            backup,
+            mode: .merge,
+            operationId: "v1-merge-restore"
+        )
+
+        let restoredLookup = try await database.dbPool.read { db in
+            try AppPreference.fetchOne(db, key: AppPreferenceKeys.mangaWordLookup)
+        }
+        #expect(try restoredLookup?.decodedValue(for: AppPreferenceCatalog.mangaWordLookup) == false)
+    }
+
+    @Test func format1BackupMissingV1KeyIsRejectedWithIncompletePreferenceCatalog() async throws {
+        let v1Entries = AppPreferenceCatalogEntry.allCases.filter {
+            $0.introducedFormatVersion <= 1 && $0 != .libraryLayoutStyle
+        }
+        let preferences = v1Entries.map { entry in
+            AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON)
+        }
+        let backup = representedBackup(
+            formatVersion: 1,
+            components: [.scalarAppPreferences],
+            preferences: preferences
+        )
+        try await assertRejected(
+            backup,
+            reason: .invalidCapabilityMetadata(
+                component: .scalarAppPreferences,
+                code: "incompletePreferenceCatalog"
+            )
+        )
+    }
+
+    @Test func format2BackupWithEveryKeyRestoresTheFullCatalog() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let v2Entries = AppPreferenceCatalogEntry.allCases
+        let preferences = v2Entries.map { entry in
+            AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON)
+        }
+        let backup = representedBackup(
+            formatVersion: 2,
+            components: [.scalarAppPreferences],
+            preferences: preferences
+        )
+        _ = try await operation(database).restore(
+            backup,
+            mode: .wipe,
+            operationId: "v2-restore"
+        )
+        let restored = try await database.dbPool.read { db in
+            try AppPreference.fetchAll(db)
+        }
+        #expect(restored.count == 21)
+        #expect(Set(restored.map(\.key)) == Set(AppPreferenceCatalogEntry.allCases.map(\.rawValue)))
+    }
+
+    @Test func format2BackupMissingMangaWordLookupIsRejectedWithIncompletePreferenceCatalog() async throws {
+        let v2MissingLookup = AppPreferenceCatalogEntry.allCases.filter { $0 != .mangaWordLookup }
+        let preferences = v2MissingLookup.map { entry in
+            AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON)
+        }
+        let backup = representedBackup(
+            formatVersion: 2,
+            components: [.scalarAppPreferences],
+            preferences: preferences
+        )
+        try await assertRejected(
+            backup,
+            reason: .invalidCapabilityMetadata(
+                component: .scalarAppPreferences,
+                code: "incompletePreferenceCatalog"
+            )
+        )
+    }
+
+    @Test func futureFormat3BackupIsRejectedWithInvalidFormatVersion() async throws {
+        let preferences = AppPreferenceCatalogEntry.allCases.map { entry in
+            AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON)
+        }
+        let backup = representedBackup(
+            formatVersion: 3,
+            components: [.scalarAppPreferences],
+            preferences: preferences
+        )
+        try await assertRejected(
+            backup,
+            reason: .invalidCapabilityMetadata(
+                component: nil,
+                code: "invalidFormatVersion"
+            )
+        )
+    }
+
+    @Test func format1BackupCarryingMangaWordLookupIsRejected() async throws {
+        let v1Entries = AppPreferenceCatalogEntry.allCases.filter { $0.introducedFormatVersion <= 1 }
+        var preferences = v1Entries.map { entry in
+            AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON)
+        }
+        preferences.append(
+            AppPreference(
+                key: AppPreferenceCatalogEntry.mangaWordLookup.rawValue,
+                value: AppPreferenceCatalogEntry.mangaWordLookup.canonicalDefaultJSON
+            )
+        )
+        let backup = representedBackup(
+            formatVersion: 1,
+            components: [.scalarAppPreferences],
+            preferences: preferences
+        )
+        try await assertRejected(
+            backup,
+            reason: .invalidCapabilityMetadata(
+                component: .scalarAppPreferences,
+                code: "incompletePreferenceCatalog"
+            )
+        )
+    }
+
     @Test func writerSnapshotCannotChangeBetweenPreflightAndTransaction() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
@@ -1083,6 +1253,7 @@ struct BackupRestoreOperationPhaseTests {
     }
 
     nonisolated private func representedBackup(
+        formatVersion: Int = 1,
         components: [BackupComponent],
         capabilities explicitCapabilities: [BackupCapabilityRecord]? = nil,
         categories: [LibraryCategory] = [],
@@ -1130,7 +1301,7 @@ struct BackupRestoreOperationPhaseTests {
         }
         return ImportedBackup(
             metadata: BackupMetadataRecord(
-                formatVersion: 1,
+                formatVersion: formatVersion,
                 createdAt: Date(timeIntervalSince1970: 1)
             ),
             capabilities: capabilities,

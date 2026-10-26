@@ -1,4 +1,6 @@
+import CoreGraphics
 import Foundation
+import ImageIO
 import ito_runner
 @testable import Ito
 
@@ -215,8 +217,10 @@ final class MangaReaderTrackerFake: MangaReaderTrackerUpdating {
 @MainActor
 final class MangaReaderSettingsFake: MangaReaderSettingsAccessing {
     var mangaReaderPreloadImageCount: Int
+    var mangaReaderWordLookupEnabled = true
     var error: (any Error)?
     private(set) var writtenValues: [Int] = []
+    private(set) var writtenWordLookupValues: [Bool] = []
 
     init(preloadImageCount: Int = 5) {
         mangaReaderPreloadImageCount = preloadImageCount
@@ -226,6 +230,114 @@ final class MangaReaderSettingsFake: MangaReaderSettingsAccessing {
         writtenValues.append(value)
         if let error { throw error }
         mangaReaderPreloadImageCount = value
+    }
+
+    func setMangaReaderWordLookupEnabled(_ value: Bool) async throws {
+        writtenWordLookupValues.append(value)
+        if let error { throw error }
+        mangaReaderWordLookupEnabled = value
+    }
+}
+
+/// Holds each `words(in:)` call until the test completes it.
+nonisolated final class PageTextRecognizerFake: PageTextRecognizing, @unchecked Sendable {
+    final class Request: @unchecked Sendable {
+        fileprivate let continuation: CheckedContinuation<[RecognizedWord], any Error>
+        private let lock = NSLock()
+        private var isFinished = false
+
+        fileprivate init(continuation: CheckedContinuation<[RecognizedWord], any Error>) {
+            self.continuation = continuation
+        }
+
+        func complete(_ result: Result<[RecognizedWord], any Error>) {
+            let resumes = lock.withLock { () -> Bool in
+                defer { isFinished = true }
+                return !isFinished
+            }
+            if resumes { continuation.resume(with: result) }
+        }
+    }
+
+    /// When false, a cancelled read still waits for `complete`, like a recognizer that finishes
+    /// work already under way.
+    let honorsCancellation: Bool
+    private let lock = NSLock()
+    private var requests: [Request] = []
+    private var waiters: [(count: Int, continuation: CheckedContinuation<Request, Never>)] = []
+
+    init(honorsCancellation: Bool = true) {
+        self.honorsCancellation = honorsCancellation
+    }
+
+    func words(in image: CGImage, orientation: CGImagePropertyOrientation) async throws -> [RecognizedWord] {
+        _ = image
+        _ = orientation
+        let slot = CancellationSlot()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let registered = Request(continuation: continuation)
+                let ready = lock.withLock { () -> [CheckedContinuation<Request, Never>] in
+                    requests.append(registered)
+                    let count = requests.count
+                    let matched = waiters.filter { $0.count == count }
+                    waiters.removeAll { $0.count == count }
+                    return matched.map(\.continuation)
+                }
+                ready.forEach { $0.resume(returning: registered) }
+                if honorsCancellation, slot.register(registered) {
+                    registered.complete(.failure(CancellationError()))
+                }
+            }
+        } onCancel: { [honorsCancellation] in
+            if honorsCancellation { slot.cancel()?.complete(.failure(CancellationError())) }
+        }
+    }
+
+    /// Hands a read to cancellation whichever of the two happens first.
+    private final class CancellationSlot: @unchecked Sendable {
+        private let lock = NSLock()
+        private var request: Request?
+        private var cancelled = false
+
+        /// Stores `request`; true when cancellation already happened.
+        func register(_ request: Request) -> Bool {
+            lock.withLock {
+                self.request = request
+                return cancelled
+            }
+        }
+
+        /// Marks cancellation; returns the read to cancel when it has started.
+        func cancel() -> Request? {
+            lock.withLock {
+                cancelled = true
+                return request
+            }
+        }
+    }
+
+    /// The `number`th read (1-based), once it has started.
+    func request(_ number: Int) async -> Request {
+        await withCheckedContinuation { continuation in
+            let existing = lock.withLock { () -> Request? in
+                if requests.count >= number { return requests[number - 1] }
+                waiters.append((number, continuation))
+                return nil
+            }
+            if let existing { continuation.resume(returning: existing) }
+        }
+    }
+}
+
+@MainActor
+final class DictionaryFake: DictionaryDefinitionChecking {
+    var definedTerms: Set<String> = []
+    private(set) var checkedTerms: [String] = []
+
+    func hasDefinition(for term: String) -> Bool {
+        checkedTerms.append(term)
+        return definedTerms.contains(term)
     }
 }
 
@@ -289,6 +401,8 @@ struct MangaReaderTestSubject {
     let presence: MangaReaderPresenceFake
     let metadata: MangaReaderPluginMetadataFake
     let imagePrefetcher: MangaReaderImagePrefetcherFake
+    let textRecognizer: PageTextRecognizerFake
+    let dictionary: DictionaryFake
     let logger: PresentationEventCaptureSpy
     let dependencies: PreparedMangaReaderDependencies
 }
@@ -308,6 +422,8 @@ func makeMangaReaderSubject(
     let presence = MangaReaderPresenceFake()
     let metadata = MangaReaderPluginMetadataFake()
     let imagePrefetcher = MangaReaderImagePrefetcherFake()
+    let textRecognizer = PageTextRecognizerFake()
+    let dictionary = DictionaryFake()
     let logger = PresentationEventCaptureSpy()
     let dependencies = PreparedMangaReaderDependencies(
         progress: progress,
@@ -317,6 +433,8 @@ func makeMangaReaderSubject(
         presence: presence,
         pluginMetadata: metadata,
         makeImagePrefetcher: { imagePrefetcher },
+        textRecognizer: textRecognizer,
+        dictionary: dictionary,
         presentationLogger: logger
     )
     let viewModel = MangaReaderViewModel(
@@ -337,6 +455,8 @@ func makeMangaReaderSubject(
         presence: presence,
         metadata: metadata,
         imagePrefetcher: imagePrefetcher,
+        textRecognizer: textRecognizer,
+        dictionary: dictionary,
         logger: logger,
         dependencies: dependencies
     )

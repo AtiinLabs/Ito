@@ -8,6 +8,7 @@ struct UITestLaunchConfiguration {
     nonisolated static let resetStorageArgument = "--ui-test-reset-storage"
     nonisolated static let repositoryDeepLinkArgument = "--ui-test-repository-deep-link"
     nonisolated static let backupWipeArgument = "--ui-test-backup-wipe"
+    nonisolated static let mangaReaderArgument = "--ui-test-manga-reader"
     nonisolated static let repositoryURLString = "https://repository.ui-test.invalid/fixture"
     nonisolated static let fixtureDirectoryName = "UITestFixtures"
     nonisolated static let productionDatabaseDirectoryName = "Database"
@@ -28,18 +29,20 @@ struct UITestLaunchConfiguration {
     let resetsStorage: Bool
     let repositoryDeepLinkEnabled: Bool
     let backupWipeEnabled: Bool
+    let mangaReaderEnabled: Bool
 
     static var current: Self {
         let arguments = ProcessInfo.processInfo.arguments
         return Self(
             resetsStorage: arguments.contains(resetStorageArgument),
             repositoryDeepLinkEnabled: arguments.contains(repositoryDeepLinkArgument),
-            backupWipeEnabled: arguments.contains(backupWipeArgument)
+            backupWipeEnabled: arguments.contains(backupWipeArgument),
+            mangaReaderEnabled: arguments.contains(mangaReaderArgument)
         )
     }
 
     var isEnabled: Bool {
-        resetsStorage || repositoryDeepLinkEnabled || backupWipeEnabled
+        resetsStorage || repositoryDeepLinkEnabled || backupWipeEnabled || mangaReaderEnabled
     }
 
     nonisolated static func fixtureRootURL(fileManager: FileManager = .default) throws -> URL {
