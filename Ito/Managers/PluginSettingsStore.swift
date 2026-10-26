@@ -51,8 +51,15 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
     public typealias FaultHandler = @Sendable (LegacyMigrationFaultPoint, LegacyDefaultsSourceTuple) throws -> Void
     public typealias OperationFault = @Sendable (String) throws -> Void
 
-    @Published nonisolated(unsafe) public private(set) var revision = 0
-    @Published nonisolated(unsafe) public private(set) var lastPersistenceError: PluginSettingsPersistenceError?
+    private let publication = PluginSettingsPublication()
+
+    public var revision: Int { publication.revision }
+    public var lastPersistenceError: PluginSettingsPersistenceError? { publication.lastPersistenceError }
+    public var revisionPublisher: Published<Int>.Publisher { publication.$revision }
+    public var lastPersistenceErrorPublisher: Published<PluginSettingsPersistenceError?>.Publisher {
+        publication.$lastPersistenceError
+    }
+    public var objectWillChange: ObservableObjectPublisher { publication.objectWillChange }
 
     private static let suitePrefix = "moe.ito.runners."
     private static let suiteEvidenceKey = "__ito_internal_plugin_suite_evidence__"
@@ -1188,8 +1195,8 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
     private func publishSuccess() {
         publishOnMain { [weak self] in
             guard let self else { return }
-            revision &+= 1
-            lastPersistenceError = nil
+            publication.revision &+= 1
+            publication.lastPersistenceError = nil
         }
     }
 
@@ -1203,7 +1210,7 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
             occurredAt: clock()
         )
         publishOnMain { [weak self] in
-            self?.lastPersistenceError = health
+            self?.publication.lastPersistenceError = health
         }
     }
 
@@ -1218,6 +1225,12 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
     private static func suiteDomain(_ pluginId: String) -> String {
         suitePrefix + pluginId
     }
+}
+
+/// Combine storage stays outside the Sendable store; only `publishOnMain` mutates these values.
+nonisolated private final class PluginSettingsPublication: ObservableObject {
+    @Published var revision = 0
+    @Published var lastPersistenceError: PluginSettingsPersistenceError?
 }
 
 /// Notes commits that change what identity discovery reads, so it runs again only after one.

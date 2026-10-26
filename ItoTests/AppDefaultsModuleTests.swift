@@ -15,7 +15,7 @@ struct AppDefaultsModuleTests {
         )
         let module = AppDefaultsModule(pluginId: "plugin", store: store)
         var observedRevisions: [Int] = []
-        let observation = store.$revision.dropFirst().sink {
+        let observation = store.revisionPublisher.dropFirst().sink {
             observedRevisions.append($0)
         }
         defer { observation.cancel() }

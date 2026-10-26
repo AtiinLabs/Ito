@@ -643,7 +643,10 @@ public final class LegacyDefaultsMigrator: @unchecked Sendable {
                                   capture: capture, in: db)
             }
         } else {
-            try AppPreference(key: entry.rawValue, value: json).insert(db)
+            try db.execute(
+                sql: "INSERT INTO appPreference (key, value) VALUES (?, ?)",
+                arguments: [entry.rawValue, json]
+            )
             try recordOutcome(path: "$", disposition: .normalized, targetKind: "appPreference",
                               targetIdentity: entry.rawValue, targetFingerprint: Self.digest(json),
                               capture: capture, in: db)
@@ -942,7 +945,10 @@ public final class LegacyDefaultsMigrator: @unchecked Sendable {
         try dbPool.write { db in
             for entry in AppPreferenceCatalogEntry.allCases {
                 if try AppPreference.fetchOne(db, key: entry.rawValue) == nil {
-                    try AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON).insert(db)
+                    try db.execute(
+                        sql: "INSERT INTO appPreference (key, value) VALUES (?, ?)",
+                        arguments: [entry.rawValue, entry.canonicalDefaultJSON]
+                    )
                 }
             }
         }

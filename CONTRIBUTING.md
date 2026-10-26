@@ -26,6 +26,8 @@ lefthook install
 
 The hook lints staged Swift files. To lint everything, run `swiftlint lint --strict`; `swiftlint --fix` corrects what it can.
 
+Compiler diagnostics are separate from SwiftLint. Check the `Ito` scheme's build and Analyze results too, and fix warnings at their source rather than suppressing them.
+
 ## Branches
 
 Create short-lived branches from current `main`:

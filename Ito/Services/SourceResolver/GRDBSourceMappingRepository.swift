@@ -151,7 +151,7 @@ public final class GRDBSourceMappingRepository: SourceMappingRepository {
         pluginId: String,
         pluginMediaKey: String
     ) async throws {
-        try await dbWriter.write { db in
+        _ = try await dbWriter.write { db in
             try SourceMappingRecord
                 .filter(Column("canonicalProvider") == canonicalProvider)
                 .filter(Column("canonicalMediaId") == canonicalMediaId)

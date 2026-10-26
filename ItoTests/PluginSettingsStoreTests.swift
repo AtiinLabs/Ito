@@ -12,13 +12,24 @@ struct PluginSettingsStoreTests {
         let store = fixture.store()
         try store.prepare(pluginId: "plugin")
         var revisions: [Int] = []
-        let observation = store.$revision.dropFirst().sink { revisions.append($0) }
-        defer { observation.cancel() }
+        var committedAtUIInvalidation: String?
+        var invalidationWasOnMain = false
+        let observation = store.revisionPublisher.dropFirst().sink { revisions.append($0) }
+        let invalidation = store.objectWillChange.prefix(1).sink {
+            committedAtUIInvalidation = try? persistedValue(fixture.database, pluginId: "plugin", key: "theme")
+            invalidationWasOnMain = Thread.isMainThread
+        }
+        defer {
+            observation.cancel()
+            invalidation.cancel()
+        }
 
         #expect(store.get(pluginId: "plugin", key: "theme") == nil)
         #expect(store.set(pluginId: "plugin", key: "theme", value: "dark"))
         #expect(store.get(pluginId: "plugin", key: "theme") == "dark")
         #expect(try persistedValue(fixture.database, pluginId: "plugin", key: "theme") == "dark")
+        #expect(committedAtUIInvalidation == "dark")
+        #expect(invalidationWasOnMain)
         #expect(store.remove(pluginId: "plugin", key: "theme"))
         #expect(store.get(pluginId: "plugin", key: "theme") == nil)
         #expect(try persistedValue(fixture.database, pluginId: "plugin", key: "theme") == nil)
@@ -35,8 +46,8 @@ struct PluginSettingsStoreTests {
         module.set(key: "setting", value: "committed")
         var revisions: [Int] = []
         var health: [PluginSettingsPersistenceError] = []
-        let revisionObservation = store.$revision.dropFirst().sink { revisions.append($0) }
-        let healthObservation = store.$lastPersistenceError.compactMap(\.self).sink {
+        let revisionObservation = store.revisionPublisher.dropFirst().sink { revisions.append($0) }
+        let healthObservation = store.lastPersistenceErrorPublisher.compactMap(\.self).sink {
             health.append($0)
         }
         defer {

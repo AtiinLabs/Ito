@@ -112,7 +112,7 @@ protocol PluginSettingsPersisting: AnyObject {
 
 extension PluginSettingsStore: PluginSettingsPersisting {
     var settingsRevisionPublisher: AnyPublisher<Int, Never> {
-        $revision.eraseToAnyPublisher()
+        revisionPublisher.eraseToAnyPublisher()
     }
 
     func prepareSettings(pluginID: String) throws {
