@@ -118,8 +118,9 @@ private func closeButton(in view: UIView) -> UIButton? {
     return nil
 }
 
+// Serialized: the tests share the app's windows and key window, which overlays change.
 @MainActor
-@Suite("Web view page loads")
+@Suite("Web view page loads", .serialized)
 struct WebviewManagerTests {
     @Test func aPageThatNeverAnswersTimesOut() async throws {
         let server = try SilentServer()

@@ -103,8 +103,8 @@ again. The page is hidden when its last waiting script ends, whether by completi
 rejection, cancellation, or a navigation that replaces the document. A waiting call
 is still bounded by the webview host-call timeout (60 seconds, `HostCalls.swift` in
 ito-runner). That limit counts from the start of the call, not from when the page is
-shown, so a slow check can be cut short; the site's own cookies from a check finished
-later are kept for the next call.
+shown, so a slow check can be cut short: the page hides and the call fails, and the
+next call shows the page again.
 
 ## Build channels
 

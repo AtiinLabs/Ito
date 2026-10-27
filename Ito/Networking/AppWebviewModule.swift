@@ -78,9 +78,9 @@ class WebviewManager: NSObject, WKNavigationDelegate {
             wv.alpha = 0.01
             wv.isUserInteractionEnabled = false
 
-            // Wait for window
+            // Home is the app's own window, never a page overlay that may be up at the moment.
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-               let window = windowScene.windows.first {
+               let window = windowScene.windows.first(where: { !($0.rootViewController is PageOverlayViewController) }) {
                 window.insertSubview(wv, at: 0)
             }
             self.webView = wv
