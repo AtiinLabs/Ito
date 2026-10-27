@@ -34,7 +34,7 @@ enum MangaContinuousRow: Hashable {
 
 @MainActor
 final class MangaContinuousCollectionViewController: UIViewController,
-    UICollectionViewDataSource, UICollectionViewDelegate {
+    UICollectionViewDataSource, UICollectionViewDelegate, UIGestureRecognizerDelegate {
     /// Prompt rows: a 400-point minimum content height plus 40 points of padding above and below.
     static let promptHeight: CGFloat = 480
     /// Height-to-width ratio reserved for an image page until its decoded size is known.
@@ -57,11 +57,14 @@ final class MangaContinuousCollectionViewController: UIViewController,
     private var imageKeyByPageID: [String: ReaderPageImageKey] = [:]
     private var pixelSizes: [ReaderPageImageKey: CGSize] = [:]
     private var imageObservations: [ReaderPageImageKey: ReaderImageObservation] = [:]
+    /// Requests that failed; their rows make room for Try Again.
+    private var failedKeys: Set<ReaderPageImageKey> = []
     private var measuredHeights: [String: CGFloat] = [:]
 
     private var subscriptions: Set<AnyCancellable> = []
     private var pendingNavigation: MangaScrollRequest?
     private var animatingNavigation: MangaScrollRequest?
+    private var isLandingNavigation = false
     private var lastReportedPageIDs: [String] = []
     private var isInvalidated = false
 
@@ -84,6 +87,10 @@ final class MangaContinuousCollectionViewController: UIViewController,
         )
         collectionView.dataSource = self
         collectionView.delegate = self
+        // Image pages and the chapter prompts handle their own taps; this covers the rest.
+        let tap = UITapGestureRecognizer(target: self, action: #selector(backgroundTapped))
+        tap.delegate = self
+        collectionView.addGestureRecognizer(tap)
         // `@Published` delivers the current value on subscription, then each new one before the
         // property changes; only the delivered value is read.
         viewModel.$continuousSnapshot
@@ -102,6 +109,23 @@ final class MangaContinuousCollectionViewController: UIViewController,
 
     override func loadView() { view = collectionView }
 
+    @objc private func backgroundTapped() { onToggleUI() }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        let point = touch.location(in: collectionView)
+        guard let index = layout.rowIndices(in: CGRect(x: point.x, y: point.y, width: 1, height: 1)).first,
+              layout.frames[index].contains(point) else { return true }
+        switch rows[index] {
+        case .previousChapter, .nextChapter:
+            return false
+        case .divider:
+            return true
+        case .page(let id):
+            guard let page = pagesByID[id], case .url = page.page.content else { return true }
+            return false
+        }
+    }
+
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         // Closing the reader stops the image session and drops its observers; reopening
@@ -117,6 +141,15 @@ final class MangaContinuousCollectionViewController: UIViewController,
         }
         performPendingNavigation()
         reportViewport()
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        // Text, dividers and prompts follow Dynamic Type; their measured heights change with it.
+        guard previousTraitCollection?.preferredContentSizeCategory
+                != traitCollection.preferredContentSizeCategory else { return }
+        measuredHeights = [:]
+        commitAnchored {}
     }
 
     /// Stops every callback into the view model; the controller is being removed.
@@ -160,26 +193,34 @@ final class MangaContinuousCollectionViewController: UIViewController,
 
     // MARK: - Layout
 
-    /// Runs `change`, recomputes every frame, and moves the offset by however far the topmost
-    /// visible page moved, so that page stays at the same pixel. Runs synchronously: no later
-    /// pass corrects the position.
+    /// Runs `change`, recomputes every frame, and moves the offset by however far the anchor page
+    /// moved, so that page stays at the same pixel. Runs synchronously: no later pass corrects
+    /// the position. A jump still animating lands at once on its page's new position.
     private func commitAnchored(_ change: () -> Void) {
         let anchor = visibleAnchor()
         change()
         layoutWidth = collectionView.bounds.width
         layout.setFrames(frames(width: layoutWidth))
         var offset = collectionView.contentOffset
-        if let anchor, let frame = pageFrame(anchor.pageID) {
+        let interrupted = animatingNavigation
+        animatingNavigation = nil
+        if let interrupted, let frame = pageFrame(interrupted.pageID) {
+            offset.y = frame.minY
+        } else if let anchor, let frame = pageFrame(anchor.pageID) {
             offset.y = frame.minY - anchor.pixelOffset
         }
         if !collectionView.isTracking && !collectionView.isDecelerating {
             let maximum = max(layout.collectionViewContentSize.height - collectionView.bounds.height, 0)
             offset.y = min(max(offset.y, 0), maximum)
         }
-        if offset != collectionView.contentOffset {
+        if interrupted != nil {
+            // Unlike assigning `contentOffset`, this also stops the running animation.
+            collectionView.setContentOffset(offset, animated: false)
+        } else if offset != collectionView.contentOffset {
             collectionView.contentOffset = offset
         }
         collectionView.layoutIfNeeded()
+        if let interrupted { acknowledge(interrupted, landed: true) }
 #if DEBUG
         onLayoutCommitted?()
 #endif
@@ -223,34 +264,26 @@ final class MangaContinuousCollectionViewController: UIViewController,
             guard let page = pagesByID[pageID] else { return 1 }
             switch page.page.content {
             case .url:
-                let size = imageKeyByPageID[pageID].flatMap { pixelSizes[$0] }
-                let ratio = size.map { $0.height / $0.width } ?? Self.fallbackImageRatio
-                return (width * ratio).rounded(.up)
+                guard let key = imageKeyByPageID[pageID] else { return (width * Self.fallbackImageRatio).rounded(.up) }
+                let ratio = pixelSizes[key].map { $0.height / $0.width } ?? Self.fallbackImageRatio
+                let height = (width * ratio).rounded(.up)
+                // A failed page needs room for its message and Try Again, however wide the image.
+                return failedKeys.contains(key) ? max(height, Self.promptHeight) : height
             case .text(let text):
-                return Self.textHeight(text, width: width)
+                return measured("text|\(pageID)", width: width, minimum: 1) { MangaContinuousTextPage(text: text) }
             }
         }
     }
 
-    /// A text page is body text with 16 points of padding on every side.
-    static func textHeight(_ text: String, width: CGFloat) -> CGFloat {
-        let bounds = (text as NSString).boundingRect(
-            with: CGSize(width: max(width - 32, 1), height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            attributes: [.font: UIFont.preferredFont(forTextStyle: .body)],
-            context: nil
-        )
-        return bounds.height.rounded(.up) + 32
-    }
-
-    /// The fitting height of a prompt or divider at `width`, cached per content and width.
+    /// The fitting height of a text page, prompt or divider at `width`, cached per content, width
+    /// and text size.
     private func measured<Content: View>(
         _ key: String,
         width: CGFloat,
         minimum: CGFloat,
         _ content: () -> Content
     ) -> CGFloat {
-        let cacheKey = "\(key)|\(width)"
+        let cacheKey = "\(key)|\(width)|\(traitCollection.preferredContentSizeCategory.rawValue)"
         if let height = measuredHeights[cacheKey] { return height }
         let fitting = UIHostingController(rootView: content())
             .sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
@@ -264,11 +297,19 @@ final class MangaContinuousCollectionViewController: UIViewController,
         return layout.frames[index]
     }
 
-    /// The topmost page with more than one point on screen, and how far its top sits below the
-    /// top of the viewport (negative when it starts above it).
+    /// The page under the middle of the viewport (or the nearest page to it), and how far its top
+    /// sits below the top of the viewport (negative when it starts above it). Anchoring where the
+    /// reader is looking, not a sliver at an edge, keeps what they see still when that sliver's
+    /// image arrives.
     func visibleAnchor() -> (pageID: String, pixelOffset: CGFloat)? {
-        guard let first = visiblePageIDs().first, let frame = pageFrame(first) else { return nil }
-        return (first, frame.minY - collectionView.contentOffset.y)
+        let viewport = collectionView.bounds
+        let midline = viewport.midY
+        let candidates = visiblePageIDs().compactMap { id in pageFrame(id).map { (id: id, frame: $0) } }
+        let distance = { (frame: CGRect) -> CGFloat in
+            frame.minY > midline ? frame.minY - midline : max(midline - frame.maxY, 0)
+        }
+        guard let anchor = candidates.min(by: { distance($0.frame) < distance($1.frame) }) else { return nil }
+        return (anchor.id, anchor.frame.minY - viewport.minY)
     }
 
     func visiblePageIDs() -> [String] {
@@ -296,12 +337,15 @@ final class MangaContinuousCollectionViewController: UIViewController,
         let liveKeys = Set(keys.values)
         cancelImageObservations { !liveKeys.contains($0) }
         pixelSizes = pixelSizes.filter { liveKeys.contains($0.key) }
+        failedKeys.formIntersection(liveKeys)
         for key in liveKeys where imageObservations[key] == nil {
             let session = viewModel.imageSession
             imageObservations[key] = session.observe(key) { [weak self] state in
                 self?.imageStateChanged(state, key: key)
             }
-            if let size = Self.validSize(session.state(for: key).pixelSize) { pixelSizes[key] = size }
+            let state = session.state(for: key)
+            if let size = Self.validSize(state.pixelSize) { pixelSizes[key] = size }
+            if case .failed = state.phase { failedKeys.insert(key) }
         }
     }
 
@@ -313,9 +357,15 @@ final class MangaContinuousCollectionViewController: UIViewController,
     }
 
     private func imageStateChanged(_ state: ReaderPageImageState, key: ReaderPageImageKey) {
-        guard !isInvalidated, imageObservations[key] != nil,
-              let size = Self.validSize(state.pixelSize), pixelSizes[key] != size else { return }
-        commitAnchored { pixelSizes[key] = size }
+        guard !isInvalidated, imageObservations[key] != nil else { return }
+        let size = Self.validSize(state.pixelSize) ?? pixelSizes[key]
+        let failed: Bool
+        if case .failed = state.phase { failed = true } else { failed = false }
+        guard size != pixelSizes[key] || failed != failedKeys.contains(key) else { return }
+        commitAnchored {
+            pixelSizes[key] = size
+            if failed { failedKeys.insert(key) } else { failedKeys.remove(key) }
+        }
         reportViewport()
     }
 
@@ -337,34 +387,42 @@ final class MangaContinuousCollectionViewController: UIViewController,
     private func performPendingNavigation() {
         guard let request = pendingNavigation, collectionView.bounds.height > 0,
               let frame = pageFrame(request.pageID) else { return }
-        pendingNavigation = nil
         let maximum = max(layout.collectionViewContentSize.height - collectionView.bounds.height, 0)
         let target = CGPoint(x: 0, y: min(max(frame.minY, 0), maximum))
+        pendingNavigation = nil
         if request.animated && target != collectionView.contentOffset {
             animatingNavigation = request
             collectionView.setContentOffset(target, animated: true)
         } else {
-            collectionView.contentOffset = target
+            // The scroll this causes reports nothing of its own; the acknowledgement does.
+            animatingNavigation = nil
+            isLandingNavigation = true
+            collectionView.setContentOffset(target, animated: false)
             collectionView.layoutIfNeeded()
-            acknowledge(request)
+            isLandingNavigation = false
+            acknowledge(request, landed: true)
         }
     }
 
-    private func acknowledge(_ request: MangaScrollRequest) {
+    /// Ends a jump. One that landed makes its page current even if a sliver of the page above
+    /// shows; one a drag took over leaves the choice to what is on screen.
+    private func acknowledge(_ request: MangaScrollRequest, landed: Bool) {
         let pageIDs = visiblePageIDs()
         lastReportedPageIDs = pageIDs
         // Delivered after this UIKit pass, never while SwiftUI or the view model is mid-update.
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.isInvalidated else { return }
             self.viewModel.consumeScrollTarget(request)
-            self.viewModel.continuousViewportChanged(pageIDs, preferredPageID: request.pageID)
+            self.viewModel.continuousViewportChanged(pageIDs, preferredPageID: landed ? request.pageID : nil)
         }
     }
 
     /// Reports the pages on screen when they change. A restore or jump in progress owns the
     /// position, so nothing is reported until it lands.
     private func reportViewport() {
-        guard !isInvalidated, pendingNavigation == nil, animatingNavigation == nil else { return }
+        guard !isInvalidated, pendingNavigation == nil, animatingNavigation == nil, !isLandingNavigation else {
+            return
+        }
         let pageIDs = visiblePageIDs()
         guard !pageIDs.isEmpty, pageIDs != lastReportedPageIDs else { return }
         lastReportedPageIDs = pageIDs
@@ -383,7 +441,17 @@ final class MangaContinuousCollectionViewController: UIViewController,
     func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
         guard let request = animatingNavigation else { return }
         animatingNavigation = nil
-        acknowledge(request)
+        acknowledge(request, landed: true)
+        // A footer jump to the last page counts as reaching the end.
+        appendIfNearEnd()
+    }
+
+    /// A drag takes over from a jump still animating: the jump is over, and the page on screen
+    /// is whatever the drag shows.
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        guard let request = animatingNavigation else { return }
+        animatingNavigation = nil
+        acknowledge(request, landed: false)
     }
 
     /// Asks for the next chapter when the user scrolls near the bottom of the last page. Only
@@ -418,7 +486,8 @@ final class MangaContinuousCollectionViewController: UIViewController,
             withReuseIdentifier: MangaContinuousHostingCell.reuseID,
             for: indexPath
         )
-        (cell as? MangaContinuousHostingCell)?.host(content(for: rows[indexPath.item]), parent: self)
+        let row = rows[indexPath.item]
+        (cell as? MangaContinuousHostingCell)?.host(content(for: row), row: row, parent: self)
         return cell
     }
 
@@ -449,7 +518,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
                 imageLabel: "Page \(page.chapterPosition + 1)"
             ))
         case .text(let text):
-            return AnyView(Text(text).foregroundColor(.white).padding().frame(maxWidth: .infinity))
+            return AnyView(MangaContinuousTextPage(text: text))
         }
     }
 
@@ -539,11 +608,14 @@ private final class MangaContinuousHostingCell: UICollectionViewCell {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func host(_ content: AnyView, parent: UIViewController) {
+    /// Shows `content`. Keyed by `row`, so a reused cell never carries one page's state (a zoom,
+    /// an image lease) over to another.
+    func host(_ content: AnyView, row: MangaContinuousRow, parent: UIViewController) {
         let rootView = AnyView(
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .ignoresSafeArea()
+                .id(row)
         )
         if let hostingController {
             hostingController.rootView = rootView
@@ -562,6 +634,18 @@ private final class MangaContinuousHostingCell: UICollectionViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         hostingController?.rootView = AnyView(EmptyView())
+    }
+}
+
+/// A text page: body text with standard padding. Measured and drawn from the same view.
+private struct MangaContinuousTextPage: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .foregroundColor(.white)
+            .padding()
+            .frame(maxWidth: .infinity)
     }
 }
 

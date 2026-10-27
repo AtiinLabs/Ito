@@ -51,6 +51,10 @@ final class ReaderPageImageSessionTests: XCTestCase {
         remounted.view.frame = window.bounds
         remounted.view.layoutIfNeeded()
         let retryLease = session.acquire(descriptor, consumer: .visible)
+        // Remounting acquires the page again; the failure stands and nothing restarts.
+        if case .failed = session.state(for: descriptor.key).phase {} else {
+            XCTFail("A remounted page must keep its failure until Try Again.")
+        }
         XCTAssertEqual(ReaderSessionURLProtocol.requestCount(for: host), 1)
 
         let retryFailure = expectation(description: "explicit retry completes as failed")

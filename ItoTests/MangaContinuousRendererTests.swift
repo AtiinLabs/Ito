@@ -35,6 +35,16 @@ final class MangaContinuousRendererTests: XCTestCase {
         try reader.assertAnchor("a#3", offset)
     }
 
+    func testATallImageArrivingInASliverAtTheTopDoesNotMoveThePageBeingRead() async throws {
+        let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 4)
+        reader.subject.viewModel.imageSession.setPrefetch([try reader.descriptor("a#0")])
+        // Only the bottom 300 points of the first page show; the reader looks at the second.
+        let offset = try reader.scroll(toPage: "a#1", pixelOffset: 308)
+
+        try await reader.respond("a#0", width: 400, height: 4_000)
+        try reader.assertAnchor("a#1", offset)
+    }
+
     func testDeepOffsetSurvivesPrependAppendAndEviction() async throws {
         let chapters = (1...5).map { chapter("c\($0)", Float32($0)) }
         let reader = try await openReader(chapters: chapters, initial: "c3", pageCount: 2)
@@ -113,6 +123,19 @@ final class MangaContinuousRendererTests: XCTestCase {
 
         XCTAssertEqual(reader.subject.viewModel.continuousPageIndex, 1)
         XCTAssertEqual(reader.subject.loader.callCount(for: "b"), 0)
+    }
+
+    func testALayoutChangeDuringAnAnimatedJumpLandsOnTheRequestedPage() async throws {
+        let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 6)
+
+        // The footer's next-page button animates; switching to Webtoon spacing lands mid-flight.
+        reader.subject.viewModel.nextPage()
+        reader.subject.viewModel.setViewerOverride(.Webtoon)
+        await waitUntil { reader.subject.viewModel.scrollTarget == nil }
+
+        let target = try XCTUnwrap(reader.controller.pageFrame("a#1"))
+        XCTAssertEqual(reader.controller.collectionView.contentOffset.y, target.minY)
+        XCTAssertEqual(reader.subject.viewModel.continuousPageIndex, 1)
     }
 
     // MARK: - Fixtures
@@ -208,21 +231,21 @@ private struct RendererFixture {
         XCTAssertEqual(anchor.pixelOffset, pixelOffset, accuracy: 0.001, file: file, line: line)
     }
 
-    /// Answers the page's pending image request and waits until the renderer applied its size.
+    /// Answers the page's image request once the session has made it, and checks the renderer
+    /// applied the size: the session notifies the renderer in the same pass as this test.
     func respond(_ pageID: String, width: Int, height: Int) async throws {
         let descriptor = try descriptor(pageID)
         let url = try XCTUnwrap(descriptor.request.url)
-        let session = subject.viewModel.imageSession
         let decoded = test.expectation(description: "\(pageID) decoded")
-        let observation = session.observe(descriptor.key) { state in
+        let observation = subject.viewModel.imageSession.observe(descriptor.key) { state in
             if state.pixelSize != nil { decoded.fulfill() }
         }
-        await test.waitUntil { images.isPending(url) }
+        await images.waitForRequest(url)
         images.respond(url, width: width, height: height)
         await test.fulfillment(of: [decoded], timeout: 5)
         observation.cancel()
         let expected = (controller.collectionView.bounds.width * CGFloat(height) / CGFloat(width)).rounded(.up)
-        await test.waitUntil { controller.pageFrame(pageID)?.height == expected }
+        XCTAssertEqual(controller.pageFrame(pageID)?.height, expected)
     }
 }
 
@@ -235,13 +258,22 @@ private final class GatedImageLoader: DataLoading, @unchecked Sendable {
 
     private let lock = NSLock()
     private var pending: [URL: [Pending]] = [:]
+    private var waiters: [URL: [CheckedContinuation<Void, Never>]] = [:]
 
     static func url(_ chapterKey: String, _ index: Int) -> String {
         "https://renderer.test/\(chapterKey)/\(index).png"
     }
 
-    func isPending(_ url: URL) -> Bool {
-        lock.withLock { !(pending[url]?.isEmpty ?? true) }
+    /// Returns once a request for `url` is waiting for an answer.
+    func waitForRequest(_ url: URL) async {
+        await withCheckedContinuation { continuation in
+            let isPending = lock.withLock {
+                if !(pending[url]?.isEmpty ?? true) { return true }
+                waiters[url, default: []].append(continuation)
+                return false
+            }
+            if isPending { continuation.resume() }
+        }
     }
 
     func loadData(
@@ -253,9 +285,11 @@ private final class GatedImageLoader: DataLoading, @unchecked Sendable {
             completion(URLError(.badURL))
             return GatedImageCancellation()
         }
-        lock.withLock {
+        let resumed = lock.withLock {
             pending[url, default: []].append(Pending(didReceiveData: didReceiveData, completion: completion))
+            return waiters.removeValue(forKey: url) ?? []
         }
+        resumed.forEach { $0.resume() }
         return GatedImageCancellation()
     }
 

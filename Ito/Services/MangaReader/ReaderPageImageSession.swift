@@ -82,8 +82,10 @@ final class ReaderImageObservation {
     }
 }
 
+/// The page images of one reader: one request per URL and headers, shared by the visible page
+/// and prefetch, and a failure that stays until Try Again.
 @MainActor
-final class ReaderPageImageSession: ObservableObject {
+final class ReaderPageImageSession {
     private struct Entry {
         var request: URLRequest?
         var phase: ReaderPageImagePhase = .idle
@@ -97,14 +99,20 @@ final class ReaderPageImageSession: ObservableObject {
         var isPrefetchQueued = false
     }
 
-    private let pipeline: ImagePipeline
+    private let pipelineOverride: ImagePipeline?
+    /// The app's image pipeline is replaced when plugin image settings change; a session without
+    /// an injected pipeline always uses the current one.
+    private var pipeline: ImagePipeline { pipelineOverride ?? .shared }
     private var entries: [ReaderPageImageKey: Entry] = [:]
     private var prefetchOrder: [ReaderPageImageKey] = []
     private var runningPrefetches = 0
     private let maximumPrefetches = 2
+    /// Every started task gets a new number, unique for the session's lifetime, so a late result
+    /// of a cancelled task never matches a request that was forgotten and added again.
+    private var lastTaskGeneration: UInt64 = 0
 
-    init(pipeline: ImagePipeline = .shared) {
-        self.pipeline = pipeline
+    init(pipeline: ImagePipeline? = nil) {
+        pipelineOverride = pipeline
     }
 
     func state(for key: ReaderPageImageKey) -> ReaderPageImageState {
@@ -130,8 +138,6 @@ final class ReaderPageImageSession: ObservableObject {
             case .visible: start(key)
             case .prefetch: enqueuePrefetch(key)
             }
-        } else if consumer == .visible, entry.isPrefetchQueued {
-            start(key)
         }
         return ReaderImageLease(id: id, key: key)
     }
@@ -240,14 +246,25 @@ final class ReaderPageImageSession: ObservableObject {
         if case .failed = entry.phase { return }
         entry.isPrefetchQueued = false
         prefetchOrder.removeAll { $0 == key }
-        entry.generation &+= 1
-        let generation = entry.generation
+        let imageRequest = ImageRequest(urlRequest: request)
+        // A page shown again whose image is still in memory appears at once, without a spinner.
+        if entry.leases.values.contains(.visible),
+           let image = pipeline.cache.cachedImage(for: imageRequest, caches: [.memory])?.image {
+            entry.phase = .ready(image)
+            entry.pixelSize = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
+            entries[key] = entry
+            publish(key)
+            return
+        }
+        lastTaskGeneration &+= 1
+        entry.generation = lastTaskGeneration
+        let generation = lastTaskGeneration
         entry.phase = .loading
         let countsAsPrefetch = !entry.leases.values.contains(where: { $0 == .visible })
         if countsAsPrefetch { runningPrefetches += 1 }
         entry.taskIsPrefetch = countsAsPrefetch
         entries[key] = entry
-        let task = pipeline.imageTask(with: ImageRequest(urlRequest: request))
+        let task = pipeline.imageTask(with: imageRequest)
         entries[key]?.cancelTask = { task.cancel() }
         publish(key)
         Task { [weak self] in
@@ -315,7 +332,10 @@ final class ReaderPageImageSession: ObservableObject {
         entry.revision &+= 1
         entries[key] = entry
         let value = snapshot(entry)
-        entry.observers.values.forEach { $0(value) }
+        // An observer may cancel others while being notified; those are not called.
+        for id in Array(entry.observers.keys) {
+            entries[key]?.observers[id]?(value)
+        }
     }
 
     private func snapshot(_ entry: Entry) -> ReaderPageImageState {

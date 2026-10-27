@@ -85,7 +85,10 @@ struct MangaImage: View {
 
     private func bindRequest() {
         releaseRequest()
-        guard let url = URL(string: urlStr) else { return }
+        guard let url = URL(string: urlStr) else {
+            imageState = ReaderPageImageState(phase: .idle, pixelSize: nil, revision: 0)
+            return
+        }
         let request = NukeMangaReaderImagePrefetcher.urlRequest(url: url, headers: headers)
         let descriptor = ReaderPageImageDescriptor(pageID: pageID, request: request)
         let key = descriptor.key

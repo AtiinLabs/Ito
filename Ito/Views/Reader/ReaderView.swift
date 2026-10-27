@@ -71,9 +71,6 @@ struct ReaderView: View {
                 .padding(32)
             case .content:
                 readComponent
-                    // Pages handle their own taps (so a double tap can zoom); this covers
-                    // the space around them.
-                    .onTapGesture(perform: toggleUI)
                     .ignoresSafeArea()
             }
 
@@ -167,10 +164,14 @@ struct ReaderView: View {
                 ? .rightToLeft
                 : .leftToRight
         )
+        // Pages handle their own taps (so a double tap can zoom); this covers the space around them.
+        .onTapGesture(perform: toggleUI)
     }
 
     // MARK: - Continuous Reader (Vertical/Webtoon)
 
+    /// Handles every tap itself: a SwiftUI tap gesture around a UIKit view would also fire for
+    /// taps the pages already handle.
     private var continuousReader: some View {
         MangaContinuousReaderView(viewModel: viewModel, onToggleUI: toggleUI)
     }
