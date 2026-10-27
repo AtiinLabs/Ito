@@ -59,53 +59,6 @@ CI builds and tests with code signing disabled. Locally, select an iOS Simulator
 
 To run on a device, set your team in Xcode and leave that change uncommitted. The pre-commit hook and the `CI / No development team` check reject a `DEVELOPMENT_TEAM` value in `project.pbxproj` or an `.xcconfig` file. If you stage the project file for another change, stage only the hunks you mean to commit (`git add -p`).
 
-### Plugin WebView scripts
-
-Starting with Ito 1.4.0, a script passed through the existing WebView execution
-API can opt into an asynchronous function body by starting with the exact line
-`//# ito-async` followed by a newline:
-
-```javascript
-//# ito-async
-return JSON.stringify(await Promise.resolve({ supported: true }));
-```
-
-This path runs in the page's content world and awaits a returned Promise. Use
-`return` explicitly, and serialize structured results with `JSON.stringify`.
-Scripts without this prefix retain their existing program-evaluation behavior.
-No SDK or WASM import changes are required; plugins using the capability must
-declare `min_app_version` of at least `1.4.0`.
-
-Caller cancellation or a replacement document ends the host's wait and discards
-late results. It does not abort JavaScript already running in the page. The
-runner's existing host-call timeout remains the deadline authority.
-
-Plugins can also ask Ito to show the shared WebView to the user, for a verification
-the host can't complete itself (such as a Cloudflare Turnstile dialog). Post to the
-`itoShowPage` message handler in the page content world and await the reply:
-
-```javascript
-const shown = (await window.webkit?.messageHandlers?.itoShowPage?.postMessage(null)) === true;
-```
-
-The reply is a boolean: `true` when the page is shown (or already shown), `false`
-when it is refused. The message body is ignored. Ito shows the page only while all
-of these hold: the message comes from the page's main frame; an async script from
-the plugin is waiting on that page; the app is in the foreground; and the user
-hasn't closed a page for this origin since the app last became active. Ito never
-clicks, detects a challenge, or polls. The user completes the verification, and the
-waiting call continues.
-
-When the user taps Close, or uses the VoiceOver escape gesture, every script waiting
-on the page fails with `ItoError.hostModuleError(domain: "webview", message:
-"Verification was closed.")`, and the origin is declined until the app becomes active
-again. The page is hidden when its last waiting script ends, whether by completion,
-rejection, cancellation, or a navigation that replaces the document. A waiting call
-is still bounded by the webview host-call timeout (60 seconds, `HostCalls.swift` in
-ito-runner). That limit counts from the start of the call, not from when the page is
-shown, so a slow check can be cut short: the page hides and the call fails, and the
-next call shows the page again.
-
 ## Build channels
 
 - **Stable:** tags such as `v1.3.0`, created only on a commit already contained in `main`.
