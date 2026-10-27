@@ -237,6 +237,38 @@ final class ReaderPageImageSessionTests: XCTestCase {
         observation.cancel()
         session.deactivate()
     }
+
+    func testAPageShownAgainAppearsAtOnceFromMemory() async throws {
+        let images = GatedImageLoader()
+        let pipeline = ImagePipeline {
+            $0.dataLoader = images
+            $0.imageCache = ImageCache()
+            $0.dataCache = nil
+        }
+        let session = ReaderPageImageSession(pipeline: pipeline)
+        let url = try XCTUnwrap(URL(string: "https://memory-session.test/page.png"))
+        let descriptor = ReaderPageImageDescriptor(pageID: "page", request: URLRequest(url: url))
+        let ready = expectation(description: "the page loads")
+        let observation = session.observe(descriptor.key) { state in
+            if case .ready = state.phase { ready.fulfill() }
+        }
+        let first = session.acquire(descriptor, consumer: .visible)
+        await images.waitForRequest(url)
+        images.respond(url, width: 300, height: 900)
+        await fulfillment(of: [ready], timeout: 5)
+        observation.cancel()
+        session.release(first)
+
+        // Scrolled back: the decoded image is still in memory, so no spinner and no request.
+        let second = session.acquire(descriptor, consumer: .visible)
+        if case .ready = session.state(for: descriptor.key).phase {} else {
+            XCTFail("A page whose image is in memory must show it at once.")
+        }
+        XCTAssertEqual(session.knownPixelSize(for: descriptor), CGSize(width: 300, height: 900))
+        XCTAssertEqual(images.requestCount, 1)
+        session.release(second)
+        session.deactivate()
+    }
 }
 
 private final class ReaderSessionURLProtocol: URLProtocol {

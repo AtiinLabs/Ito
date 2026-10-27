@@ -1,7 +1,5 @@
-import Combine
 import Foundation
 import Nuke
-import SwiftUI
 import UIKit
 
 struct ReaderPageImageKey: Hashable {
@@ -120,6 +118,15 @@ final class ReaderPageImageSession {
             return ReaderPageImageState(phase: .idle, pixelSize: nil, revision: 0)
         }
         return snapshot(entry)
+    }
+
+    /// The image's decoded size if this session or the image pipeline's memory cache knows it,
+    /// without starting a request.
+    func knownPixelSize(for descriptor: ReaderPageImageDescriptor) -> CGSize? {
+        if let size = entries[descriptor.key]?.pixelSize { return size }
+        let request = ImageRequest(urlRequest: descriptor.request)
+        guard let image = pipeline.cache.cachedImage(for: request, caches: [.memory])?.image else { return nil }
+        return CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
     }
 
     func acquire(_ descriptor: ReaderPageImageDescriptor, consumer: ReaderImageConsumer) -> ReaderImageLease {

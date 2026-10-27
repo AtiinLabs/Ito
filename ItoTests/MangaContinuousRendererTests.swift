@@ -45,6 +45,25 @@ final class MangaContinuousRendererTests: XCTestCase {
         try reader.assertAnchor("a#1", offset)
     }
 
+    func testThePreviousChaptersLastPageArrivingAboveTheDividerDoesNotMoveTheCurrentChapter() async throws {
+        // A 667-point screen puts the middle of the viewport in the gap above the divider.
+        let reader = try await openReader(
+            chapters: [chapter("c1", 1), chapter("c2", 2)],
+            initial: "c2",
+            pageCount: 2,
+            windowSize: CGSize(width: 375, height: 667)
+        )
+        reader.subject.loader.enqueue(.pages(pages("c1", count: 2)), for: "c1")
+        reader.subject.viewModel.prependPreviousChapter()
+        await waitUntil { reader.subject.viewModel.segments.count == 2 }
+        let anchor = try XCTUnwrap(reader.controller.visibleAnchor())
+        XCTAssertEqual(anchor.pageID, "c2#0")
+
+        reader.subject.viewModel.imageSession.setPrefetch([try reader.descriptor("c1#1")])
+        try await reader.respond("c1#1", width: 400, height: 4_000)
+        try reader.assertAnchor("c2#0", anchor.pixelOffset)
+    }
+
     func testDeepOffsetSurvivesPrependAppendAndEviction() async throws {
         let chapters = (1...5).map { chapter("c\($0)", Float32($0)) }
         let reader = try await openReader(chapters: chapters, initial: "c3", pageCount: 2)
@@ -144,7 +163,8 @@ final class MangaContinuousRendererTests: XCTestCase {
         chapters: [Manga.Chapter],
         initial: String,
         pageCount: Int,
-        savedPage: Int? = nil
+        savedPage: Int? = nil,
+        windowSize: CGSize = CGSize(width: 390, height: 844)
     ) async throws -> RendererFixture {
         let images = GatedImageLoader()
         let pipeline = ImagePipeline {
@@ -165,7 +185,7 @@ final class MangaContinuousRendererTests: XCTestCase {
 
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
         let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        window.frame = CGRect(origin: .zero, size: windowSize)
         let controller = MangaContinuousCollectionViewController(viewModel: subject.viewModel, onToggleUI: {})
         window.rootViewController = controller
         window.makeKeyAndVisible()
@@ -250,7 +270,7 @@ private struct RendererFixture {
 }
 
 /// Holds image requests until the test answers them with a PNG of a chosen size.
-private final class GatedImageLoader: DataLoading, @unchecked Sendable {
+final class GatedImageLoader: DataLoading, @unchecked Sendable {
     private struct Pending {
         let didReceiveData: @Sendable (Data, URLResponse) -> Void
         let completion: @Sendable (Error?) -> Void
@@ -259,6 +279,10 @@ private final class GatedImageLoader: DataLoading, @unchecked Sendable {
     private let lock = NSLock()
     private var pending: [URL: [Pending]] = [:]
     private var waiters: [URL: [CheckedContinuation<Void, Never>]] = [:]
+    private var requests = 0
+
+    /// Every request the pipeline has made so far.
+    var requestCount: Int { lock.withLock { requests } }
 
     static func url(_ chapterKey: String, _ index: Int) -> String {
         "https://renderer.test/\(chapterKey)/\(index).png"
@@ -286,6 +310,7 @@ private final class GatedImageLoader: DataLoading, @unchecked Sendable {
             return GatedImageCancellation()
         }
         let resumed = lock.withLock {
+            requests += 1
             pending[url, default: []].append(Pending(didReceiveData: didReceiveData, completion: completion))
             return waiters.removeValue(forKey: url) ?? []
         }

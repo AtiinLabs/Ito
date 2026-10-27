@@ -111,13 +111,17 @@ final class MangaContinuousCollectionViewController: UIViewController,
 
     @objc private func backgroundTapped() { onToggleUI() }
 
+    /// The controls toggle on taps nothing else handles: dividers, text pages and gaps. Image
+    /// pages handle their own taps in every state, and a prompt does unless it is loading.
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         let point = touch.location(in: collectionView)
         guard let index = layout.rowIndices(in: CGRect(x: point.x, y: point.y, width: 1, height: 1)).first,
               layout.frames[index].contains(point) else { return true }
         switch rows[index] {
-        case .previousChapter, .nextChapter:
-            return false
+        case .previousChapter:
+            return snapshot?.loadingPrevious == true
+        case .nextChapter:
+            return snapshot?.loadingNext == true
         case .divider:
             return true
         case .page(let id):
@@ -213,6 +217,8 @@ final class MangaContinuousCollectionViewController: UIViewController,
             let maximum = max(layout.collectionViewContentSize.height - collectionView.bounds.height, 0)
             offset.y = min(max(offset.y, 0), maximum)
         }
+        // The scroll this causes reports nothing of its own while a jump lands.
+        isLandingNavigation = interrupted != nil
         if interrupted != nil {
             // Unlike assigning `contentOffset`, this also stops the running animation.
             collectionView.setContentOffset(offset, animated: false)
@@ -220,6 +226,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
             collectionView.contentOffset = offset
         }
         collectionView.layoutIfNeeded()
+        isLandingNavigation = false
         if let interrupted { acknowledge(interrupted, landed: true) }
 #if DEBUG
         onLayoutCommitted?()
@@ -297,18 +304,19 @@ final class MangaContinuousCollectionViewController: UIViewController,
         return layout.frames[index]
     }
 
-    /// The page under the middle of the viewport (or the nearest page to it), and how far its top
-    /// sits below the top of the viewport (negative when it starts above it). Anchoring where the
-    /// reader is looking, not a sliver at an edge, keeps what they see still when that sliver's
-    /// image arrives.
+    /// The page under the middle of the viewport, and how far its top sits below the top of the
+    /// viewport (negative when it starts above it). When a divider or gap is there instead, the
+    /// page below it: a page grows downwards, so a page above that grows cannot move what is
+    /// below, but one used as the anchor would push it away. Only without a page below, the
+    /// nearest one above.
     func visibleAnchor() -> (pageID: String, pixelOffset: CGFloat)? {
         let viewport = collectionView.bounds
         let midline = viewport.midY
         let candidates = visiblePageIDs().compactMap { id in pageFrame(id).map { (id: id, frame: $0) } }
-        let distance = { (frame: CGRect) -> CGFloat in
-            frame.minY > midline ? frame.minY - midline : max(midline - frame.maxY, 0)
-        }
-        guard let anchor = candidates.min(by: { distance($0.frame) < distance($1.frame) }) else { return nil }
+        let anchor = candidates.first { $0.frame.minY <= midline && midline < $0.frame.maxY }
+            ?? candidates.first { $0.frame.minY > midline }
+            ?? candidates.last
+        guard let anchor else { return nil }
         return (anchor.id, anchor.frame.minY - viewport.minY)
     }
 
@@ -326,26 +334,29 @@ final class MangaContinuousCollectionViewController: UIViewController,
     // MARK: - Images
 
     private func observeImages() {
-        var keys: [String: ReaderPageImageKey] = [:]
+        var descriptors: [String: ReaderPageImageDescriptor] = [:]
         for page in snapshot?.pages ?? [] {
             guard case .url(let value) = page.page.content, let url = URL(string: value) else { continue }
-            keys[page.id] = ReaderPageImageKey(
+            descriptors[page.id] = ReaderPageImageDescriptor(
+                pageID: page.id,
                 request: NukeMangaReaderImagePrefetcher.urlRequest(url: url, headers: page.page.headers)
             )
         }
-        imageKeyByPageID = keys
-        let liveKeys = Set(keys.values)
+        imageKeyByPageID = descriptors.mapValues(\.key)
+        let liveKeys = Set(imageKeyByPageID.values)
         cancelImageObservations { !liveKeys.contains($0) }
         pixelSizes = pixelSizes.filter { liveKeys.contains($0.key) }
         failedKeys.formIntersection(liveKeys)
-        for key in liveKeys where imageObservations[key] == nil {
-            let session = viewModel.imageSession
+        let session = viewModel.imageSession
+        for descriptor in descriptors.values where imageObservations[descriptor.key] == nil {
+            let key = descriptor.key
             imageObservations[key] = session.observe(key) { [weak self] state in
                 self?.imageStateChanged(state, key: key)
             }
-            let state = session.state(for: key)
-            if let size = Self.validSize(state.pixelSize) { pixelSizes[key] = size }
-            if case .failed = state.phase { failedKeys.insert(key) }
+            // Sizes known now (including images still in memory) are laid out from the start,
+            // instead of moving rows when the page appears.
+            if let size = Self.validSize(session.knownPixelSize(for: descriptor)) { pixelSizes[key] = size }
+            if case .failed = session.state(for: key).phase { failedKeys.insert(key) }
         }
     }
 
@@ -417,12 +428,11 @@ final class MangaContinuousCollectionViewController: UIViewController,
         }
     }
 
-    /// Reports the pages on screen when they change. A restore or jump in progress owns the
-    /// position, so nothing is reported until it lands.
+    /// Reports the pages on screen when they change. A restore or jump not yet started owns the
+    /// position, so nothing is reported until it is applied; an animated jump's passing pages are
+    /// reported, and its landing makes its page current.
     private func reportViewport() {
-        guard !isInvalidated, pendingNavigation == nil, animatingNavigation == nil, !isLandingNavigation else {
-            return
-        }
+        guard !isInvalidated, pendingNavigation == nil, !isLandingNavigation else { return }
         let pageIDs = visiblePageIDs()
         guard !pageIDs.isEmpty, pageIDs != lastReportedPageIDs else { return }
         lastReportedPageIDs = pageIDs

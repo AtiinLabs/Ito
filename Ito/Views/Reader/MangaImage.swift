@@ -18,15 +18,13 @@ struct MangaImage: View {
         Group {
             if let image = readyImage {
                 loadedImage(image)
-            } else if case .failed = imageState.phase {
-                failureView
-            } else if URL(string: urlStr) == nil {
-                invalidURLView
+            } else if let onImageTap {
+                // The page's tap works before the image shows too (Try Again keeps its own).
+                placeholder
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onImageTap)
             } else {
-                ProgressView()
-                    .tint(foreground)
-                    .frame(maxWidth: .infinity, minHeight: 400)
-                    .padding(40)
+                placeholder
             }
         }
         .onAppear(perform: bindRequest)
@@ -34,6 +32,20 @@ struct MangaImage: View {
         .onChange(of: headers) { _ in bindRequest() }
         .onChange(of: pageID) { _ in bindRequest() }
         .onDisappear(perform: releaseRequest)
+    }
+
+    @ViewBuilder
+    private var placeholder: some View {
+        if case .failed = imageState.phase {
+            failureView
+        } else if URL(string: urlStr) == nil {
+            invalidURLView
+        } else {
+            ProgressView()
+                .tint(foreground)
+                .frame(maxWidth: .infinity, minHeight: 400)
+                .padding(40)
+        }
     }
 
     private var readyImage: Image? {
