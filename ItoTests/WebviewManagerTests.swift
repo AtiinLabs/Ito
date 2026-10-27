@@ -97,6 +97,8 @@ private func presentedOverlay(of manager: WebviewManager) -> PageOverlayViewCont
 @MainActor
 private func expectHome(_ manager: WebviewManager) {
     #expect(presentedOverlay(of: manager) == nil)
+    // Back in the app's own window, not detached: the page keeps rendering for later scripts.
+    #expect(manager.webView?.window != nil)
     // UIKit stores alpha as a float: 0.01 reads back as 0.00999…, so compare with a tolerance.
     #expect(abs((manager.webView?.alpha ?? 1) - 0.01) < 0.001)
     #expect(manager.webView?.isUserInteractionEnabled == false)
@@ -341,6 +343,12 @@ struct WebviewManagerTests {
             try await pending.value
         }
         expectHome(manager)
+
+        // Same as Close: the origin is now declined until the app becomes active.
+        let waiting = await startNeverSettlingScript(on: manager)
+        #expect(try await askToShowPage(on: manager) == "false")
+        _ = try await manager.executeJs(script: "window.__itoRelease('done'); 'released'")
+        #expect(try await waiting.value == "done")
     }
 
     @Test func aPostWithNoWaitingScriptIsRefused() async throws {

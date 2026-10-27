@@ -170,9 +170,11 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
                 pendingScripts[id] = continuation
-                wv.callAsyncJavaScript(script, arguments: [:], in: nil, in: .page) { [weak self] result in
-                    let mapped = result.map(WebviewManager.scriptResult)
-                    Task { @MainActor in self?.finishScript(id, with: mapped) }
+                // WebKit's Objective-C entry point, not the Swift overlay: it needs no
+                // libswiftWebKit symbol on older systems, reports `undefined` as nil rather than
+                // unwrapping it, and completes on the main actor, so the script ends in this turn.
+                wv.__callAsyncJavaScript(script, arguments: [:], inFrame: nil, in: .page) { [weak self] value, error in
+                    self?.finishScript(id, with: error.map { .failure($0) } ?? .success(WebviewManager.scriptResult(value)))
                 }
 #if DEBUG
                 onAsyncScriptSent?()
@@ -248,12 +250,9 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         "\(origin.protocol)://\(origin.host):\(origin.port)"
     }
 
-    /// The string a script result becomes for the plugin. `undefined` and `null` are both empty.
-    private nonisolated static func scriptResult(_ value: Any) -> String {
-        let mirror = Mirror(reflecting: value)
-        if value is NSNull || (mirror.displayStyle == .optional && mirror.children.isEmpty) {
-            return ""
-        }
+    /// The string a script result becomes for the plugin. `undefined` (nil) and `null` are both empty.
+    private static func scriptResult(_ value: Any?) -> String {
+        guard let value, !(value is NSNull) else { return "" }
         return String(describing: value)
     }
 

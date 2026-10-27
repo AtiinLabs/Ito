@@ -60,7 +60,10 @@ final class PagePresentation {
 
         window.isHidden = true
         window.rootViewController = nil
-        previousKeyWindow?.makeKey()
+        // The window that was key may have been hidden meanwhile; never make a hidden window key.
+        if let previousKeyWindow, !previousKeyWindow.isHidden {
+            previousKeyWindow.makeKey()
+        }
         UIAccessibility.post(notification: .screenChanged, argument: nil)
     }
 }

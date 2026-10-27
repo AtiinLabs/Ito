@@ -85,7 +85,7 @@ the host can't complete itself (such as a Cloudflare Turnstile dialog). Post to 
 `itoShowPage` message handler in the page content world and await the reply:
 
 ```javascript
-const shown = await window.webkit?.messageHandlers?.itoShowPage?.postMessage(null);
+const shown = (await window.webkit?.messageHandlers?.itoShowPage?.postMessage(null)) === true;
 ```
 
 The reply is a boolean: `true` when the page is shown (or already shown), `false`
@@ -102,7 +102,9 @@ on the page fails with `ItoError.hostModuleError(domain: "webview", message:
 again. The page is hidden when its last waiting script ends, whether by completion,
 rejection, cancellation, or a navigation that replaces the document. A waiting call
 is still bounded by the webview host-call timeout (60 seconds, `HostCalls.swift` in
-ito-runner).
+ito-runner). That limit counts from the start of the call, not from when the page is
+shown, so a slow check can be cut short; the site's own cookies from a check finished
+later are kept for the next call.
 
 ## Build channels
 
