@@ -82,6 +82,25 @@ final class BrowseViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.availableUpdates.map(\.repoURL), ["https://one.example", "https://two.example"])
     }
 
+    func testArchivedPackageIsNotOfferedAsAnUpdate() {
+        let plugins = BrowsePluginManagerSpy(installedPlugins: [
+            "plugin": makePlugin(id: "plugin", name: "Plugin", version: "1.0")
+        ])
+        let repositories = BrowseRepositoryManagerSpy(repositories: [
+            makeRepository(packages: [
+                makePackage(
+                    id: "plugin",
+                    name: "Plugin",
+                    version: "2.0",
+                    archived: true
+                )
+            ])
+        ])
+        let viewModel = makeViewModel(plugins: plugins, repositories: repositories)
+
+        XCTAssertTrue(viewModel.availableUpdates.isEmpty)
+    }
+
     func testAnUpdateNeedingANewerItoIsSkippedForTheNewestOneThatRuns() {
         let plugins = BrowsePluginManagerSpy(installedPlugins: [
             "zulu": makePlugin(id: "zulu", name: "Zulu", version: "1.0")
@@ -779,7 +798,13 @@ final class BrowseViewModelTests: XCTestCase {
         )
     }
 
-    private func makePackage(id: String, name: String, version: String, minAppVersion: String = "1.0") -> RepoPackage {
+    private func makePackage(
+        id: String,
+        name: String,
+        version: String,
+        minAppVersion: String = "1.0",
+        archived: Bool = false
+    ) -> RepoPackage {
         RepoPackage(
             id: id,
             name: name,
@@ -789,7 +814,7 @@ final class BrowseViewModelTests: XCTestCase {
             iconUrl: nil,
             sha256: "fixture",
             pluginType: "manga",
-            archived: false,
+            archived: archived,
             archivedReason: nil,
             archivedDate: nil
         )

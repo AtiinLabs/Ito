@@ -133,10 +133,19 @@ final class MigrationReportViewModel: ObservableObject {
     }
 
     func canInstall(_ plugin: MigrationReport.UnresolvedPlugin) -> Bool {
-        isRemediationAllowed
-            && disposition(for: plugin.foreignId) == nil
-            && !plugin.isInstalled
-            && plugin.confidence >= Self.installConfidenceThreshold
+        guard isRemediationAllowed,
+              disposition(for: plugin.foreignId) == nil,
+              !plugin.isInstalled,
+              plugin.confidence >= Self.installConfidenceThreshold else { return false }
+        var foundArchived = false
+        for repository in repositories {
+            for package in repository.index?.packages ?? [] where package.id == plugin.resolvedId {
+                if !package.isArchived { return true }
+                foundArchived = true
+            }
+        }
+        // No known match may still be found by refreshing; a known retired-only match cannot.
+        return !foundArchived
     }
 
     func isInstalling(foreignID: String) -> Bool {
@@ -152,7 +161,8 @@ final class MigrationReportViewModel: ObservableObject {
         }
         var seenIDs = Set(options.map(\.id))
         for repository in repositories {
-            for package in repository.index?.packages ?? [] where !seenIDs.contains(package.id) {
+            for package in repository.index?.packages ?? []
+                where !package.isArchived && !seenIDs.contains(package.id) {
                 seenIDs.insert(package.id)
                 options.append(MigrationPluginOption(id: package.id, name: package.name, isInstalled: false))
             }
@@ -332,7 +342,9 @@ final class MigrationReportViewModel: ObservableObject {
         in repositories: [Repository]
     ) -> (package: RepoPackage, repositoryURL: String)? {
         for repository in repositories {
-            if let package = repository.index?.packages.first(where: { $0.id == resolvedID }) {
+            if let package = repository.index?.packages.first(where: {
+                $0.id == resolvedID && !$0.isArchived
+            }) {
                 return (package, repository.url)
             }
         }

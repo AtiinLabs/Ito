@@ -102,8 +102,9 @@ public final class BrowseViewModel: ObservableObject {
         for repository in repositories {
             guard let packages = repository.index?.packages else { continue }
             for package in packages {
-                // An update this version of Ito can't run isn't offered.
-                guard let installed = installedPlugins[package.id],
+                // Archived or incompatible packages aren't offered for download.
+                guard !package.isArchived,
+                      let installed = installedPlugins[package.id],
                       installed.info.version.compare(
                         package.version,
                         options: .numeric

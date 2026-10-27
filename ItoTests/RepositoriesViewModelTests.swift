@@ -335,6 +335,25 @@ final class RepositoriesViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.installState(for: package), .installed)
     }
 
+    func testArchivedPackageTakesPrecedenceAndCannotBeInstalled() async {
+        let package = makePackage(
+            version: "2.0",
+            archived: true,
+            archivedReason: "No longer maintained"
+        )
+        let manager = RepositoryManagerSpy(repositories: [makeRepository(packages: [package])])
+        let plugins = RepositoryPluginManagerSpy()
+        plugins.publish([package.id: makeInstalledPlugin(id: package.id, version: "1.0")])
+        let viewModel = makeRepoDetailViewModel(manager: manager, plugins: plugins)
+
+        XCTAssertEqual(viewModel.installState(for: package), .archived)
+        await viewModel.installPackage(package)
+
+        XCTAssertTrue(manager.installInvocations.isEmpty)
+        XCTAssertTrue(viewModel.installingPackageIDs.isEmpty)
+        XCTAssertNil(viewModel.installationFailureMessage)
+    }
+
     func testInstallSuccessAndUpdateSuccessReflectAuthoritativePluginPublication() async {
         let package = makePackage(version: "2.0")
         let manager = RepositoryManagerSpy(repositories: [makeRepository(packages: [package])])
@@ -527,7 +546,9 @@ final class RepositoriesViewModelTests: XCTestCase {
         name: String = "Fixture",
         version: String = "1.0",
         minAppVersion: String = "1.0",
-        pluginType: String = "manga"
+        pluginType: String = "manga",
+        archived: Bool = false,
+        archivedReason: String? = nil
     ) -> RepoPackage {
         RepoPackage(
             id: id,
@@ -538,8 +559,8 @@ final class RepositoriesViewModelTests: XCTestCase {
             iconUrl: nil,
             sha256: "fixture",
             pluginType: pluginType,
-            archived: false,
-            archivedReason: nil,
+            archived: archived,
+            archivedReason: archivedReason,
             archivedDate: nil
         )
     }

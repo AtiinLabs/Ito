@@ -160,6 +160,7 @@ public struct RepositoryRefreshFailure: LocalizedError, Equatable, Sendable {
 public enum RepositoryPackageInstallationError: LocalizedError {
     case invalidPackageIdentifier
     case packageUnavailable
+    case archived
     case rollbackFailed
 
     public var errorDescription: String? {
@@ -168,6 +169,8 @@ public enum RepositoryPackageInstallationError: LocalizedError {
             return "The repository package identifier is invalid."
         case .packageUnavailable:
             return "The package is no longer available from the repository."
+        case .archived:
+            return "Archived plugins cannot be installed or updated."
         case .rollbackFailed:
             return "The package installation failed and the previous plugin could not be restored."
         }
@@ -475,6 +478,7 @@ public class RepoManager: ObservableObject {
     }
 
     public func installPackage(_ pkg: RepoPackage, repositoryUrl: String) async throws {
+        try requireActivePackage(pkg, repositoryURL: repositoryUrl)
         if let refusal = compatibilityRefusal(for: pkg) {
             throw refusal
         }
@@ -533,7 +537,16 @@ public class RepoManager: ObservableObject {
         }
     }
 
+    private func requireActivePackage(_ package: RepoPackage, repositoryURL: String) throws {
+        let listed = repositories.first { $0.url == repositoryURL }?.index?.packages.first { $0.id == package.id }
+        guard !package.isArchived, listed?.isArchived != true else {
+            throw RepositoryPackageInstallationError.archived
+        }
+    }
+
     private func downloadAndInstall(_ pkg: RepoPackage, repositoryUrl: String) async throws {
+        // Re-check replacements resolved from a refreshed index as well as the original request.
+        try requireActivePackage(pkg, repositoryURL: repositoryUrl)
         let pluginsDirectory = try resolvedPluginsDirectory()
         let destUrl = try packageDestinationURL(
             packageID: pkg.id,

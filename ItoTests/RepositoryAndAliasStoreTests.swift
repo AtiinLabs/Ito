@@ -290,6 +290,113 @@ struct RepositoryAndAliasStoreTests {
         #expect(installedData == successfulData)
     }
 
+    @Test(arguments: [false, true])
+    func archivedPackageIsRefusedBeforeDownloadAndKeepsExistingFiles(alreadyInstalled: Bool) async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ArchivedInstall-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let destination = directory.appendingPathComponent("plugin.archived.ito")
+        let previous = Data("existing plugin".utf8)
+        if alreadyInstalled {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try previous.write(to: destination)
+        }
+        let data = Data("archived replacement".utf8)
+        let fetcher = RepositoryPackageFetchRecorder(data: data)
+        let manager = RepoManager(
+            dbPool: database.dbPool,
+            pluginsDirectory: directory,
+            packageFetcher: { request in await fetcher.fetch(request) }
+        )
+        let package = makePackage(id: "plugin.archived", sha256: sha256(data), archived: true)
+
+        await #expect(throws: RepositoryPackageInstallationError.self) {
+            try await manager.installPackage(package, repositoryUrl: "https://example.com/repo")
+        }
+        #expect(await fetcher.callCount == 0)
+        if alreadyInstalled {
+            #expect(try Data(contentsOf: destination) == previous)
+        } else {
+            #expect(!FileManager.default.fileExists(atPath: destination.path))
+        }
+    }
+
+    @Test func missingPluginLookupDoesNotOfferAnArchivedPackage() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let archived = makePackage(
+            id: "plugin.archived", sha256: String(repeating: "0", count: 64), archived: true
+        )
+        let payload = try JSONEncoder().encode(makeIndex(packages: [archived]))
+        let manager = RepoManager(dbPool: database.dbPool, indexFetcher: { _ in payload })
+        try await manager.addRepository(url: "https://example.com/repo")
+
+        let candidate = try await manager.findPackage(forExactPluginID: archived.id)
+        #expect(candidate == nil)
+    }
+
+    @Test func cachedArchiveFlagRefusesAnOlderActivePackageRequest() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CachedArchivedInstall-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let data = Data("package".utf8)
+        let stale = makePackage(id: "plugin.retired", sha256: sha256(data))
+        let archived = makePackage(id: stale.id, sha256: stale.sha256, archived: true)
+        let payload = try JSONEncoder().encode(makeIndex(packages: [archived]))
+        let fetcher = RepositoryPackageFetchRecorder(data: data)
+        let manager = RepoManager(
+            dbPool: database.dbPool,
+            pluginsDirectory: directory,
+            packageFetcher: { request in await fetcher.fetch(request) },
+            indexFetcher: { _ in payload }
+        )
+        try await manager.addRepository(url: "https://example.com/repo")
+
+        await #expect(throws: RepositoryPackageInstallationError.archived) {
+            try await manager.installPackage(stale, repositoryUrl: "https://example.com/repo")
+        }
+        #expect(await fetcher.callCount == 0)
+        #expect(!FileManager.default.fileExists(atPath: directory.path))
+    }
+
+    @Test func replacementThatBecameArchivedIsNotDownloaded() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ArchivedReplacement-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stale = makePackage(id: "plugin.retired", sha256: String(repeating: "0", count: 64))
+        let replacement = makePackage(
+            id: stale.id, version: "2.0", sha256: String(repeating: "1", count: 64),
+            downloadUrl: "replacement.ito", archived: true
+        )
+        let indexes = RepositoryIndexSequence(payloads: [
+            try JSONEncoder().encode(makeIndex(packages: [stale])),
+            try JSONEncoder().encode(makeIndex(packages: [replacement]))
+        ])
+        let fetcher = RepositoryPackageFetchRecorder(data: Data())
+        let manager = RepoManager(
+            dbPool: database.dbPool,
+            pluginsDirectory: directory,
+            packageFetcher: { request in
+                _ = await fetcher.fetch(request)
+                throw RepositoryPackageInstallationError.packageUnavailable
+            },
+            indexFetcher: { _ in await indexes.next() }
+        )
+        try await manager.addRepository(url: "https://example.com/repo")
+
+        await #expect(throws: RepositoryPackageInstallationError.self) {
+            try await manager.installPackage(stale, repositoryUrl: "https://example.com/repo")
+        }
+        #expect(await fetcher.callCount == 1)
+        #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("plugin.retired.ito").path))
+    }
+
     @Test func invalidPackageIdentifierCannotEscapePluginsDirectoryOrFetchNetwork() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
@@ -490,7 +597,8 @@ struct RepositoryAndAliasStoreTests {
         id: String,
         version: String = "1.0",
         sha256: String,
-        downloadUrl: String = "package.ito"
+        downloadUrl: String = "package.ito",
+        archived: Bool? = nil
     ) -> RepoPackage {
         RepoPackage(
             id: id,
@@ -501,7 +609,7 @@ struct RepositoryAndAliasStoreTests {
             iconUrl: nil,
             sha256: sha256,
             pluginType: "manga",
-            archived: nil,
+            archived: archived,
             archivedReason: nil,
             archivedDate: nil
         )

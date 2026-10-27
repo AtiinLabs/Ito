@@ -73,7 +73,29 @@ struct UITestLaunchConfiguration {
               "repo_name": "UI Test Repository",
               "repo_url": "\(repositoryURLString)",
               "description": "Disposable local UI test fixture",
-              "packages": []
+              "packages": [
+                {
+                  "id": "ui.test.archived",
+                  "name": "Archived Fixture",
+                  "version": "1.0.0",
+                  "min_app_version": "1.0.0",
+                  "download_url": "archived.ito",
+                  "sha256": "",
+                  "type": "anime",
+                  "archived": true,
+                  "archived_reason": "The website is no longer available."
+                },
+                {
+                  "id": "ui.test.available",
+                  "name": "Available Fixture",
+                  "version": "1.0.0",
+                  "min_app_version": "1.0.0",
+                  "download_url": "available.ito",
+                  "sha256": "",
+                  "type": "anime",
+                  "archived": false
+                }
+              ]
             }
             """.utf8
         )

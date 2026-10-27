@@ -78,6 +78,32 @@ final class MigrationReportViewModelTests: XCTestCase {
         XCTAssertEqual(subject.logger.events.last?.outcome, .failed(.pluginUnavailable))
     }
 
+    func testArchivedMatchingPackageIsNotInstalled() async throws {
+        let archivedPackage = RepoPackage(
+            id: "old.plugin",
+            name: "Old",
+            version: "1.0",
+            minAppVersion: "1.0",
+            downloadUrl: "old.plugin.ito",
+            iconUrl: nil,
+            sha256: "fixture",
+            pluginType: "manga",
+            archived: true,
+            archivedReason: "Retired",
+            archivedDate: nil
+        )
+        let subject = makeMigrationSubject(
+            unresolved: [migrationUnresolved(foreignId: "foreign", resolvedId: "old.plugin")],
+            repositories: [migrationRepository(url: "https://archived.example", packages: [archivedPackage])]
+        )
+
+        let plugin = migrationUnresolved(foreignId: "foreign", resolvedId: "old.plugin")
+        XCTAssertFalse(subject.viewModel.canInstall(plugin))
+        XCTAssertNil(subject.viewModel.install(foreignID: "foreign"))
+        XCTAssertTrue(subject.repositories.events.isEmpty)
+        XCTAssertNil(subject.viewModel.disposition(for: "foreign"))
+    }
+
     func testInstallFailureKeepsRowPendingAndPresentsReason() async throws {
         let subject = makeMigrationSubject(
             unresolved: [migrationUnresolved(foreignId: "foreign", resolvedId: "old.plugin")],
@@ -238,6 +264,48 @@ final class MigrationReportViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.filteredPickerOptions.map(\.id), ["b.id"])
         subject.viewModel.pickerSearchText = "c.ID"
         XCTAssertEqual(subject.viewModel.filteredPickerOptions.map(\.id), ["c.id"])
+    }
+
+    func testPickerExcludesArchivedRepositoryPackagesButKeepsInstalledArchivedPluginMapping() {
+        let archivedPackage = RepoPackage(
+            id: "archived.repo",
+            name: "Archived Repo",
+            version: "1.0",
+            minAppVersion: "1.0",
+            downloadUrl: "archived.repo.ito",
+            iconUrl: nil,
+            sha256: "fixture",
+            pluginType: "manga",
+            archived: true,
+            archivedReason: nil,
+            archivedDate: nil
+        )
+        let installedArchivedPackage = RepoPackage(
+            id: "installed.archived",
+            name: "Installed Archived",
+            version: "1.0",
+            minAppVersion: "1.0",
+            downloadUrl: "installed.archived.ito",
+            iconUrl: nil,
+            sha256: "fixture",
+            pluginType: "manga",
+            archived: true,
+            archivedReason: nil,
+            archivedDate: nil
+        )
+        let subject = makeMigrationSubject(
+            unresolved: [migrationUnresolved(foreignId: "a", resolvedId: "old")],
+            repositories: [
+                migrationRepository(
+                    url: "https://archived.example",
+                    packages: [archivedPackage, installedArchivedPackage]
+                )
+            ],
+            installed: [pr7bPlugin(id: "installed.archived", name: "Installed Archived")]
+        )
+
+        XCTAssertEqual(subject.viewModel.pickerOptions.map(\.id), ["installed.archived"])
+        XCTAssertTrue(subject.viewModel.pickerOptions.first?.isInstalled == true)
     }
 
     func testCancellingPickerPerformsNoRemapAndResetsSearch() {

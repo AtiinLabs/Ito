@@ -57,6 +57,25 @@ final class ItoUITests: XCTestCase {
     }
 
     @MainActor
+    func testArchivedRepositoryPackageHasNoInstallAction() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-reset-storage", "--ui-test-repository-deep-link"]
+        app.launch()
+        let repository = app.staticTexts["UI Test Repository"]
+        XCTAssertTrue(repository.waitForExistence(timeout: 20))
+        repository.tap()
+
+        let archived = app.cells.containing(.staticText, identifier: "Archived Fixture").firstMatch
+        XCTAssertTrue(archived.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["The website is no longer available."].exists)
+        XCTAssertFalse(archived.buttons["Install"].exists)
+        XCTAssertFalse(archived.buttons["Update"].exists)
+
+        let available = app.cells.containing(.staticText, identifier: "Available Fixture").firstMatch
+        XCTAssertTrue(available.buttons["Install"].exists)
+    }
+
+    @MainActor
     func testRepositoryRemovedAfterConfirmation() throws {
         let app = XCUIApplication()
         app.launchArguments = [

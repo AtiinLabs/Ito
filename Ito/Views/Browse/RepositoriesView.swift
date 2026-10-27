@@ -340,6 +340,20 @@ struct PackageRowView: View {
                 .frame(width: 72)
         } else {
             switch installState {
+            case .archived:
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("Unavailable")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    if let reason = pkg.archivedReason?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !reason.isEmpty {
+                        Text(reason)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.trailing)
+                    }
+                }
+
             case .incompatible(let minVersion):
                 Text(minVersion.map { "Requires v\($0)" } ?? "Requires a newer Ito")
                     .font(.caption2)

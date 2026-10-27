@@ -7,6 +7,7 @@ final class RepoDetailViewModel: ObservableObject {
     enum InstallState: Equatable {
         /// The package can't run here; `minVersion` is the Ito version it names, if any.
         case incompatible(minVersion: String?)
+        case archived
         case updateAvailable
         case installed
         case notInstalled
@@ -63,6 +64,9 @@ final class RepoDetailViewModel: ObservableObject {
     }
 
     func installState(for package: RepoPackage) -> InstallState {
+        if package.isArchived {
+            return .archived
+        }
         if let refusal = repositoryManager.compatibilityRefusal(for: package) {
             return .incompatible(minVersion: refusal.minimumAppVersion)
         }
@@ -80,7 +84,8 @@ final class RepoDetailViewModel: ObservableObject {
     }
 
     func installPackage(_ package: RepoPackage) async {
-        guard !installingPackageIDs.contains(package.id) else { return }
+        guard !package.isArchived,
+              !installingPackageIDs.contains(package.id) else { return }
 
         let operationID = UUID()
         installOperations[package.id] = operationID

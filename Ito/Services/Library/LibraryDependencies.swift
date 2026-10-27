@@ -277,7 +277,9 @@ extension RepoManager: DeferredPluginInstalling {
         try await refreshAllReportingFailures()
 
         for repository in repositories {
-            guard let package = repository.index?.packages.first(where: { $0.id == pluginID }) else {
+            guard let package = repository.index?.packages.first(where: {
+                $0.id == pluginID && !$0.isArchived
+            }) else {
                 continue
             }
             return DeferredPluginPackageCandidate(
