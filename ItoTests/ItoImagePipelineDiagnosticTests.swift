@@ -192,25 +192,23 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
             "Referer": "https://source.example.com/manga/123",
             "Authorization": "Bearer test-token"
         ]
-        let withHeaders = NukeMangaReaderImagePrefetcher.request(
-            for: Page(index: 0, content: .url(testURL), headers: customHeaders)
-        )?.urlRequest
-        XCTAssertEqual(withHeaders?.value(forHTTPHeaderField: "Referer"), "https://source.example.com/manga/123")
-        XCTAssertEqual(withHeaders?.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
-        XCTAssertNil(withHeaders?.value(forHTTPHeaderField: "User-Agent"))
+        let url = try XCTUnwrap(URL(string: testURL))
+        let withHeaders = NukeMangaReaderImagePrefetcher.urlRequest(url: url, headers: customHeaders)
+        XCTAssertEqual(withHeaders.value(forHTTPHeaderField: "Referer"), "https://source.example.com/manga/123")
+        XCTAssertEqual(withHeaders.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
+        XCTAssertNil(withHeaders.value(forHTTPHeaderField: "User-Agent"))
 
         // A plugin's own User-Agent wins.
-        let ownAgent = NukeMangaReaderImagePrefetcher.request(
-            for: Page(index: 1, content: .url(testURL), headers: ["User-Agent": "PluginAgent/1"])
-        )?.urlRequest
-        XCTAssertEqual(ownAgent?.value(forHTTPHeaderField: "User-Agent"), "PluginAgent/1")
+        let ownAgent = NukeMangaReaderImagePrefetcher.urlRequest(
+            url: url,
+            headers: ["User-Agent": "PluginAgent/1"]
+        )
+        XCTAssertEqual(ownAgent.value(forHTTPHeaderField: "User-Agent"), "PluginAgent/1")
 
         // Without plugin headers no Referer is invented (it used to be the image's own URL).
-        let defaults = NukeMangaReaderImagePrefetcher.request(
-            for: Page(index: 2, content: .url(testURL), headers: nil)
-        )?.urlRequest
-        XCTAssertNil(defaults?.value(forHTTPHeaderField: "Referer"))
-        XCTAssertNil(defaults?.value(forHTTPHeaderField: "User-Agent"))
+        let defaults = NukeMangaReaderImagePrefetcher.urlRequest(url: url, headers: nil)
+        XCTAssertNil(defaults.value(forHTTPHeaderField: "Referer"))
+        XCTAssertNil(defaults.value(forHTTPHeaderField: "User-Agent"))
     }
 
     // MARK: - Test G: Custom ito:// scheme routing via PluginDataLoader

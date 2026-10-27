@@ -265,8 +265,13 @@ final class MangaReaderPluginMetadataFake: MangaReaderPluginMetadataProviding {
 
 @MainActor
 final class MangaReaderImagePrefetcherFake: MangaReaderImagePrefetching {
+    let imageSession: ReaderPageImageSession
     private(set) var batches: [[Page]] = []
     private(set) var stopCount = 0
+
+    init(imageSession: ReaderPageImageSession) {
+        self.imageSession = imageSession
+    }
 
     func prefetch(_ pages: [Page]) {
         batches.append(pages)
@@ -297,7 +302,8 @@ struct MangaReaderTestSubject {
 func makeMangaReaderSubject(
     entry: MediaEntry,
     initialChapter: Chapter,
-    preloadImageCount: Int = 5
+    preloadImageCount: Int = 5,
+    imageSession: ReaderPageImageSession = ReaderPageImageSession()
 ) -> MangaReaderTestSubject {
     let events = MangaReaderEventRecorder()
     let loader = MangaPageLoaderFake()
@@ -307,7 +313,7 @@ func makeMangaReaderSubject(
     let settings = MangaReaderSettingsFake(preloadImageCount: preloadImageCount)
     let presence = MangaReaderPresenceFake()
     let metadata = MangaReaderPluginMetadataFake()
-    let imagePrefetcher = MangaReaderImagePrefetcherFake()
+    let imagePrefetcher = MangaReaderImagePrefetcherFake(imageSession: imageSession)
     let logger = PresentationEventCaptureSpy()
     let dependencies = PreparedMangaReaderDependencies(
         progress: progress,
@@ -346,11 +352,13 @@ func makeMangaReaderSubject(
 func makeMangaReaderSubject(
     manga: Manga,
     initialChapter: Manga.Chapter,
-    preloadImageCount: Int = 5
+    preloadImageCount: Int = 5,
+    imageSession: ReaderPageImageSession = ReaderPageImageSession()
 ) -> MangaReaderTestSubject {
     makeMangaReaderSubject(
         entry: .manga(manga),
         initialChapter: initialChapter,
-        preloadImageCount: preloadImageCount
+        preloadImageCount: preloadImageCount,
+        imageSession: imageSession
     )
 }

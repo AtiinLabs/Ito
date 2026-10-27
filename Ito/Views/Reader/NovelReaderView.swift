@@ -107,6 +107,7 @@ struct NovelReaderView: View {
     private func readerContent(safeAreaBottom: CGFloat) -> some View {
         if viewModel.isPaging {
             NovelPagingReaderView(
+                imageSession: viewModel.imageSession,
                 loadedChapters: viewModel.loadedChapters,
                 fontSize: viewModel.fontSize,
                 fontFamily: viewModel.fontFamily,
@@ -157,7 +158,7 @@ struct NovelReaderView: View {
                                 }
 
                             ForEach(Array(loadedChapter.pages.enumerated()), id: \.offset) { index, page in
-                                pageText(for: page)
+                                pageText(for: page, pageID: blockID(loadedChapter.id, index))
                                     .id(blockID(loadedChapter.id, index))
                                     .onAppear {
                                         viewModel.continuousPageAppeared(
@@ -321,7 +322,7 @@ struct NovelReaderView: View {
     }
 
     @ViewBuilder
-    private func pageText(for page: Page) -> some View {
+    private func pageText(for page: Page, pageID: String) -> some View {
         switch page.content {
         case .text(let text):
             SelectableTextView(
@@ -333,7 +334,13 @@ struct NovelReaderView: View {
             .padding(.horizontal)
             .padding(.vertical, 4)
         case .url(let urlString):
-            MangaImage(urlStr: urlString, headers: page.headers, foreground: viewModel.theme.textColor)
+            MangaImage(
+                urlStr: urlString,
+                headers: page.headers,
+                session: viewModel.imageSession,
+                pageID: pageID,
+                foreground: viewModel.theme.textColor
+            )
                 .padding(.horizontal)
         }
     }

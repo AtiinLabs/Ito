@@ -419,6 +419,44 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.history.requests.map(\.chapterKey), ["a"])
     }
 
+    func testEmptyContinuousAppendFailsClosedAndPublishesSettledSnapshot() async {
+        let a = makeChapter("a", number: 1)
+        let b = makeChapter("b", number: 2)
+        let subject = makeSubject(chapters: [a, b], initial: a, viewer: .Vertical)
+        subject.loader.enqueue(.pages([page(0)]), for: "a")
+        subject.loader.enqueue(.pages([]), for: "b")
+        subject.viewModel.start()
+        await waitForReader { subject.viewModel.loadPhase == .content }
+
+        subject.viewModel.appendNextChapter()
+        let loadingRevision = subject.viewModel.continuousSnapshot.revision
+        await waitForReader { subject.viewModel.appendFailed }
+
+        XCTAssertEqual(subject.viewModel.segments.map(\.chapter.key), ["a"])
+        XCTAssertEqual(subject.viewModel.continuousSnapshot.pages.map(\.id), subject.viewModel.flatPages.map(\.id))
+        XCTAssertTrue(subject.viewModel.continuousSnapshot.appendFailed)
+        XCTAssertEqual(subject.viewModel.continuousSnapshot.revision, loadingRevision + 1)
+        XCTAssertFalse(subject.viewModel.loadingNextChapter)
+    }
+
+    func testEmptyContinuousPrependFailsClosedWithoutAddingAnEmptySegment() async {
+        let a = makeChapter("a", number: 1)
+        let b = makeChapter("b", number: 2)
+        let subject = makeSubject(chapters: [a, b], initial: b, viewer: .Vertical)
+        subject.loader.enqueue(.pages([page(0)]), for: "b")
+        subject.loader.enqueue(.pages([]), for: "a")
+        subject.viewModel.start()
+        await waitForReader { subject.viewModel.loadPhase == .content }
+
+        subject.viewModel.prependPreviousChapter()
+        await waitForReader { subject.viewModel.prependFailed }
+
+        XCTAssertEqual(subject.viewModel.segments.map(\.chapter.key), ["b"])
+        XCTAssertEqual(subject.viewModel.continuousSnapshot.pages.map(\.id), subject.viewModel.flatPages.map(\.id))
+        XCTAssertTrue(subject.viewModel.continuousSnapshot.prependFailed)
+        XCTAssertFalse(subject.viewModel.loadingPrevChapter)
+    }
+
     func testContinuousAppendFailureWaitsForAnExplicitRetry() async {
         let a = makeChapter("a", number: 1)
         let b = makeChapter("b", number: 2)
@@ -473,7 +511,6 @@ final class MangaReaderViewModelTests: XCTestCase {
         subject.loader.enqueue(.suspended, for: "a")
         subject.viewModel.start()
         await waitForReader { subject.viewModel.loadPhase == .content }
-        subject.viewModel.updateContinuousScrollAlignment(1.37)
         subject.viewModel.continuousViewportChanged([subject.viewModel.flatPages[1].id])
 
         subject.viewModel.prependPreviousChapter()
@@ -486,7 +523,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.segments.map { $0.chapter.key }, ["a", "b"])
         XCTAssertEqual(subject.viewModel.segments[0].pages.map(\.index), [2, 5])
         XCTAssertEqual(subject.viewModel.continuousPageIndex, 3)
-        assertScrollRequest(subject.viewModel.scrollTarget, pageID: "b#1", alignmentY: 1.37, waitsForLayout: true)
+        XCTAssertNil(subject.viewModel.scrollTarget, "Prepend preservation is owned by the renderer's pixel anchor.")
     }
 
     func testContinuousDropsChaptersFarBehindTheReader() async {
@@ -501,7 +538,6 @@ final class MangaReaderViewModelTests: XCTestCase {
         for loaded in 1..<5 {
             // Scroll to the end of the newest chapter, then load the next one.
             let last = subject.viewModel.flatPages.last!
-            subject.viewModel.updateContinuousScrollAlignment(0.62)
             subject.viewModel.continuousViewportChanged([last.id])
 
             subject.viewModel.appendNextChapter()
@@ -514,7 +550,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         )
         // The reader stays on the same page after the chapter above it is dropped.
         XCTAssertEqual(subject.viewModel.flatPages[subject.viewModel.continuousPageIndex].id, "c4#1")
-        assertScrollRequest(subject.viewModel.scrollTarget, pageID: "c4#1", alignmentY: 0.62, waitsForLayout: true)
+        XCTAssertNil(subject.viewModel.scrollTarget, "Eviction preservation is owned by the renderer's pixel anchor.")
     }
 
     func testContinuousPrependFailureCleansOperationAndAllowsRetry() async {
@@ -940,21 +976,17 @@ final class MangaReaderViewModelTests: XCTestCase {
 
     // MARK: - Fixtures
 
-    /// Compares what a scroll request asks for; every request has its own identity.
+    /// Compares an explicit navigation request; every request has its own identity.
     func assertScrollRequest(
         _ request: MangaScrollRequest?,
         pageID: String,
         animated: Bool = false,
-        alignmentY: CGFloat = 0,
-        waitsForLayout: Bool = false,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
         guard let request else { return XCTFail("Expected a scroll request", file: file, line: line) }
         XCTAssertEqual(request.pageID, pageID, file: file, line: line)
         XCTAssertEqual(request.animated, animated, file: file, line: line)
-        XCTAssertEqual(request.alignmentY, alignmentY, accuracy: 0.0001, file: file, line: line)
-        XCTAssertEqual(request.waitsForLayout, waitsForLayout, file: file, line: line)
     }
 
     func makeSubject(

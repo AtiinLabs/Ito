@@ -38,12 +38,36 @@ struct MangaScrollRequest: Equatable {
     /// request for an earlier one.
     let id = UUID()
     let pageID: String
-    /// Footer page buttons animate; position restores and corrections jump.
+    /// Footer page buttons animate; position restores jump.
     let animated: Bool
-    /// Positions the page at its previous normalized vertical location in the viewport.
-    var alignmentY: CGFloat = 0
-    /// Content mutations first let native anchoring settle; only correct remaining displacement.
-    var waitsForLayout: Bool = false
+}
+
+/// Everything the continuous renderer draws, published as one value once a change (an append
+/// or prepend together with its trimming) is complete, so the renderer never lays out a
+/// half-applied chapter window.
+struct MangaContinuousReaderSnapshot {
+    /// Increases with every publication; the renderer skips a revision it already applied.
+    let revision: UInt64
+    let pages: [FlatPage]
+    let previousChapter: Manga.Chapter?
+    let nextChapter: Manga.Chapter?
+    let loadingPrevious: Bool
+    let loadingNext: Bool
+    let prependFailed: Bool
+    let appendFailed: Bool
+    let isWebtoon: Bool
+
+    static let empty = MangaContinuousReaderSnapshot(
+        revision: 0,
+        pages: [],
+        previousChapter: nil,
+        nextChapter: nil,
+        loadingPrevious: false,
+        loadingNext: false,
+        prependFailed: false,
+        appendFailed: false,
+        isWebtoon: false
+    )
 }
 
 extension MangaReaderViewModel {

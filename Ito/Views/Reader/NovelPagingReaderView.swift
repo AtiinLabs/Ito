@@ -3,6 +3,7 @@ import UIKit
 import ito_runner
 
 struct NovelPagingReaderView: View {
+    let imageSession: ReaderPageImageSession
     let loadedChapters: [NovelLoadedChapter]
     let fontSize: Double
     let fontFamily: NovelFont
@@ -43,6 +44,7 @@ struct NovelPagingReaderView: View {
                 } else {
                     PageViewController(
                         pages: flattenedPages,
+                        imageSession: imageSession,
                         currentPage: $currentPageIndex,
                         maxWidth: max(0, size.width - 32),
                         textColor: theme.textColor,
@@ -248,6 +250,7 @@ struct NovelPagingReaderView: View {
 
 struct PageViewController: UIViewControllerRepresentable {
     let pages: [NovelPaginationPage]
+    let imageSession: ReaderPageImageSession
     @Binding var currentPage: Int
     let maxWidth: CGFloat
     /// For image pages' loading and error content.
@@ -321,6 +324,7 @@ struct PageViewController: UIViewControllerRepresentable {
             vc.index = index
             vc.page = parent.pages[index]
             vc.maxWidth = parent.maxWidth
+            vc.imageSession = parent.imageSession
             vc.foreground = parent.textColor
             return vc
         }
@@ -374,6 +378,7 @@ struct PageViewController: UIViewControllerRepresentable {
 
 class PageContentViewController: UIViewController {
     var index: Int = 0
+    var imageSession: ReaderPageImageSession!
     var page: NovelPaginationPage?
     var maxWidth: CGFloat = 0
     var foreground: Color = .primary
@@ -421,7 +426,13 @@ class PageContentViewController: UIViewController {
     /// An illustration fills the page, loaded the same way as in continuous mode.
     private func showImage(_ image: NovelPageImage) {
         let host = UIHostingController(
-            rootView: MangaImage(urlStr: image.url, headers: image.headers, foreground: foreground)
+            rootView: MangaImage(
+                urlStr: image.url,
+                headers: image.headers,
+                session: imageSession,
+                pageID: "novel-paged-\(page?.chapterID.uuidString ?? "")-\(index)",
+                foreground: foreground
+            )
         )
         host.view.backgroundColor = .clear
         host.view.translatesAutoresizingMaskIntoConstraints = false

@@ -44,6 +44,7 @@ final class NovelReaderViewModel: ObservableObject {
     let pluginID: String
     /// The series being read: a novel, or a manga whose chapter is text.
     let entry: MediaEntry
+    let imageSession = ReaderPageImageSession()
     let chapterLoader: any NovelChapterLoading
 
     @Published private(set) var currentChapter: Novel.Chapter
@@ -180,6 +181,7 @@ final class NovelReaderViewModel: ObservableObject {
     func disappear() {
         guard isActive else { return }
         isActive = false
+        imageSession.deactivate()
         hasPresentedPresence = false
         sessionID = UUID()
         contentGeneration &+= 1

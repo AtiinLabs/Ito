@@ -1,5 +1,4 @@
 import Foundation
-import Nuke
 import ito_runner
 
 @MainActor
@@ -156,38 +155,34 @@ extension PluginManager: MangaReaderPluginMetadataProviding {}
 
 @MainActor
 protocol MangaReaderImagePrefetching: AnyObject {
+    var imageSession: ReaderPageImageSession { get }
     func prefetch(_ pages: [Page])
     func stopPrefetching()
 }
 
+/// Prefetches upcoming pages through the reader's image session, so a prefetched image and the
+/// visible page share one request, one cache entry and one failure.
 @MainActor
 final class NukeMangaReaderImagePrefetcher: MangaReaderImagePrefetching {
-    private let prefetcher: ImagePrefetcher
+    let imageSession: ReaderPageImageSession
 
-    init(pipeline: ImagePipeline = .shared) {
-        prefetcher = ImagePrefetcher(
-            pipeline: pipeline,
-            destination: .diskCache,
-            maxConcurrentRequestCount: 2
-        )
+    init(session: ReaderPageImageSession = ReaderPageImageSession()) {
+        imageSession = session
     }
 
     func prefetch(_ pages: [Page]) {
-        let requests = pages.compactMap(Self.request(for:))
-        guard !requests.isEmpty else { return }
-        prefetcher.startPrefetching(with: requests)
+        imageSession.setPrefetch(pages.compactMap { page in
+            guard case .url(let urlString) = page.content,
+                  let url = URL(string: urlString) else { return nil }
+            return ReaderPageImageDescriptor(
+                pageID: String(page.index),
+                request: Self.urlRequest(url: url, headers: page.headers)
+            )
+        })
     }
 
     func stopPrefetching() {
-        prefetcher.stopPrefetching()
-    }
-
-    static func request(for page: Page) -> ImageRequest? {
-        guard case .url(let urlString) = page.content,
-              let url = URL(string: urlString) else {
-            return nil
-        }
-        return ImageRequest(urlRequest: urlRequest(url: url, headers: page.headers))
+        imageSession.setPrefetch([])
     }
 
     /// The request for a page image: the plugin's headers as given. No Referer is guessed (the
@@ -259,6 +254,7 @@ private final class UnavailableMangaReaderDependencies:
     MangaReaderPresencePresenting,
     MangaReaderPluginMetadataProviding,
     MangaReaderImagePrefetching {
+    let imageSession = ReaderPageImageSession()
     var mangaReaderPreloadImageCount: Int {
         AppPreferenceCatalog.preloadImageCount.defaultValue.rawValue
     }

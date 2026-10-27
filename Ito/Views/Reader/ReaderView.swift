@@ -1,13 +1,10 @@
 import SwiftUI
-import NukeUI
-import Nuke
 import ito_runner
 
 // MARK: - ReaderView
 
 struct ReaderView: View {
     @StateObject private var viewModel: MangaReaderViewModel
-    @State private var continuousPosition = MangaContinuousScrollPositionCoordinator()
     @State private var showSettings = false
     @State private var showUI = true
 
@@ -16,7 +13,6 @@ struct ReaderView: View {
     /// `viewModel` is evaluated once, when SwiftUI first creates this view's state.
     init(viewModel: @autoclosure @escaping () -> MangaReaderViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel())
-
     }
 
     var body: some View {
@@ -145,17 +141,21 @@ struct ReaderView: View {
             )
         ) {
             if let previous = viewModel.chapterBefore(viewModel.currentChapter) {
-                loadingChapterView(chapter: previous, isNext: false, prompt: .loading)
+                loadingChapterView(chapter: previous, isNext: false)
                     .tag(-1)
             }
 
             ForEach(Array(viewModel.pagedPages.enumerated()), id: \.offset) { position, page in
-                pageImage(for: page, number: position + 1)
+                pageImage(
+                    for: page,
+                    number: position + 1,
+                    pageID: FlatPage.id(chapterKey: viewModel.currentChapter.key, position: position)
+                )
                     .tag(position)
             }
 
             if let next = viewModel.chapterAfter(viewModel.currentChapter) {
-                loadingChapterView(chapter: next, isNext: true, prompt: .loading)
+                loadingChapterView(chapter: next, isNext: true)
                     .tag(viewModel.pagedPages.count)
             }
         }
@@ -172,138 +172,15 @@ struct ReaderView: View {
     // MARK: - Continuous Reader (Vertical/Webtoon)
 
     private var continuousReader: some View {
-        ScrollViewReader { proxy in
-            ScrollView(showsIndicators: false) {
-                LazyVStack(spacing: viewModel.activeViewer == .Webtoon ? 0 : 8) {
-                    if let previous = viewModel.previousChapterForFirstSegment {
-                        Button(action: { viewModel.prependPreviousChapter() }) {
-                            loadingChapterView(
-                                chapter: previous,
-                                isNext: false,
-                                prompt: viewModel.loadingPrevChapter
-                                    ? .loading
-                                    : (viewModel.prependFailed ? .failed : .tap)
-                            )
-                        }
-                        .disabled(viewModel.loadingPrevChapter)
-                    }
-
-                    ForEach(viewModel.flatPages) { flatPage in
-                        VStack(spacing: 0) {
-                            if flatPage.chapterPosition == 0 && flatPage.segmentIndex > 0 {
-                                chapterDivider(for: flatPage.chapter)
-                            }
-
-                            pageImage(for: flatPage.page, number: flatPage.chapterPosition + 1)
-                                .background(MangaContinuousPageGeometryReporter(pageID: flatPage.id))
-                                .id(flatPage.id)
-                        }
-                    }
-
-                    if viewModel.loadingNextChapter {
-                        ProgressView()
-                            .tint(.white)
-                            .frame(maxWidth: .infinity, minHeight: 200)
-                    } else if let next = viewModel.nextChapterForLastSegment {
-                        if viewModel.appendFailed {
-                            Button(action: { viewModel.retryAppendNextChapter() }) {
-                                loadingChapterView(chapter: next, isNext: true, prompt: .failed)
-                            }
-                        } else {
-                            Color.clear
-                                .frame(height: 1)
-                                .onAppear { viewModel.appendNextChapter() }
-                        }
-                    }
-                }
-                .coordinateSpace(name: "manga.continuous.content")
-                .background { MangaContinuousContentBoundsReporter() }
-            }
-            .coordinateSpace(name: "manga.continuous.viewport")
-            .overlay { MangaContinuousViewportReporter() }
-            .onPreferenceChange(MangaContinuousGeometryPreferenceKey.self) { geometry in
-                if let request = continuousPosition.handle(geometry, viewModel: viewModel) {
-                    scroll(proxy, to: request)
-                }
-            }
-            .onChange(of: viewModel.scrollTarget) { target in
-                guard let target, let request = continuousPosition.issue(target, viewModel: viewModel) else { return }
-                scroll(proxy, to: request)
-            }
-            // A target set before this view existed (a restored page, a mode switch) never
-            // changes while it is on screen, so scroll to it once here.
-            .onAppear {
-                guard let target = viewModel.scrollTarget,
-                      let request = continuousPosition.issue(target, viewModel: viewModel) else { return }
-                scroll(proxy, to: request)
-            }
-        }
-    }
-
-    private func scroll(_ proxy: ScrollViewProxy, to request: MangaScrollRequest) {
-        let anchor = UnitPoint(x: 0.5, y: request.alignmentY)
-        if request.animated {
-            withAnimation { proxy.scrollTo(request.pageID, anchor: anchor) }
-        } else {
-            proxy.scrollTo(request.pageID, anchor: anchor)
-        }
+        MangaContinuousReaderView(viewModel: viewModel, onToggleUI: toggleUI)
     }
 
     // MARK: - Shared views
 
-    private func chapterDivider(for chapter: Manga.Chapter) -> some View {
-        VStack(spacing: 14) {
-            Rectangle()
-                .fill(Color.white.opacity(0.2))
-                .frame(height: 1)
-                .padding(.horizontal, 24)
-
-            VStack(spacing: 6) {
-                Text("Next Chapter")
-                    .font(.caption2.weight(.medium))
-                    .foregroundColor(.white.opacity(0.35))
-                    .textCase(.uppercase)
-
-                Text(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))
-                    .font(.headline)
-                    .foregroundColor(.white.opacity(0.75))
-                    .multilineTextAlignment(.center)
-            }
-
-            Rectangle()
-                .fill(Color.white.opacity(0.2))
-                .frame(height: 1)
-                .padding(.horizontal, 24)
-        }
-        .padding(.vertical, 40)
-    }
-
-    private enum ChapterLoadPrompt {
-        case tap
-        case loading
-        case failed
-    }
-
-    @ViewBuilder
-    private func loadingChapterView(
-        chapter: Manga.Chapter,
-        isNext: Bool,
-        prompt: ChapterLoadPrompt
-    ) -> some View {
+    private func loadingChapterView(chapter: Manga.Chapter, isNext: Bool) -> some View {
         VStack(spacing: 16) {
-            switch prompt {
-            case .loading:
-                ProgressView().tint(.white)
-            case .tap:
-                Image(systemName: isNext ? "arrow.down.circle" : "arrow.up.circle")
-                    .font(.system(size: 40))
-                    .foregroundColor(.white)
-            case .failed:
-                Image(systemName: "arrow.clockwise.circle")
-                    .font(.system(size: 40))
-                    .foregroundColor(.white)
-            }
-            Text(Self.promptText(prompt, isNext: isNext))
+            ProgressView().tint(.white)
+            Text(isNext ? "Loading Next Chapter..." : "Loading Previous Chapter...")
                 .foregroundColor(.white)
                 .font(.headline)
                 .multilineTextAlignment(.center)
@@ -315,26 +192,17 @@ struct ReaderView: View {
         .padding(40)
     }
 
-    private static func promptText(_ prompt: ChapterLoadPrompt, isNext: Bool) -> String {
-        switch (prompt, isNext) {
-        case (.tap, true): return "Tap to Load Next Chapter"
-        case (.tap, false): return "Tap to Load Previous Chapter"
-        case (.loading, true): return "Loading Next Chapter..."
-        case (.loading, false): return "Loading Previous Chapter..."
-        case (.failed, true): return "Couldn't load the next chapter. Tap to try again."
-        case (.failed, false): return "Couldn't load the previous chapter. Tap to try again."
-        }
-    }
-
     /// `number` is the page's place in its chapter, read out for image pages; text pages read
     /// their own text.
     @ViewBuilder
-    private func pageImage(for page: Page, number: Int) -> some View {
+    private func pageImage(for page: Page, number: Int, pageID: String) -> some View {
         switch page.content {
         case .url(let urlString):
             MangaImage(
                 urlStr: urlString,
                 headers: page.headers,
+                session: viewModel.imageSession,
+                pageID: pageID,
                 onImageTap: toggleUI,
                 imageLabel: "Page \(number)"
             )
@@ -585,84 +453,5 @@ private struct ReaderFooterView: View {
         }
         .disabled(!isEnabled)
         .accessibilityLabel(label)
-    }
-}
-
-// MARK: - Manga Image Loader
-
-struct MangaImage: View {
-    let urlStr: String
-    let headers: [String: String]?
-    /// Colour of the loading, error and placeholder content: white on the manga reader's black,
-    /// the reading theme's text colour in the novel reader.
-    var foreground: Color = .white
-    /// When set, the loaded image can be pinched and double-tapped to zoom, and a single tap
-    /// calls this. Loading and error states are never zoomable, so Try Again stays tappable.
-    var onImageTap: (() -> Void)?
-    /// What VoiceOver reads for the loaded image.
-    var imageLabel = "Illustration"
-
-    /// Bumped by Try Again so `LazyImage` starts a fresh request.
-    @State private var attempt = 0
-
-    var body: some View {
-        if let url = URL(string: urlStr) {
-            LazyImage(request: ImageRequest(urlRequest: createRequest(url: url))) { state in
-                if let image = state.image {
-                    loadedImage(image)
-                } else if state.error != nil {
-                    VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .foregroundColor(foreground.opacity(0.7))
-                            .font(.largeTitle)
-                        Text("Couldn't load this page")
-                            .font(.subheadline)
-                            .foregroundColor(foreground.opacity(0.8))
-                        Button("Try Again") { attempt += 1 }
-                            .buttonStyle(.bordered)
-                            .tint(foreground)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 400, alignment: .center)
-                    .padding(40)
-                } else {
-                    ProgressView()
-                        .tint(foreground)
-                        .frame(maxWidth: .infinity, minHeight: 400, alignment: .center)
-                        .padding(40)
-                }
-            }
-            .id(attempt)
-        } else {
-            VStack(spacing: 12) {
-                Image(systemName: "photo")
-                    .foregroundColor(foreground.opacity(0.5))
-                    .font(.largeTitle)
-                Text("This page has no valid image address")
-                    .font(.subheadline)
-                    .foregroundColor(foreground.opacity(0.7))
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity, minHeight: 400, alignment: .center)
-            .padding(40)
-        }
-    }
-
-    @ViewBuilder
-    private func loadedImage(_ image: Image) -> some View {
-        if let onImageTap {
-            ZoomablePage(onTap: onImageTap) {
-                image.resizable().scaledToFit()
-            }
-            .accessibilityLabel(imageLabel)
-        } else {
-            image
-                .resizable()
-                .scaledToFit()
-                .accessibilityLabel(imageLabel)
-        }
-    }
-
-    func createRequest(url: URL) -> URLRequest {
-        NukeMangaReaderImagePrefetcher.urlRequest(url: url, headers: headers)
     }
 }
