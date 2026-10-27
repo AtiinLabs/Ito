@@ -19,8 +19,10 @@ struct MangaImage: View {
             if let image = readyImage {
                 loadedImage(image)
             } else if let onImageTap {
-                // The page's tap works before the image shows too (Try Again keeps its own).
+                // Cover the whole row, including empty space below a short placeholder.
+                // Try Again keeps its own button action.
                 placeholder
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .contentShape(Rectangle())
                     .onTapGesture(perform: onImageTap)
             } else {
