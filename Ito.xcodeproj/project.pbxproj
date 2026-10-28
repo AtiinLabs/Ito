@@ -683,7 +683,7 @@
 			repositoryURL = "https://github.com/AtiinLabs/ito-runner.git";
 			requirement = {
 				kind = revision;
-				revision = 85f0ea635db9417011730f81af1cb1be0ac9d1cc;
+				revision = 01023289a8f75acca6de73018ce63b74570b670e;
 			};
 		};
 		3D0A11E02FF2000000000003 /* XCRemoteSwiftPackageReference "anilist-sdk" */ = {
