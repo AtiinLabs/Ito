@@ -185,6 +185,41 @@ final class PluginSettingsViewModelTests: XCTestCase {
         viewModel.cancel()
     }
 
+    func testFutureControlDoesNotHideSupportedDependentSettings() {
+        let store = PR7BSettingsStoreSpy()
+        let future = richControl("future", .unsupported(tag: 99))
+        let dependent = Control(
+            id: "detail", title: "Detail", visibleWhen: [
+                ControlCondition(control: "future", anyOf: ["enabled"])
+            ], kind: .toggle(ToggleControl(defaultValue: false))
+        )
+        let viewModel = richViewModel([future, dependent], store: store)
+        XCTAssertEqual(viewModel.visibleSections.flatMap(\.controls).map(\.id), ["future", "detail"])
+        viewModel.cancel()
+    }
+
+    func testVisibilityDistinguishesByteDistinctOptionValues() {
+        let store = PR7BSettingsStoreSpy()
+        let composed = "\u{00e9}"
+        let decomposed = "e\u{0301}"
+        let target = richControl("choice", .select(SelectControl(
+            options: .inline([
+                ChoiceOption(value: composed, label: "First"),
+                ChoiceOption(value: decomposed, label: "Second")
+            ]), defaultValue: composed
+        )))
+        let dependent = Control(
+            id: "detail", title: "Detail", visibleWhen: [
+                ControlCondition(control: "choice", anyOf: [decomposed])
+            ], kind: .toggle(ToggleControl(defaultValue: false))
+        )
+        let viewModel = richViewModel([target, dependent], store: store)
+        XCTAssertEqual(viewModel.visibleSections.flatMap(\.controls).map(\.id), ["choice"])
+        XCTAssertTrue(viewModel.persistControlValue(.select(decomposed), for: target))
+        XCTAssertEqual(viewModel.visibleSections.flatMap(\.controls).map(\.id), ["choice", "detail"])
+        viewModel.cancel()
+    }
+
     func testIntegerRangesRejectInvalidDraftsWithoutChangingTheirText() {
         let kind = ControlKind.integerRange(IntegerRangeControl(
             min: -10, max: 100, defaultLower: nil, defaultUpper: nil, unit: nil
