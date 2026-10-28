@@ -200,11 +200,17 @@ final class PluginSettingsViewModel: ObservableObject {
         return succeeded
     }
     func effectiveValue(for control: Control) -> ControlValue? {
-        control.effectiveValue(stored: storedValue(key: control.id)).value
+        effectiveValueState(for: control).value
+    }
+
+    func effectiveValueState(for control: Control) -> (value: ControlValue?, state: StoredValueState) {
+        presentation.effectiveValue(for: control, stored: storedValue(key: control.id))
     }
 
     func persistControlValue(_ value: ControlValue, for control: Control) -> Bool {
-        guard control.kind.accepts(value) else { return false }
+        guard presentation.accepts(value, for: control) else { return false }
+        // An explicit empty selection persists ""; only Reset removes the key. An absent
+        // migrated key can still activate a plugin's legacy fallback.
         return persistValue(key: control.id, value: ControlValueCodec.canonical(value))
     }
 

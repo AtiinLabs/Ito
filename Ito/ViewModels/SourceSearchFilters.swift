@@ -3,6 +3,19 @@ import ito_runner
 /// User overrides only; defaults and visibility remain the runner's responsibility.
 @MainActor
 final class SourceSearchFilters {
+    struct Presentation {
+        let sections: [ControlSection]
+        let visibleControlIDs: Set<String>
+
+        init(capabilities: SearchCapabilities, values: [String: ControlValue]) {
+            let visible = capabilities.visibleControlIDs(values: values)
+            visibleControlIDs = visible
+            sections = capabilities.sections.filter { section in
+                section.controls.contains { visible.contains($0.id) }
+            }
+        }
+    }
+
     private enum Scope: Hashable {
         case all
         case kind(MediaKind)

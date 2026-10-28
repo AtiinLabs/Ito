@@ -33,12 +33,13 @@ struct SearchFilterSheet: View {
     }
 
     var body: some View {
+        let presentation = SourceSearchFilters.Presentation(capabilities: capabilities, values: draft)
         NavigationView {
             Form {
-                ForEach(capabilities.sections, id: \.id) { section in
+                ForEach(presentation.sections, id: \.id) { section in
                     if section.flags.contains(.page) {
                         NavigationLink {
-                            Form { sectionRows(section) }
+                            Form { sectionRows(section, visibleIDs: presentation.visibleControlIDs) }
                                 .navigationTitle(section.title)
                         } label: {
                             VStack(alignment: .leading) {
@@ -50,7 +51,7 @@ struct SearchFilterSheet: View {
                         }
                     } else {
                         Section {
-                            sectionRows(section)
+                            sectionRows(section, visibleIDs: presentation.visibleControlIDs)
                         } header: {
                             Text(section.title)
                         } footer: {
@@ -81,9 +82,8 @@ struct SearchFilterSheet: View {
     }
 
     @ViewBuilder
-    private func sectionRows(_ section: ControlSection) -> some View {
-        let visible = capabilities.visibleControlIDs(values: draft)
-        ForEach(section.controls.filter { visible.contains($0.id) }, id: \.id) { control in
+    private func sectionRows(_ section: ControlSection, visibleIDs: Set<String>) -> some View {
+        ForEach(section.controls.filter { visibleIDs.contains($0.id) }, id: \.id) { control in
             if let value = draft[control.id] ?? control.kind.defaultValue {
                 ControlValueRow(
                     control: control,

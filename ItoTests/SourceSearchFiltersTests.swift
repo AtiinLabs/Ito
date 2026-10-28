@@ -54,4 +54,38 @@ final class SourceSearchFiltersTests: XCTestCase {
         XCTAssertNil(state.capabilities(for: nil))
         XCTAssertTrue(state.values(for: nil).isEmpty)
     }
+
+    func testPresentationHidesDependentPageWithoutDiscardingItsOverride() {
+        let state = SourceSearchFilters()
+        let dependent = Control(
+            id: "dependent",
+            title: "Dependent",
+            visibleWhen: [.init(control: "enabled", anyOf: ["true"])],
+            kind: .text(.init(defaultValue: ""))
+        )
+        let capabilities = SearchCapabilities(sections: [
+            .init(id: "controller", title: "Controller", controls: [toggle]),
+            .init(id: "dependentPage", title: "Dependent page", flags: [.page], controls: [dependent])
+        ])
+        state.updateCapabilities(capabilities, kind: nil)
+        var draft: [String: ControlValue] = ["dependent": .text("kept")]
+
+        let initiallyHidden = SourceSearchFilters.Presentation(capabilities: capabilities, values: draft)
+        XCTAssertEqual(initiallyHidden.sections.map(\.id), ["controller"])
+        XCTAssertEqual(initiallyHidden.visibleControlIDs, ["enabled"])
+
+        draft["enabled"] = .toggle(true)
+        let shown = SourceSearchFilters.Presentation(capabilities: capabilities, values: draft)
+        XCTAssertEqual(shown.sections.map(\.id), ["controller", "dependentPage"])
+        XCTAssertEqual(shown.visibleControlIDs, ["enabled", "dependent"])
+        XCTAssertTrue(shown.sections[1].flags.contains(.page))
+
+        draft["enabled"] = .toggle(false)
+        let hiddenAgain = SourceSearchFilters.Presentation(capabilities: capabilities, values: draft)
+        XCTAssertEqual(hiddenAgain.sections.map(\.id), ["controller"])
+        XCTAssertEqual(hiddenAgain.visibleControlIDs, ["enabled"])
+        XCTAssertEqual(draft["dependent"], .text("kept"))
+        state.apply(draft, kind: nil)
+        XCTAssertEqual(state.values(for: nil), ["enabled": .toggle(false), "dependent": .text("kept")])
+    }
 }

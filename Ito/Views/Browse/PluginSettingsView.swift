@@ -288,7 +288,7 @@ private struct SettingsControlRow: View {
 
     private var storedValue: String? { viewModel.storedValue(key: control.id) }
     private var effective: (value: ControlValue?, state: StoredValueState) {
-        control.effectiveValue(stored: storedValue)
+        viewModel.effectiveValueState(for: control)
     }
 
     var body: some View {
@@ -301,11 +301,7 @@ private struct SettingsControlRow: View {
                     value: value,
                     currentValue: { viewModel.effectiveValue(for: control) ?? value },
                     onChange: { updated in
-                        if case .select(nil) = updated, case let .select(spec) = control.kind, spec.defaultValue == nil {
-                            _ = viewModel.resetControl(control)
-                        } else {
-                            _ = viewModel.persistControlValue(updated, for: control)
-                        }
+                        _ = viewModel.persistControlValue(updated, for: control)
                     },
                     optionCatalog: viewModel.optionCatalog(for: control)
                 )

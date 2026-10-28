@@ -450,7 +450,7 @@ struct SourceView: View {
             if let sort = capabilities.sort, case .select(let body) = sort.kind,
                case .inline(let options) = body.options {
                 Menu {
-                    ForEach(options, id: \.value) { option in
+                    ForEach(options, id: \.identity) { option in
                         Button {
                             viewModel.selectSort(.select(option.value))
                         } label: {

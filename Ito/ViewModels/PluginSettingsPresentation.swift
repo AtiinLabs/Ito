@@ -37,6 +37,26 @@ struct PluginSettingsPresentation {
 
     var controls: [Control] { sections.flatMap(\.controls) }
 
+    func effectiveValue(for control: Control, stored: String?) -> (value: ControlValue?, state: StoredValueState) {
+        guard isLegacy else { return control.effectiveValue(stored: stored) }
+        guard let stored else { return (control.kind.defaultValue, .unset) }
+        // Legacy schemas store raw strings, not the rich form's validated value language.
+        switch control.kind {
+        case .toggle: return (.toggle(stored == "true"), .valid)
+        case .text: return (.text(stored), .valid)
+        case .select: return (.select(stored), .valid)
+        default: return control.effectiveValue(stored: stored)
+        }
+    }
+
+    func accepts(_ value: ControlValue, for control: Control) -> Bool {
+        guard isLegacy else { return control.kind.accepts(value) }
+        switch (control.kind, value) {
+        case (.toggle, .toggle), (.text, .text), (.select, .select): return true
+        default: return false
+        }
+    }
+
     func visibleControlIDs(value: (Control) -> ControlValue?) -> Set<String> {
         if let richForm {
             return richForm.visibleControlIDs(effectiveValue: value)

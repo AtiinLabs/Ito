@@ -63,6 +63,15 @@ final class SourceControlsUITests: XCTestCase {
         XCTAssertTrue(first.waitForExistence(timeout: 20))
         attach(app, name: "Structured browse filter and title ordering")
 
+        // These two orders have canonically equivalent, byte-distinct source IDs.
+        sort.tap()
+        app.buttons["Newest first"].tap()
+        let newest = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Example 099")).firstMatch
+        XCTAssertTrue(newest.waitForExistence(timeout: 10))
+        sort.tap()
+        app.buttons["Oldest first"].tap()
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+
         let search = app.searchFields["Search source..."]
         search.tap()
         search.typeText("Example 01")
