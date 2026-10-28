@@ -75,3 +75,26 @@ extension Setting {
         isOn ? "true" : "false"
     }
 }
+
+extension SettingsSurface {
+    /// Rich forms apply defaults in the SDK so an unset key remains distinguishable from a saved value.
+    var storedDefaults: [String: String] {
+        if case .legacy(let schema, _) = self { return schema.storedDefaults }
+        return [:]
+    }
+
+    var secretSettingIDs: Set<String> {
+        switch self {
+        case .legacy(let schema, _):
+            return Set(schema.settings.compactMap { setting in
+                if case .secret(let id, _, _) = setting { return id }
+                return nil
+            })
+        case .form(let form):
+            return Set(form.controls.compactMap { control in
+                if case .secret = control.kind { return control.id }
+                return nil
+            })
+        }
+    }
+}

@@ -1,17 +1,6 @@
 import SwiftUI
 import ito_runner
 
-extension Setting: @retroactive Identifiable {
-    public var id: String {
-        switch self {
-        case .toggle(let id, _, _, _): return id
-        case .text(let id, _, _, _): return id
-        case .picker(let id, _, _, _, _): return id
-        case .secret(let id, _, _): return id
-        }
-    }
-}
-
 struct PluginSettingsView: View {
     @StateObject private var viewModel: PluginSettingsViewModel
     @Environment(\.dismiss) private var dismiss
@@ -75,8 +64,33 @@ struct PluginSettingsView: View {
     private var settingsContent: some View {
         if viewModel.isPrepared {
             formLevelIssuesSection
-            ForEach(viewModel.schema.settings, id: \.id) { setting in
-                SettingRowView(setting: setting, viewModel: viewModel)
+            if let failure = viewModel.presentation.formFailure {
+                Section {
+                    Label("Some settings of this source couldn't be shown.", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                    Text(failure.localizedDescription).font(.caption).foregroundColor(.secondary)
+                }
+            }
+            ForEach(viewModel.visibleSections) { section in
+                if section.isPage {
+                    NavigationLink(destination: PluginSettingsSectionView(section: section, viewModel: viewModel)) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(section.title)
+                            if let summary = section.summary {
+                                Text(summary).font(.caption).foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                } else {
+                    Section(
+                        header: section.title.isEmpty ? nil : Text(section.title),
+                        footer: section.summary.map { Text($0) }
+                    ) {
+                        ForEach(section.controls, id: \.id) { control in
+                            SettingsControlRow(control: control, viewModel: viewModel)
+                        }
+                    }
+                }
             }
             actionsSection
             statusSections
@@ -250,157 +264,100 @@ struct PluginSettingsView: View {
     }
 }
 
-private struct SettingRowView: View {
-    let setting: Setting
+private struct PluginSettingsSectionView: View {
+    let section: PluginSettingsPresentation.Section
     @ObservedObject var viewModel: PluginSettingsViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            switch setting {
-            case .toggle(let id, let name, let summary, let defaultValue):
-                ToggleSettingRow(
-                    id: id,
-                    name: name,
-                    summary: summary,
-                    defaultValue: defaultValue,
-                    viewModel: viewModel
+        List {
+            Section {
+                ForEach(viewModel.visibleSections.first(where: { $0.id == section.id })?.controls ?? [], id: \.id) { control in
+                    SettingsControlRow(control: control, viewModel: viewModel)
+                }
+            } footer: {
+                if let summary = section.summary { Text(summary) }
+            }
+        }
+        .navigationTitle(section.title)
+    }
+}
+
+private struct SettingsControlRow: View {
+    let control: Control
+    @ObservedObject var viewModel: PluginSettingsViewModel
+
+    private var storedValue: String? { viewModel.storedValue(key: control.id) }
+    private var effective: (value: ControlValue?, state: StoredValueState) {
+        control.effectiveValue(stored: storedValue)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if case let .secret(secret) = control.kind {
+                SecretSettingRow(control: control, placeholder: secret.placeholder, viewModel: viewModel)
+            } else if let value = effective.value {
+                ControlValueRow(
+                    control: control,
+                    value: value,
+                    currentValue: { viewModel.effectiveValue(for: control) ?? value },
+                    onChange: { updated in
+                        if case .select(nil) = updated, case let .select(spec) = control.kind, spec.defaultValue == nil {
+                            _ = viewModel.resetControl(control)
+                        } else {
+                            _ = viewModel.persistControlValue(updated, for: control)
+                        }
+                    },
+                    optionCatalog: viewModel.optionCatalog(for: control)
                 )
-            case .text(let id, let name, let summary, let defaultValue):
-                TextSettingRow(
-                    id: id,
-                    name: name,
-                    summary: summary,
-                    defaultValue: defaultValue,
-                    viewModel: viewModel
-                )
-            case .picker(let id, let name, let summary, let options, let defaultValue):
-                PickerSettingRow(
-                    id: id,
-                    name: name,
-                    summary: summary,
-                    options: options,
-                    defaultValue: defaultValue,
-                    viewModel: viewModel
-                )
-            case .secret(let id, let name, let summary):
-                SecretSettingRow(id: id, name: name, summary: summary, viewModel: viewModel)
+            } else {
+                Text(control.title)
+                Text("This control type is not supported.").font(.caption).foregroundColor(.secondary)
             }
 
-            if let issues = viewModel.issuesBySettingKey[setting.id], !issues.isEmpty {
+            if storedValue != nil, control.kind.defaultValue != nil, effective.state != .invalid {
+                Button("Reset") { _ = viewModel.resetControl(control) }
+                    .font(.caption)
+                    .buttonStyle(.borderless)
+            }
+            if effective.state == .invalid {
+                Label("Saved value isn't valid; the source uses the default.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundColor(.orange)
+                Button("Reset") { _ = viewModel.resetControl(control) }
+                    .font(.caption)
+                    .buttonStyle(.borderless)
+            }
+            if let issues = viewModel.issuesBySettingKey[control.id], !issues.isEmpty {
                 ForEach(issues.indices, id: \.self) { index in
                     Label(issues[index], systemImage: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                        .font(.caption)
+                        .foregroundColor(.orange).font(.caption)
                 }
             }
         }
     }
 }
 
-private struct ToggleSettingRow: View {
-    let id: String
-    let name: String
-    let summary: String?
-    let defaultValue: Bool
-    @ObservedObject var viewModel: PluginSettingsViewModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Toggle(name, isOn: Binding(
-                get: { viewModel.storedValue(key: id).map { $0 == Setting.storedToggle(true) } ?? defaultValue },
-                set: { viewModel.persistValue(key: id, value: Setting.storedToggle($0)) }
-            ))
-            if let summary, !summary.isEmpty {
-                Text(summary)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding(.vertical, 2)
-    }
-}
-
-private struct TextSettingRow: View {
-    let id: String
-    let name: String
-    let summary: String?
-    let defaultValue: String
-    @ObservedObject var viewModel: PluginSettingsViewModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(name)
-            TextField(name, text: Binding(
-                get: { viewModel.storedValue(key: id) ?? defaultValue },
-                set: { viewModel.persistValue(key: id, value: $0) }
-            ))
-            .textFieldStyle(RoundedBorderTextFieldStyle())
-
-            if let summary, !summary.isEmpty {
-                Text(summary)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding(.vertical, 2)
-    }
-}
-
-private struct PickerSettingRow: View {
-    let id: String
-    let name: String
-    let summary: String?
-    let options: [String]
-    let defaultValue: String
-    @ObservedObject var viewModel: PluginSettingsViewModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Picker(name, selection: Binding(
-                get: { viewModel.storedValue(key: id) ?? defaultValue },
-                set: { viewModel.persistValue(key: id, value: $0) }
-            )) {
-                ForEach(options, id: \.self) { option in
-                    Text(option).tag(option)
-                }
-            }
-            if let summary, !summary.isEmpty {
-                Text(summary)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding(.vertical, 2)
-    }
-}
-
-/// A masked field for API keys and passwords. A saved value is never shown again; entering a new
-/// one replaces it. The field stays on screen after saving (emptied), because iOS offers to save a
-/// secure field's text as a website password when the field leaves the screen still holding it.
 private struct SecretSettingRow: View {
-    let id: String
-    let name: String
-    let summary: String?
+    let control: Control
+    let placeholder: String?
     @ObservedObject var viewModel: PluginSettingsViewModel
 
     var body: some View {
-        let isSaved = viewModel.hasSecret(key: id)
-        let draft = viewModel.secretDraft(key: id)
+        let isSaved = viewModel.hasSecret(key: control.id)
+        let draft = viewModel.secretDraft(key: control.id)
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(name)
+                Text(control.title)
                 Spacer()
                 if isSaved {
                     Label("Saved", systemImage: "lock.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
             SecureField(
-                isSaved ? "Enter a new value to replace it" : name,
+                placeholder ?? (isSaved ? "Enter a new value to replace it" : control.title),
                 text: Binding(
-                    get: { viewModel.secretDraft(key: id) },
-                    set: { viewModel.updateSecretDraft(key: id, value: $0) }
+                    get: { viewModel.secretDraft(key: control.id) },
+                    set: { viewModel.updateSecretDraft(key: control.id, value: $0) }
                 )
             )
             .textContentType(.oneTimeCode)
@@ -409,24 +366,20 @@ private struct SecretSettingRow: View {
             .textFieldStyle(RoundedBorderTextFieldStyle())
             .onSubmit(save)
             HStack {
-                if isSaved {
-                    Button("Remove", role: .destructive) { viewModel.clearSecret(key: id) }
-                }
+                if isSaved { Button("Remove", role: .destructive) { viewModel.clearSecret(key: control.id) } }
                 Spacer()
                 Button("Save", action: save)
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .buttonStyle(.borderless)
-            if let summary, !summary.isEmpty {
-                Text(summary)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            if let summary = control.summary, !summary.isEmpty {
+                Text(summary).font(.caption).foregroundColor(.secondary)
             }
         }
         .padding(.vertical, 2)
     }
 
     private func save() {
-        _ = viewModel.persistSecret(key: id, value: viewModel.secretDraft(key: id))
+        _ = viewModel.persistSecret(key: control.id, value: viewModel.secretDraft(key: control.id))
     }
 }

@@ -223,7 +223,8 @@ struct AppViewFactory {
     ) -> PluginSettingsViewModel {
         PluginSettingsViewModel(
             plugin: destination.plugin,
-            schema: destination.schema,
+            surface: destination.surface,
+            runnerProvider: sourceDependencies.runnerProvider,
             settingsStore: sourceDependencies.settingsStore,
             messagePresenter: sourceMessagePresenter,
             completionRecovery: completionRecovery,

@@ -728,6 +728,11 @@ struct InstalledPluginSuiteBootstrapExtension: DurableStateBootstrapExtension {
     func prepare(dbPool: DatabasePool) async throws {
         let fileManager = FileManager.default
         let pluginsDirectory = try pluginsDirectory ?? Self.defaultPluginsDirectory(fileManager)
+        #if DEBUG
+        if UITestLaunchConfiguration.current.isEnabled {
+            try UITestLaunchConfiguration.installPluginFixture(in: pluginsDirectory)
+        }
+        #endif
         var discoveries: [PluginSettingsDiscovery] = []
         if fileManager.fileExists(atPath: pluginsDirectory.path) {
             let pluginURLs = try fileManager.contentsOfDirectory(

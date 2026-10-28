@@ -170,10 +170,9 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
     /// plugin without defaults.
     private func readSchemaDefaults(from runner: ItoRunner, into defaults: PluginCompletionDefaults) async throws -> Bool {
         do {
-            if let schema = try await runner.getSettings() {
-                let stored = await MainActor.run { schema.storedDefaults }
-                defaults.useSchemaDefaults(stored)
-            }
+            let surface = try await runner.getSettingsSurface()
+            let stored = await MainActor.run { surface?.storedDefaults ?? [:] }
+            defaults.useSchemaDefaults(stored)
             return true
         } catch let error as ItoError {
             return !Self.isCrash(error)
@@ -226,7 +225,7 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
             case .server: return .retryable(.server)
             case .other: return .paused(.sourceError, .sourceError)
             }
-        case .requiresNewerHost, .unsupportedABI, .postcardDecodingError, .postcardEncodingError:
+        case .requiresNewerHost, .unsupportedABI, .postcardDecodingError, .postcardEncodingError, .controlContractViolation:
             return .paused(.incompatible, .incompatible)
         case .hostModuleError(let domain, _):
             // The plugin needs a capability a headless completion deliberately lacks.

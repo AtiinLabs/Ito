@@ -4,13 +4,17 @@ import Foundation
 import ito_runner
 
 protocol SourceRunnerContext: SearchDetailLoading {
+    var runnerIdentity: ObjectIdentifier { get }
     func loadHome() async throws -> HomeLayout
-    func loadSettingsSchema() async throws -> SettingsSchema?
+    func loadSettingsSurface() async throws -> SettingsSurface?
+    func loadSearchCapabilities(kind: MediaKind?) async throws -> SearchCapabilities?
+    func loadOptionPage(_ request: OptionRequest) async throws -> OptionPage?
+    func loadSearchSuggestions(query: String, kind: MediaKind?) async throws -> [SearchSuggestion]?
     func search(
         kind: MediaKind?,
         query: String,
         page: Int32,
-        filters: [FilterItem]?
+        filterValues: [String: ControlValue]
     ) async throws -> MediaPageResult
     func loadListing(
         listing: Listing,
@@ -21,6 +25,8 @@ protocol SourceRunnerContext: SearchDetailLoading {
 final class ItoRunnerSourceContext: SourceRunnerContext {
     let runner: ItoRunner
 
+    var runnerIdentity: ObjectIdentifier { ObjectIdentifier(runner) }
+
     init(runner: ItoRunner) {
         self.runner = runner
     }
@@ -29,18 +35,30 @@ final class ItoRunnerSourceContext: SourceRunnerContext {
         try await pluginCall { try await runner.getHome() }
     }
 
-    func loadSettingsSchema() async throws -> SettingsSchema? {
-        try await pluginCall { try await runner.getSettings() }
+    func loadSettingsSurface() async throws -> SettingsSurface? {
+        try await pluginCall { try await runner.getSettingsSurface() }
+    }
+
+    func loadSearchCapabilities(kind: MediaKind?) async throws -> SearchCapabilities? {
+        try await pluginCall { try await runner.getSearchCapabilities(kind: kind) }
+    }
+
+    func loadOptionPage(_ request: OptionRequest) async throws -> OptionPage? {
+        try await pluginCall { try await runner.getOptionPage(request) }
+    }
+
+    func loadSearchSuggestions(query: String, kind: MediaKind?) async throws -> [SearchSuggestion]? {
+        try await pluginCall { try await runner.getSearchSuggestions(query: query, kind: kind) }
     }
 
     func search(
         kind: MediaKind?,
         query: String,
         page: Int32,
-        filters: [FilterItem]?
+        filterValues: [String: ControlValue]
     ) async throws -> MediaPageResult {
         try await pluginCall {
-            try await runner.search(query: query, page: page, kind: kind, filters: filters)
+            try await runner.search(query: query, page: page, kind: kind, filterValues: filterValues)
         }
     }
 
@@ -104,6 +122,7 @@ protocol PluginSettingsPersisting: AnyObject {
     func prepareSettings(pluginID: String) throws
     func storedValue(pluginID: String, key: String) -> String?
     func persistValue(pluginID: String, key: String, value: String) -> Bool
+    func removeValue(pluginID: String, key: String) -> Bool
     func hasSecret(pluginID: String, key: String) -> Bool
     func persistSecret(pluginID: String, key: String, value: String) -> Bool
     func clearSecret(pluginID: String, key: String) -> Bool
@@ -125,6 +144,10 @@ extension PluginSettingsStore: PluginSettingsPersisting {
 
     func persistValue(pluginID: String, key: String, value: String) -> Bool {
         set(pluginId: pluginID, key: key, value: value)
+    }
+
+    func removeValue(pluginID: String, key: String) -> Bool {
+        remove(pluginId: pluginID, key: key)
     }
 
     func hasSecret(pluginID: String, key: String) -> Bool {
@@ -429,6 +452,8 @@ private final class UnavailableSourceDependency: SourceRunnerProviding,
     func storedValue(pluginID: String, key: String) -> String? { nil }
 
     func persistValue(pluginID: String, key: String, value: String) -> Bool { false }
+
+    func removeValue(pluginID: String, key: String) -> Bool { false }
 
     func hasSecret(pluginID: String, key: String) -> Bool { false }
 

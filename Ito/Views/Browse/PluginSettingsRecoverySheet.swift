@@ -34,5 +34,6 @@ struct PluginSettingsRecoverySheet: View {
             }
         }
         .task { await viewModel.load() }
+        .onDisappear { viewModel.settingsClosed() }
     }
 }

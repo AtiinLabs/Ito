@@ -69,15 +69,32 @@ struct AppDefaultsModuleTests {
         ])
 
         let applied = AppDefaultsModule(pluginId: "plugin", store: store)
-        #expect(try await PluginManager.applySchemaDefaults(from: { schema }, to: applied, pluginID: "plugin"))
+        #expect(try await PluginManager.applySchemaDefaults(from: { .legacy(schema, formFailure: nil) }, to: applied, pluginID: "plugin"))
         #expect(applied.get(key: "server") == "https://example.com")
 
         let failed = AppDefaultsModule(pluginId: "plugin", store: store)
-        let reported: () async throws -> SettingsSchema? = {
+        let reported: () async throws -> SettingsSurface? = {
             throw ItoError.pluginFailed(function: "get_settings", reason: "Bad schema")
         }
         #expect(try await PluginManager.applySchemaDefaults(from: reported, to: failed, pluginID: "plugin"))
         #expect(failed.get(key: "server") == nil)
+    }
+
+    @Test func switchingToARichFormClearsInjectedDefaultsWithoutChangingSavedValues() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let store = PluginSettingsStore(dbPool: database.dbPool, domainFactory: { EmptyPluginDomain(name: $0) })
+        let defaults = AppDefaultsModule(pluginId: "plugin", store: store)
+        defaults.useSchemaDefaults(["unset": "old default", "saved": "old default"])
+        defaults.set(key: "saved", value: "user choice")
+
+        #expect(try await PluginManager.applySchemaDefaults(
+            from: { .form(SettingsForm(sections: [])) },
+            to: defaults,
+            pluginID: "plugin"
+        ))
+        #expect(defaults.get(key: "unset") == nil)
+        #expect(defaults.get(key: "saved") == "user choice")
     }
 
     @Test func aPluginThatCrashesDescribingItsSettingsIsNotUsed() async throws {
@@ -85,8 +102,8 @@ struct AppDefaultsModuleTests {
         defer { database.cleanup() }
         let store = PluginSettingsStore(dbPool: database.dbPool, domainFactory: { EmptyPluginDomain(name: $0) })
         let defaults = AppDefaultsModule(pluginId: "plugin", store: store)
-        let crashing: () async throws -> SettingsSchema? = { throw ItoError.wasmTrap("unreachable") }
-        let cancelled: () async throws -> SettingsSchema? = { throw CancellationError() }
+        let crashing: () async throws -> SettingsSurface? = { throw ItoError.wasmTrap("unreachable") }
+        let cancelled: () async throws -> SettingsSurface? = { throw CancellationError() }
 
         #expect(try await !PluginManager.applySchemaDefaults(from: crashing, to: defaults, pluginID: "plugin"))
         await #expect(throws: CancellationError.self) {

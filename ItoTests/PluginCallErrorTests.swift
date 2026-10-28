@@ -78,6 +78,10 @@ struct PluginCallErrorTests {
 
     @Test func undecodableDataIsAnIncompatibility() {
         #expect(PluginCallError(.postcardDecodingError("Unexpected end of data")).kind == .incompatible)
+        let invalidControls = ItoError.controlContractViolation(
+            function: "get_settings_form", violation: .init(.signature)
+        )
+        #expect(PluginCallError(invalidControls).kind == .incompatible)
     }
 
     @Test func aWebViewFailureSaysSo() {

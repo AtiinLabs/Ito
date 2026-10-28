@@ -155,7 +155,7 @@ struct PluginSettingsDiagnosticServiceTests {
 
         let defaults = try await service.captureDefaults(
             pluginID: pluginID,
-            schema: schema,
+            surface: .legacy(schema, formFailure: nil),
             secretDrafts: secretDrafts
         )
 
@@ -193,6 +193,37 @@ struct PluginSettingsDiagnosticServiceTests {
         }
         #expect(postImageEpoch == initialImageEpoch)
         #expect(postCompletionScope == initialCompletionScope)
+    }
+
+    @Test func richFormDraftsOverlayOnlyDeclaredSecretsWithoutInjectingDefaults() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let secrets = PluginSecretStore(keychain: InMemoryPluginSecretKeychain())
+        let store = PluginSettingsStore(dbPool: database.dbPool, secrets: secrets)
+        #expect(store.setSecret(pluginId: "rich", key: "credential", value: "saved"))
+        let form = SettingsForm(sections: [
+            ControlSection(id: "account", title: "Account", summary: nil, flags: [], controls: [
+                Control(id: "credential", title: "Credential", summary: nil, flags: 0,
+                        visibleWhen: [], kind: .secret(SecretControl(placeholder: nil))),
+                Control(id: "ordinary", title: "Ordinary", summary: nil, flags: 0,
+                        visibleWhen: [], kind: .toggle(ToggleControl(defaultValue: true)))
+            ])
+        ])
+        let service = await MainActor.run {
+            PluginSettingsDiagnosticService(settingsStore: store, locatePlugin: { _ in
+                throw URLError(.fileDoesNotExist)
+            })
+        }
+        let defaults = try await service.captureDefaults(
+            pluginID: "rich",
+            surface: .form(form),
+            secretDrafts: ["credential": "draft", "ordinary": "not a secret", "unknown": "ignored"]
+        )
+        #expect(defaults.get(key: "credential") == "draft")
+        #expect(defaults.get(key: "ordinary") == nil)
+        #expect(defaults.get(key: "unknown") == nil)
+        #expect(secrets.value(pluginID: "rich", key: "credential") == "saved")
+        #expect(store.get(pluginId: "rich", key: "credential") == nil)
     }
 
     // MARK: - Host Module Rejection Tests
@@ -245,7 +276,7 @@ struct PluginSettingsDiagnosticServiceTests {
                         task?.cancel()
                     }
                     do {
-                        _ = try await service.inspect(pluginID: "test", schema: schema, secretDrafts: [:])
+                        _ = try await service.inspect(pluginID: "test", surface: .legacy(schema, formFailure: nil), secretDrafts: [:])
                         continuation.resume()
                     } catch {
                         continuation.resume(throwing: error)

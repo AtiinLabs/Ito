@@ -30,11 +30,13 @@ struct SourceView: View {
             .navigationTitle(viewModel.plugin.info.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    searchControls
                     if viewModel.hasSettings {
                         Button(action: { viewModel.showSettings = true }) {
                             Image(systemName: "gear")
                         }
+                        .accessibilityLabel("Source settings")
                     }
                 }
             }
@@ -45,6 +47,16 @@ struct SourceView: View {
                     viewFactory.makePluginSettingsView(destination: destination)
                 } else if let reason = viewModel.settingsUnavailableReason {
                     SourceSettingsUnavailableView(pluginName: viewModel.plugin.info.name, reason: reason)
+                }
+            }
+            .sheet(isPresented: $viewModel.showSearchFilters) {
+                if let capabilities = viewModel.searchCapabilities {
+                    SearchFilterSheet(
+                        capabilities: capabilities,
+                        values: viewModel.filterValues,
+                        optionCatalog: { viewModel.makeOptionCatalogModel($0) },
+                        onApply: { viewModel.applyFilters($0) }
+                    )
                 }
             }
             .sheet(isPresented: $viewModel.showSignIn, onDismiss: {
@@ -79,6 +91,7 @@ struct SourceView: View {
             .onChange(of: viewModel.searchQuery) { query in
                 viewModel.performSearch(query: query)
             }
+            .onSubmit(of: .search) { viewModel.submitSearch() }
             .onChange(of: viewModel.shouldDismiss) { shouldDismiss in
                 if shouldDismiss { dismiss() }
             }
@@ -119,7 +132,7 @@ struct SourceView: View {
                 Task { await viewModel.retry() }
             }
         case .content, .empty:
-            if !viewModel.hasActiveSearchQuery {
+            if !viewModel.hasActiveSearch {
                 homeContent
             } else {
                 searchContent
@@ -432,8 +445,69 @@ struct SourceView: View {
     }
 
     @ViewBuilder
+    private var searchControls: some View {
+        if let capabilities = viewModel.searchCapabilities {
+            if let sort = capabilities.sort, case .select(let body) = sort.kind,
+               case .inline(let options) = body.options {
+                Menu {
+                    ForEach(options, id: \.value) { option in
+                        Button {
+                            viewModel.selectSort(.select(option.value))
+                        } label: {
+                            if (viewModel.filterValues[sort.id] ?? sort.kind.defaultValue) == .select(option.value) {
+                                Label(option.label, systemImage: "checkmark")
+                            } else {
+                                Text(option.label)
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                }
+                .disabled(!viewModel.sortEnabled)
+                .accessibilityLabel("Sort")
+                .accessibilityHint(viewModel.sortEnabled ? "" : "Sorting is only available without search text.")
+            }
+            if !capabilities.sections.isEmpty {
+                Button { viewModel.showSearchFilters = true } label: {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                }
+                .disabled(!viewModel.filtersEnabled)
+                .accessibilityLabel("Filters")
+                .accessibilityHint(viewModel.filtersEnabled ? "" : "Filters are only available without search text.")
+            }
+        }
+    }
+
+    @ViewBuilder
     private var searchContent: some View {
         VStack(spacing: 0) {
+            if let capabilities = viewModel.searchCapabilities, viewModel.hasActiveSearchQuery {
+                if capabilities.sort != nil && !viewModel.sortEnabled {
+                    Text("Sorting is only available without search text.")
+                        .font(.caption).foregroundStyle(.secondary).padding(.horizontal)
+                }
+                if !capabilities.sections.isEmpty && !viewModel.filtersEnabled {
+                    Text("Filters are only available without search text.")
+                        .font(.caption).foregroundStyle(.secondary).padding(.horizontal)
+                }
+            }
+            ForEach(viewModel.searchSuggestions.indices, id: \.self) { index in
+                let suggestion = viewModel.searchSuggestions[index]
+                Button {
+                    viewModel.searchQuery = suggestion.query
+                } label: {
+                    VStack(alignment: .leading) {
+                        Text(suggestion.query)
+                        if let subtitle = suggestion.subtitle {
+                            Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                }
+            }
             if viewModel.isMultiKind {
                 scopePicker
             }

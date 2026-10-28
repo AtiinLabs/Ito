@@ -5,7 +5,8 @@ import ito_runner
 @MainActor
 final class PluginSettingsViewModel: ObservableObject {
     let plugin: InstalledPlugin
-    let schema: SettingsSchema
+    let surface: SettingsSurface
+    let presentation: PluginSettingsPresentation
 
     @Published private(set) var isPrepared = false
     @Published private(set) var isLoading = false
@@ -21,8 +22,21 @@ final class PluginSettingsViewModel: ObservableObject {
 
     // Diagnostics: actions and validation
     @Published private(set) var actions: [SettingsAction] = []
-    @Published private(set) var issuesBySettingKey: [String: [String]] = [:]
-    @Published private(set) var formLevelIssues: [String] = []
+    @Published private var inspectionIssues: [SettingIssue] = []
+
+    var issuesBySettingKey: [String: [String]] {
+        let visible = Set(visibleSections.flatMap(\.controls).map(\.id))
+        return inspectionIssues.reduce(into: [:]) { result, issue in
+            if !issue.key.isEmpty && visible.contains(issue.key) {
+                result[issue.key, default: []].append(issue.message)
+            }
+        }
+    }
+
+    var formLevelIssues: [String] {
+        let visible = Set(visibleSections.flatMap(\.controls).map(\.id))
+        return inspectionIssues.filter { $0.key.isEmpty || !visible.contains($0.key) }.map(\.message)
+    }
     @Published private(set) var isInspecting = false
     @Published private(set) var inspectError: String?
     @Published private(set) var runningActionID: String?
@@ -33,8 +47,10 @@ final class PluginSettingsViewModel: ObservableObject {
     private let messagePresenter: any SourceMessagePresenting
     private let completionRecovery: (any PluginCompletionRecovering)?
     private let diagnostics: (any PluginSettingsDiagnosing)?
+    private let runnerProvider: (any SourceRunnerProviding)?
 
     private var secretDrafts: [String: String] = [:]
+    private var optionCatalogModels: [String: OptionCatalogModel] = [:]
     private var isActive = true
     private var inputRevision: UInt64 = 0
     private var loadOperationID: UUID?
@@ -52,14 +68,17 @@ final class PluginSettingsViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     init(
         plugin: InstalledPlugin,
-        schema: SettingsSchema,
+        surface: SettingsSurface,
+        runnerProvider: (any SourceRunnerProviding)? = nil,
         settingsStore: any PluginSettingsPersisting,
         messagePresenter: any SourceMessagePresenting,
         completionRecovery: (any PluginCompletionRecovering)? = nil,
         diagnostics: (any PluginSettingsDiagnosing)? = nil
     ) {
         self.plugin = plugin
-        self.schema = schema
+        self.surface = surface
+        self.presentation = PluginSettingsPresentation(surface: surface)
+        self.runnerProvider = runnerProvider
         self.settingsStore = settingsStore
         self.messagePresenter = messagePresenter
         self.completionRecovery = completionRecovery
@@ -179,6 +198,59 @@ final class PluginSettingsViewModel: ObservableObject {
             handleInputChanged()
         }
         return succeeded
+    }
+    func effectiveValue(for control: Control) -> ControlValue? {
+        control.effectiveValue(stored: storedValue(key: control.id)).value
+    }
+
+    func persistControlValue(_ value: ControlValue, for control: Control) -> Bool {
+        guard control.kind.accepts(value) else { return false }
+        return persistValue(key: control.id, value: ControlValueCodec.canonical(value))
+    }
+
+    @discardableResult
+    func resetControl(_ control: Control) -> Bool {
+        let succeeded = settingsStore.removeValue(pluginID: plugin.id, key: control.id)
+        let saved = finishPersistence(succeeded)
+        if saved { handleInputChanged() }
+        return saved
+    }
+
+    func optionCatalog(for control: Control, debounceNanoseconds: UInt64 = 250_000_000) -> OptionCatalogModel? {
+        let source: OptionSource?
+        switch control.kind {
+        case .select(let spec): source = spec.options
+        case .multiSelect(let spec): source = spec.options
+        default: source = nil
+        }
+        guard case let .catalog(catalog)? = source,
+              let runnerProvider else { return nil }
+        if let existing = optionCatalogModels[control.id] { return existing }
+        let model = OptionCatalogModel(
+            catalog: catalog,
+            runnerProvider: runnerProvider,
+            pluginID: plugin.id,
+            debounceNanoseconds: debounceNanoseconds
+        )
+        optionCatalogModels[control.id] = model
+        return model
+    }
+
+    var visibleSections: [PluginSettingsPresentation.Section] {
+        let visible = presentation.visibleControlIDs { control in
+            effectiveValue(for: control)
+        }
+        return presentation.sections.compactMap { section in
+            let controls = section.controls.filter { visible.contains($0.id) }
+            guard !controls.isEmpty else { return nil }
+            return PluginSettingsPresentation.Section(
+                id: section.id,
+                title: section.title,
+                summary: section.summary,
+                isPage: section.isPage,
+                controls: controls
+            )
+        }
     }
 
     var completionPresentation: CompletionPresentation? {
@@ -306,6 +378,8 @@ final class PluginSettingsViewModel: ObservableObject {
 
         actionResultGeneration &+= 1
         actionTask?.cancel()
+        for model in optionCatalogModels.values { model.disappear() }
+        optionCatalogModels.removeAll()
     }
 
     private func handleInputChanged() {
@@ -341,7 +415,7 @@ final class PluginSettingsViewModel: ObservableObject {
         isInspecting = true
         let capturedDrafts = secretDrafts
         let pluginID = plugin.id
-        let schema = self.schema
+        let surface = self.surface
 
         inspectTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -352,7 +426,7 @@ final class PluginSettingsViewModel: ObservableObject {
                 try Task.checkCancellation()
                 inspectionResult = try await diagnostics.inspect(
                     pluginID: pluginID,
-                    schema: schema,
+                    surface: surface,
                     secretDrafts: capturedDrafts
                 )
                 try Task.checkCancellation()
@@ -396,26 +470,7 @@ final class PluginSettingsViewModel: ObservableObject {
 
     private func applyInspection(_ inspection: PluginSettingsInspection) {
         self.actions = deduplicateActions(inspection.actions)
-        if let issues = inspection.issues {
-            var byKey: [String: [String]] = [:]
-            var formLevel: [String] = []
-            let schemaKeys = Set(schema.settings.map(\.id))
-
-            for issue in issues {
-                // Match exact key without trimming - schema setting IDs may have surrounding spaces
-                if issue.key.isEmpty || !schemaKeys.contains(issue.key) {
-                    formLevel.append(issue.message)
-                } else {
-                    byKey[issue.key, default: []].append(issue.message)
-                }
-            }
-            self.issuesBySettingKey = byKey
-            self.formLevelIssues = formLevel
-        } else {
-            // Issues are unsupported by this plugin
-            self.issuesBySettingKey = [:]
-            self.formLevelIssues = []
-        }
+        self.inspectionIssues = inspection.issues ?? []
     }
 
     private func deduplicateActions(_ rawActions: [SettingsAction]) -> [SettingsAction] {
@@ -446,7 +501,7 @@ final class PluginSettingsViewModel: ObservableObject {
         let capturedDrafts = secretDrafts
         let capturedInputRev = inputRevision
         let pluginID = plugin.id
-        let schema = self.schema
+        let surface = self.surface
 
         actionTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -457,7 +512,7 @@ final class PluginSettingsViewModel: ObservableObject {
                 try Task.checkCancellation()
                 result = try await diagnostics.run(
                     pluginID: pluginID,
-                    schema: schema,
+                    surface: surface,
                     secretDrafts: capturedDrafts,
                     actionID: actionID
                 )

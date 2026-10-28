@@ -116,6 +116,7 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
     }
 
     let runner = ItoRunner()
+    var runnerIdentity: ObjectIdentifier { ObjectIdentifier(runner) }
     var homeResult: Result<HomeLayout, any Error> = .success(HomeLayout(components: []))
     var settingsResult: Result<SettingsSchema?, any Error> = .success(nil)
     var searchResult: Result<MediaPageResult, any Error> = .success(MediaPageResult(entries: [], hasNextPage: false))
@@ -144,21 +145,43 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
         return try homeResult.get()
     }
 
-    func loadSettingsSchema() async throws -> SettingsSchema? {
+    func loadSettingsSurface() async throws -> SettingsSurface? {
         settingsLoadCount += 1
         loadEvents.append("settings")
-        return try settingsResult.get()
+        return try settingsResult.get().map { .legacy($0, formFailure: nil) }
+    }
+
+    var capabilitiesResult: Result<SearchCapabilities?, any Error> = .success(nil)
+    var optionPageResult: Result<OptionPage?, any Error> = .success(nil)
+    var suggestionsResult: Result<[SearchSuggestion]?, any Error> = .success(nil)
+    var capabilitiesHandler: ((MediaKind?) async throws -> SearchCapabilities?)?
+    var suggestionsHandler: ((String, MediaKind?) async throws -> [SearchSuggestion]?)?
+    var searchHandler: ((MediaKind?, String, Int32, [String: ControlValue]) async throws -> MediaPageResult)?
+
+    func loadSearchCapabilities(kind: MediaKind?) async throws -> SearchCapabilities? {
+        if let capabilitiesHandler { return try await capabilitiesHandler(kind) }
+        return try capabilitiesResult.get()
+    }
+
+    func loadOptionPage(_ request: OptionRequest) async throws -> OptionPage? {
+        try optionPageResult.get()
+    }
+
+    func loadSearchSuggestions(query: String, kind: MediaKind?) async throws -> [SearchSuggestion]? {
+        if let suggestionsHandler { return try await suggestionsHandler(query, kind) }
+        return try suggestionsResult.get()
     }
 
     func search(
         kind pluginType: MediaKind?,
         query: String,
         page: Int32,
-        filters: [FilterItem]?
+        filterValues: [String: ControlValue]
     ) async throws -> MediaPageResult {
         searchInvocations.append(
-            .init(pluginType: pluginType, query: query, page: page, filterCount: filters?.count)
+            .init(pluginType: pluginType, query: query, page: page, filterCount: filterValues.count)
         )
+        if let searchHandler { return try await searchHandler(pluginType, query, page, filterValues) }
         if suspendsSearch {
             return try await withCheckedThrowingContinuation {
                 pendingSearches.append(.init(query: query, kind: pluginType, continuation: $0))
@@ -263,6 +286,13 @@ final class PR7BSettingsStoreSpy: PluginSettingsPersisting {
         writes.append((pluginID, key, value))
         guard persistSucceeds else { return false }
         values[key] = value
+        revision += 1
+        return true
+    }
+
+    func removeValue(pluginID: String, key: String) -> Bool {
+        guard persistSucceeds else { return false }
+        values[key] = nil
         revision += 1
         return true
     }

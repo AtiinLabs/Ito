@@ -32,11 +32,11 @@ final class PluginSettingsLoaderViewModel: ObservableObject {
         do {
             let context = try await runnerProvider.sourceRunnerContext(for: plugin.id)
             try Task.checkCancellation()
-            let schema = try await context.loadSettingsSchema()
+            let surface = try await context.loadSettingsSurface()
             try Task.checkCancellation()
             guard generation == operation else { return }
-            if let schema {
-                destination = SourceSettingsDestination(plugin: plugin, schema: schema)
+            if let surface {
+                destination = SourceSettingsDestination(plugin: plugin, surface: surface)
             } else {
                 failure = "This source does not offer settings."
             }
@@ -49,5 +49,10 @@ final class PluginSettingsLoaderViewModel: ObservableObject {
             }
             failure = error.localizedDescription
         }
+    }
+
+    func settingsClosed() {
+        generation = UUID()
+        if let plugin { runnerProvider.evictSourceRunner(for: plugin.id) }
     }
 }

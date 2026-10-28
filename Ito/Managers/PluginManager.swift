@@ -230,7 +230,7 @@ public class PluginManager: ObservableObject {
     ) async throws -> ItoRunner {
         let (runner, defaults) = try await makeRunner(pluginID: pluginID, pluginURL: pluginURL, settingsStore: settingsStore)
         let usable = try await applySchemaDefaults(
-            from: { try await runner.getSettings() },
+            from: { try await runner.getSettingsSurface() },
             to: defaults,
             pluginID: pluginID
         )
@@ -263,19 +263,17 @@ public class PluginManager: ObservableObject {
         return (runner, defaults)
     }
 
-    /// Reads the plugin's settings schema so settings the user never set read as their defaults.
-    /// Returns false when reading it crashed the plugin, so that runner must not be used. Any
-    /// other failure only leaves the plugin without defaults.
+    /// Injects defaults only for legacy settings; rich forms apply defaults in the SDK.
+    /// Returns false after a plugin crash so the unusable runner can be discarded.
     @MainActor
     static func applySchemaDefaults(
-        from readSchema: () async throws -> SettingsSchema?,
+        from readSchema: () async throws -> SettingsSurface?,
         to defaults: AppDefaultsModule,
         pluginID: String
     ) async throws -> Bool {
         do {
-            if let schema = try await pluginCall(readSchema) {
-                defaults.useSchemaDefaults(schema.storedDefaults)
-            }
+            let surface = try await pluginCall(readSchema)
+            defaults.useSchemaDefaults(surface?.storedDefaults ?? [:])
             return true
         } catch let error as PluginCallError where error.kind == .crashed {
             return false

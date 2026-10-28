@@ -1,9 +1,149 @@
+import Combine
 import XCTest
 import ito_runner
 @testable import Ito
 
 @MainActor
 final class SourceViewModelTests: XCTestCase {
+    func testEmptyQueryWithFiltersDoesNotBrowseWithoutCapabilityFlag() async {
+        let context = PR7BSourceRunnerContextSpy()
+        let toggle = Control(id: "enabled", title: "Enabled", kind: .toggle(.init(defaultValue: false)))
+        context.capabilitiesResult = .success(.init(sections: [.init(id: "filters", title: "Filters", controls: [toggle])]))
+        let viewModel = makeViewModel(provider: PR7BSourceRunnerProviderSpy(contexts: [context]), debounce: nil)
+        await viewModel.loadIfNeeded()
+        viewModel.applyFilters(["enabled": .toggle(true)])
+        XCTAssertEqual(viewModel.filterValues, ["enabled": .toggle(true)])
+        XCTAssertEqual(viewModel.searchPhase, .idle)
+        XCTAssertFalse(viewModel.hasActiveSearch)
+        XCTAssertTrue(context.searchInvocations.isEmpty)
+    }
+
+    func testCapabilitiesLoadAllKindsAndEachSelectedKind() async {
+        let context = PR7BSourceRunnerContextSpy()
+        var requested: [MediaKind?] = []
+        let mangaLoaded = expectation(description: "manga capabilities")
+        context.capabilitiesHandler = { kind in
+            requested.append(kind)
+            if kind == .manga { mangaLoaded.fulfill() }
+            return .init(sections: [])
+        }
+        let viewModel = makeViewModel(plugin: pr7bPlugin(kinds: [.manga, .anime]),
+            provider: PR7BSourceRunnerProviderSpy(contexts: [context]), debounce: nil)
+        await viewModel.loadIfNeeded()
+        XCTAssertEqual(requested.count, 1)
+        XCTAssertNil(requested[0])
+        viewModel.selectedKind = .manga
+        await fulfillment(of: [mangaLoaded], timeout: 2)
+        XCTAssertEqual(requested.compactMap { $0 }, [.manga])
+        viewModel.cancelActiveOperations()
+    }
+
+    func testSuggestionsDropStaleTextAndDisappearCompletion() async {
+        let context = PR7BSourceRunnerContextSpy()
+        context.capabilitiesResult = .success(.init(flags: [.suggestions], sections: []))
+        let viewModel = makeViewModel(provider: PR7BSourceRunnerProviderSpy(contexts: [context]), debounce: nil)
+        await viewModel.loadIfNeeded()
+        var first: CheckedContinuation<[SearchSuggestion]?, Never>?
+        var second: CheckedContinuation<[SearchSuggestion]?, Never>?
+        let firstStarted = expectation(description: "old suggestions started")
+        let secondStarted = expectation(description: "new suggestions started")
+        let oldReturned = expectation(description: "old suggestions returned")
+        let newReturned = expectation(description: "new suggestions returned")
+        context.suggestionsHandler = { query, _ in
+            if query == "old" {
+                let result = await withCheckedContinuation { first = $0; firstStarted.fulfill() }
+                oldReturned.fulfill()
+                return result
+            }
+            let result = await withCheckedContinuation { second = $0; secondStarted.fulfill() }
+            newReturned.fulfill()
+            return result
+        }
+        viewModel.searchQuery = "old"
+        viewModel.performSearch(query: "old")
+        await fulfillment(of: [firstStarted], timeout: 2)
+        viewModel.searchQuery = "new"
+        viewModel.performSearch(query: "new")
+        await fulfillment(of: [secondStarted], timeout: 2)
+        first?.resume(returning: [.init(query: "stale")])
+        await fulfillment(of: [oldReturned], timeout: 2)
+        viewModel.cancelActiveOperations()
+        second?.resume(returning: [.init(query: "also stale")])
+        await fulfillment(of: [newReturned], timeout: 2)
+        XCTAssertTrue(viewModel.searchSuggestions.isEmpty)
+    }
+
+    func testSortAndApplyEachCaptureOneSearchAndBrowseRequiresAnOverride() async {
+        let context = PR7BSourceRunnerContextSpy()
+        let sort = Control(id: "sort", title: "Sort", kind: .select(.init(options: .inline([
+            .init(value: "new", label: "Newest"), .init(value: "old", label: "Oldest")
+        ]), defaultValue: "new")))
+        let toggle = Control(id: "enabled", title: "Enabled", kind: .toggle(.init(defaultValue: false)))
+        context.capabilitiesResult = .success(.init(flags: [.browse, .sortWithQuery, .filtersWithQuery],
+            sort: sort, sections: [.init(id: "filters", title: "Filters", controls: [toggle])]))
+        let viewModel = makeViewModel(provider: PR7BSourceRunnerProviderSpy(contexts: [context]), debounce: nil)
+        await viewModel.loadIfNeeded()
+        viewModel.performSearch(query: "")
+        XCTAssertEqual(viewModel.searchPhase, .idle)
+        XCTAssertTrue(context.searchInvocations.isEmpty)
+
+        let sorted = expectation(description: "sort search")
+        context.searchHandler = { _, query, _, values in
+            XCTAssertEqual(query, "")
+            XCTAssertEqual(values, ["sort": .select("old")])
+            sorted.fulfill()
+            return .init(entries: [], hasNextPage: false)
+        }
+        viewModel.selectSort(.select("old"))
+        await fulfillment(of: [sorted], timeout: 2)
+        XCTAssertEqual(context.searchInvocations.count, 1)
+        let applied = expectation(description: "apply search")
+        context.searchHandler = { _, _, _, values in
+            XCTAssertEqual(values, ["sort": .select("old"), "enabled": .toggle(true)])
+            applied.fulfill()
+            return .init(entries: [], hasNextPage: false)
+        }
+        viewModel.applyFilters(["sort": .select("old"), "enabled": .toggle(true)])
+        await fulfillment(of: [applied], timeout: 2)
+        XCTAssertEqual(context.searchInvocations.count, 2)
+    }
+
+    func testFilterChangeDropsNonCooperativeSearchCompletion() async {
+        let context = PR7BSourceRunnerContextSpy()
+        let toggle = Control(id: "enabled", title: "Enabled", kind: .toggle(.init(defaultValue: false)))
+        context.capabilitiesResult = .success(.init(flags: [.filtersWithQuery], sections: [
+            .init(id: "filters", title: "Filters", controls: [toggle])
+        ]))
+        let viewModel = makeViewModel(provider: PR7BSourceRunnerProviderSpy(contexts: [context]), debounce: nil)
+        await viewModel.loadIfNeeded()
+        var first: CheckedContinuation<MediaPageResult, Never>?
+        var second: CheckedContinuation<MediaPageResult, Never>?
+        let firstStarted = expectation(description: "first started")
+        let secondStarted = expectation(description: "second started")
+        let firstReturned = expectation(description: "first returned")
+        context.searchHandler = { _, _, _, values in
+            if values.isEmpty {
+                let result = await withCheckedContinuation { first = $0; firstStarted.fulfill() }
+                firstReturned.fulfill()
+                return result
+            }
+            return await withCheckedContinuation { second = $0; secondStarted.fulfill() }
+        }
+        viewModel.searchQuery = "query"
+        viewModel.performSearch(query: "query")
+        await fulfillment(of: [firstStarted], timeout: 2)
+        viewModel.applyFilters(["enabled": .toggle(true)])
+        await fulfillment(of: [secondStarted], timeout: 2)
+        first?.resume(returning: .init(entries: [.manga(.init(key: "stale", title: "Stale"))], hasNextPage: false))
+        await fulfillment(of: [firstReturned], timeout: 2)
+        let content = expectation(description: "fresh published")
+        let observation = viewModel.$searchPhase.filter { $0 == .content }.prefix(1).sink { _ in content.fulfill() }
+        second?.resume(returning: .init(entries: [.manga(.init(key: "fresh", title: "Fresh"))], hasNextPage: false))
+        await fulfillment(of: [content], timeout: 2)
+        XCTAssertEqual(viewModel.searchEntries.map(\.key), ["fresh"])
+        observation.cancel()
+    }
+
     func testInitialStateContainsOnlyStablePluginIdentity() {
         let viewModel = makeViewModel()
 
@@ -11,7 +151,7 @@ final class SourceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.searchPhase, .idle)
         XCTAssertEqual(viewModel.plugin.id, "plugin.manga")
         XCTAssertNil(viewModel.homeLayout)
-        XCTAssertNil(viewModel.settingsSchema)
+        XCTAssertNil(viewModel.settingsSurface)
         XCTAssertTrue(viewModel.searchEntries.isEmpty)
     }
 
@@ -28,7 +168,10 @@ final class SourceViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.phase, .content)
         XCTAssertEqual(viewModel.homeLayout?.components.compactMap(\.title), ["home-a", "home-b"])
-        XCTAssertEqual(viewModel.settingsSchema?.settings.count, 1)
+        guard case .legacy(let schema, _) = viewModel.settingsSurface else {
+            return XCTFail("Expected legacy settings surface")
+        }
+        XCTAssertEqual(schema.settings.count, 1)
         XCTAssertEqual(provider.requestedPluginIDs, ["plugin.manga"])
         XCTAssertEqual(context.settingsLoadCount, 1)
         XCTAssertEqual(context.homeLoadCount, 1)
@@ -573,7 +716,7 @@ final class SourceViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.searchPhase, .idle)
         XCTAssertTrue(context.searchInvocations.isEmpty)
         let viewSource = try? sourceFile("Ito/Views/Browse/SourceView.swift")
-        XCTAssertTrue(viewSource?.contains("if !viewModel.hasActiveSearchQuery") == true)
+        XCTAssertTrue(viewSource?.contains("if !viewModel.hasActiveSearch") == true)
     }
 
     func testTypedRoutesPreserveSourceContextPluginAndPayload() async throws {

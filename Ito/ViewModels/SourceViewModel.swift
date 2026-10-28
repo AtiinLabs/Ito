@@ -11,7 +11,7 @@ struct SourceListingDestination {
 
 struct SourceSettingsDestination {
     let plugin: InstalledPlugin
-    let schema: SettingsSchema
+    let surface: SettingsSurface
 }
 
 @MainActor
@@ -39,7 +39,7 @@ final class SourceViewModel: ObservableObject {
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var searchPhase: SearchPhase = .idle
     @Published private(set) var homeLayout: HomeLayout?
-    @Published private(set) var settingsSchema: SettingsSchema?
+    @Published private(set) var settingsSurface: SettingsSurface?
     /// Why the plugin's settings can't be shown, when it has settings but they couldn't be read.
     @Published private(set) var settingsUnavailableReason: String?
     /// Whether the last load failed because the plugin needs settings (missing, or rejected
@@ -65,6 +65,9 @@ final class SourceViewModel: ObservableObject {
     @Published private(set) var searchEntries: [MediaEntry] = []
     @Published var searchQuery = ""
     @Published var showSettings = false
+    @Published private(set) var searchCapabilities: SearchCapabilities?
+    @Published private(set) var searchSuggestions: [SearchSuggestion] = []
+    @Published var showSearchFilters = false
     @Published var showArchivedPluginDeleteConfirmation = false
     @Published private(set) var isDeletingArchivedPlugin = false
     @Published private(set) var archivedPluginDeleteError: String?
@@ -79,6 +82,11 @@ final class SourceViewModel: ObservableObject {
     private var loadTask: Task<Void, Never>?
     private var loadOperationID: UUID?
     private var searchTask: Task<Void, Never>?
+    private let searchFilters = SourceSearchFilters()
+    private var capabilitiesTask: Task<Void, Never>?
+    private var capabilitiesOperationID: UUID?
+    private var suggestionTask: Task<Void, Never>?
+    private var suggestionGeneration = UUID()
     private var searchOperationID: UUID?
     private var deleteOperationID: UUID?
     private var archivedPluginFileSnapshot: SourcePluginFileSnapshot?
@@ -98,13 +106,18 @@ final class SourceViewModel: ObservableObject {
         self.messagePresenter = messagePresenter
         self.searchDebounceNanoseconds = searchDebounceNanoseconds
     }
-
     deinit {
         loadTask?.cancel()
         searchTask?.cancel()
+        capabilitiesTask?.cancel()
+        suggestionTask?.cancel()
     }
 
     func loadIfNeeded() async {
+        if phase == .content || phase == .empty, searchCapabilities == nil {
+            await refreshSearchCapabilities()
+            return
+        }
         guard phase == .idle || phase == .cancelled else { return }
         await load(invalidateCachedRunner: false)
     }
@@ -128,24 +141,35 @@ final class SourceViewModel: ObservableObject {
     }
 
     func performSearch(query: String) {
+        startSearch(query: query, debounce: true)
+    }
+
+    func submitSearch() {
+        startSearch(query: searchQuery, debounce: false)
+    }
+
+    private func startSearch(query: String, debounce: Bool) {
+        cancelSuggestions()
         cancelSearch(publishCancelledState: false)
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedQuery.isEmpty else {
+        let kind = effectiveSearchKind(for: selectedKind)
+        let filters = searchFilters.values(for: kind)
+        guard !trimmedQuery.isEmpty || (searchCapabilities?.flags.contains(.browse) == true && !filters.isEmpty) else {
             clearSearchResults()
             searchPhase = .idle
+            refreshSuggestions(for: query)
             return
         }
-
-        let capturedKind = effectiveSearchKind(for: selectedKind)
         let operationID = UUID()
         searchOperationID = operationID
         searchPhase = .loading
         searchFailureNeedsSettings = false
         searchFailureNeedsLogin = false
         searchFailurePendingTrust = nil
-        let task = Task { @MainActor [weak self] in
+        let requestedSuggestionGeneration = suggestionGeneration
+        searchTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            if let searchDebounceNanoseconds {
+            if debounce, let searchDebounceNanoseconds {
                 do {
                     try await Task.sleep(nanoseconds: searchDebounceNanoseconds)
                 } catch {
@@ -153,33 +177,111 @@ final class SourceViewModel: ObservableObject {
                     return
                 }
             }
-            await executeSearch(query: trimmedQuery, kind: capturedKind, operationID: operationID)
+            await executeSearch(query: trimmedQuery, kind: kind, filterValues: filters, operationID: operationID)
+            guard suggestionGeneration == requestedSuggestionGeneration,
+                  isCurrentQuery(query, kind: kind), !Task.isCancelled else { return }
+            if debounce { refreshSuggestions(for: query) }
         }
-        searchTask = task
     }
 
     private func scopeDidChange() {
         cancelSearch(publishCancelledState: false)
-        let trimmedQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedQuery.isEmpty else {
-            clearSearchResults()
-            searchPhase = .idle
-            return
-        }
-        let capturedKind = effectiveSearchKind(for: selectedKind)
-        let operationID = UUID()
-        searchOperationID = operationID
-        searchPhase = .loading
-        searchFailureNeedsSettings = false
-        searchFailureNeedsLogin = false
-        searchFailurePendingTrust = nil
-        let task = Task { @MainActor [weak self] in
+        cancelSuggestions()
+        showSearchFilters = false
+        searchCapabilities = nil
+        capabilitiesTask?.cancel()
+        capabilitiesTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            await executeSearch(query: trimmedQuery, kind: capturedKind, operationID: operationID)
+            await refreshSearchCapabilities()
+            guard !Task.isCancelled else { return }
+            startSearch(query: searchQuery, debounce: false)
         }
-        searchTask = task
     }
 
+    var filterValues: [String: ControlValue] {
+        searchFilters.values(for: effectiveSearchKind(for: selectedKind))
+    }
+
+    var sortEnabled: Bool {
+        !hasActiveSearchQuery || searchCapabilities?.flags.contains(.sortWithQuery) == true
+    }
+
+    var filtersEnabled: Bool {
+        !hasActiveSearchQuery || searchCapabilities?.flags.contains(.filtersWithQuery) == true
+    }
+
+    func selectSort(_ value: ControlValue) {
+        guard sortEnabled, let sort = searchCapabilities?.sort else { return }
+        searchFilters.setValue(value, for: sort, kind: effectiveSearchKind(for: selectedKind))
+        objectWillChange.send()
+        submitSearch()
+    }
+
+    func applyFilters(_ values: [String: ControlValue]) {
+        guard filtersEnabled else { return }
+        searchFilters.apply(values, kind: effectiveSearchKind(for: selectedKind))
+        objectWillChange.send()
+        showSearchFilters = false
+        submitSearch()
+    }
+
+    func makeOptionCatalogModel(_ catalog: OptionCatalog) -> OptionCatalogModel {
+        OptionCatalogModel(
+            catalog: catalog,
+            runnerProvider: runnerProvider,
+            pluginID: plugin.id,
+            debounceNanoseconds: searchDebounceNanoseconds ?? 0
+        )
+    }
+
+    private func refreshSearchCapabilities() async {
+        guard let context else { return }
+        let kind = effectiveSearchKind(for: selectedKind)
+        let operationID = UUID()
+        capabilitiesOperationID = operationID
+        let result: SearchCapabilities?
+        do {
+            result = try await context.loadSearchCapabilities(kind: kind)
+        } catch {
+            guard !(error is CancellationError) else { return }
+            result = nil
+        }
+        guard capabilitiesOperationID == operationID, !Task.isCancelled,
+              effectiveSearchKind(for: selectedKind) == kind else { return }
+        searchFilters.updateCapabilities(result, kind: kind)
+        searchCapabilities = result
+    }
+
+    private func isCurrentQuery(_ query: String, kind: MediaKind?) -> Bool {
+        searchQuery == query && effectiveSearchKind(for: selectedKind) == kind
+    }
+
+    private func cancelSuggestions() {
+        suggestionGeneration = UUID()
+        suggestionTask?.cancel()
+        suggestionTask = nil
+        searchSuggestions = []
+    }
+
+    private func refreshSuggestions(for query: String) {
+        cancelSuggestions()
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              searchCapabilities?.flags.contains(.suggestions) == true, let context else { return }
+        let generation = suggestionGeneration
+        let kind = effectiveSearchKind(for: selectedKind)
+        suggestionTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                if let searchDebounceNanoseconds { try await Task.sleep(nanoseconds: searchDebounceNanoseconds) }
+                let suggestions = try await context.loadSearchSuggestions(query: query, kind: kind)
+                guard !Task.isCancelled, suggestionGeneration == generation,
+                      isCurrentQuery(query, kind: kind) else { return }
+                searchSuggestions = suggestions ?? []
+            } catch {
+                // Suggestions are optional and must never replace search errors or results.
+            }
+        }
+    }
     private func effectiveSearchKind(for kind: MediaKind?) -> MediaKind? {
         isMultiKind ? kind : kind ?? plugin.info.distinctKinds.first
     }
@@ -188,9 +290,16 @@ final class SourceViewModel: ObservableObject {
         !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    var hasActiveSearch: Bool {
+        hasActiveSearchQuery || (searchCapabilities?.flags.contains(.browse) == true && !filterValues.isEmpty)
+    }
+
     func cancelActiveOperations() {
         cancelLoad(publishCancelledState: true)
         cancelSearch(publishCancelledState: true)
+        capabilitiesOperationID = nil
+        capabilitiesTask?.cancel()
+        cancelSuggestions()
     }
 
     func listingDestination(listing: Listing, title: String) -> SourceListingDestination? {
@@ -204,13 +313,12 @@ final class SourceViewModel: ObservableObject {
     }
 
     var settingsDestination: SourceSettingsDestination? {
-        guard let settingsSchema else { return nil }
-        return SourceSettingsDestination(plugin: plugin, schema: settingsSchema)
+        guard let settingsSurface else { return nil }
+        return SourceSettingsDestination(plugin: plugin, surface: settingsSurface)
     }
-
     /// Whether the source offers settings, even ones that can't be shown right now.
     var hasSettings: Bool {
-        settingsSchema != nil || settingsUnavailableReason != nil
+        settingsSurface != nil || settingsUnavailableReason != nil
     }
 
     /// Whether the load failure should offer the settings: it needs them and they can be edited.
@@ -310,6 +418,9 @@ final class SourceViewModel: ObservableObject {
 
     private func load(invalidateCachedRunner: Bool) async {
         cancelLoad(publishCancelledState: false)
+        capabilitiesOperationID = nil
+        capabilitiesTask?.cancel()
+        cancelSuggestions()
         let operationID = UUID()
         loadOperationID = operationID
         phase = .loading
@@ -321,7 +432,7 @@ final class SourceViewModel: ObservableObject {
         if invalidateCachedRunner {
             runnerProvider.evictSourceRunner(for: plugin.id)
             context = nil
-            settingsSchema = nil
+            settingsSurface = nil
             settingsUnavailableReason = nil
         }
 
@@ -348,13 +459,17 @@ final class SourceViewModel: ObservableObject {
             // Published before the home loads: a home that fails for want of settings needs the
             // settings button to recover.
             switch settings {
-            case .schema(let schema):
-                settingsSchema = schema
+            case .surface(let surface):
+                settingsSurface = surface
                 settingsUnavailableReason = nil
             case .unavailable(let reason):
-                settingsSchema = nil
+                settingsSurface = nil
                 settingsUnavailableReason = reason
             }
+            context = nextContext
+            await refreshSearchCapabilities()
+            try Task.checkCancellation()
+            guard isCurrentLoad(operationID) else { return }
             let layout = try await nextContext.loadHome()
             try Task.checkCancellation()
             guard isCurrentLoad(operationID) else { return }
@@ -380,7 +495,7 @@ final class SourceViewModel: ObservableObject {
         }
     }
 
-    private func executeSearch(query: String, kind: MediaKind?, operationID: UUID) async {
+    private func executeSearch(query: String, kind: MediaKind?, filterValues: [String: ControlValue], operationID: UUID) async {
         guard let context = await loadedContext() else {
             guard isCurrentSearch(operationID), !Task.isCancelled else {
                 finishCancelledSearch(operationID)
@@ -404,7 +519,7 @@ final class SourceViewModel: ObservableObject {
                 kind: kind,
                 query: query,
                 page: 1,
-                filters: []
+                filterValues: filterValues
             )
             try Task.checkCancellation()
             guard isCurrentSearch(operationID) else { return }
@@ -421,9 +536,10 @@ final class SourceViewModel: ObservableObject {
     /// The runner context, once the home load that creates it has finished. A search typed
     /// while the source is still loading waits for that load instead of failing.
     private func loadedContext() async -> (any SourceRunnerContext)? {
-        if context == nil, phase == .loading, let loadTask {
+        if phase == .loading, let loadTask {
             await loadTask.value
         }
+        guard phase == .content || phase == .empty else { return nil }
         return context
     }
 
@@ -449,7 +565,7 @@ final class SourceViewModel: ObservableObject {
     }
 
     private enum SettingsLoad {
-        case schema(SettingsSchema?)
+        case surface(SettingsSurface?)
         case unavailable(reason: String)
     }
 
@@ -457,7 +573,7 @@ final class SourceViewModel: ObservableObject {
     /// is not kept as a reason: the home would otherwise load on the crashed runner.
     private func loadSettings(from context: any SourceRunnerContext) async throws -> SettingsLoad {
         do {
-            return .schema(try await context.loadSettingsSchema())
+            return .surface(try await context.loadSettingsSurface())
         } catch let error as PluginCallError where error.kind == .crashed {
             throw error
         } catch is CancellationError {

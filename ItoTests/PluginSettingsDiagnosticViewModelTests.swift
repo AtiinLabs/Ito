@@ -5,6 +5,56 @@ import ito_runner
 
 @MainActor
 extension PluginSettingsViewModelTests {
+    func testRichFormIssuesFollowVisibilityAndUnsavedSecretActionStaysUnpersisted() async throws {
+        let store = PR7BSettingsStoreSpy()
+        let diagnostics = PR7BDiagnosticsSpy()
+        diagnostics.inspectResult = PluginSettingsInspection(actions: [], issues: [
+            SettingIssue(key: "credential", message: "Credential issue"),
+            SettingIssue(key: "unknown", message: "Form issue")
+        ])
+        let toggle = Control(
+            id: "enabled", title: "Enabled", summary: nil, flags: 0, visibleWhen: [],
+            kind: .toggle(ToggleControl(defaultValue: false))
+        )
+        let secret = Control(
+            id: "credential", title: "Credential", summary: nil, flags: 0,
+            visibleWhen: [ControlCondition(control: "enabled", anyOf: ["true"])],
+            kind: .secret(SecretControl(placeholder: nil))
+        )
+        let viewModel = PluginSettingsViewModel(
+            plugin: pr7bPlugin(),
+            surface: .form(SettingsForm(sections: [
+                ControlSection(id: "rich", title: "Rich", summary: nil, flags: [.page], controls: [toggle, secret])
+            ])),
+            settingsStore: store, messagePresenter: PR7BMessagePresenterSpy(), diagnostics: diagnostics
+        )
+        let inspected = expectation(description: "rich form inspected")
+        let observation = diagnostics.inspectCountPublisher.filter { $0 >= 1 }
+            .flatMap { _ in viewModel.$isInspecting.filter { !$0 } }
+            .first().sink { _ in inspected.fulfill() }
+        await viewModel.loadIfNeeded()
+        await fulfillment(of: [inspected], timeout: 2)
+        withExtendedLifetime(observation) {}
+        XCTAssertTrue(viewModel.issuesBySettingKey.isEmpty)
+        XCTAssertEqual(viewModel.formLevelIssues, ["Credential issue", "Form issue"])
+        XCTAssertTrue(viewModel.persistControlValue(.toggle(true), for: toggle))
+        XCTAssertEqual(viewModel.issuesBySettingKey["credential"], ["Credential issue"])
+        XCTAssertEqual(viewModel.formLevelIssues, ["Form issue"])
+
+        viewModel.updateSecretDraft(key: "credential", value: "unsaved-test-credential")
+        let finished = expectation(description: "rich action finished")
+        let actionObservation = diagnostics.runCountPublisher.filter { $0 >= 1 }
+            .flatMap { _ in viewModel.$runningActionID.filter { $0 == nil } }
+            .first().sink { _ in finished.fulfill() }
+        viewModel.runAction("check")
+        await fulfillment(of: [finished], timeout: 2)
+        withExtendedLifetime(actionObservation) {}
+        XCTAssertEqual(diagnostics.runCalls.first?.secretDrafts["credential"], "unsaved-test-credential")
+        XCTAssertNil(store.values["credential"])
+        XCTAssertNil(store.secrets["credential"])
+        viewModel.cancel()
+    }
+
     func testInspectRunsOnPreparationAndPublishesActionsAndIssues() async throws {
         let diagnostics = PR7BDiagnosticsSpy()
         diagnostics.inspectResult = PluginSettingsInspection(
@@ -549,13 +599,13 @@ extension PluginSettingsViewModelTests {
 private final class PR7BDiagnosticsSpy: PluginSettingsDiagnosing {
     struct InspectCall: Sendable {
         let pluginID: String
-        let schema: SettingsSchema
+        let surface: SettingsSurface
         let secretDrafts: [String: String]
     }
 
     struct RunCall: Sendable {
         let pluginID: String
-        let schema: SettingsSchema
+        let surface: SettingsSurface
         let secretDrafts: [String: String]
         let actionID: String
     }
@@ -588,10 +638,10 @@ private final class PR7BDiagnosticsSpy: PluginSettingsDiagnosing {
 
     func inspect(
         pluginID: String,
-        schema: SettingsSchema,
+        surface: SettingsSurface,
         secretDrafts: [String: String]
     ) async throws -> PluginSettingsInspection {
-        inspectCalls.append(InspectCall(pluginID: pluginID, schema: schema, secretDrafts: secretDrafts))
+        inspectCalls.append(InspectCall(pluginID: pluginID, surface: surface, secretDrafts: secretDrafts))
         inspectSubject.send(inspectCalls.count)
         if suspendsInspect {
             await withCheckedContinuation { inspectContinuation = $0 }
@@ -602,11 +652,11 @@ private final class PR7BDiagnosticsSpy: PluginSettingsDiagnosing {
 
     func run(
         pluginID: String,
-        schema: SettingsSchema,
+        surface: SettingsSurface,
         secretDrafts: [String: String],
         actionID: String
     ) async throws -> String? {
-        runCalls.append(RunCall(pluginID: pluginID, schema: schema, secretDrafts: secretDrafts, actionID: actionID))
+        runCalls.append(RunCall(pluginID: pluginID, surface: surface, secretDrafts: secretDrafts, actionID: actionID))
         runSubject.send(runCalls.count)
         if suspendsRun {
             await withCheckedContinuation { runContinuation = $0 }

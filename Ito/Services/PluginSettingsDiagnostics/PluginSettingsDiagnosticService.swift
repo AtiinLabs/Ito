@@ -39,17 +39,19 @@ final class PluginSettingsDiagnosticService: PluginSettingsDiagnosing {
 
     func inspect(
         pluginID: String,
-        schema: SettingsSchema,
+        surface: SettingsSurface,
         secretDrafts: [String: String]
     ) async throws -> PluginSettingsInspection {
         try Task.checkCancellation()
         let pluginURL = try locatePlugin(pluginID)
         try Task.checkCancellation()
 
-        let defaults = try await captureDefaults(pluginID: pluginID, schema: schema, secretDrafts: secretDrafts)
+        let defaults = try await captureDefaults(pluginID: pluginID, surface: surface, secretDrafts: secretDrafts)
         try Task.checkCancellation()
 
-        let runner = try await loadRunner(pluginURL: pluginURL, defaults: defaults, netModule: PluginDiagnosticDenyingNetModule())
+        let runner = try await loadRunner(
+            pluginURL: pluginURL, defaults: defaults, surface: surface, netModule: PluginDiagnosticDenyingNetModule()
+        )
         try Task.checkCancellation()
 
         let actions = try await pluginCall {
@@ -67,7 +69,7 @@ final class PluginSettingsDiagnosticService: PluginSettingsDiagnosing {
 
     func run(
         pluginID: String,
-        schema: SettingsSchema,
+        surface: SettingsSurface,
         secretDrafts: [String: String],
         actionID: String
     ) async throws -> String? {
@@ -75,7 +77,7 @@ final class PluginSettingsDiagnosticService: PluginSettingsDiagnosing {
         let pluginURL = try locatePlugin(pluginID)
         try Task.checkCancellation()
 
-        let defaults = try await captureDefaults(pluginID: pluginID, schema: schema, secretDrafts: secretDrafts)
+        let defaults = try await captureDefaults(pluginID: pluginID, surface: surface, secretDrafts: secretDrafts)
         try Task.checkCancellation()
 
         let cookies = settingsStore.cookies
@@ -85,7 +87,7 @@ final class PluginSettingsDiagnosticService: PluginSettingsDiagnosing {
         )
         defer { netModule.invalidate() }
 
-        let runner = try await loadRunner(pluginURL: pluginURL, defaults: defaults, netModule: netModule)
+        let runner = try await loadRunner(pluginURL: pluginURL, defaults: defaults, surface: surface, netModule: netModule)
         try Task.checkCancellation()
 
         let result = try await pluginCall {
@@ -98,7 +100,7 @@ final class PluginSettingsDiagnosticService: PluginSettingsDiagnosing {
 
     func captureDefaults(
         pluginID: String,
-        schema: SettingsSchema,
+        surface: SettingsSurface,
         secretDrafts: [String: String]
     ) async throws -> PluginCompletionDefaults {
         let store = settingsStore
@@ -112,13 +114,8 @@ final class PluginSettingsDiagnosticService: PluginSettingsDiagnosing {
             capture.cancel()
         }
 
-        // Overlay ONLY schema-declared secret keys with nonblank (trimmed) draft; empty/blank means use saved
-        let schemaSecretKeys: Set<String> = Set(schema.settings.compactMap { setting in
-            switch setting {
-            case .secret(let id, _, _): return id
-            default: return nil
-            }
-        })
+        // Only declared secret controls may overlay saved credentials with an unsaved draft.
+        let schemaSecretKeys = surface.secretSettingIDs
 
         for (key, draft) in secretDrafts where schemaSecretKeys.contains(key) {
             let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -128,13 +125,14 @@ final class PluginSettingsDiagnosticService: PluginSettingsDiagnosing {
         }
 
         let defaults = PluginCompletionDefaults(settings: values)
-        defaults.useSchemaDefaults(schema.storedDefaults)
+        defaults.useSchemaDefaults(surface.storedDefaults)
         return defaults
     }
 
     private func loadRunner(
         pluginURL: URL,
         defaults: PluginCompletionDefaults,
+        surface: SettingsSurface,
         netModule: any NetModule
     ) async throws -> ItoRunner {
         let runner = ItoRunner()
@@ -144,6 +142,10 @@ final class PluginSettingsDiagnosticService: PluginSettingsDiagnosing {
         await runner.setHtmlModule(DefaultHtmlModule())
         await runner.setWebviewModule(PluginDiagnosticWebviewModule())
         _ = try await runner.loadBundle(from: pluginURL)
+        if case .form = surface {
+            // The isolated instance must negotiate the same surface before interpreting saved values.
+            _ = try await pluginCall { try await runner.getSettingsSurface() }
+        }
         return runner
     }
 }

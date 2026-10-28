@@ -180,7 +180,10 @@ struct PluginSecretSettingsTests {
         let store = makeStore(database)
         let viewModel = PluginSettingsViewModel(
             plugin: pr7bPlugin(id: "komga", name: "Komga"),
-            schema: try pr7bSettingsSchema(settings: [.secret(id: "api_key", name: "API key", summary: nil)]),
+            surface: .legacy(
+                try pr7bSettingsSchema(settings: [.secret(id: "api_key", name: "API key", summary: nil)]),
+                formFailure: nil
+            ),
             settingsStore: store,
             messagePresenter: PR7BMessagePresenterSpy()
         )
@@ -191,6 +194,73 @@ struct PluginSecretSettingsTests {
         #expect(store.secrets.value(pluginID: "komga", key: "api_key") == "key-value")
         #expect(viewModel.clearSecret(key: "api_key"))
         #expect(viewModel.hasSecret(key: "api_key") == false)
+    }
+
+    @Test func richFormSecretsStayOutOfBackupWhileJSONSettingsRoundTrip() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let store = makeStore(database)
+        let secret = Control(
+            id: "credential", title: "Credential", summary: nil, flags: 0, visibleWhen: [],
+            kind: .secret(SecretControl(placeholder: nil))
+        )
+        let tags = Control(
+            id: "tags", title: "Tags", summary: nil, flags: 0, visibleWhen: [],
+            kind: .multiSelect(MultiSelectControl(options: .inline([]), defaultValue: [], maxSelected: nil))
+        )
+        let range = Control(
+            id: "range", title: "Range", summary: nil, flags: 0, visibleWhen: [],
+            kind: .integerRange(IntegerRangeControl(min: 0, max: 100, defaultLower: nil, defaultUpper: nil, unit: nil))
+        )
+        let viewModel = PluginSettingsViewModel(
+            plugin: pr7bPlugin(id: "komga", name: "Komga"),
+            surface: .form(SettingsForm(sections: [
+                ControlSection(id: "rich", title: "Rich", summary: nil, flags: [], controls: [secret, tags, range])
+            ])),
+            settingsStore: store, messagePresenter: PR7BMessagePresenterSpy()
+        )
+        let chosen = ControlValue.multiSelect(["quotes\"and\\slashes", "日本語", "comma,value"])
+        let bounds = ControlValue.integerRange(lower: nil, upper: 42)
+        viewModel.updateSecretDraft(key: secret.id, value: "backup-excluded-test-secret")
+        #expect(viewModel.persistSecret(key: secret.id, value: viewModel.secretDraft(key: secret.id)))
+        #expect(viewModel.secretDraft(key: secret.id).isEmpty)
+        #expect(viewModel.persistControlValue(chosen, for: tags))
+        #expect(viewModel.persistControlValue(bounds, for: range))
+        viewModel.cancel()
+        #expect(try settingRowCount(database, key: secret.id) == 0)
+        try await database.dbPool.write { db in
+            for entry in AppPreferenceCatalogEntry.allCases {
+                try AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON).insert(db)
+            }
+        }
+        let backupURL = database.databaseURL.deletingLastPathComponent().appendingPathComponent("rich-controls.itobackup")
+        try await BackupExportOperation(
+            dbPool: database.dbPool, sourceDatabaseURL: database.databaseURL, readinessGate: {}
+        ).export(to: backupURL)
+        let backup = try await ItoNativeImporter().parse(url: backupURL)
+        #expect(!backup.pluginSettings.contains { $0.key == secret.id })
+        let importedTags = backup.pluginSettings.first { $0.key == tags.id }
+        let importedRange = backup.pluginSettings.first { $0.key == range.id }
+        #expect(importedTags?.value == Data(ControlValueCodec.canonical(chosen).utf8))
+        #expect(importedRange?.value == Data(ControlValueCodec.canonical(bounds).utf8))
+        #expect(try Data(contentsOf: backupURL).range(of: Data("backup-excluded-test-secret".utf8)) == nil)
+        #expect(tags.effectiveValue(stored: importedTags.map { String(decoding: $0.value, as: UTF8.self) }).value == chosen)
+        #expect(range.effectiveValue(stored: importedRange.map { String(decoding: $0.value, as: UTF8.self) }).value == bounds)
+        let restored = try TestDatabase()
+        defer { restored.cleanup() }
+        _ = try await ComponentAwareBackupRestoreOperation(
+            dbPool: restored.dbPool,
+            operationIdProvider: { "rich-controls-restore" },
+            now: { Date(timeIntervalSince1970: 1_800_000_000) }
+        ).restore(backup, mode: .merge, operationId: "rich-controls-restore")
+        let restoredRows = try await restored.dbPool.read { db in try PluginSettingRecord.fetchAll(db) }
+        #expect(!restoredRows.contains { $0.key == secret.id })
+        let restoredTags = restoredRows.first { $0.key == tags.id }
+        let restoredRange = restoredRows.first { $0.key == range.id }
+        #expect(restoredTags?.value == importedTags?.value)
+        #expect(restoredRange?.value == importedRange?.value)
+        #expect(tags.effectiveValue(stored: restoredTags.map { String(decoding: $0.value, as: UTF8.self) }).value == chosen)
+        #expect(range.effectiveValue(stored: restoredRange.map { String(decoding: $0.value, as: UTF8.self) }).value == bounds)
     }
 
     private func makeStore(_ database: TestDatabase) -> PluginSettingsStore {

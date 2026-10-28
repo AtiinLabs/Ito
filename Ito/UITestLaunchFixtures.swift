@@ -63,6 +63,16 @@ struct UITestLaunchConfiguration {
         return components.url!
     }
 
+    /// Installs the bundled local source used by settings and search UI tests into isolated storage.
+    nonisolated static func installPluginFixture(in directory: URL) throws {
+        guard let encoded = ProcessInfo.processInfo.environment["ITO_UI_TEST_PLUGIN_BASE64"] else { return }
+        guard let data = Data(base64Encoded: encoded) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try data.write(to: directory.appendingPathComponent("rich-settings.ito"), options: .atomic)
+    }
+
     nonisolated static func repositoryIndexData(for url: URL) throws -> Data {
         guard url.absoluteString == "\(repositoryURLString)/index.json" else {
             throw URLError(.unsupportedURL)

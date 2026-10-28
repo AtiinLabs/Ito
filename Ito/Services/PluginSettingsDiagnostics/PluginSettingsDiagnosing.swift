@@ -13,6 +13,6 @@ nonisolated struct PluginSettingsInspection: Sendable {
 
 @MainActor
 protocol PluginSettingsDiagnosing: AnyObject {
-    func inspect(pluginID: String, schema: SettingsSchema, secretDrafts: [String: String]) async throws -> PluginSettingsInspection
-    func run(pluginID: String, schema: SettingsSchema, secretDrafts: [String: String], actionID: String) async throws -> String?
+    func inspect(pluginID: String, surface: SettingsSurface, secretDrafts: [String: String]) async throws -> PluginSettingsInspection
+    func run(pluginID: String, surface: SettingsSurface, secretDrafts: [String: String], actionID: String) async throws -> String?
 }

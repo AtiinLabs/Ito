@@ -43,7 +43,7 @@ struct PluginCallError: LocalizedError, Equatable {
             self.init(kind: kind, message: Self.pluginMessage(reason))
         case .wasmTrap, .memoryOutOfBounds:
             self.init(kind: .crashed, message: "The source stopped unexpectedly. Try again.")
-        case .postcardDecodingError, .postcardEncodingError:
+        case .postcardDecodingError, .postcardEncodingError, .controlContractViolation:
             self.init(kind: .incompatible, message: Self.incompatibleMessage)
         case .requiresNewerHost, .unsupportedABI:
             // Only raised while loading, where PluginManager turns them into
