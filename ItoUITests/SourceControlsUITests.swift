@@ -74,14 +74,31 @@ final class SourceControlsUITests: XCTestCase {
         attach(app, name: "A declared suggestion executes its catalog search")
     }
 
-    private func openSource() throws -> XCUIApplication {
+    func testAccessibilityTextSizeKeepsCatalogSelectionUsable() throws {
+        let app = try openSource(extraArguments: [
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+        ])
+        app.buttons["Source settings"].tap()
+        openTagPicker(app)
+        let search = app.searchFields["Search options"]
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
+        search.tap()
+        search.typeText("Tag 5999")
+        let option = app.buttons.matching(NSPredicate(format: "label == %@", "Tag 5999")).firstMatch
+        XCTAssertTrue(option.waitForExistence(timeout: 10))
+        option.tap()
+        XCTAssertTrue(app.buttons["Remove Tag 5999"].waitForExistence(timeout: 10))
+        attach(app, name: "Searchable selection at accessibility text size")
+    }
+
+    private func openSource(extraArguments: [String] = []) throws -> XCUIApplication {
         let bundle = Bundle(for: Self.self)
         let url = try XCTUnwrap(
             bundle.url(forResource: "rich-settings", withExtension: "ito", subdirectory: "Fixtures")
                 ?? bundle.url(forResource: "rich-settings", withExtension: "ito")
         )
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-test-reset-storage"]
+        app.launchArguments = ["--ui-test-reset-storage"] + extraArguments
         app.launchEnvironment["ITO_UI_TEST_PLUGIN_BASE64"] = try Data(contentsOf: url).base64EncodedString()
         app.launch()
         let browse = app.tabBars.buttons["Browse"]
