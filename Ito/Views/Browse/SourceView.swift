@@ -158,6 +158,7 @@ struct SourceView: View {
             }
             .padding(.vertical)
         }
+        .accessibilityIdentifier("source-home-layout")
     }
 
     private var archivedPluginBanner: some View {
@@ -482,6 +483,15 @@ struct SourceView: View {
     @ViewBuilder
     private var searchContent: some View {
         VStack(spacing: 0) {
+            // Keep source navigation visible even while the system search bar is active.
+            HStack {
+                SourceHomeButton { viewModel.returnToHome() }
+                if viewModel.isMultiKind { scopePicker }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
             if let capabilities = viewModel.searchCapabilities, viewModel.hasActiveSearchQuery {
                 if capabilities.sort != nil && !viewModel.sortEnabled {
                     Text("Sorting is only available without search text.")
@@ -508,9 +518,6 @@ struct SourceView: View {
                     .padding(.vertical, 8)
                 }
             }
-            if viewModel.isMultiKind {
-                scopePicker
-            }
             searchBody
         }
     }
@@ -523,9 +530,6 @@ struct SourceView: View {
             }
         }
         .pickerStyle(.segmented)
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 4)
     }
 
     private func kindTitle(_ kind: MediaKind) -> String {
@@ -665,6 +669,23 @@ struct SourceView: View {
                     .buttonStyle(.bordered)
             }
         }
+    }
+}
+
+private struct SourceHomeButton: View {
+    @Environment(\.dismissSearch) private var dismissSearch
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            action()
+            dismissSearch()
+        } label: {
+            Image(systemName: "house")
+                .frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("Source home")
+        .accessibilityHint("Return to this source's home layout.")
     }
 }
 

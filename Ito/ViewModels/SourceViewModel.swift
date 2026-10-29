@@ -151,6 +151,17 @@ final class SourceViewModel: ObservableObject {
         startSearch(query: searchQuery, debounce: false)
     }
 
+    /// Returns to the cached source home without discarding per-kind catalog choices.
+    func returnToHome() {
+        cancelSearch(publishCancelledState: false)
+        cancelSuggestions()
+        showSearchFilters = false
+        isBrowsing = false
+        searchQuery = ""
+        clearSearchResults()
+        searchPhase = .idle
+    }
+
     private func startSearch(query: String, debounce: Bool) {
         cancelSuggestions()
         cancelSearch(publishCancelledState: false)

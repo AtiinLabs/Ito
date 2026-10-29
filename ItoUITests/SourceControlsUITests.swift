@@ -81,6 +81,19 @@ final class SourceControlsUITests: XCTestCase {
         let match = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Example 010")).firstMatch
         XCTAssertTrue(match.waitForExistence(timeout: 10))
         attach(app, name: "A declared suggestion executes its catalog search")
+
+        let home = app.buttons["Source home"]
+        XCTAssertTrue(home.waitForExistence(timeout: 10))
+        home.tap()
+        XCTAssertTrue(app.scrollViews["source-home-layout"].waitForExistence(timeout: 10))
+        XCTAssertFalse(home.exists)
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+
+        sort.tap()
+        app.buttons["Oldest first"].tap()
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.scrollViews["source-home-layout"].exists)
+        attach(app, name: "Source home returns directly and catalog choices survive")
     }
 
     func testAccessibilityTextSizeKeepsCatalogSelectionUsable() throws {
