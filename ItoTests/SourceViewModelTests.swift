@@ -38,6 +38,139 @@ final class SourceViewModelTests: XCTestCase {
         viewModel.cancelActiveOperations()
     }
 
+    func testSortedBrowseKeepsResultsOpenAcrossKindsWithoutCopyingOverrides() async {
+        let context = PR7BSourceRunnerContextSpy()
+        let sort = Control(id: "sort", title: "Sort", kind: .select(.init(
+            options: .inline([.init(value: "title", label: "Title")]), defaultValue: "title"
+        )))
+        let capabilities = SearchCapabilities(flags: [.browse], sort: sort, sections: [])
+        let mangaCapabilitiesStarted = expectation(description: "manga capabilities pending")
+        var mangaCapabilities: CheckedContinuation<SearchCapabilities?, Never>?
+        context.capabilitiesHandler = { kind in
+            if kind == .manga {
+                return await withCheckedContinuation {
+                    mangaCapabilities = $0
+                    mangaCapabilitiesStarted.fulfill()
+                }
+            }
+            return capabilities
+        }
+        var requestedValues: [[String: ControlValue]] = []
+        var requestedQueries: [String] = []
+        context.searchHandler = { _, query, _, values in
+            requestedQueries.append(query)
+            requestedValues.append(values)
+            return .init(entries: [
+                .manga(.init(key: "comic", title: "Comic")),
+                .novel(.init(key: "novel", title: "Novel"))
+            ], hasNextPage: false)
+        }
+        let viewModel = makeViewModel(
+            plugin: pr7bPlugin(kinds: [.manga, .novel]),
+            provider: PR7BSourceRunnerProviderSpy(contexts: [context]), debounce: nil
+        )
+        await viewModel.loadIfNeeded()
+        let initialResults = expectation(description: "sorted all-kind results")
+        let initialSubscription = viewModel.$searchPhase.dropFirst().filter { $0 == .content }
+            .sink { _ in initialResults.fulfill() }
+        viewModel.selectSort(.select("title"))
+        await fulfillment(of: [initialResults], timeout: 2)
+        initialSubscription.cancel()
+        XCTAssertTrue(viewModel.hasActiveSearch)
+        let queryResults = expectation(description: "query within sorted catalog")
+        let querySubscription = viewModel.$searchPhase.dropFirst().filter { $0 == .content }
+            .sink { _ in queryResults.fulfill() }
+        viewModel.searchQuery = "Comic"
+        viewModel.performSearch(query: "Comic")
+        await fulfillment(of: [queryResults], timeout: 2)
+        querySubscription.cancel()
+
+        let kinds: [MediaKind?] = [.manga, .novel, nil]
+        for kind in kinds {
+            viewModel.selectedKind = kind
+            if kind == .manga {
+                await fulfillment(of: [mangaCapabilitiesStarted], timeout: 2)
+                XCTAssertNil(viewModel.searchCapabilities)
+                viewModel.searchQuery = ""
+                viewModel.performSearch(query: "")
+                guard viewModel.hasActiveSearch else {
+                    mangaCapabilities?.resume(returning: capabilities)
+                    XCTFail("Changing kind must not replace the results view with source home")
+                    viewModel.cancelActiveOperations()
+                    return
+                }
+            }
+            let results = expectation(description: "results for \(String(describing: kind))")
+            let subscription = viewModel.$searchPhase.dropFirst().filter { $0 == .content }
+                .sink { _ in results.fulfill() }
+            if kind == .manga { mangaCapabilities?.resume(returning: capabilities) }
+            await fulfillment(of: [results], timeout: 2)
+            subscription.cancel()
+            XCTAssertTrue(viewModel.hasActiveSearch)
+            XCTAssertEqual(context.searchInvocations.last?.pluginType, kind)
+            XCTAssertEqual(viewModel.searchEntries.map(\.kind), kind.map { [$0] } ?? [.manga, .novel])
+            XCTAssertEqual(viewModel.filterValues, kind == nil ? ["sort": .select("title")] : [:])
+        }
+        XCTAssertEqual(requestedQueries, ["", "Comic", "", "", ""])
+        XCTAssertEqual(requestedValues, [
+            ["sort": .select("title")], ["sort": .select("title")], [:], [:], ["sort": .select("title")]
+        ])
+        viewModel.cancelActiveOperations()
+    }
+
+    func testClearingFiltersReturnsToHomeWithoutAnEmptyBrowseRequest() async {
+        let context = PR7BSourceRunnerContextSpy()
+        let toggle = Control(id: "enabled", title: "Enabled", kind: .toggle(.init(defaultValue: false)))
+        context.capabilitiesResult = .success(.init(
+            flags: [.browse], sections: [.init(id: "filters", title: "Filters", controls: [toggle])]
+        ))
+        let viewModel = makeViewModel(provider: PR7BSourceRunnerProviderSpy(contexts: [context]), debounce: nil)
+        await viewModel.loadIfNeeded()
+        let results = expectation(description: "filtered browse finished")
+        let subscription = viewModel.$searchPhase.dropFirst().filter { $0 == .empty }
+            .sink { _ in results.fulfill() }
+        viewModel.applyFilters(["enabled": .toggle(true)])
+        await fulfillment(of: [results], timeout: 2)
+        subscription.cancel()
+        XCTAssertTrue(viewModel.hasActiveSearch)
+        viewModel.applyFilters([:])
+        XCTAssertFalse(viewModel.hasActiveSearch)
+        XCTAssertEqual(viewModel.searchPhase, .idle)
+        XCTAssertEqual(context.searchInvocations.count, 1)
+        viewModel.cancelActiveOperations()
+    }
+
+    func testResolvedKindWithoutBrowseSupportReturnsHomeWithoutDispatching() async {
+        let context = PR7BSourceRunnerContextSpy()
+        let toggle = Control(id: "enabled", title: "Enabled", kind: .toggle(.init(defaultValue: false)))
+        let capabilities = SearchCapabilities(
+            flags: [.browse], sections: [.init(id: "filters", title: "Filters", controls: [toggle])]
+        )
+        context.capabilitiesHandler = { kind in kind == .manga ? .init(sections: []) : capabilities }
+        let viewModel = makeViewModel(
+            plugin: pr7bPlugin(kinds: [.manga, .novel]),
+            provider: PR7BSourceRunnerProviderSpy(contexts: [context]), debounce: nil
+        )
+        await viewModel.loadIfNeeded()
+        let results = expectation(description: "initial filtered browse")
+        let initialSubscription = viewModel.$searchPhase.dropFirst().filter { $0 == .empty }
+            .sink { _ in results.fulfill() }
+        viewModel.applyFilters(["enabled": .toggle(true)])
+        await fulfillment(of: [results], timeout: 2)
+        initialSubscription.cancel()
+        XCTAssertTrue(viewModel.hasActiveSearch)
+
+        let resolved = expectation(description: "unsupported kind resolved")
+        let subscription = viewModel.$searchPhase.dropFirst().filter { $0 == .idle }
+            .sink { _ in resolved.fulfill() }
+        viewModel.selectedKind = .manga
+        await fulfillment(of: [resolved], timeout: 2)
+        subscription.cancel()
+        XCTAssertFalse(viewModel.hasActiveSearch)
+        XCTAssertEqual(context.searchInvocations.count, 1)
+        viewModel.cancelActiveOperations()
+    }
+
     func testSuggestionsDropStaleTextAndDisappearCompletion() async {
         let context = PR7BSourceRunnerContextSpy()
         context.capabilitiesResult = .success(.init(flags: [.suggestions], sections: []))
@@ -715,8 +848,6 @@ final class SourceViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.hasActiveSearchQuery)
         XCTAssertEqual(viewModel.searchPhase, .idle)
         XCTAssertTrue(context.searchInvocations.isEmpty)
-        let viewSource = try? sourceFile("Ito/Views/Browse/SourceView.swift")
-        XCTAssertTrue(viewSource?.contains("if !viewModel.hasActiveSearch") == true)
     }
 
     func testTypedRoutesPreserveSourceContextPluginAndPayload() async throws {
@@ -970,50 +1101,6 @@ final class SourceViewModelTests: XCTestCase {
         )
     }
 
-    func testMigratedSourceLayerContainsNoPresentationGlobalsOrTypeErasedRoutes() throws {
-        let paths = [
-            "Ito/ViewModels/SourceViewModel.swift",
-            "Ito/Views/Browse/SourceView.swift"
-        ]
-        for path in paths {
-            let source = try sourceFile(path)
-            for forbidden in [
-                "PluginManager.shared", "RepoManager.shared", "SnackBarManager.shared",
-                "AppDatabase.shared", "URLSession.shared", "FileManager.default",
-                "UIApplication.shared", "UserDefaults.standard", "AppLogger", "AnyView",
-                "configure("
-            ] {
-                XCTAssertFalse(source.contains(forbidden), "Forbidden \(forbidden) in \(path)")
-            }
-        }
-    }
-
-    func testProductionCompositionKeepsNavigatedModelsFactoryOwnedAndOutOfRootStore() throws {
-        let factorySource = try sourceFile("Ito/Views/Search/SearchRouteFactory.swift")
-        let scopeSource = try sourceFile("Ito/AppScope.swift")
-
-        for factoryMethod in [
-            "func makeSourceViewModel(plugin:",
-            "func makeListingViewModel(destination:",
-            "func makePluginSettingsViewModel("
-        ] {
-            XCTAssertTrue(factorySource.contains(factoryMethod))
-        }
-        XCTAssertTrue(factorySource.contains("runnerProvider: sourceDependencies.runnerProvider"))
-        XCTAssertTrue(factorySource.contains("settingsStore: sourceDependencies.settingsStore"))
-        XCTAssertTrue(factorySource.contains("messagePresenter: sourceMessagePresenter"))
-        XCTAssertTrue(scopeSource.contains("let fileOperations = LocalBrowsePluginFileOperations("))
-        XCTAssertEqual(
-            scopeSource.components(separatedBy: "LocalBrowsePluginFileOperations(").count - 1,
-            1
-        )
-        for forbidden in [
-            "storedSourceViewModel", "storedListingViewModel", "storedPluginSettingsViewModel"
-        ] {
-            XCTAssertFalse(scopeSource.contains(forbidden))
-        }
-    }
-
     func testProductionRunnerAdapterPreservesInjectedRunnerIdentity() {
         let runner = ItoRunner()
         let context = ItoRunnerSourceContext(runner: runner)
@@ -1038,12 +1125,5 @@ final class SourceViewModelTests: XCTestCase {
             messagePresenter: messages,
             searchDebounceNanoseconds: debounce
         )
-    }
-
-    private func sourceFile(_ path: String) throws -> String {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        return try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
     }
 }

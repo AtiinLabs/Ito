@@ -87,6 +87,8 @@ final class SourceViewModel: ObservableObject {
     private var capabilitiesOperationID: UUID?
     private var suggestionTask: Task<Void, Never>?
     private var suggestionGeneration = UUID()
+    // Browse intent survives kind changes even when that kind has no filter overrides yet.
+    @Published private var isBrowsing = false
     private var searchOperationID: UUID?
     private var deleteOperationID: UUID?
     private var archivedPluginFileSnapshot: SourcePluginFileSnapshot?
@@ -132,6 +134,7 @@ final class SourceViewModel: ObservableObject {
         guard settingsUnavailableReason == nil else { return }
         cancelSearch(publishCancelledState: false)
         clearSearchResults()
+        isBrowsing = false
         searchQuery = ""
         await load(invalidateCachedRunner: true)
     }
@@ -154,7 +157,7 @@ final class SourceViewModel: ObservableObject {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let kind = effectiveSearchKind(for: selectedKind)
         let filters = searchFilters.values(for: kind)
-        guard !trimmedQuery.isEmpty || (searchCapabilities?.flags.contains(.browse) == true && !filters.isEmpty) else {
+        guard !trimmedQuery.isEmpty || (searchCapabilities?.flags.contains(.browse) == true && isBrowsing) else {
             clearSearchResults()
             searchPhase = .idle
             refreshSuggestions(for: query)
@@ -213,14 +216,14 @@ final class SourceViewModel: ObservableObject {
     func selectSort(_ value: ControlValue) {
         guard sortEnabled, let sort = searchCapabilities?.sort else { return }
         searchFilters.setValue(value, for: sort, kind: effectiveSearchKind(for: selectedKind))
-        objectWillChange.send()
+        isBrowsing = searchCapabilities?.flags.contains(.browse) == true
         submitSearch()
     }
 
     func applyFilters(_ values: [String: ControlValue]) {
         guard filtersEnabled else { return }
         searchFilters.apply(values, kind: effectiveSearchKind(for: selectedKind))
-        objectWillChange.send()
+        isBrowsing = searchCapabilities?.flags.contains(.browse) == true && !filterValues.isEmpty
         showSearchFilters = false
         submitSearch()
     }
@@ -249,6 +252,8 @@ final class SourceViewModel: ObservableObject {
         guard capabilitiesOperationID == operationID, !Task.isCancelled,
               effectiveSearchKind(for: selectedKind) == kind else { return }
         searchFilters.updateCapabilities(result, kind: kind)
+        // Only a resolved current response can end browsing, not transient nil capabilities.
+        if isBrowsing, result?.flags.contains(.browse) != true { isBrowsing = false }
         searchCapabilities = result
     }
 
@@ -291,7 +296,7 @@ final class SourceViewModel: ObservableObject {
     }
 
     var hasActiveSearch: Bool {
-        hasActiveSearchQuery || (searchCapabilities?.flags.contains(.browse) == true && !filterValues.isEmpty)
+        hasActiveSearchQuery || isBrowsing
     }
 
     func cancelActiveOperations() {
