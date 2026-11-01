@@ -131,6 +131,52 @@
         }
       }
     },
+    "%lld Earlier Chapters" : {
+      "comment" : "History: expand a series' earlier chapters",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Earlier Chapter"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Earlier Chapters"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld Earlier Episodes" : {
+      "comment" : "History: expand a series' earlier episodes",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Earlier Episode"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Earlier Episodes"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld GB" : {
 
     },
@@ -510,7 +556,7 @@
 
     },
     "All" : {
-      "comment" : "Filter chip: show every list"
+      "comment" : "Filter chip: show every list\nHistory filter: every kind of media"
     },
     "All sources resolved" : {
 
@@ -537,7 +583,7 @@
 
     },
     "Anime" : {
-
+      "comment" : "History filter\nHistory: kind of media"
     },
     "App preferences" : {
 
@@ -798,6 +844,12 @@
     "Content Not Found" : {
 
     },
+    "Continue" : {
+      "comment" : "History: resume reading or watching a series"
+    },
+    "Continue %@" : {
+      "comment" : "History: resume button, with the series title"
+    },
     "Continue Watching?" : {
 
     },
@@ -920,9 +972,6 @@
     "Debug logs could not be loaded. Please try again." : {
 
     },
-    "Delete" : {
-
-    },
     "Delete %@?" : {
 
     },
@@ -1016,7 +1065,7 @@
       }
     },
     "Episode %@" : {
-      "comment" : "Discord status: episode number"
+      "comment" : "Discord status: episode number\nHistory: an episode without a title"
     },
     "Episodes" : {
 
@@ -1143,6 +1192,9 @@
     "File copy error: The plugin could not be imported." : {
 
     },
+    "Filter" : {
+      "comment" : "History: filter button"
+    },
     "Filtered" : {
 
     },
@@ -1193,6 +1245,9 @@
     },
     "Hiatus" : {
       "comment" : "Series status: paused"
+    },
+    "Hide Earlier" : {
+      "comment" : "History: collapse a series' earlier chapters"
     },
     "High to Low" : {
 
@@ -1518,7 +1573,7 @@
       "comment" : "Discord status"
     },
     "Manga" : {
-      "comment" : "Manga format"
+      "comment" : "History filter\nHistory: kind of media\nManga format"
     },
     "Manga, Anime, and Novels" : {
 
@@ -1727,6 +1782,9 @@
     "Not tracked" : {
 
     },
+    "Nothing in your history matches this search or filter." : {
+
+    },
     "Nothing in your library matches\n\"%@\"." : {
 
     },
@@ -1740,7 +1798,10 @@
 
     },
     "Novel" : {
-      "comment" : "Manga format: light novel"
+      "comment" : "History: kind of media\nManga format: light novel"
+    },
+    "Novels" : {
+      "comment" : "History filter"
     },
     "Number of images ahead of your current position to preload. Higher values use more data but reduce loading times." : {
 
@@ -1772,8 +1833,20 @@
     "Open" : {
 
     },
+    "Open Series" : {
+
+    },
     "Open Settings" : {
 
+    },
+    "Opens the series" : {
+      "comment" : "History: accessibility hint of a series row"
+    },
+    "Opens this chapter" : {
+      "comment" : "History: accessibility hint of an earlier chapter row"
+    },
+    "Opens this episode" : {
+      "comment" : "History: accessibility hint of an earlier episode row"
     },
     "Optional" : {
 
@@ -1908,6 +1981,9 @@
     "Read progress and resume" : {
 
     },
+    "Read to the End" : {
+      "comment" : "History: the chapter was read to the end"
+    },
     "Read with Plugins" : {
 
     },
@@ -2004,6 +2080,9 @@
 
     },
     "Remove Repository" : {
+
+    },
+    "Remove from History" : {
 
     },
     "Remove from Library" : {
@@ -2209,6 +2288,9 @@
     "Search Again" : {
 
     },
+    "Search History" : {
+
+    },
     "Search Other Sources" : {
 
     },
@@ -2348,7 +2430,7 @@
 
     },
     "Show" : {
-
+      "comment" : "History: which kinds of media to list"
     },
     "Show less" : {
 
@@ -2358,28 +2440,6 @@
     },
     "Show the list picker when saving a new series." : {
 
-    },
-    "Showing the %lld most recent entries." : {
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Showing the %lld most recent entry."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Showing the %lld most recent entries."
-                }
-              }
-            }
-          }
-        }
-      }
     },
     "Shows what you're reading or watching on your Discord profile. Needs a Rich Presence bridge running at the server address." : {
 
@@ -2467,6 +2527,9 @@
     },
     "Source mappings" : {
 
+    },
+    "Source not installed" : {
+      "comment" : "History: the source a series was read on was removed"
     },
     "Source settings" : {
 
@@ -2870,6 +2933,9 @@
     "To read this content, you must install the '%@' extension." : {
 
     },
+    "Today" : {
+      "comment" : "History section"
+    },
     "Too many attempts failed." : {
 
     },
@@ -2996,6 +3062,9 @@
     "Unknown Chapter" : {
 
     },
+    "Unknown Episode" : {
+
+    },
     "Unknown Plugin" : {
 
     },
@@ -3074,6 +3143,9 @@
     "Warnings" : {
 
     },
+    "Watched to the End" : {
+      "comment" : "History: the episode was watched to the end"
+    },
     "Watching" : {
 
     },
@@ -3142,6 +3214,9 @@
     },
     "Year & Season" : {
 
+    },
+    "Yesterday" : {
+      "comment" : "History section"
     },
     "You stopped this episode at %@." : {
 

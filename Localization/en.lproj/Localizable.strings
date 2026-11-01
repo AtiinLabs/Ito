@@ -69,7 +69,8 @@
 
 "Adds this series to the list" = "Adds this series to the list";
 
-/* Filter chip: show every list */
+/* Filter chip: show every list
+History filter: every kind of media */
 "All" = "All";
 
 "All sources resolved" = "All sources resolved";
@@ -88,6 +89,8 @@
 
 "AniList couldn't complete this request: %@" = "AniList couldn't complete this request: %@";
 
+/* History filter
+History: kind of media */
 "Anime" = "Anime";
 
 "App preferences" = "App preferences";
@@ -255,6 +258,12 @@
 
 "Content Not Found" = "Content Not Found";
 
+/* History: resume reading or watching a series */
+"Continue" = "Continue";
+
+/* History: resume button, with the series title */
+"Continue %@" = "Continue %@";
+
 "Continue Watching?" = "Continue Watching?";
 
 "Continue from %@" = "Continue from %@";
@@ -329,8 +338,6 @@
 
 "Debug logs could not be loaded. Please try again." = "Debug logs could not be loaded. Please try again.";
 
-"Delete" = "Delete";
-
 "Delete %@?" = "Delete %@?";
 
 "Delete List" = "Delete List";
@@ -384,7 +391,8 @@
 
 "Enter values between %@ and %@, with minimum no greater than maximum." = "Enter values between %1$@ and %2$@, with minimum no greater than maximum.";
 
-/* Discord status: episode number */
+/* Discord status: episode number
+History: an episode without a title */
 "Episode %@" = "Episode %@";
 
 "Episodes" = "Episodes";
@@ -454,6 +462,9 @@
 
 "File copy error: The plugin could not be imported." = "File copy error: The plugin could not be imported.";
 
+/* History: filter button */
+"Filter" = "Filter";
+
 "Filtered" = "Filtered";
 
 /* Filter button */
@@ -492,6 +503,9 @@
 
 /* Series status: paused */
 "Hiatus" = "Hiatus";
+
+/* History: collapse a series' earlier chapters */
+"Hide Earlier" = "Hide Earlier";
 
 "High to Low" = "High to Low";
 
@@ -704,7 +718,9 @@
 /* Discord status */
 "Managing Library" = "Managing Library";
 
-/* Manga format */
+/* History filter
+History: kind of media
+Manga format */
 "Manga" = "Manga";
 
 "Manga, Anime, and Novels" = "Manga, Anime, and Novels";
@@ -850,6 +866,8 @@
 
 "Not tracked" = "Not tracked";
 
+"Nothing in your history matches this search or filter." = "Nothing in your history matches this search or filter.";
+
 "Nothing in your library matches\n\"%@\"." = "Nothing in your library matches\n\"%@\".";
 
 "Notification permission was denied, but the preference could not be disabled. Please try again." = "Notification permission was denied, but the preference could not be disabled. Please try again.";
@@ -858,8 +876,12 @@
 
 "Notify on New Chapters" = "Notify on New Chapters";
 
-/* Manga format: light novel */
+/* History: kind of media
+Manga format: light novel */
 "Novel" = "Novel";
+
+/* History filter */
+"Novels" = "Novels";
 
 "Number of images ahead of your current position to preload. Higher values use more data but reduce loading times." = "Number of images ahead of your current position to preload. Higher values use more data but reduce loading times.";
 
@@ -885,7 +907,18 @@
 
 "Open" = "Open";
 
+"Open Series" = "Open Series";
+
 "Open Settings" = "Open Settings";
+
+/* History: accessibility hint of a series row */
+"Opens the series" = "Opens the series";
+
+/* History: accessibility hint of an earlier chapter row */
+"Opens this chapter" = "Opens this chapter";
+
+/* History: accessibility hint of an earlier episode row */
+"Opens this episode" = "Opens this episode";
 
 "Optional" = "Optional";
 
@@ -973,6 +1006,9 @@
 
 "Read progress and resume" = "Read progress and resume";
 
+/* History: the chapter was read to the end */
+"Read to the End" = "Read to the End";
+
 "Read with Plugins" = "Read with Plugins";
 
 "Read/Watched" = "Read/Watched";
@@ -1034,6 +1070,8 @@
 "Remove Plugin" = "Remove Plugin";
 
 "Remove Repository" = "Remove Repository";
+
+"Remove from History" = "Remove from History";
 
 "Remove from Library" = "Remove from Library";
 
@@ -1153,6 +1191,8 @@
 
 "Search Again" = "Search Again";
 
+"Search History" = "Search History";
+
 "Search Other Sources" = "Search Other Sources";
 
 "Search Repositories & Install" = "Search Repositories & Install";
@@ -1247,6 +1287,7 @@
 
 "Settings unavailable" = "Settings unavailable";
 
+/* History: which kinds of media to list */
 "Show" = "Show";
 
 "Show less" = "Show less";
@@ -1312,6 +1353,9 @@
 "Source loading was cancelled." = "Source loading was cancelled.";
 
 "Source mappings" = "Source mappings";
+
+/* History: the source a series was read on was removed */
+"Source not installed" = "Source not installed";
 
 "Source settings" = "Source settings";
 
@@ -1592,6 +1636,9 @@ Reading font: the system font */
 
 "To read this content, you must install the '%@' extension." = "To read this content, you must install the '%@' extension.";
 
+/* History section */
+"Today" = "Today";
+
 "Too many attempts failed." = "Too many attempts failed.";
 
 "Top Rated" = "Top Rated";
@@ -1674,6 +1721,8 @@ Reading font: the system font */
 
 "Unknown Chapter" = "Unknown Chapter";
 
+"Unknown Episode" = "Unknown Episode";
+
 "Unknown Plugin" = "Unknown Plugin";
 
 "Unknown Repository" = "Unknown Repository";
@@ -1730,6 +1779,9 @@ Reading font: the system font */
 
 "Warnings" = "Warnings";
 
+/* History: the episode was watched to the end */
+"Watched to the End" = "Watched to the End";
+
 "Watching" = "Watching";
 
 /* Discord status: the episode being watched */
@@ -1770,6 +1822,9 @@ Reading font: the system font */
 "Year" = "Year";
 
 "Year & Season" = "Year & Season";
+
+/* History section */
+"Yesterday" = "Yesterday";
 
 "You stopped this episode at %@." = "You stopped this episode at %@.";
 

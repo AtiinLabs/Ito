@@ -1,5 +1,7 @@
 import Combine
 import Foundation
+import OSLog
+import ito_runner
 
 struct LibraryOrganizationSnapshot: Equatable, Sendable {
     let categories: [LibraryCategory]
@@ -52,7 +54,8 @@ protocol HistoryServing: AnyObject {
     var historySnapshot: [HistoryEntry] { get }
     var historySnapshotPublisher: AnyPublisher<[HistoryEntry], Never> { get }
 
-    func removeEntry(id: String) async throws
+    func removeChapter(_ series: HistorySeriesKey, chapterKey: String) async throws
+    func removeSeries(_ series: HistorySeriesKey) async throws
     func clearHistory() async throws
 }
 
@@ -63,12 +66,83 @@ extension HistoryManager: HistoryServing {
         $history.eraseToAnyPublisher()
     }
 
-    func removeEntry(id: String) async throws {
-        try await removeEntryDurably(id: id)
+    func removeChapter(_ series: HistorySeriesKey, chapterKey: String) async throws {
+        try await removeChapterDurably(series, chapterKey: chapterKey)
+    }
+
+    func removeSeries(_ series: HistorySeriesKey) async throws {
+        try await removeSeriesDurably(series)
     }
 
     func clearHistory() async throws {
         try await clearHistoryDurably()
+    }
+}
+
+/// Whether a chapter in history has been read or watched to the end.
+@MainActor
+protocol HistoryProgressReading: AnyObject {
+    /// Fires before read progress changes.
+    var progressWillChange: AnyPublisher<Void, Never> { get }
+
+    func isFinished(_ series: HistorySeriesKey, chapterKey: String, chapterNumber: Float?) -> Bool
+}
+
+extension ReadProgressManager: HistoryProgressReading {
+    var progressWillChange: AnyPublisher<Void, Never> {
+        objectWillChange.map { _ in () }.eraseToAnyPublisher()
+    }
+
+    func isFinished(_ series: HistorySeriesKey, chapterKey: String, chapterNumber: Float?) -> Bool {
+        isRead(
+            media: MediaIdentity(pluginId: series.pluginId, canonicalMediaId: series.mediaKey, mediaKind: series.mediaKind),
+            chapterId: chapterKey,
+            chapterNum: chapterNumber
+        )
+    }
+}
+
+/// What opening a series from history shows: its saved library item, else one made from what
+/// history recorded, which the series' screen then loads in full from its source.
+@MainActor
+protocol HistoryLibraryLookup: AnyObject {
+    func libraryItem(for record: ReadingHistoryRecord) -> LibraryItem?
+}
+
+extension LibraryManager: HistoryLibraryLookup {
+    func libraryItem(for record: ReadingHistoryRecord) -> LibraryItem? {
+        let media = MediaIdentity(pluginId: record.pluginId, canonicalMediaId: record.mediaKey, mediaKind: record.mediaKind)
+        if let saved = items.first(where: { $0.mediaIdentity == media }) {
+            return saved
+        }
+        do {
+            return try LibraryItem.unsaved(from: record)
+        } catch {
+            AppLogger.general.error("[History] Could not prepare a series to open: \(error)")
+            return nil
+        }
+    }
+}
+
+extension LibraryItem {
+    /// A series that is not in the library, as history recorded it.
+    static func unsaved(from record: ReadingHistoryRecord) throws -> LibraryItem {
+        let encoder = JSONEncoder()
+        let payload: Data = switch record.mediaKind {
+        case .manga: try encoder.encode(Manga(key: record.mediaKey, title: record.title, cover: record.coverUrl))
+        case .novel: try encoder.encode(Novel(key: record.mediaKey, title: record.title, cover: record.coverUrl))
+        case .anime: try encoder.encode(Anime(key: record.mediaKey, title: record.title, cover: record.coverUrl))
+        }
+        return LibraryItem(
+            id: record.mediaKey,
+            title: record.title,
+            coverUrl: record.coverUrl,
+            pluginId: record.pluginId,
+            isAnime: record.mediaKind == .anime,
+            pluginType: record.mediaKind,
+            rawPayload: payload,
+            anilistId: nil
+        )
     }
 }
 
@@ -171,18 +245,33 @@ struct PreparedCategoryHistoryDependencies {
     let organization: any LibraryOrganizationServing
     let history: any HistoryServing
     let sourceNames: any HistorySourceNaming
+    let progress: any HistoryProgressReading
+    let libraryLookup: any HistoryLibraryLookup
 
     static func production(
         libraryManager: LibraryManager,
         historyManager: HistoryManager,
-        pluginManager: PluginManager
+        pluginManager: PluginManager,
+        readProgressManager: ReadProgressManager
     ) -> Self {
-        Self(organization: libraryManager, history: historyManager, sourceNames: pluginManager)
+        Self(
+            organization: libraryManager,
+            history: historyManager,
+            sourceNames: pluginManager,
+            progress: readProgressManager,
+            libraryLookup: libraryManager
+        )
     }
 
     static func unavailable() -> Self {
         let dependency = UnavailableCategoryHistoryDependency()
-        return Self(organization: dependency, history: dependency, sourceNames: dependency)
+        return Self(
+            organization: dependency,
+            history: dependency,
+            sourceNames: dependency,
+            progress: dependency,
+            libraryLookup: dependency
+        )
     }
 }
 
@@ -192,7 +281,7 @@ private enum UnavailableCategoryHistoryDependencyError: Error {
 
 @MainActor
 private final class UnavailableCategoryHistoryDependency: LibraryOrganizationServing,
-    HistoryServing, HistorySourceNaming {
+    HistoryServing, HistorySourceNaming, HistoryProgressReading, HistoryLibraryLookup {
     let organizationSnapshot = LibraryOrganizationSnapshot(categories: [], links: [])
     let historySnapshot: [HistoryEntry] = []
 
@@ -204,8 +293,24 @@ private final class UnavailableCategoryHistoryDependency: LibraryOrganizationSer
         Just(historySnapshot).eraseToAnyPublisher()
     }
 
+    var progressWillChange: AnyPublisher<Void, Never> {
+        Empty().eraseToAnyPublisher()
+    }
+
     func displayName(for pluginID: String) -> String? {
         _ = pluginID
+        return nil
+    }
+
+    func isFinished(_ series: HistorySeriesKey, chapterKey: String, chapterNumber: Float?) -> Bool {
+        _ = series
+        _ = chapterKey
+        _ = chapterNumber
+        return false
+    }
+
+    func libraryItem(for record: ReadingHistoryRecord) -> LibraryItem? {
+        _ = record
         return nil
     }
 
@@ -242,8 +347,14 @@ private final class UnavailableCategoryHistoryDependency: LibraryOrganizationSer
         throw UnavailableCategoryHistoryDependencyError.unavailable
     }
 
-    func removeEntry(id: String) async throws {
-        _ = id
+    func removeChapter(_ series: HistorySeriesKey, chapterKey: String) async throws {
+        _ = series
+        _ = chapterKey
+        throw UnavailableCategoryHistoryDependencyError.unavailable
+    }
+
+    func removeSeries(_ series: HistorySeriesKey) async throws {
+        _ = series
         throw UnavailableCategoryHistoryDependencyError.unavailable
     }
 

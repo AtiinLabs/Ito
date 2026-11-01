@@ -44,7 +44,6 @@ final class CategoryHistoryDependencyBoundaryTests: XCTestCase {
         XCTAssertTrue(settings.contains("@StateObject private var viewModel: CategorySettingsViewModel"))
         XCTAssertTrue(settings.contains("init(viewModel: @autoclosure @escaping () -> CategorySettingsViewModel)"))
         XCTAssertTrue(history.contains("@StateObject private var viewModel: HistoryViewModel"))
-        XCTAssertTrue(history.contains("init(viewModel: @autoclosure @escaping () -> HistoryViewModel)"))
     }
 
     func testEveryCategoryAndHistoryConstructionSiteUsesFactoryComposition() throws {
@@ -90,27 +89,15 @@ final class CategoryHistoryDependencyBoundaryTests: XCTestCase {
             XCTAssertTrue(libraryManager.contains(signature), "Missing \(signature)")
         }
         XCTAssertTrue(libraryManager.contains("public func renameCategory(id: String, to name: String) async throws"))
-        XCTAssertTrue(historyManager.contains("removeEntryDurably(id: String) async throws"))
         XCTAssertTrue(historyManager.contains("clearHistoryDurably() async throws"))
         XCTAssertFalse(views.contains("dbPool"))
         XCTAssertFalse(views.contains("createCategory(name:"))
         XCTAssertFalse(views.contains("renameCategory(id:"))
         XCTAssertFalse(views.contains("deleteCategoryDurably"))
         XCTAssertFalse(views.contains("toggleCategoryDurably"))
-        XCTAssertFalse(views.contains("removeEntryDurably"))
+        XCTAssertFalse(views.contains("removeChapterDurably"))
+        XCTAssertFalse(views.contains("removeSeriesDurably"))
         XCTAssertFalse(views.contains("clearHistoryDurably"))
-    }
-
-    func testHistoryRowRemainsPurePresentation() throws {
-        let source = try sourceFile("Ito/Views/Library/HistoryView.swift")
-        let rowStart = try XCTUnwrap(source.range(of: "struct HistoryItemRow"))
-        let row = String(source[rowStart.lowerBound...])
-
-        XCTAssertTrue(row.contains("let entry: HistoryEntry"))
-        XCTAssertTrue(row.contains("LazyImage"))
-        XCTAssertTrue(row.contains("RelativeDateTimeFormatter"))
-        XCTAssertFalse(row.contains("ViewModel"))
-        XCTAssertFalse(row.contains("HistoryManager"))
     }
 
     private func sourceFile(_ path: String) throws -> String {

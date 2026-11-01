@@ -126,12 +126,13 @@ struct AppViewFactory {
     }
 
     func makeHistoryView() -> HistoryView {
-        categoryHistoryViewFactory.makeHistoryView()
+        categoryHistoryViewFactory.makeHistoryView(viewFactory: self)
     }
 
-    func makeDeferredPluginViewModel(item: LibraryItem) -> DeferredPluginViewModel {
+    func makeDeferredPluginViewModel(item: LibraryItem, openIntent: MediaDetailOpenIntent? = nil) -> DeferredPluginViewModel {
         DeferredPluginViewModel(
             item: item,
+            openIntent: openIntent,
             plugins: libraryDependencies.plugins,
             installer: libraryDependencies.installer,
             payloadDecoder: libraryDependencies.payloadDecoder,
@@ -139,21 +140,26 @@ struct AppViewFactory {
         )
     }
 
-    func makeDeferredPluginView(item: LibraryItem) -> DeferredPluginView {
+    func makeDeferredPluginView(item: LibraryItem, openIntent: MediaDetailOpenIntent? = nil) -> DeferredPluginView {
         DeferredPluginView(
             item: item,
+            openIntent: openIntent,
             viewFactory: self
         )
     }
 
     @ViewBuilder
-    func makeDeferredPluginDestination(_ destination: DeferredPluginDestination) -> some View {
+    func makeDeferredPluginDestination(
+        _ destination: DeferredPluginDestination,
+        openIntent: MediaDetailOpenIntent? = nil
+    ) -> some View {
         switch destination {
         case .manga(let pluginID, let runner, let media):
             makeMangaDetailView(
                 runner: runner,
                 media: media,
-                pluginID: pluginID
+                pluginID: pluginID,
+                openIntent: openIntent
             ) { manga in
                 try await pluginCall { try await runner.getMediaUpdate(.manga(manga)).expecting(\.manga) }
             }
@@ -161,7 +167,8 @@ struct AppViewFactory {
             makeAnimeDetailView(
                 runner: runner,
                 media: media,
-                pluginID: pluginID
+                pluginID: pluginID,
+                openIntent: openIntent
             ) { anime in
                 try await pluginCall { try await runner.getMediaUpdate(.anime(anime)).expecting(\.anime) }
             }
@@ -169,7 +176,8 @@ struct AppViewFactory {
             makeNovelDetailView(
                 runner: runner,
                 media: media,
-                pluginID: pluginID
+                pluginID: pluginID,
+                openIntent: openIntent
             ) { novel in
                 try await pluginCall { try await runner.getMediaUpdate(.novel(novel)).expecting(\.novel) }
             }
@@ -348,6 +356,7 @@ struct AppViewFactory {
         runner: ItoRunner,
         media: Manga,
         pluginID: String,
+        openIntent: MediaDetailOpenIntent? = nil,
         loader: @escaping (Manga) async throws -> Manga
     ) -> some View {
         if let mediaDetailViewFactory {
@@ -355,7 +364,8 @@ struct AppViewFactory {
                 runner: runner,
                 media: media,
                 pluginID: pluginID,
-                loader: loader
+                loader: loader,
+                openIntent: openIntent
             )
         } else {
             Text("Media details are unavailable.")
@@ -367,6 +377,7 @@ struct AppViewFactory {
         runner: ItoRunner,
         media: Anime,
         pluginID: String,
+        openIntent: MediaDetailOpenIntent? = nil,
         loader: @escaping (Anime) async throws -> Anime
     ) -> some View {
         if let mediaDetailViewFactory {
@@ -374,7 +385,8 @@ struct AppViewFactory {
                 runner: runner,
                 media: media,
                 pluginID: pluginID,
-                loader: loader
+                loader: loader,
+                openIntent: openIntent
             )
         } else {
             Text("Media details are unavailable.")
@@ -386,6 +398,7 @@ struct AppViewFactory {
         runner: ItoRunner,
         media: Novel,
         pluginID: String,
+        openIntent: MediaDetailOpenIntent? = nil,
         loader: @escaping (Novel) async throws -> Novel
     ) -> some View {
         if let mediaDetailViewFactory {
@@ -393,7 +406,8 @@ struct AppViewFactory {
                 runner: runner,
                 media: media,
                 pluginID: pluginID,
-                loader: loader
+                loader: loader,
+                openIntent: openIntent
             )
         } else {
             Text("Media details are unavailable.")

@@ -246,27 +246,12 @@ extension ReadProgressManager: VideoPlayerProgressTracking {
 
 @MainActor
 protocol VideoPlayerHistoryRecording: AnyObject {
-    func recordAnime(
-        _ anime: Anime,
-        episodeKey: String,
-        episodeTitle: String,
-        pluginID: String
-    )
+    func recordEpisode(of anime: Anime, episode: HistoryChapter, pluginID: String)
 }
 
 extension HistoryManager: VideoPlayerHistoryRecording {
-    func recordAnime(
-        _ anime: Anime,
-        episodeKey: String,
-        episodeTitle: String,
-        pluginID: String
-    ) {
-        addAnime(
-            anime,
-            episodeKey: episodeKey,
-            episodeTitle: episodeTitle,
-            pluginId: pluginID
-        )
+    func recordEpisode(of anime: Anime, episode: HistoryChapter, pluginID: String) {
+        recordAnime(anime, episode: episode, pluginId: pluginID)
     }
 }
 
@@ -414,15 +399,9 @@ private final class UnavailableVideoPlayerDependencies:
         _ = episodeID
     }
 
-    func recordAnime(
-        _ anime: Anime,
-        episodeKey: String,
-        episodeTitle: String,
-        pluginID: String
-    ) {
+    func recordEpisode(of anime: Anime, episode: HistoryChapter, pluginID: String) {
         _ = anime
-        _ = episodeKey
-        _ = episodeTitle
+        _ = episode
         _ = pluginID
     }
 

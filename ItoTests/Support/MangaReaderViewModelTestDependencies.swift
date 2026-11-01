@@ -158,7 +158,8 @@ final class MangaReaderHistoryFake: MangaReaderHistoryRecording {
     struct Request {
         let entry: MediaEntry
         let chapterKey: String
-        let chapterTitle: String
+        let chapterTitle: String?
+        let chapterNumber: Float?
         let pluginID: String
     }
 
@@ -169,18 +170,14 @@ final class MangaReaderHistoryFake: MangaReaderHistoryRecording {
         self.events = events
     }
 
-    func recordChapter(
-        of entry: MediaEntry,
-        chapterKey: String,
-        chapterTitle: String,
-        pluginID: String
-    ) {
-        events.record("history:\(chapterKey)")
+    func recordChapter(of entry: MediaEntry, chapter: HistoryChapter, pluginID: String) {
+        events.record("history:\(chapter.key)")
         requests.append(
             Request(
                 entry: entry,
-                chapterKey: chapterKey,
-                chapterTitle: chapterTitle,
+                chapterKey: chapter.key,
+                chapterTitle: chapter.title,
+                chapterNumber: chapter.number,
                 pluginID: pluginID
             )
         )

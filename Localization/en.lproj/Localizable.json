@@ -7,6 +7,16 @@
     "one": "%1$@ has %2$lld new episode.",
     "other": "%1$@ has %2$lld new episodes."
   },
+  "%lld Earlier Chapters": {
+    "description": "History: expand a series' earlier chapters",
+    "one": "%lld Earlier Chapter",
+    "other": "%lld Earlier Chapters"
+  },
+  "%lld Earlier Episodes": {
+    "description": "History: expand a series' earlier episodes",
+    "one": "%lld Earlier Episode",
+    "other": "%lld Earlier Episodes"
+  },
   "%lld Hours": {
     "one": "%lld Hour",
     "other": "%lld Hours"
@@ -66,9 +76,5 @@
   "Score: %lld percent": {
     "one": "Score: %lld percent",
     "other": "Score: %lld percent"
-  },
-  "Showing the %lld most recent entries.": {
-    "one": "Showing the %lld most recent entry.",
-    "other": "Showing the %lld most recent entries."
   }
 }

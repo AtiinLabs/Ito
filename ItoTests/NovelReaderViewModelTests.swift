@@ -27,7 +27,8 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertEqual(phaseAtHistory, .content)
         XCTAssertEqual(chapterCountAtHistory, 1)
         XCTAssertEqual(subject.events.events, ["history:a"])
-        XCTAssertEqual(subject.history.requests[0].chapterTitle, "a")
+        XCTAssertNil(subject.history.requests[0].chapterTitle)
+        XCTAssertEqual(subject.history.requests[0].chapterNumber, 12.75)
         XCTAssertEqual(subject.history.requests[0].pluginID, "plugin.test")
 
         let loaded = subject.viewModel.loadedChapters[0]

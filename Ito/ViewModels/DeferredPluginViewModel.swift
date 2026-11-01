@@ -47,6 +47,9 @@ private extension DeferredPluginMedia {
 struct DeferredPluginRoute: Identifiable {
     let id: UUID
     let destination: DeferredPluginDestination
+    /// What the series screen opens once loaded. Only the first route carries it, so a route
+    /// rebuilt later (returning to the screen, a plugin update) does not open the reader again.
+    let openIntent: MediaDetailOpenIntent?
 }
 
 enum DeferredPluginPhase {
@@ -83,16 +86,19 @@ final class DeferredPluginViewModel: ObservableObject {
     private var packageLookupTask: Task<Void, Never>?
     private var installTask: Task<Void, Never>?
     private var runnerTask: Task<Void, Never>?
+    private var pendingOpenIntent: MediaDetailOpenIntent?
     private var cancellables: Set<AnyCancellable> = []
 
     init(
         item: LibraryItem,
+        openIntent: MediaDetailOpenIntent? = nil,
         plugins: any LibraryPluginServing,
         installer: any DeferredPluginInstalling,
         payloadDecoder: any DeferredPluginPayloadDecoding,
         presentationLogger: any PresentationEventLogging
     ) {
         self.item = item
+        pendingOpenIntent = openIntent
         self.plugins = plugins
         self.installer = installer
         self.payloadDecoder = payloadDecoder
@@ -426,7 +432,8 @@ final class DeferredPluginViewModel: ObservableObject {
                             pluginID: pluginID,
                             runner: runner,
                             media: media
-                        )
+                        ),
+                        openIntent: self.takeOpenIntent()
                     )
                 )
                 self.logFinished(
@@ -453,6 +460,11 @@ final class DeferredPluginViewModel: ObservableObject {
                 )
             }
         }
+    }
+
+    private func takeOpenIntent() -> MediaDetailOpenIntent? {
+        defer { pendingOpenIntent = nil }
+        return pendingOpenIntent
     }
 
     private func applyInstalledPluginPublication(_ snapshot: LibraryPluginSnapshot) {

@@ -354,14 +354,12 @@ final class MultiKindDurableIdentityTests: XCTestCase {
 
         let mangaTask = history.recordManga(
             Manga(key: "42", title: "Manga 42"),
-            chapterKey: "m-ch1",
-            chapterTitle: "Chapter 1",
+            chapter: HistoryChapter(key: "m-ch1", title: "Chapter 1", number: 1),
             pluginId: "source.multi"
         )
         let novelTask = history.recordNovel(
             Novel(key: "42", title: "Novel 42"),
-            chapterKey: "n-ch1",
-            chapterTitle: "Chapter 1",
+            chapter: HistoryChapter(key: "n-ch1", title: "Chapter 1", number: 1),
             pluginId: "source.multi"
         )
         await mangaTask?.value

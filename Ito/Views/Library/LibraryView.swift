@@ -649,9 +649,9 @@ struct DeferredPluginView: View {
     @StateObject private var viewModel: DeferredPluginViewModel
     let viewFactory: AppViewFactory
 
-    init(item: LibraryItem, viewFactory: AppViewFactory) {
+    init(item: LibraryItem, openIntent: MediaDetailOpenIntent? = nil, viewFactory: AppViewFactory) {
         _viewModel = StateObject(
-            wrappedValue: viewFactory.makeDeferredPluginViewModel(item: item)
+            wrappedValue: viewFactory.makeDeferredPluginViewModel(item: item, openIntent: openIntent)
         )
         self.viewFactory = viewFactory
     }
@@ -699,7 +699,7 @@ struct DeferredPluginView: View {
         case .failure(let failure):
             deferredFailureView(failure)
         case .ready(let route):
-            viewFactory.makeDeferredPluginDestination(route.destination)
+            viewFactory.makeDeferredPluginDestination(route.destination, openIntent: route.openIntent)
                 .id(route.id)
         }
     }

@@ -202,6 +202,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
     private var lastSynchronizedTrackerProgress: [MediaIdentity: TrackerProgressSnapshot] = [:]
     private var hasStarted = false
+    /// Applied after the first successful detail load, then cleared.
+    private var pendingOpenIntent: MediaDetailOpenIntent?
     private var isAppeared = false
     private var cancellables = Set<AnyCancellable>()
 
@@ -211,7 +213,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         routeContext: MediaDetailRouteContext<M>,
         dependencies: PreparedMediaDetailDependencies,
         messagePresenter: any MediaDetailMessagePresenting,
-        presentationLogger: any PresentationEventLogging
+        presentationLogger: any PresentationEventLogging,
+        openIntent: MediaDetailOpenIntent? = nil
     ) {
         self.media = media
         self.pluginID = pluginID
@@ -219,6 +222,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         self.dependencies = dependencies
         self.messagePresenter = messagePresenter
         self.presentationLogger = presentationLogger
+        pendingOpenIntent = openIntent
 
         let identity = MediaIdentity(pluginId: pluginID, canonicalMediaId: media.key, mediaKind: media.mediaKind)
         let libraryState = dependencies.library.state
@@ -671,6 +675,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
                 if advanceBaselineWhenFinished {
                     self?.beginBaselineAdvanceIfNeeded()
                 }
+                self?.performPendingOpenIntent()
             } catch is CancellationError {
                 self?.publishDetailCancellation(operationID: operationID)
             } catch {
@@ -886,6 +891,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         guard isCurrentDetailOperation(operationID, mediaKey: mediaKey) else { return }
         detailOperationID = nil
         detailTask = nil
+        // A screen that could not load stays on its error instead of opening a stale chapter.
+        pendingOpenIntent = nil
         detailLoadState = .failure(String(localized: "Failed to load details. Please try again."))
         messagePresenter.present(.detailLoadFailed)
         logFinished(
@@ -895,6 +902,21 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         )
         if advanceBaselineWhenFinished {
             beginBaselineAdvanceIfNeeded()
+        }
+    }
+
+    private func performPendingOpenIntent() {
+        guard let intent = pendingOpenIntent else { return }
+        pendingOpenIntent = nil
+        let target: M.Chapter?
+        switch intent {
+        case .resume:
+            target = resumeChapter
+        case .chapter(let key):
+            target = media.chapterList?.first { $0.key == key }
+        }
+        if let target {
+            selectChapter(target)
         }
     }
 
@@ -972,6 +994,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     private func invalidateOperationsForIdentityTransition() {
+        // A series relinked to another source does not open the chapter asked for the old one.
+        pendingOpenIntent = nil
         detailOperationID = nil
         themeOperationID = nil
         relinkSearchOperationID = nil

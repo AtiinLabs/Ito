@@ -349,7 +349,8 @@ final class VideoPlayerHistoryFake: VideoPlayerHistoryRecording {
     struct Request {
         let anime: Anime
         let episodeKey: String
-        let episodeTitle: String
+        let episodeTitle: String?
+        let episodeNumber: Float?
         let pluginID: String
     }
 
@@ -360,18 +361,14 @@ final class VideoPlayerHistoryFake: VideoPlayerHistoryRecording {
         self.events = events
     }
 
-    func recordAnime(
-        _ anime: Anime,
-        episodeKey: String,
-        episodeTitle: String,
-        pluginID: String
-    ) {
+    func recordEpisode(of anime: Anime, episode: HistoryChapter, pluginID: String) {
         events.record("history")
         requests.append(
             Request(
                 anime: anime,
-                episodeKey: episodeKey,
-                episodeTitle: episodeTitle,
+                episodeKey: episode.key,
+                episodeTitle: episode.title,
+                episodeNumber: episode.number,
                 pluginID: pluginID
             )
         )
