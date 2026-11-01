@@ -20,8 +20,13 @@ final class DeferredPluginViewModelTests: XCTestCase {
                 runnerResponses: [.immediate(.success(runner))]
             )
 
+            let ready = expectation(description: "\(type) opened")
+            let subscription = subject.viewModel.$phase.sink { phase in
+                if case .ready = phase { ready.fulfill() }
+            }
             subject.viewModel.appear()
-            await waitUntil { subject.viewModel.route != nil }
+            await fulfillment(of: [ready], timeout: 2)
+            subscription.cancel()
 
             XCTAssertEqual(subject.plugins.runnerRequests, ["plugin.exact"])
             XCTAssertEqual(subject.installer.lookupRequests, [])
