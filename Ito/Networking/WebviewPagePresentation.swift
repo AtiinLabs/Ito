@@ -106,8 +106,8 @@ final class PageOverlayView: UIView {
         hostLabel.translatesAutoresizingMaskIntoConstraints = false
 
         let closeButton = UIButton(type: .system)
-        closeButton.setTitle("Close", for: .normal)
-        closeButton.accessibilityLabel = "Close"
+        closeButton.setTitle(String(localized: "Close"), for: .normal)
+        closeButton.accessibilityLabel = String(localized: "Close")
         closeButton.addTarget(self, action: #selector(closeTapped), for: .primaryActionTriggered)
         closeButton.translatesAutoresizingMaskIntoConstraints = false
 

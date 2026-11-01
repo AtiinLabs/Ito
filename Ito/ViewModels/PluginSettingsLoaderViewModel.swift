@@ -26,7 +26,7 @@ final class PluginSettingsLoaderViewModel: ObservableObject {
         isLoading = true
         defer { if generation == operation { isLoading = false } }
         guard let plugin else {
-            failure = "This source is no longer installed."
+            failure = String(localized: "This source is no longer installed.")
             return
         }
         do {
@@ -38,7 +38,7 @@ final class PluginSettingsLoaderViewModel: ObservableObject {
             if let surface {
                 destination = SourceSettingsDestination(plugin: plugin, surface: surface)
             } else {
-                failure = "This source does not offer settings."
+                failure = String(localized: "This source does not offer settings.")
             }
         } catch is CancellationError {
             return

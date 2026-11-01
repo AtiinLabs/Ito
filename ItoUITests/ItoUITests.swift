@@ -19,7 +19,7 @@ final class ItoUITests: XCTestCase {
     @MainActor
     func testExample() throws {
         // UI tests must launch the application that they test.
-        let app = XCUIApplication()
+        let app = XCUIApplication.english()
         app.launch()
 
         // Use XCTAssert and related functions to verify your tests produce the correct results.
@@ -27,11 +27,10 @@ final class ItoUITests: XCTestCase {
 
     @MainActor
     func testRepositoryDeepLinkConfirmsAdditionAndIsConsumedOnce() throws {
-        let app = XCUIApplication()
-        app.launchArguments = [
+        let app = XCUIApplication.english(arguments: [
             "--ui-test-reset-storage",
             "--ui-test-repository-deep-link"
-        ]
+        ])
         app.launch()
 
         let browseTab = app.tabBars.buttons["Browse"]
@@ -58,8 +57,7 @@ final class ItoUITests: XCTestCase {
 
     @MainActor
     func testArchivedRepositoryPackageHasNoInstallAction() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["--ui-test-reset-storage", "--ui-test-repository-deep-link"]
+        let app = XCUIApplication.english(arguments: ["--ui-test-reset-storage", "--ui-test-repository-deep-link"])
         app.launch()
         let repository = app.staticTexts["UI Test Repository"]
         XCTAssertTrue(repository.waitForExistence(timeout: 20))
@@ -77,11 +75,10 @@ final class ItoUITests: XCTestCase {
 
     @MainActor
     func testRepositoryRemovedAfterConfirmation() throws {
-        let app = XCUIApplication()
-        app.launchArguments = [
+        let app = XCUIApplication.english(arguments: [
             "--ui-test-reset-storage",
             "--ui-test-repository-deep-link"
-        ]
+        ])
         app.launch()
 
         // The deep link opens the repository list.
@@ -103,11 +100,10 @@ final class ItoUITests: XCTestCase {
 
     @MainActor
     func testBackupWipeRequiresTwoConfirmations() throws {
-        let app = XCUIApplication()
-        app.launchArguments = [
+        let app = XCUIApplication.english(arguments: [
             "--ui-test-reset-storage",
             "--ui-test-backup-wipe"
-        ]
+        ])
         app.launch()
 
         let settingsTab = app.tabBars.buttons["Settings"]
@@ -173,8 +169,7 @@ final class ItoUITests: XCTestCase {
     /// Launches with one disposable library item and shows it on the Library tab.
     @MainActor
     private func launchWithLibraryFixture() -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = ["--ui-test-reset-storage", "--ui-test-backup-wipe"]
+        let app = XCUIApplication.english(arguments: ["--ui-test-reset-storage", "--ui-test-backup-wipe"])
         app.launch()
         let libraryTab = app.tabBars.buttons["Library"]
         XCTAssertTrue(libraryTab.waitForExistence(timeout: 20))
@@ -195,7 +190,7 @@ final class ItoUITests: XCTestCase {
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
+            XCUIApplication.english().launch()
         }
     }
 

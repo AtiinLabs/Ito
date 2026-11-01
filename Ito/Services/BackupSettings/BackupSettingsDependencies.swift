@@ -94,7 +94,7 @@ private enum BackupSettingsDependencyUnavailableError: LocalizedError {
     case unavailable
 
     var errorDescription: String? {
-        "Backup & Restore is unavailable."
+        String(localized: "Backup & Restore is unavailable.")
     }
 }
 

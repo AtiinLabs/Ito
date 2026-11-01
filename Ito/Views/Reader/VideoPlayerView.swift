@@ -53,8 +53,10 @@ struct VideoPlayerView: View {
             }
             if let subtitles = viewModel.selectedVideo?.subtitles {
                 ForEach(Array(subtitles.enumerated()), id: \.offset) { _, subtitle in
-                    let type = subtitle.isHardsub ? "(Hardsub)" : "(Softsub)"
-                    Button("\(subtitle.language) \(type)") {
+                    let title = subtitle.isHardsub
+                        ? String(localized: "\(subtitle.language) (Hardsub)", comment: "Subtitle track: language, burned into the video")
+                        : String(localized: "\(subtitle.language) (Softsub)", comment: "Subtitle track: language, separate track")
+                    Button(title) {
                         viewModel.selectSubtitle(subtitle)
                     }
                 }
@@ -198,7 +200,7 @@ struct VideoPlayerView: View {
                     Button(action: { showAudioSelector = true }) {
                         HStack(spacing: 4) {
                             Image(systemName: "speaker.wave.2")
-                            Text(viewModel.selectedAudioTrack?.language ?? "Audio")
+                            Text(viewModel.selectedAudioTrack?.language ?? String(localized: "Audio", comment: "Audio track button when no track is selected"))
                         }
                         .font(.caption)
                         .padding(.horizontal, 10)
@@ -213,7 +215,7 @@ struct VideoPlayerView: View {
                     Button(action: { showSubtitleSelector = true }) {
                         HStack(spacing: 4) {
                             Image(systemName: "captions.bubble")
-                            Text(viewModel.selectedSubtitle?.language ?? "Subtitles")
+                            Text(viewModel.selectedSubtitle?.language ?? String(localized: "Subtitles", comment: "Subtitle button when no subtitle is selected"))
                         }
                         .font(.caption)
                         .padding(.horizontal, 10)

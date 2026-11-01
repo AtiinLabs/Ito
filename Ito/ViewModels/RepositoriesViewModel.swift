@@ -71,7 +71,7 @@ final class RepositoriesViewModel: ObservableObject {
                 messagePresenter.present(.alreadyAdded)
             }
         } catch {
-            addFailureMessage = "Failed to add repository. Please check the URL and try again."
+            addFailureMessage = String(localized: "Failed to add repository. Please check the URL and try again.")
         }
     }
 

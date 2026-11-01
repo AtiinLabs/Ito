@@ -72,7 +72,7 @@ nonisolated public struct PluginSecretStoreError: Error, Equatable, LocalizedErr
     public let status: OSStatus
 
     public var errorDescription: String? {
-        "The Keychain could not save the change (status \(status))."
+        String(localized: "The Keychain could not save the change (status \(String(status))).")
     }
 }
 

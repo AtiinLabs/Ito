@@ -68,13 +68,13 @@ final class TrackerProviderSelectionViewModel: ObservableObject {
     func label(for providerID: String) -> String {
         switch summaries[providerID] ?? .notTracked {
         case .notTracked:
-            return "Not tracked"
+            return String(localized: "Not tracked")
         case .loading:
-            return "Checking…"
+            return String(localized: "Checking…")
         case .notOnList:
-            return "Not on list"
+            return String(localized: "Not on list")
         case .unavailable:
-            return "Tracked"
+            return String(localized: "Tracked")
         case .entry(let status, let progress):
             let statusLabel = TrackerDetailsViewModel.statusLabel(for: status, isReadingFormat: isReadingFormat)
             guard let progress else { return statusLabel }

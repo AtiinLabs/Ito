@@ -166,7 +166,7 @@ final class OptionCatalogModel: ObservableObject {
             return LabelResolution(labels: labels, unavailable: unavailable, error: nil)
         } catch {
             guard isCurrent() else { return LabelResolution(labels: [:], unavailable: [], error: nil) }
-            return LabelResolution(labels: labels, unavailable: unavailable, error: "Labels unavailable.")
+            return LabelResolution(labels: labels, unavailable: unavailable, error: String(localized: "Labels unavailable."))
         }
     }
 
@@ -193,7 +193,7 @@ final class OptionCatalogModel: ObservableObject {
             } catch {
                 guard generation == requestGeneration, !Task.isCancelled else { return }
                 if offset == 0 {
-                    state = .failed("Options could not be loaded.")
+                    state = .failed(String(localized: "Options could not be loaded."))
                 } else if case let .loaded(items, next, total, revision, runnerID, _, _) = state {
                     state = .loaded(
                         items: items,
@@ -202,7 +202,7 @@ final class OptionCatalogModel: ObservableObject {
                         revision: revision,
                         runnerID: runnerID,
                         loadingMore: false,
-                        moreError: "More options could not be loaded."
+                        moreError: String(localized: "More options could not be loaded.")
                     )
                 }
             }

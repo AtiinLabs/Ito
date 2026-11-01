@@ -151,9 +151,9 @@ public struct RepositoryRefreshFailure: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         guard !items.isEmpty else { return nil }
         if items.count == 1 {
-            return "Failed to refresh \(items[0].repositoryURL): \(items[0].reason)"
+            return String(localized: "Failed to refresh \(items[0].repositoryURL): \(items[0].reason)")
         }
-        return "Failed to refresh \(items.count) repositories."
+        return String(localized: "Failed to refresh \(items.count) repositories.")
     }
 }
 
@@ -166,13 +166,13 @@ public enum RepositoryPackageInstallationError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .invalidPackageIdentifier:
-            return "The repository package identifier is invalid."
+            return String(localized: "The repository package identifier is invalid.")
         case .packageUnavailable:
-            return "The package is no longer available from the repository."
+            return String(localized: "The package is no longer available from the repository.")
         case .archived:
-            return "Archived plugins cannot be installed or updated."
+            return String(localized: "Archived plugins cannot be installed or updated.")
         case .rollbackFailed:
-            return "The package installation failed and the previous plugin could not be restored."
+            return String(localized: "The package installation failed and the previous plugin could not be restored.")
         }
     }
 }

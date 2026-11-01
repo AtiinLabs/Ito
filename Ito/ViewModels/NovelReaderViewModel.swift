@@ -918,15 +918,15 @@ final class NovelReaderViewModel: ObservableObject {
         let anilistID = dependencies.tracker.novelReaderAnilistID(for: mediaIdentity)
         let detailsURL = anilistID.map { "https://anilist.co/manga/\($0)" }
         let pluginName = dependencies.pluginMetadata.novelReaderPluginDisplayName(for: pluginID)
-            ?? "Unknown Plugin"
-        let scanlator = chapter.scanlator ?? "Official"
+            ?? String(localized: "Unknown Plugin")
+        let scanlator = chapter.scanlator ?? String(localized: "Official", comment: "Discord status: chapter from the official release")
         dependencies.presence.presentNovelReaderPresence(
             NovelReaderPresence(
                 details: entry.title,
-                state: "Reading \(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))",
+                state: String(localized: "Reading \(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))", comment: "Discord status: the chapter being read"),
                 activityType: 3,
                 detailsURL: detailsURL,
-                largeImageText: "Reading from \(scanlator) at \(pluginName)",
+                largeImageText: String(localized: "Reading from \(scanlator) at \(pluginName)", comment: "Discord status: scanlation group, then source name"),
                 imageURL: entry.cover,
                 resetTimer: resetTimer
             )

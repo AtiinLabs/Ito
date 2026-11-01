@@ -17,29 +17,29 @@ nonisolated enum PluginImageTransportError: LocalizedError, Equatable, Sendable 
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return "The image URL is invalid."
+            return String(localized: "The image URL is invalid.")
         case .userInfoNotAllowed:
-            return "Credentials or user information are not allowed in image URLs."
+            return String(localized: "Credentials or user information are not allowed in image URLs.")
         case .unpermittedOrigin:
-            return "The image URL origin is not permitted."
+            return String(localized: "The image URL origin is not permitted.")
         case .unpermittedScheme:
-            return "The image URL scheme must be HTTP or HTTPS."
+            return String(localized: "The image URL scheme must be HTTP or HTTPS.")
         case .invalidHeaderName:
-            return "An HTTP header name contains invalid characters."
+            return String(localized: "An HTTP header name contains invalid characters.")
         case .invalidHeaderValue:
-            return "An HTTP header value contains invalid newline characters."
+            return String(localized: "An HTTP header value contains invalid newline characters.")
         case .prohibitedHeader:
-            return "The specified HTTP header is prohibited."
+            return String(localized: "The specified HTTP header is prohibited.")
         case .crossOriginRedirectBlocked:
-            return "Cross-origin redirects are blocked for plugin image requests."
+            return String(localized: "Cross-origin redirects are blocked for plugin image requests.")
         case .httpsDowngradeBlocked:
-            return "HTTPS to HTTP redirect downgrades are prohibited."
+            return String(localized: "HTTPS to HTTP redirect downgrades are prohibited.")
         case .badServerResponse:
-            return "The server returned a non-success response."
+            return String(localized: "The server returned a non-success response.")
         case .nonHTTPResponse:
-            return "The server did not return a valid HTTP response."
+            return String(localized: "The server did not return a valid HTTP response.")
         case .downloadFailed:
-            return "The image could not be downloaded. Check the connection and source settings."
+            return String(localized: "The image could not be downloaded. Check the connection and source settings.")
         }
     }
 }

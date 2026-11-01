@@ -289,7 +289,7 @@ struct PluginRowView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(plugin.info.name)
                     .font(.headline)
-                Text("v\(plugin.info.version) • \(plugin.info.author ?? "Unknown")")
+                Text("v\(plugin.info.version) • \(plugin.info.author ?? String(localized: "Unknown"))")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 if plugin.info.archived ?? false {
@@ -319,9 +319,9 @@ struct PluginTypeBadge: View {
 
     private var style: (title: String, icon: String, color: Color) {
         switch type {
-        case .anime: return ("Anime", "play.tv", .purple)
-        case .manga: return ("Manga", "book.closed", .orange)
-        case .novel: return ("Novel", "text.book.closed", .green)
+        case .anime: return (String(localized: "Anime"), "play.tv", .purple)
+        case .manga: return (String(localized: "Manga"), "book.closed", .orange)
+        case .novel: return (String(localized: "Novel"), "text.book.closed", .green)
         }
     }
 

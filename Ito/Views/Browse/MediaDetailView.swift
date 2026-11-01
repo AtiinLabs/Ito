@@ -286,7 +286,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
         allChapterCount: Int,
         displayedChapterCount: Int
     ) -> some View {
-        let title = viewModel.media is Anime ? "Episodes" : "Chapters"
+        let title = viewModel.media is Anime ? String(localized: "Episodes") : String(localized: "Chapters")
         let isFiltered = viewModel.filterOption != .all || viewModel.sortOrder != .descending
         return VStack(spacing: 12) {
             HStack(alignment: .center) {
@@ -324,7 +324,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                         withAnimation { viewModel.sortOrder = order }
                     } label: {
                         Label(
-                            order.rawValue,
+                            order.localizedTitle,
                             systemImage: viewModel.sortOrder == order ? "checkmark" : order.icon
                         )
                     }
@@ -337,7 +337,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                         withAnimation { viewModel.filterOption = option }
                     } label: {
                         Label(
-                            option.rawValue,
+                            option.localizedTitle,
                             systemImage: viewModel.filterOption == option
                                 ? "checkmark"
                                 : option.icon
@@ -378,12 +378,12 @@ struct MediaDetailView<M: MediaDisplayable>: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 if viewModel.sortOrder != .descending {
-                    ActiveFilterPill(label: viewModel.sortOrder.rawValue) {
+                    ActiveFilterPill(label: viewModel.sortOrder.localizedTitle) {
                         withAnimation { viewModel.sortOrder = .descending }
                     }
                 }
                 if viewModel.filterOption != .all {
-                    ActiveFilterPill(label: viewModel.filterOption.rawValue) {
+                    ActiveFilterPill(label: viewModel.filterOption.localizedTitle) {
                         withAnimation { viewModel.filterOption = .all }
                     }
                 }
@@ -448,7 +448,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .empty:
-                    relinkEmptyState(message: "No results found. Try again.")
+                    relinkEmptyState(message: String(localized: "No results found. Try again."))
                 case .failure(let message):
                     relinkEmptyState(message: message)
                 case .results:

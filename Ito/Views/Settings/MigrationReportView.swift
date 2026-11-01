@@ -97,7 +97,7 @@ struct MigrationReportView: View {
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         } else {
-                            Text("\(activeCount) source\(activeCount == 1 ? "" : "s") need\(activeCount == 1 ? "s" : "") attention")
+                            Text("\(activeCount) sources need attention")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -148,7 +148,7 @@ struct MigrationReportView: View {
                         Text(plugin.foreignId)
                             .font(.body)
                             .fontWeight(.medium)
-                        Text("\(plugin.affectedItemCount) item\(plugin.affectedItemCount == 1 ? "" : "s") affected")
+                        Text("\(plugin.affectedItemCount) items affected")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

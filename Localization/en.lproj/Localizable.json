@@ -1,0 +1,74 @@
+{
+  "%@ has %lld new chapters.": {
+    "one": "%1$@ has %2$lld new chapter.",
+    "other": "%1$@ has %2$lld new chapters."
+  },
+  "%@ has %lld new episodes.": {
+    "one": "%1$@ has %2$lld new episode.",
+    "other": "%1$@ has %2$lld new episodes."
+  },
+  "%lld Hours": {
+    "one": "%lld Hour",
+    "other": "%lld Hours"
+  },
+  "%lld chapters": {
+    "one": "%lld chapter",
+    "other": "%lld chapters"
+  },
+  "%lld episodes": {
+    "one": "%lld episode",
+    "other": "%lld episodes"
+  },
+  "%lld history entries": {
+    "one": "%lld history entry",
+    "other": "%lld history entries"
+  },
+  "%lld images": {
+    "one": "%lld image",
+    "other": "%lld images"
+  },
+  "%lld items affected": {
+    "one": "%lld item affected",
+    "other": "%lld items affected"
+  },
+  "%lld items imported": {
+    "one": "%lld item imported",
+    "other": "%lld items imported"
+  },
+  "%lld packages": {
+    "one": "%lld package",
+    "other": "%lld packages"
+  },
+  "%lld paused": {
+    "one": "%lld paused",
+    "other": "%lld paused"
+  },
+  "%lld percent": {
+    "one": "%lld percent",
+    "other": "%lld percent"
+  },
+  "%lld sources need attention": {
+    "one": "%lld source needs attention",
+    "other": "%lld sources need attention"
+  },
+  "%lld titles have new updates, including %@": {
+    "one": "%1$lld title has new updates, including %2$@",
+    "other": "%1$lld titles have new updates, including %2$@"
+  },
+  "%lld waiting to sync": {
+    "one": "%lld waiting to sync",
+    "other": "%lld waiting to sync"
+  },
+  "Failed to refresh %lld repositories.": {
+    "one": "Failed to refresh %lld repository.",
+    "other": "Failed to refresh %lld repositories."
+  },
+  "Score: %lld percent": {
+    "one": "Score: %lld percent",
+    "other": "Score: %lld percent"
+  },
+  "Showing the %lld most recent entries.": {
+    "one": "Showing the %lld most recent entry.",
+    "other": "Showing the %lld most recent entries."
+  }
+}

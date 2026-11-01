@@ -14,11 +14,11 @@ enum TrackerSettingsProviderFailure: Equatable {
     var message: String {
         switch self {
         case .authentication:
-            return "Authentication failed. Please try again."
+            return String(localized: "Authentication failed. Please try again.")
         case .tokenRejected:
-            return "The token was not accepted. Check that it was copied completely and has not been revoked."
+            return String(localized: "The token was not accepted. Check that it was copied completely and has not been revoked.")
         case .logout:
-            return "Logout failed. Please try again."
+            return String(localized: "Logout failed. Please try again.")
         }
     }
 }
@@ -87,11 +87,11 @@ final class TrackerSettingsViewModel: ObservableObject {
     func footer(for provider: TrackerProviderPresentation) -> String {
         switch provider.identifier {
         case MALCredentialRepository.providerID:
-            return "Ito syncs progress for series you are watching or reading on MyAnimeList. Automatic sync only moves progress forward. Ito never deletes entries or changes scores, dates, tags or comments."
+            return String(localized: "Ito syncs progress for series you are watching or reading on MyAnimeList. Automatic sync only moves progress forward. Ito never deletes entries or changes scores, dates, tags or comments.")
         case MangaBakaCredentialRepository.providerID:
-            return "Ito updates chapter progress for manga and novels you are reading on MangaBaka. Ratings, dates and notes are left as they are. Series data from MangaBaka is licensed CC BY-NC-SA 4.0."
+            return String(localized: "Ito updates chapter progress for manga and novels you are reading on MangaBaka. Ratings, dates and notes are left as they are. Series data from MangaBaka is licensed CC BY-NC-SA 4.0.")
         default:
-            return "Sync your progress automatically with \(provider.name)."
+            return String(localized: "Sync your progress automatically with \(provider.name).")
         }
     }
 

@@ -127,10 +127,13 @@ extension MangaReaderViewModel {
     ) -> MangaReaderPresence {
         MangaReaderPresence(
             details: entry.title,
-            state: "Reading \(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))",
+            state: String(localized: "Reading \(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))", comment: "Discord status: the chapter being read"),
             activityType: 3,
             detailsURL: anilistID.map { "https://anilist.co/manga/\($0)" },
-            largeImageText: "Reading from \(chapter.scanlator ?? "Official") at \(pluginName ?? "Unknown Plugin")",
+            largeImageText: String(
+                localized: "Reading from \(chapter.scanlator ?? String(localized: "Official", comment: "Discord status: chapter from the official release")) at \(pluginName ?? String(localized: "Unknown Plugin"))",
+                comment: "Discord status: scanlation group, then source name"
+            ),
             imageURL: entry.cover,
             resetTimer: resetTimer
         )

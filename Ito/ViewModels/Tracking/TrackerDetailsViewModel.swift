@@ -22,13 +22,13 @@ enum TrackerDetailsFailure: Equatable {
     var message: String {
         switch self {
         case .remoteUpdate:
-            return "Your tracker entry could not be updated. Please try again."
+            return String(localized: "Your tracker entry could not be updated. Please try again.")
         case .linkPersistenceAfterRemoteUpdate:
-            return "The tracker entry was updated remotely, but the local link was not saved. Please retry to finish linking."
+            return String(localized: "The tracker entry was updated remotely, but the local link was not saved. Please retry to finish linking.")
         case .unlinkPersistence:
-            return "Tracking could not be stopped locally. Please try again."
+            return String(localized: "Tracking could not be stopped locally. Please try again.")
         case .progressWouldDecrease(let providerName):
-            return "\(providerName) progress only moves forward from Ito. Choose Repeating to start over, or change it on \(providerName)."
+            return String(localized: "\(providerName) progress only moves forward from Ito. Choose Repeating to start over, or change it on \(providerName).")
         }
     }
 }
@@ -141,11 +141,11 @@ final class TrackerDetailsViewModel: ObservableObject {
     var remoteLoadErrorMessage: String? {
         guard remoteEntryState == .failure else { return nil }
         return remoteLoadFailureMessage
-            ?? "Existing tracker progress could not be checked. Please retry before saving."
+            ?? String(localized: "Existing tracker progress could not be checked. Please retry before saving.")
     }
 
     var currentStatusLabel: String {
-        media.isReadingFormat ? "Reading" : "Watching"
+        media.isReadingFormat ? String(localized: "Reading") : String(localized: "Watching")
     }
 
     var totalProgress: Int? {
@@ -153,15 +153,15 @@ final class TrackerDetailsViewModel: ObservableObject {
     }
 
     var scoreText: String {
-        score.map { String(format: "%.1f", $0) } ?? "Not set"
+        score.map { String(format: "%.1f", $0) } ?? String(localized: "Not set")
     }
 
     var startDateText: String {
-        startDate.map { Self.dateFormatter.string(from: $0) } ?? "Not set"
+        startDate.map { Self.dateFormatter.string(from: $0) } ?? String(localized: "Not set")
     }
 
     var finishDateText: String {
-        finishDate.map { Self.dateFormatter.string(from: $0) } ?? "Not set"
+        finishDate.map { Self.dateFormatter.string(from: $0) } ?? String(localized: "Not set")
     }
 
     private static let dateFormatter: DateFormatter = {
@@ -180,7 +180,15 @@ final class TrackerDetailsViewModel: ObservableObject {
     }
 
     static func statusLabel(for status: String, isReadingFormat: Bool) -> String {
-        status == "CURRENT" ? (isReadingFormat ? "Reading" : "Watching") : status.capitalized
+        switch status {
+        case "CURRENT": return isReadingFormat ? String(localized: "Reading") : String(localized: "Watching")
+        case "PLANNING": return String(localized: "Planning")
+        case "COMPLETED": return String(localized: "Completed")
+        case "PAUSED": return String(localized: "Paused")
+        case "DROPPED": return String(localized: "Dropped")
+        case "REPEATING": return String(localized: "Repeating")
+        default: return status.capitalized
+        }
     }
 
     func displayLabel(for statusOption: String) -> String {
@@ -193,9 +201,11 @@ final class TrackerDetailsViewModel: ObservableObject {
         guard TrackerWriteRules.movesProgressForwardOnly(providerID), let loadedStatus else { return nil }
         switch loadedStatus {
         case "COMPLETED", "PAUSED", "DROPPED":
-            return "Automatic progress updates are off while this entry is \(displayLabel(for: loadedStatus)). Set it to \(currentStatusLabel) to resume them."
+            return String(localized: "Automatic progress updates are off while this entry is \(displayLabel(for: loadedStatus)). Set it to \(currentStatusLabel) to resume them.")
         case "PLANNING":
-            return "Ito marks this entry \(currentStatusLabel) when you start \(media.isReadingFormat ? "chapter 1" : "episode 1")."
+            return media.isReadingFormat
+                ? String(localized: "Ito marks this entry \(currentStatusLabel) when you start chapter 1.")
+                : String(localized: "Ito marks this entry \(currentStatusLabel) when you start episode 1.")
         default:
             return nil
         }

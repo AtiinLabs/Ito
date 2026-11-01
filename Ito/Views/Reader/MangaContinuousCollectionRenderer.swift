@@ -525,7 +525,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
                 session: viewModel.imageSession,
                 pageID: page.id,
                 onImageTap: { [weak self] in self?.onToggleUI() },
-                imageLabel: "Page \(page.chapterPosition + 1)"
+                imageLabel: String(localized: "Page \(page.chapterPosition + 1)", comment: "Accessibility label of a manga page; number is its position in the chapter")
             ))
         case .text(let text):
             return AnyView(MangaContinuousTextPage(text: text))
@@ -738,12 +738,12 @@ private struct MangaContinuousChapterPrompt: View {
 
     private var prompt: String {
         switch (phase, isNext) {
-        case (.tap, true): return "Tap to Load Next Chapter"
-        case (.tap, false): return "Tap to Load Previous Chapter"
-        case (.loading, true): return "Loading Next Chapter..."
-        case (.loading, false): return "Loading Previous Chapter..."
-        case (.failed, true): return "Couldn't load the next chapter. Tap to try again."
-        case (.failed, false): return "Couldn't load the previous chapter. Tap to try again."
+        case (.tap, true): return String(localized: "Tap to Load Next Chapter")
+        case (.tap, false): return String(localized: "Tap to Load Previous Chapter")
+        case (.loading, true): return String(localized: "Loading Next Chapter...")
+        case (.loading, false): return String(localized: "Loading Previous Chapter...")
+        case (.failed, true): return String(localized: "Couldn't load the next chapter. Tap to try again.")
+        case (.failed, false): return String(localized: "Couldn't load the previous chapter. Tap to try again.")
         }
     }
 }

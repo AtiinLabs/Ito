@@ -13,15 +13,15 @@ enum BackupSettingsAlert: Equatable, Identifiable {
     var title: String {
         switch self {
         case .exportFailed:
-            "Export Failed"
+            String(localized: "Export Failed")
         case .importFailed:
-            "Import Failed"
+            String(localized: "Import Failed")
         case .mergeCheckFailed:
-            "Merge Check Failed"
+            String(localized: "Merge Check Failed")
         case .restoreFailed:
-            "Restore Failed"
+            String(localized: "Restore Failed")
         case .acknowledgmentFailed:
-            "Acknowledgment Failed"
+            String(localized: "Acknowledgment Failed")
         }
     }
 
@@ -847,13 +847,13 @@ final class BackupSettingsViewModel: ObservableObject {
         case BackupPreflightError.rejected(let reason):
             return reason.userMessage
         case BackupExportError.incompleteMigration:
-            return "Ito is still preparing your library. Try again in a moment."
+            return String(localized: "Ito is still preparing your library. Try again in a moment.")
         case BackupMergeError.ambiguousLocalIdentity:
-            return "A series in the backup matches more than one series in your library, so nothing was merged."
+            return String(localized: "A series in the backup matches more than one series in your library, so nothing was merged.")
         case BackupMergeError.noFreeLibraryID:
-            return "A series in the backup could not be given a place in your library, so nothing was merged."
+            return String(localized: "A series in the backup could not be given a place in your library, so nothing was merged.")
         case BackupMergeError.invalidReplacementCategoryReference:
-            return "A series in the backup belongs to a list that could not be found, so nothing was merged."
+            return String(localized: "A series in the backup belongs to a list that could not be found, so nothing was merged.")
         default:
             return error.localizedDescription
         }

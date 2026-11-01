@@ -155,15 +155,15 @@ private struct BootstrapGateView: View {
                 )
             } else {
                 BootstrapFailureView(
-                    title: "Couldn’t start the app",
-                    message: "Required runtime services are unavailable. Retry to prepare them again."
+                    title: String(localized: "Couldn’t start the app"),
+                    message: String(localized: "Required runtime services are unavailable. Retry to prepare them again.")
                 ) {
                     Task { _ = await bootstrap.retryRuntimeInvariantFailure() }
                 }
             }
         case .failed(let message):
             BootstrapFailureView(
-                title: "Couldn’t prepare your library",
+                title: String(localized: "Couldn’t prepare your library"),
                 message: message
             ) {
                 Task { _ = await bootstrap.retry() }

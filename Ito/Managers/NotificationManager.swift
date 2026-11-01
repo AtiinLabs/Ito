@@ -101,13 +101,14 @@ public class NotificationManager: ObservableObject {
         if updatedItems.count == 1 {
             let item = updatedItems[0].0
             let chapters = updatedItems[0].1
-            let typeLabel = item.isAnime ? "episodes" : "chapters"
-            content.title = "New Update"
-            content.body = "\(item.title) has \(chapters) new \(typeLabel)."
+            content.title = String(localized: "New Update")
+            content.body = item.isAnime
+                ? String(localized: "\(item.title) has \(chapters) new episodes.")
+                : String(localized: "\(item.title) has \(chapters) new chapters.")
         } else {
-            content.title = "Library Updates"
-            let itemsString = updatedItems.prefix(2).map { $0.0.title }.joined(separator: ", ")
-            content.body = "\(updatedItems.count) titles have new updates, including \(itemsString)"
+            content.title = String(localized: "Library Updates")
+            let itemsString = ListFormatter.localizedString(byJoining: updatedItems.prefix(2).map { $0.0.title })
+            content.body = String(localized: "\(updatedItems.count) titles have new updates, including \(itemsString)")
             content.threadIdentifier = "LibraryUpdates"
         }
 

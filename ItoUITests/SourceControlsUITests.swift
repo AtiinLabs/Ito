@@ -119,8 +119,7 @@ final class SourceControlsUITests: XCTestCase {
             bundle.url(forResource: "rich-settings", withExtension: "ito", subdirectory: "Fixtures")
                 ?? bundle.url(forResource: "rich-settings", withExtension: "ito")
         )
-        let app = XCUIApplication()
-        app.launchArguments = ["--ui-test-reset-storage"] + extraArguments
+        let app = XCUIApplication.english(arguments: ["--ui-test-reset-storage"] + extraArguments)
         app.launchEnvironment["ITO_UI_TEST_PLUGIN_BASE64"] = try Data(contentsOf: url).base64EncodedString()
         app.launch()
         let browse = app.tabBars.buttons["Browse"]

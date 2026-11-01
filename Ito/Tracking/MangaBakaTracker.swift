@@ -15,20 +15,20 @@ nonisolated enum MangaBakaTrackerError: Error, Equatable, Sendable, LocalizedErr
     var errorDescription: String? {
         switch self {
         case .invalidMediaID:
-            "The linked MangaBaka id is invalid."
+            String(localized: "The linked MangaBaka id is invalid.")
         case .invalidStatus(let status):
-            "\(status) is not a library state MangaBaka supports."
+            String(localized: "\(status) is not a library state MangaBaka supports.")
         case .unsupportedRemoteStatus(let status):
-            "MangaBaka reports the library state \(status), which Ito does not support yet."
+            String(localized: "MangaBaka reports the library state \(status), which Ito does not support yet.")
         case .seriesMerged(let id):
-            "MangaBaka merged this series into series \(id). Stop tracking it and link it again."
+            String(localized: "MangaBaka merged this series into series \(String(id)). Stop tracking it and link it again.")
         case .seriesUnavailable:
-            "This series is no longer available on MangaBaka. Stop tracking it and link it again."
+            String(localized: "This series is no longer available on MangaBaka. Stop tracking it and link it again.")
         }
     }
 
     var userMessage: String {
-        errorDescription ?? "MangaBaka could not be reached."
+        errorDescription ?? String(localized: "MangaBaka could not be reached.")
     }
 }
 

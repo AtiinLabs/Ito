@@ -21,6 +21,14 @@ nonisolated public enum AppThemePreference: String, Codable, CaseIterable, Senda
     case system = "System"
     case light = "Light"
     case dark = "Dark"
+
+    public var localizedTitle: String {
+        switch self {
+        case .system: return String(localized: "System")
+        case .light: return String(localized: "Light")
+        case .dark: return String(localized: "Dark")
+        }
+    }
 }
 
 nonisolated public enum NovelFontPreference: String, Codable, CaseIterable, Sendable {
@@ -61,6 +69,10 @@ nonisolated public enum ImagePreloadCountPreference: Int, Codable, CaseIterable,
     case ten = 10
     case fifteen = 15
     case twenty = 20
+
+    public var localizedTitle: String {
+        self == .none ? String(localized: "Off") : String(localized: "\(rawValue) images")
+    }
 }
 
 nonisolated public enum AppPreferenceKeys {

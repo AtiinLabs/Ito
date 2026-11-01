@@ -12,7 +12,7 @@ nonisolated struct PluginDiagnosticDenyingNetModule: NetModule, Sendable {
 nonisolated struct PluginDiagnosticWebviewModule: WebviewModule {
     static let unavailable = ItoError.hostModuleError(
         domain: "webview",
-        message: "A web view is not available during settings diagnostics."
+        message: String(localized: "A web view is not available during settings diagnostics.")
     )
 
     func loadUrl(request: WebviewRequest) async throws -> WebviewResponse {

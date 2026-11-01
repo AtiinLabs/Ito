@@ -8,9 +8,9 @@ extension PluginInfo {
 
     public var archiveNotice: String {
         if let reason = archivedReason {
-            return "This plugin is no longer maintained.\nReason: \(reason)"
+            return String(localized: "This plugin is no longer maintained.\nReason: \(reason)")
         }
-        return "This plugin is no longer maintained."
+        return String(localized: "This plugin is no longer maintained.")
     }
 }
 
@@ -120,7 +120,7 @@ struct SourceView: View {
             ProgressView("Loading Source...")
         case .failure(let error):
             failureView(
-                message: "Error: \(error)",
+                message: String(localized: "Error: \(error)"),
                 opensSettings: viewModel.failureOffersSettings,
                 offersSignIn: viewModel.failureNeedsLogin && signInTarget != nil,
                 pendingTrust: viewModel.failurePendingTrust
@@ -128,7 +128,7 @@ struct SourceView: View {
                 Task { await viewModel.retry() }
             }
         case .cancelled:
-            failureView(message: "Source loading was cancelled.") {
+            failureView(message: String(localized: "Source loading was cancelled.")) {
                 Task { await viewModel.retry() }
             }
         case .content, .empty:
@@ -276,7 +276,7 @@ struct SourceView: View {
                                 mediaDestination(entry.manga)
                             }
                             HStack {
-                                Text(entry.chapter.title ?? "Chapter \(entry.chapter.chapter.map { String(Int($0)) } ?? "—")")
+                                Text(entry.chapter.title ?? String(localized: "Chapter \(entry.chapter.chapter.map { String(Int($0)) } ?? "—")"))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
@@ -323,7 +323,7 @@ struct SourceView: View {
                                 mediaDestination(entry.anime)
                             }
                             HStack {
-                                Text(entry.episode.title ?? "Episode \(entry.episode.episode.map { String(Int($0)) } ?? "—")")
+                                Text(entry.episode.title ?? String(localized: "Episode \(entry.episode.episode.map { String(Int($0)) } ?? "—")"))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
@@ -370,7 +370,7 @@ struct SourceView: View {
                                 mediaDestination(entry.novel)
                             }
                             HStack {
-                                Text(entry.chapter.title ?? "Chapter \(entry.chapter.chapter.map { String(Int($0)) } ?? "—")")
+                                Text(entry.chapter.title ?? String(localized: "Chapter \(entry.chapter.chapter.map { String(Int($0)) } ?? "—")"))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
@@ -467,7 +467,7 @@ struct SourceView: View {
                 }
                 .disabled(!viewModel.sortEnabled)
                 .accessibilityLabel("Sort")
-                .accessibilityHint(viewModel.sortEnabled ? "" : "Sorting is only available without search text.")
+                .accessibilityHint(viewModel.sortEnabled ? "" : String(localized: "Sorting is only available without search text."))
             }
             if !capabilities.sections.isEmpty {
                 Button { viewModel.showSearchFilters = true } label: {
@@ -475,7 +475,7 @@ struct SourceView: View {
                 }
                 .disabled(!viewModel.filtersEnabled)
                 .accessibilityLabel("Filters")
-                .accessibilityHint(viewModel.filtersEnabled ? "" : "Filters are only available without search text.")
+                .accessibilityHint(viewModel.filtersEnabled ? "" : String(localized: "Filters are only available without search text."))
             }
         }
     }
@@ -534,9 +534,9 @@ struct SourceView: View {
 
     private func kindTitle(_ kind: MediaKind) -> String {
         switch kind {
-        case .manga: return "Manga"
-        case .anime: return "Anime"
-        case .novel: return "Novel"
+        case .manga: return String(localized: "Manga")
+        case .anime: return String(localized: "Anime")
+        case .novel: return String(localized: "Novel")
         }
     }
 
@@ -548,7 +548,7 @@ struct SourceView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failure(let error):
             failureView(
-                message: "Search error: \(error)",
+                message: String(localized: "Search error: \(error)"),
                 opensSettings: viewModel.searchFailureOffersSettings,
                 offersSignIn: viewModel.searchFailureNeedsLogin && signInTarget != nil,
                 pendingTrust: viewModel.searchFailurePendingTrust
@@ -556,7 +556,7 @@ struct SourceView: View {
                 viewModel.performSearch(query: viewModel.searchQuery)
             }
         case .cancelled:
-            failureView(message: "Search was cancelled.") {
+            failureView(message: String(localized: "Search was cancelled.")) {
                 viewModel.performSearch(query: viewModel.searchQuery)
             }
         case .empty:

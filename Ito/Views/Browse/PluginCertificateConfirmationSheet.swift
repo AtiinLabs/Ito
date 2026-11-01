@@ -73,7 +73,7 @@ struct PluginCertificateConfirmationSheet: View {
                             try onTrust()
                             dismiss()
                         } catch {
-                            errorMessage = "The certificate couldn't be saved. Try again."
+                            errorMessage = String(localized: "The certificate couldn't be saved. Try again.")
                         }
                     }
                 }

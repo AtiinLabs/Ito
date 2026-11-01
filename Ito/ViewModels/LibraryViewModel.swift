@@ -23,14 +23,14 @@ enum LibraryAlert: Equatable {
     case exportGenerationFailed
     case exporterFailed
 
-    var title: String { "Backup Error" }
+    var title: String { String(localized: "Backup Error") }
 
     var message: String {
         switch self {
         case .exportGenerationFailed:
-            return "The library backup could not be generated. Please try again."
+            return String(localized: "The library backup could not be generated. Please try again.")
         case .exporterFailed:
-            return "The library backup could not be exported. Please try again."
+            return String(localized: "The library backup could not be exported. Please try again.")
         }
     }
 }
@@ -145,7 +145,7 @@ final class LibraryViewModel: ObservableObject {
 
     var categories: [LibraryCategoryPresentation] {
         snapshot.categories.map {
-            LibraryCategoryPresentation(id: $0.id, name: $0.name)
+            LibraryCategoryPresentation(id: $0.id, name: $0.displayName)
         }
     }
 
@@ -166,7 +166,7 @@ final class LibraryViewModel: ObservableObject {
             }
             return LibraryPresentationGroup(
                 id: category.id,
-                name: category.name,
+                name: category.displayName,
                 isSystem: category.isSystemCategory,
                 items: categoryItems
             )
@@ -639,7 +639,7 @@ final class LibraryViewModel: ObservableObject {
     }
 
     private var selectedCategoryName: String? {
-        snapshot.categories.first(where: { $0.id == selectedCategoryID })?.name
+        snapshot.categories.first(where: { $0.id == selectedCategoryID })?.displayName
     }
 
     private func presentDiscordIfNeeded() {

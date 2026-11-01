@@ -669,15 +669,17 @@ final class VideoPlayerViewModel: ObservableObject {
         let anilistID = dependencies.tracker.videoPlayerAnilistID(for: mediaIdentity)
         let detailsURL = anilistID.map { "https://anilist.co/anime/\($0)" }
         let pluginName = dependencies.pluginMetadata
-            .videoPlayerPluginDisplayName(for: pluginID) ?? "Unknown Plugin"
-        let subgroup = episode.lang?.uppercased() ?? "Original"
+            .videoPlayerPluginDisplayName(for: pluginID) ?? String(localized: "Unknown Plugin")
+        let subgroup = episode.lang?.uppercased() ?? String(localized: "Original", comment: "Discord status: video in its original language")
+        let episodeTitle = episode.title
+            ?? String(localized: "Episode \(String(episode.chapterNumber ?? 0))", comment: "Discord status: episode number")
         dependencies.presence.presentVideoPlayerPresence(
             VideoPlayerPresence(
                 details: anime.title,
-                state: "Watching \(episode.title ?? "Episode \(episode.chapterNumber ?? 0)")",
+                state: String(localized: "Watching \(episodeTitle)", comment: "Discord status: the episode being watched"),
                 activityType: 3,
                 detailsURL: detailsURL,
-                largeImageText: "Watching from \(subgroup) at \(pluginName)",
+                largeImageText: String(localized: "Watching from \(subgroup) at \(pluginName)", comment: "Discord status: language group, then source name"),
                 imageURL: anime.cover,
                 resetTimer: resetTimer
             )

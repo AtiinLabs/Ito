@@ -32,12 +32,12 @@ struct DiscoverView: View {
                               ? "line.3.horizontal.decrease.circle.fill"
                               : "line.3.horizontal.decrease.circle")
                     }
-                    .accessibilityLabel(viewModel.isFilterActive ? "Filters, active" : "Filters")
+                    .accessibilityLabel(viewModel.isFilterActive ? String(localized: "Filters, active", comment: "Filter button when filters are applied") : String(localized: "Filters", comment: "Filter button"))
                 }
             }
             .searchable(
                 text: $viewModel.searchQuery,
-                prompt: "Search \(viewModel.selectedType == .anime ? "anime" : "manga")..."
+                prompt: searchPrompt
             )
             .sheet(isPresented: $showFilters) {
                 DiscoverFilterView(
@@ -145,7 +145,7 @@ struct DiscoverView: View {
                 }
                 if let status = viewModel.activeFilters.status {
                     filterPill(
-                        status.replacingOccurrences(of: "_", with: " ").capitalized,
+                        DiscoverOptionLabels.status(status),
                         style: .include
                     ) {
                         viewModel.removeStatus()
@@ -153,7 +153,7 @@ struct DiscoverView: View {
                 }
                 if let year = viewModel.activeFilters.year {
                     let label = viewModel.activeFilters.season != nil
-                        ? "\(viewModel.activeFilters.season!.capitalized) \(year)"
+                        ? "\(DiscoverOptionLabels.season(viewModel.activeFilters.season!)) \(year)"
                         : "\(year)"
                     filterPill(label, style: .include) {
                         viewModel.removeYearAndSeason()
@@ -192,6 +192,10 @@ struct DiscoverView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Remove \(label) filter")
+    }
+
+    private var searchPrompt: LocalizedStringKey {
+        viewModel.selectedType == .anime ? "Search anime..." : "Search manga..."
     }
 }
 
@@ -282,7 +286,7 @@ private struct DiscoverHomeView: View {
     }
 
     private func discoverSection(
-        title: String,
+        title: LocalizedStringKey,
         items: [DiscoverMedia]
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -412,7 +416,7 @@ struct DiscoverSearchRow: View {
 
                 HStack(spacing: 6) {
                     if let format = media.format {
-                        Text(format.replacingOccurrences(of: "_", with: " "))
+                        Text(DiscoverOptionLabels.format(format))
                             .font(.caption2.weight(.semibold))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -430,11 +434,11 @@ struct DiscoverSearchRow: View {
                         .foregroundStyle(.secondary)
                     }
                     if let eps = media.episodes {
-                        Text("\(eps) ep")
+                        Text("\(eps) episodes")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     } else if let chs = media.chapters {
-                        Text("\(chs) ch")
+                        Text("\(chs) chapters")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }

@@ -10,18 +10,18 @@ enum DebugLogAlert: Identifiable, Equatable {
     var title: String {
         switch self {
         case .fetchFailed:
-            return "Unable to Fetch Logs"
+            return String(localized: "Unable to Fetch Logs")
         case .copyFailed:
-            return "Unable to Copy Logs"
+            return String(localized: "Unable to Copy Logs")
         }
     }
 
     var message: String {
         switch self {
         case .fetchFailed:
-            return "Debug logs could not be loaded. Please try again."
+            return String(localized: "Debug logs could not be loaded. Please try again.")
         case .copyFailed:
-            return "Debug logs could not be copied. Please try again."
+            return String(localized: "Debug logs could not be copied. Please try again.")
         }
     }
 }

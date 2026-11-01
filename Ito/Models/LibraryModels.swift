@@ -28,6 +28,12 @@ public struct LibraryCategory: Codable, Identifiable, Hashable, Sendable, Fetcha
         self.createdAt = createdAt
     }
 
+    /// The name to show. The built-in list is stored as "Uncategorized" and cannot be
+    /// renamed, so it shows in the user's language.
+    public var displayName: String {
+        isSystemCategory ? String(localized: "Uncategorized") : name
+    }
+
     public enum Columns {
         public static let id = Column(CodingKeys.id)
         public static let name = Column(CodingKeys.name)

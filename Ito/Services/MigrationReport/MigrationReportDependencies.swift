@@ -108,7 +108,7 @@ struct PreparedMigrationReportDependencies {
 private enum MigrationReportDependencyUnavailableError: LocalizedError {
     case unavailable
 
-    var errorDescription: String? { "Migration remediation is unavailable." }
+    var errorDescription: String? { String(localized: "Migration remediation is unavailable.") }
 }
 
 @MainActor

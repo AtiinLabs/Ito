@@ -107,8 +107,8 @@ struct OptionSelectionView: View {
     private func label(for value: String) -> String {
         let identity = Data(value.utf8)
         if let label = inlineOptions.first(where: { $0.identity == identity })?.label ?? resolution?.labels[identity] { return label }
-        if unavailable.contains(identity) { return "Unavailable option" }
-        return resolution?.error != nil || catalog == nil ? "Labels unavailable" : "Loading label…"
+        if unavailable.contains(identity) { return String(localized: "Unavailable option") }
+        return resolution?.error != nil || catalog == nil ? String(localized: "Labels unavailable") : String(localized: "Loading label…")
     }
 
     private func toggle(_ option: String) {

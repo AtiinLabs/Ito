@@ -33,16 +33,16 @@ actor MangaBakaCredentialRepository {
         var errorDescription: String? {
             switch self {
             case .notSignedIn:
-                "Not signed in to MangaBaka."
+                String(localized: "Not signed in to MangaBaka.")
             case .tokenRejected:
-                "MangaBaka no longer accepts the saved token. Sign in again."
+                String(localized: "MangaBaka no longer accepts the saved token. Sign in again.")
             case .sessionExpired:
-                "The MangaBaka session expired. Sign in again."
+                String(localized: "The MangaBaka session expired. Sign in again.")
             }
         }
 
         var userMessage: String {
-            errorDescription ?? "Sign in to MangaBaka again."
+            errorDescription ?? String(localized: "Sign in to MangaBaka again.")
         }
     }
 

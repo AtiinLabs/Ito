@@ -257,15 +257,15 @@ enum SourcePluginFileError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalidPluginLocation:
-            return "The plugin file is outside the configured plugins directory."
+            return String(localized: "The plugin file is outside the configured plugins directory.")
         case .missingPluginFile:
-            return "The plugin file no longer exists."
+            return String(localized: "The plugin file no longer exists.")
         case .stalePluginIdentity:
-            return "The plugin changed after this screen was opened. Refresh and try again."
+            return String(localized: "The plugin changed after this screen was opened. Refresh and try again.")
         case .stalePluginState:
-            return "Installed plugins changed during removal. Refresh and try again."
+            return String(localized: "Installed plugins changed during removal. Refresh and try again.")
         case .rollbackFailed:
-            return "The plugin removal failed and the original file could not be restored."
+            return String(localized: "The plugin removal failed and the original file could not be restored.")
         }
     }
 }

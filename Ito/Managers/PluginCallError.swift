@@ -36,13 +36,13 @@ struct PluginCallError: LocalizedError, Equatable {
         case .pluginFailed(_, let reason, _) where reason.map(Self.isSDKDecodingFailure) == true:
             self.init(kind: .incompatible, message: Self.incompatibleMessage)
         case .pluginFailed(_, let reason, .needsLogin):
-            let message = reason?.isEmpty == false ? Self.pluginMessage(reason) : "Sign in to this source to continue."
+            let message = reason?.isEmpty == false ? Self.pluginMessage(reason) : String(localized: "Sign in to this source to continue.")
             self.init(kind: .needsLogin, message: message)
         case .pluginFailed(_, let reason, let category):
             let kind: Kind = category == .needsSetup || category == .unauthorized ? .needsSettings : .reported
             self.init(kind: kind, message: Self.pluginMessage(reason))
         case .wasmTrap, .memoryOutOfBounds:
-            self.init(kind: .crashed, message: "The source stopped unexpectedly. Try again.")
+            self.init(kind: .crashed, message: String(localized: "The source stopped unexpectedly. Try again."))
         case .postcardDecodingError, .postcardEncodingError, .controlContractViolation:
             self.init(kind: .incompatible, message: Self.incompatibleMessage)
         case .requiresNewerHost, .unsupportedABI:
@@ -50,7 +50,7 @@ struct PluginCallError: LocalizedError, Equatable {
             // PluginRequiresNewerAppError; mapped here for completeness.
             self.init(kind: .incompatible, message: PluginRequiresNewerAppError.unnamedVersionMessage)
         case .hostModuleError(let domain, let message):
-            self.init(kind: .host, message: domain == "webview" ? "The source's web page failed: \(message)" : message)
+            self.init(kind: .host, message: domain == "webview" ? String(localized: "The source's web page failed: \(message)") : message)
         }
     }
 
@@ -61,8 +61,9 @@ struct PluginCallError: LocalizedError, Equatable {
         return PluginCallError(error)
     }
 
-    private static let incompatibleMessage =
-        "The source sent something this version of Ito can't read. Update the source or Ito."
+    private static var incompatibleMessage: String {
+        String(localized: "The source sent something this version of Ito can't read. Update the source or Ito.")
+    }
 
     /// The plugin couldn't read what Ito sent or encode its answer: the plugin and Ito disagree on
     /// the data format, so it's a version mismatch rather than something the plugin said.
@@ -76,7 +77,7 @@ struct PluginCallError: LocalizedError, Equatable {
     /// ("Network error: …") are shown as the plugin gave them.
     private static func pluginMessage(_ reason: String?) -> String {
         guard let reason, !reason.isEmpty else {
-            return "The source couldn't complete this request."
+            return String(localized: "The source couldn't complete this request.")
         }
         let hostPrefix = "Host error: "
         return reason.hasPrefix(hostPrefix) ? String(reason.dropFirst(hostPrefix.count)) : reason

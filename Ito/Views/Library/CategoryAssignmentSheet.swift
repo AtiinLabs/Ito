@@ -81,14 +81,14 @@ struct CategoryAssignmentSheet: View {
             addCategorySheet
         }
         .alert(
-            viewModel.failure?.alertTitle ?? "List Change Failed",
+            viewModel.failure?.alertTitle ?? String(localized: "List Change Failed"),
             isPresented: assignmentFailureBinding
         ) {
             Button("OK", role: .cancel) {
                 viewModel.dismissFailure()
             }
         } message: {
-            Text(viewModel.failure?.alertMessage ?? "Please try again.")
+            Text(viewModel.failure?.alertMessage ?? String(localized: "Please try again."))
         }
         .onDisappear {
             viewModel.dismissPresentation()
@@ -140,14 +140,14 @@ struct CategoryAssignmentSheet: View {
         }
         .interactiveDismissDisabled(viewModel.isCreatingAndAssigning)
         .alert(
-            viewModel.failure?.alertTitle ?? "List Not Created",
+            viewModel.failure?.alertTitle ?? String(localized: "List Not Created"),
             isPresented: createAndAssignFailureBinding
         ) {
             Button("OK", role: .cancel) {
                 viewModel.dismissFailure()
             }
         } message: {
-            Text(viewModel.failure?.alertMessage ?? "Please try again.")
+            Text(viewModel.failure?.alertMessage ?? String(localized: "Please try again."))
         }
     }
 
@@ -169,7 +169,7 @@ struct CategoryAssignmentSheet: View {
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(category.name)
+                    Text(category.displayName)
                         .foregroundColor(.primary)
 
                     if isLinked {
@@ -203,7 +203,7 @@ struct CategoryAssignmentSheet: View {
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isLinked)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(category.name)
+        .accessibilityLabel(category.displayName)
         .accessibilityValue(isAssigning ? "Saving" : "")
         .accessibilityAddTraits(isLinked ? .isSelected : [])
         .accessibilityHint(

@@ -59,8 +59,8 @@ struct LibraryView: View {
             }
             .alert(isPresented: alertBinding) {
                 Alert(
-                    title: Text(viewModel.alert?.title ?? "Backup Error"),
-                    message: Text(viewModel.alert?.message ?? "The operation failed."),
+                    title: Text(viewModel.alert?.title ?? String(localized: "Backup Error")),
+                    message: Text(viewModel.alert?.message ?? String(localized: "The operation failed.")),
                     dismissButton: .default(Text("OK")) {
                         viewModel.dismissAlert()
                     }
@@ -283,7 +283,7 @@ struct LibraryView: View {
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    pillButton(title: "All", id: nil)
+                    pillButton(title: String(localized: "All", comment: "Filter chip: show every list"), id: nil)
                     ForEach(viewModel.categories) { category in
                         pillButton(title: category.name, id: category.id)
                     }
@@ -329,6 +329,7 @@ struct LibraryView: View {
                         Task { await viewModel.requestUpdate() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
+                            .accessibilityLabel("Check for Updates")
                     }
                     .disabled(viewModel.isRefreshing)
                 }
@@ -350,7 +351,9 @@ struct LibraryView: View {
                     )
                 }
                 .accessibilityLabel(
-                    "Switch to \(viewModel.layoutStyle == .sectioned ? "tabbed" : "sectioned") layout"
+                    viewModel.layoutStyle == .sectioned
+                        ? String(localized: "Switch to tabbed layout")
+                        : String(localized: "Switch to sectioned layout")
                 )
                 if viewModel.hasItems {
                     Button {
@@ -372,6 +375,7 @@ struct LibraryView: View {
                     .disabled(viewModel.isGeneratingExport)
                 } label: {
                     Image(systemName: "ellipsis.circle")
+                        .accessibilityLabel("More Options")
                 }
             }
         }
@@ -677,13 +681,21 @@ struct DeferredPluginView: View {
                 retry: viewModel.installMissingPlugin
             )
         case .incompatible(let minimumVersion):
-            failureView(
-                title: "Extension Incompatible",
-                message: minimumVersion.map { "This extension requires Ito \($0) or later." }
-                    ?? "This extension requires a newer version of Ito.",
-                retryTitle: nil,
-                retry: nil
-            )
+            if let minimumVersion {
+                failureView(
+                    title: "Extension Incompatible",
+                    message: "This extension requires Ito \(minimumVersion) or later.",
+                    retryTitle: nil,
+                    retry: nil
+                )
+            } else {
+                failureView(
+                    title: "Extension Incompatible",
+                    message: "This extension requires a newer version of Ito.",
+                    retryTitle: nil,
+                    retry: nil
+                )
+            }
         case .failure(let failure):
             deferredFailureView(failure)
         case .ready(let route):
@@ -692,7 +704,7 @@ struct DeferredPluginView: View {
         }
     }
 
-    private func loadingView(label: String) -> some View {
+    private func loadingView(label: LocalizedStringKey) -> some View {
         VStack(spacing: 14) {
             ProgressView().scaleEffect(1.2)
             Text(label)
@@ -775,9 +787,9 @@ struct DeferredPluginView: View {
     }
 
     private func failureView(
-        title: String,
-        message: String,
-        retryTitle: String?,
+        title: LocalizedStringKey,
+        message: LocalizedStringKey,
+        retryTitle: LocalizedStringKey?,
         retry: (() -> Void)?
     ) -> some View {
         VStack(spacing: 16) {

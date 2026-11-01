@@ -6,8 +6,8 @@ nonisolated enum ReaderChapterTitle {
     /// else "Unknown Chapter".
     static func text(title: String?, number: Float32?) -> String {
         if let title, !title.isEmpty { return title }
-        if let number { return "Chapter \(number.formatted())" }
-        return "Unknown Chapter"
+        if let number { return String(localized: "Chapter \(number.formatted())") }
+        return String(localized: "Unknown Chapter")
     }
 }
 

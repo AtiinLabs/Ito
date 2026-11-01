@@ -46,11 +46,11 @@ nonisolated enum MALTrackerError: Error, Equatable, Sendable, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidMediaID:
-            "The linked MyAnimeList id is invalid."
+            String(localized: "The linked MyAnimeList id is invalid.")
         case .invalidStatus(let status):
-            "\(status) is not a list status MyAnimeList supports."
+            String(localized: "\(status) is not a list status MyAnimeList supports.")
         case .unsupportedRemoteStatus(let status):
-            "MyAnimeList reports the list status \(status), which Ito does not support yet."
+            String(localized: "MyAnimeList reports the list status \(status), which Ito does not support yet.")
         }
     }
 }

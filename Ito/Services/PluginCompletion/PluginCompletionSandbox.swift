@@ -50,7 +50,7 @@ nonisolated struct PluginCompletionStdModule: StdModule {
 nonisolated struct PluginCompletionWebviewModule: WebviewModule {
     static let unavailable = ItoError.hostModuleError(
         domain: "webview",
-        message: "A web view is not available while syncing read progress."
+        message: String(localized: "A web view is not available while syncing read progress.")
     )
 
     func loadUrl(request: WebviewRequest) async throws -> WebviewResponse {

@@ -69,7 +69,7 @@ nonisolated enum TrackerTokenError: Error, Equatable, Sendable, LocalizedError {
     case rejected
 
     var errorDescription: String? {
-        "The token was not accepted."
+        String(localized: "The token was not accepted.")
     }
 }
 

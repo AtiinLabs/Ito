@@ -50,11 +50,13 @@ struct DebugLogView: View {
                     Task { await viewModel.fetchLogs() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
+                        .accessibilityLabel("Refresh Logs")
                 }
             }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: viewModel.copyLogs) {
                     Image(systemName: "doc.on.doc")
+                        .accessibilityLabel("Copy Logs")
                 }
                 .disabled(viewModel.filteredLogs.isEmpty)
             }

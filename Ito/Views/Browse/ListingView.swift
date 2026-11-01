@@ -30,7 +30,7 @@ struct ListingView: View {
         case .failure(let error):
             failureView(message: error)
         case .cancelled:
-            failureView(message: "Loading was cancelled.")
+            failureView(message: String(localized: "Loading was cancelled."))
         case .empty:
             VStack(spacing: 12) {
                 Text("No results found.")

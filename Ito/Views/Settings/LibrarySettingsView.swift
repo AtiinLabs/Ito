@@ -52,7 +52,7 @@ struct LibrarySettingsView: View {
                         }
                     )) {
                         ForEach(viewModel.updateIntervals, id: \.self) { interval in
-                            Text(interval.rawValue == 1 ? "1 Hour" : "\(interval.rawValue) Hours")
+                            Text("\(interval.rawValue) Hours")
                                 .tag(interval)
                         }
                     }

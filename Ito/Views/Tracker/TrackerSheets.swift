@@ -309,7 +309,7 @@ private struct TrackerSearchResultRow: View {
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
-                Text(media.format ?? (isAnime ? "Anime" : "Manga"))
+                Text(media.format ?? (isAnime ? String(localized: "Anime") : String(localized: "Manga")))
                     .font(.caption2)
                     .padding(4)
                     .background(Color.accentColor.opacity(0.1))
@@ -352,7 +352,7 @@ struct TrackerDetailsSheet: View {
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.orange)
-                    Text(viewModel.remoteLoadErrorMessage ?? "Tracker progress is unavailable.")
+                    Text(viewModel.remoteLoadErrorMessage ?? String(localized: "Tracker progress is unavailable."))
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
@@ -407,7 +407,7 @@ struct TrackerDetailsSheet: View {
         .alert("Tracker Change Not Saved", isPresented: $viewModel.isPresentingFailureAlert) {
             Button("OK", role: .cancel, action: viewModel.dismissFailure)
         } message: {
-            Text(viewModel.failure?.message ?? "Your tracker change couldn't be saved. Please try again.")
+            Text(viewModel.failure?.message ?? String(localized: "Your tracker change couldn't be saved. Please try again."))
         }
         .task { viewModel.start() }
         .onChange(of: viewModel.output?.id) { _ in

@@ -17,7 +17,7 @@ struct AppearanceSettingsView: View {
                     }
                 )) {
                     ForEach(viewModel.availableThemes) { theme in
-                        Text(theme.rawValue).tag(theme)
+                        Text(theme.localizedTitle).tag(theme)
                     }
                 }
                 .pickerStyle(SegmentedPickerStyle())

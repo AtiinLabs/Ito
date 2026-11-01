@@ -65,20 +65,20 @@ final class TrackerSearchViewModel: ObservableObject {
     var isLoading: Bool { state == .loading }
 
     var errorMessage: String? {
-        state == .failure ? "Search failed. Please try again." : nil
+        state == .failure ? String(localized: "Search failed. Please try again.") : nil
     }
 
     /// Shown when a MyAnimeList search is too short for MyAnimeList to accept (it needs 3 characters).
     var queryHint: String? {
         guard providerID == MALCredentialRepository.providerID,
               searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).count < 3 else { return nil }
-        return "Enter at least 3 characters to search MyAnimeList."
+        return String(localized: "Enter at least 3 characters to search MyAnimeList.")
     }
 
     /// Credit required by the tracker's data license, shown under the results.
     var attribution: String? {
         providerID == MangaBakaCredentialRepository.providerID
-            ? "Series data from MangaBaka, licensed CC BY-NC-SA 4.0."
+            ? String(localized: "Series data from MangaBaka, licensed CC BY-NC-SA 4.0.")
             : nil
     }
 

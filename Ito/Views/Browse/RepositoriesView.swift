@@ -95,14 +95,14 @@ struct RepositoriesView: View {
                     selection: $selectedRepositoryURL
                 ) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(repository.index?.repoName ?? "Unknown Repository")
+                        Text(repository.index?.repoName ?? String(localized: "Unknown Repository"))
                             .font(.headline)
                         Text(repository.url)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                         if let count = repository.index?.packages.count {
-                            Text("\(count) package\(count == 1 ? "" : "s")")
+                            Text("\(count) packages")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
@@ -201,7 +201,7 @@ struct RepoDetailView: View {
             }
         }
         .searchable(text: $viewModel.searchQuery, prompt: "Search packages")
-        .navigationTitle(viewModel.repository?.index?.repoName ?? "Repository")
+        .navigationTitle(viewModel.repository?.index?.repoName ?? String(localized: "Repository"))
         .navigationBarTitleDisplayMode(.large)
     }
 
@@ -355,7 +355,7 @@ struct PackageRowView: View {
                 }
 
             case .incompatible(let minVersion):
-                Text(minVersion.map { "Requires v\($0)" } ?? "Requires a newer Ito")
+                Text(minVersion.map { String(localized: "Requires v\($0)") } ?? String(localized: "Requires a newer Ito"))
                     .font(.caption2)
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.trailing)

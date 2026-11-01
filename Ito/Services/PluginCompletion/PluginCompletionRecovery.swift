@@ -18,21 +18,21 @@ extension PluginCompletionPauseReason {
     nonisolated var recoveryDescription: String {
         switch self {
         case .configurationChanged:
-            return "The server or account settings changed, or are incomplete."
+            return String(localized: "The server or account settings changed, or are incomplete.")
         case .unknownOrigin:
-            return "The account this progress was recorded under could not be verified."
+            return String(localized: "The account this progress was recorded under could not be verified.")
         case .credentials:
-            return "The source rejected the saved credentials."
+            return String(localized: "The source rejected the saved credentials.")
         case .missingRemote:
-            return "The title could not be found on the server."
+            return String(localized: "The title could not be found on the server.")
         case .sourceUnavailable:
-            return "The source is not installed or is unavailable."
+            return String(localized: "The source is not installed or is unavailable.")
         case .incompatible:
-            return "The source must be updated before it can sync progress."
+            return String(localized: "The source must be updated before it can sync progress.")
         case .sourceError:
-            return "The source reported an error."
+            return String(localized: "The source reported an error.")
         case .retryLimit:
-            return "Too many attempts failed."
+            return String(localized: "Too many attempts failed.")
         }
     }
 }

@@ -80,8 +80,7 @@ public actor DiscoverService {
         }
     }
 
-    /// Keeps the "AniList Error <status>: <message>" text Discover shows and
-    /// `DiscoverPresentationFailure.isAniListOutage` matches on.
+    /// Keeps the AniList error text that `DiscoverPresentationFailure.isAniListOutage` matches on.
     private static func presentableError(_ error: AniListError) -> Error {
         let status: Int?
         switch error {
@@ -98,10 +97,12 @@ public actor DiscoverService {
         }
 
         let message = error.localizedDescription
+        let description = String(localized: "AniList couldn't complete this request: \(message)")
+        let userInfo: [String: Any] = [NSLocalizedDescriptionKey: description, NSUnderlyingErrorKey: error]
         guard let status else {
-            return NSError(domain: "DiscoverService", code: 0, userInfo: [NSLocalizedDescriptionKey: "AniList Error: \(message)"])
+            return NSError(domain: "DiscoverService", code: 0, userInfo: userInfo)
         }
-        return NSError(domain: "DiscoverService", code: status, userInfo: [NSLocalizedDescriptionKey: "AniList Error \(status): \(message)"])
+        return NSError(domain: "DiscoverService", code: status, userInfo: userInfo)
     }
 }
 

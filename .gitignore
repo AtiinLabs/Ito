@@ -49,3 +49,6 @@ Carthage/Build/
 
 # General macOS files
 .DS_Store
+
+# Python (repository scripts)
+__pycache__/

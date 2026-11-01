@@ -1,0 +1,1813 @@
+/* Subtitle track: language, burned into the video */
+"%@ (Hardsub)" = "%@ (Hardsub)";
+
+/* Subtitle track: language, separate track */
+"%@ (Softsub)" = "%@ (Softsub)";
+
+"%@ Settings" = "%@ Settings";
+
+"%@ already contains state for destination media \"%@\"." = "%1$@ already contains state for destination media \"%2$@\".";
+
+"%@ is also removed from your lists. Reading history and progress are kept." = "%@ is also removed from your lists. Reading history and progress are kept.";
+
+"%@ is not a library state MangaBaka supports." = "%@ is not a library state MangaBaka supports.";
+
+"%@ is not a list status MyAnimeList supports." = "%@ is not a list status MyAnimeList supports.";
+
+"%@ progress only moves forward from Ito. Choose Repeating to start over, or change it on %@." = "%1$@ progress only moves forward from Ito. Choose Repeating to start over, or change it on %2$@.";
+
+"%@ theme" = "%@ theme";
+
+"%@, maximum" = "%@, maximum";
+
+"%@, minimum" = "%@, minimum";
+
+"%lld GB" = "%lld GB";
+
+/* Discord status: library size */
+"%lld Series in %lld Categories" = "%1$lld Series in %2$lld Categories";
+
+"A library item already exists at the destination \"%@\"." = "A library item already exists at the destination \"%@\".";
+
+"A series in the backup belongs to a list that could not be found, so nothing was merged." = "A series in the backup belongs to a list that could not be found, so nothing was merged.";
+
+"A series in the backup belongs to a list the backup does not include." = "A series in the backup belongs to a list the backup does not include.";
+
+"A series in the backup could not be given a place in your library, so nothing was merged." = "A series in the backup could not be given a place in your library, so nothing was merged.";
+
+"A series in the backup has no source." = "A series in the backup has no source.";
+
+"A series in the backup matches more than one series in your library, so nothing was merged." = "A series in the backup matches more than one series in your library, so nothing was merged.";
+
+"A setting in the backup is damaged or from an unsupported version." = "A setting in the backup is damaged or from an unsupported version.";
+
+"A source in the backup matches more than one installed source." = "A source in the backup matches more than one installed source.";
+
+"A web view is not available during settings diagnostics." = "A web view is not available during settings diagnostics.";
+
+"A web view is not available while syncing read progress." = "A web view is not available while syncing read progress.";
+
+"About" = "About";
+
+"Acknowledge" = "Acknowledge";
+
+"Acknowledgment Failed" = "Acknowledgment Failed";
+
+"Action completed successfully." = "Action completed successfully.";
+
+"Add" = "Add";
+
+"Add Repository" = "Add Repository";
+
+"Add a repository URL to discover and install plugins." = "Add a repository URL to discover and install plugins.";
+
+"Add to List" = "Add to List";
+
+"Add to List..." = "Add to List...";
+
+"Added" = "Added";
+
+"Adds this series to the list" = "Adds this series to the list";
+
+/* Filter chip: show every list */
+"All" = "All";
+
+"All sources resolved" = "All sources resolved";
+
+"All-Time Popular" = "All-Time Popular";
+
+"Already added" = "Already added";
+
+"An HTTP header name contains invalid characters." = "An HTTP header name contains invalid characters.";
+
+"An HTTP header value contains invalid newline characters." = "An HTTP header value contains invalid newline characters.";
+
+"An unknown error occurred while running the diagnostic." = "An unknown error occurred while running the diagnostic.";
+
+"AniList Service Unavailable" = "AniList Service Unavailable";
+
+"AniList couldn't complete this request: %@" = "AniList couldn't complete this request: %@";
+
+"Anime" = "Anime";
+
+"App preferences" = "App preferences";
+
+/* Reader settings tab: colors and brightness */
+"Appearance" = "Appearance";
+
+"Apply" = "Apply";
+
+"Archived" = "Archived";
+
+"Archived Plugin" = "Archived Plugin";
+
+"Archived plugins cannot be installed or updated." = "Archived plugins cannot be installed or updated.";
+
+"Are you sure you want to reject this match?" = "Are you sure you want to reject this match?";
+
+/* Audio track button when no track is selected */
+"Audio" = "Audio";
+
+"Authentication failed. Please try again." = "Authentication failed. Please try again.";
+
+/* Reading mode: follow the series' default direction */
+"Automatic" = "Automatic";
+
+"Automatic Updates" = "Automatic Updates";
+
+"Automatic progress updates are off while this entry is %@. Set it to %@ to resume them." = "Automatic progress updates are off while this entry is %1$@. Set it to %2$@ to resume them.";
+
+"Automatic reads right to left, since this series does not specify a mode." = "Automatic reads right to left, since this series does not specify a mode.";
+
+"Automatic update checks are skipped on cellular data and personal hotspots. Refreshing the library by hand always checks." = "Automatic update checks are skipped on cellular data and personal hotspots. Refreshing the library by hand always checks.";
+
+"Automatic uses this series' mode: %@." = "Automatic uses this series' mode: %@.";
+
+"Automatically fetch and append the next chapter as you approach the end of the current one." = "Automatically fetch and append the next chapter as you approach the end of the current one.";
+
+"Available Plugins" = "Available Plugins";
+
+"Back" = "Back";
+
+"Background Updates" = "Background Updates";
+
+"Backup & Restore" = "Backup & Restore";
+
+"Backup & Restore is unavailable." = "Backup & Restore is unavailable.";
+
+"Backup Error" = "Backup Error";
+
+"Backup State" = "Backup State";
+
+"Best Match" = "Best Match";
+
+"Brightness" = "Brightness";
+
+"Browse" = "Browse";
+
+"Browse Discover" = "Browse Discover";
+
+"Browse Repositories" = "Browse Repositories";
+
+"BrowseView requires a prepared runtime" = "BrowseView requires a prepared runtime";
+
+/* Discord status: the library list being viewed */
+"Browsing %@" = "Browsing %@";
+
+/* Discord status */
+"Browsing Collection" = "Browsing Collection";
+
+/* Discord status */
+"Browsing Library" = "Browsing Library";
+
+/* Discord status: source name */
+"Browsing at %@" = "Browsing at %@";
+
+"Cache Limit" = "Cache Limit";
+
+"Cached images and pages are removed and downloaded again when needed." = "Cached images and pages are removed and downloaded again when needed.";
+
+"Calculating…" = "Calculating…";
+
+"Cancel" = "Cancel";
+
+"Cancel Action" = "Cancel Action";
+
+/* Series status */
+"Cancelled" = "Cancelled";
+
+"Certificate Fingerprint (SHA-256)" = "Certificate Fingerprint (SHA-256)";
+
+"Chapter %@" = "Chapter %@";
+
+/* Novel chapter heading: number, then chapter title */
+"Chapter %@ - %@" = "Chapter %1$@ - %2$@";
+
+"Chapters" = "Chapters";
+
+"Check AniList Discord Status" = "Check AniList Discord Status";
+
+"Check for Updates" = "Check for Updates";
+
+"Check in Background" = "Check in Background";
+
+"Check on Wi-Fi Only" = "Check on Wi-Fi Only";
+
+"Check your internet connection or try again later." = "Check your internet connection or try again later.";
+
+"Checking existing progress..." = "Checking existing progress...";
+
+"Checking for updates... %lld/%lld" = "Checking for updates... %1$lld/%2$lld";
+
+"Checking saved credentials…" = "Checking saved credentials…";
+
+"Checking…" = "Checking…";
+
+/* Country of origin */
+"China" = "China";
+
+"Choose List on Save" = "Choose List on Save";
+
+"Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports." = "Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports.";
+
+/* Button: clear all history entries */
+"Clear" = "Clear";
+
+"Clear All History?" = "Clear All History?";
+
+"Clear Cache" = "Clear Cache";
+
+"Clear Cache?" = "Clear Cache?";
+
+"Clear Cookies and Site Data" = "Clear Cookies and Site Data";
+
+"Clear History" = "Clear History";
+
+"Clear selection" = "Clear selection";
+
+"Close" = "Close";
+
+"Close Reader" = "Close Reader";
+
+"Close Settings" = "Close Settings";
+
+"Completed" = "Completed";
+
+"Completed and cancelled series are not checked for new chapters, in the background or when you refresh the library." = "Completed and cancelled series are not checked for new chapters, in the background or when you refresh the library.";
+
+"Components" = "Components";
+
+"Confirm" = "Confirm";
+
+"Confirm Merge" = "Confirm Merge";
+
+"Confirm Source?" = "Confirm Source?";
+
+"Connected" = "Connected";
+
+"Connecting..." = "Connecting...";
+
+"Connection unexpectedly closed" = "Connection unexpectedly closed";
+
+"Content Not Found" = "Content Not Found";
+
+"Continue Watching?" = "Continue Watching?";
+
+"Continue from %@" = "Continue from %@";
+
+"Cookies, website data and Cloudflare clearance were removed." = "Cookies, website data and Cloudflare clearance were removed.";
+
+"Copied to clipboard" = "Copied to clipboard";
+
+"Copy Logs" = "Copy Logs";
+
+"Could not install \"%@\": %@" = "Could not install \"%1$@\": %2$@";
+
+"Could not read installed plugin metadata for %@: %@" = "Could not read installed plugin metadata for %1$@: %2$@";
+
+"Couldn't Load Plugin" = "Couldn't Load Plugin";
+
+"Couldn't Load Saved Item" = "Couldn't Load Saved Item";
+
+"Couldn't load popular titles: %@" = "Couldn't load popular titles: %@";
+
+"Couldn't load the next chapter" = "Couldn't load the next chapter";
+
+"Couldn't load the next chapter. Tap to try again." = "Couldn't load the next chapter. Tap to try again.";
+
+"Couldn't load the previous chapter. Tap to try again." = "Couldn't load the previous chapter. Tap to try again.";
+
+"Couldn't load this chapter" = "Couldn't load this chapter";
+
+"Couldn't load this page" = "Couldn't load this page";
+
+"Couldn't load this season's anime: %@" = "Couldn't load this season's anime: %@";
+
+"Couldn't load top-rated titles: %@" = "Couldn't load top-rated titles: %@";
+
+"Couldn't load trending titles: %@" = "Couldn't load trending titles: %@";
+
+"Couldn’t prepare your library" = "Couldn’t prepare your library";
+
+"Couldn’t start the app" = "Couldn’t start the app";
+
+"Country" = "Country";
+
+/* Reader background theme */
+"Cream" = "Cream";
+
+"Create" = "Create";
+
+"Create Backup" = "Create Backup";
+
+"Create a Personal Access Token in your %@ settings, then paste it here." = "Create a Personal Access Token in your %@ settings, then paste it here.";
+
+"Create a Token on %@" = "Create a Token on %@";
+
+"Create a list below to organize your library." = "Create a list below to organize your library.";
+
+"Credentials or user information are not allowed in image URLs." = "Credentials or user information are not allowed in image URLs.";
+
+"Cross-origin redirects are blocked for plugin image requests." = "Cross-origin redirects are blocked for plugin image requests.";
+
+"Current Usage" = "Current Usage";
+
+/* Reader background theme */
+"Dark" = "Dark";
+
+"Data" = "Data";
+
+"Dates" = "Dates";
+
+"Debug Logs" = "Debug Logs";
+
+"Debug logs could not be copied. Please try again." = "Debug logs could not be copied. Please try again.";
+
+"Debug logs could not be loaded. Please try again." = "Debug logs could not be loaded. Please try again.";
+
+"Delete" = "Delete";
+
+"Delete %@?" = "Delete %@?";
+
+"Delete List" = "Delete List";
+
+"Dependency repaired" = "Dependency repaired";
+
+"Details unavailable" = "Details unavailable";
+
+"Developer" = "Developer";
+
+"Diagnostics & Actions" = "Diagnostics & Actions";
+
+"Discard" = "Discard";
+
+"Discard Paused Progress…" = "Discard Paused Progress…";
+
+"Discard paused progress?" = "Discard paused progress?";
+
+"Disconnected" = "Disconnected";
+
+"Discord Integration" = "Discord Integration";
+
+"Discord Rich Presence" = "Discord Rich Presence";
+
+/* Header label for a title without a format */
+"Discover" = "Discover";
+
+"DiscoverView requires a prepared runtime" = "DiscoverView requires a prepared runtime";
+
+"Done" = "Done";
+
+"Drop a .ito plugin file here, or browse repositories to find and install plugins." = "Drop a .ito plugin file here, or browse repositories to find and install plugins.";
+
+"Dropped" = "Dropped";
+
+"Edit" = "Edit";
+
+"Edit List" = "Edit List";
+
+"Enter a name for your new list." = "Enter a name for your new list.";
+
+"Enter a new value to replace it" = "Enter a new value to replace it";
+
+"Enter a whole number between %@ and %@." = "Enter a whole number between %1$@ and %2$@.";
+
+"Enter a ws:// or wss:// address, such as ws://127.0.0.1:3000." = "Enter a ws:// or wss:// address, such as ws://127.0.0.1:3000.";
+
+"Enter at least 3 characters to search MyAnimeList." = "Enter at least 3 characters to search MyAnimeList.";
+
+"Enter the full URL to the repository. The app will fetch index.json from this address." = "Enter the full URL to the repository. The app will fetch index.json from this address.";
+
+"Enter values between %@ and %@, with minimum no greater than maximum." = "Enter values between %1$@ and %2$@, with minimum no greater than maximum.";
+
+/* Discord status: episode number */
+"Episode %@" = "Episode %@";
+
+"Episodes" = "Episodes";
+
+"Error" = "Error";
+
+"Error Loading Video" = "Error Loading Video";
+
+"Error: %@" = "Error: %@";
+
+/* Source match: exact match on an alternative title */
+"Exact Alt Match" = "Exact Alt Match";
+
+/* Source match: exact title match */
+"Exact Match" = "Exact Match";
+
+"Exclude" = "Exclude";
+
+"Existing tracker progress could not be checked. Please retry before saving." = "Existing tracker progress could not be checked. Please retry before saving.";
+
+"Explore" = "Explore";
+
+"Export" = "Export";
+
+"Export Failed" = "Export Failed";
+
+"Export Library" = "Export Library";
+
+"Extension Incompatible" = "Extension Incompatible";
+
+"Extension Not Found" = "Extension Not Found";
+
+"Extension Required" = "Extension Required";
+
+"Extension Type Mismatch" = "Extension Type Mismatch";
+
+"Extracting Video Streams..." = "Extracting Video Streams...";
+
+"Failed to access plugins directory." = "Failed to access plugins directory.";
+
+"Failed to add repository. Please check the URL and try again." = "Failed to add repository. Please check the URL and try again.";
+
+"Failed to add repository. Please try again." = "Failed to add repository. Please try again.";
+
+"Failed to install package. Please try again." = "Failed to install package. Please try again.";
+
+"Failed to load details" = "Failed to load details";
+
+"Failed to load details. Please try again." = "Failed to load details. Please try again.";
+
+"Failed to load dropped file." = "Failed to load dropped file.";
+
+"Failed to load source" = "Failed to load source";
+
+"Failed to refresh %@: %@" = "Failed to refresh %1$@: %2$@";
+
+"Failed to remove plugin" = "Failed to remove plugin";
+
+"Failed to remove plugin. Please try again." = "Failed to remove plugin. Please try again.";
+
+"Failed to remove repository. Please try again." = "Failed to remove repository. Please try again.";
+
+/* Anime season: autumn */
+"Fall" = "Fall";
+
+"Fetching Logs..." = "Fetching Logs...";
+
+"File copy error: The plugin could not be imported." = "File copy error: The plugin could not be imported.";
+
+"Filtered" = "Filtered";
+
+/* Filter button */
+"Filters" = "Filters";
+
+"Filters are only available without search text." = "Filters are only available without search text.";
+
+/* Filter button when filters are applied */
+"Filters, active" = "Filters, active";
+
+"Find Manga, Anime, and Novels across all your plugins." = "Find Manga, Anime, and Novels across all your plugins.";
+
+/* Series status: complete */
+"Finished" = "Finished";
+
+"Format" = "Format";
+
+"Full details could not be refreshed." = "Full details could not be refreshed.";
+
+"Full media details could not be refreshed. The available summary is still shown." = "Full media details could not be refreshed. The available summary is still shown.";
+
+/* Source match: approximate match, score as percent */
+"Fuzzy (%.0f%%)" = "Fuzzy (%.0f%%)";
+
+"General" = "General";
+
+"Genres" = "Genres";
+
+"Go to Settings > Trackers and sign in to AniList or MyAnimeList to track anime." = "Go to Settings > Trackers and sign in to AniList or MyAnimeList to track anime.";
+
+"Go to Settings > Trackers and sign in to AniList, MyAnimeList or MangaBaka before tracking." = "Go to Settings > Trackers and sign in to AniList, MyAnimeList or MangaBaka before tracking.";
+
+"HTTPS to HTTP redirect downgrades are prohibited." = "HTTPS to HTTP redirect downgrades are prohibited.";
+
+/* Series status: paused */
+"Hiatus" = "Hiatus";
+
+"High to Low" = "High to Low";
+
+"History" = "History";
+
+"History Change Failed" = "History Change Failed";
+
+"History Item Not Deleted" = "History Item Not Deleted";
+
+"History Not Cleared" = "History Not Cleared";
+
+"History item not deleted" = "History item not deleted";
+
+"History not cleared" = "History not cleared";
+
+"Host" = "Host";
+
+"How would you like to restore?" = "How would you like to restore?";
+
+/* Accessibility label of a manga page image */
+"Illustration" = "Illustration";
+
+"Image & Network Cache" = "Image & Network Cache";
+
+"Import" = "Import";
+
+"Import Failed" = "Import Failed";
+
+"Import Results" = "Import Results";
+
+"Importer aliases" = "Importer aliases";
+
+"Include" = "Include";
+
+"Incognito Mode" = "Incognito Mode";
+
+"Index Unavailable" = "Index Unavailable";
+
+"Inserted" = "Inserted";
+
+"Install" = "Install";
+
+"Install a source in Browse to check your library for updates." = "Install a source in Browse to check your library for updates.";
+
+"Install missing extensions, remap them to an existing Ito plugin, or skip to handle later from your library." = "Install missing extensions, remap them to an existing Ito plugin, or skip to handle later from your library.";
+
+"Install plugins from the Browse tab to source content." = "Install plugins from the Browse tab to source content.";
+
+"Installation Failed" = "Installation Failed";
+
+"Installed" = "Installed";
+
+"Installed plugins changed during removal. Refresh and try again." = "Installed plugins changed during removal. Refresh and try again.";
+
+"Installing extension…" = "Installing extension…";
+
+"Invalid Server Address" = "Invalid Server Address";
+
+"Invalid URL" = "Invalid URL";
+
+"Items only in this list move to %@. Nothing is removed from your library." = "Items only in this list move to %@. Nothing is removed from your library.";
+
+"Items you read or watch\nwill appear here." = "Items you read or watch\nwill appear here.";
+
+"Ito could not open the device Settings app. Please try again." = "Ito could not open the device Settings app. Please try again.";
+
+"Ito is still preparing your library. Try again in a moment." = "Ito is still preparing your library. Try again in a moment.";
+
+"Ito keeps the token in the Keychain on this device. Revoke it on %@ when you no longer need it." = "Ito keeps the token in the Keychain on this device. Revoke it on %@ when you no longer need it.";
+
+"Ito marks this entry %@ when you start chapter 1." = "Ito marks this entry %@ when you start chapter 1.";
+
+"Ito marks this entry %@ when you start episode 1." = "Ito marks this entry %@ when you start episode 1.";
+
+"Ito syncs progress for series you are watching or reading on MyAnimeList. Automatic sync only moves progress forward. Ito never deletes entries or changes scores, dates, tags or comments." = "Ito syncs progress for series you are watching or reading on MyAnimeList. Automatic sync only moves progress forward. Ito never deletes entries or changes scores, dates, tags or comments.";
+
+"Ito updates chapter progress for manga and novels you are reading on MangaBaka. Ratings, dates and notes are left as they are. Series data from MangaBaka is licensed CC BY-NC-SA 4.0." = "Ito updates chapter progress for manga and novels you are reading on MangaBaka. Ratings, dates and notes are left as they are. Series data from MangaBaka is licensed CC BY-NC-SA 4.0.";
+
+/* Country of origin */
+"Japan" = "Japan";
+
+"Keep All Backup" = "Keep All Backup";
+
+"Keep All Local" = "Keep All Local";
+
+"Key: %@" = "Key: %@";
+
+"Keychain %@ failed (status %@)." = "Keychain %1$@ failed (status %2$@).";
+
+"Keychain access was denied (status %@)." = "Keychain access was denied (status %@).";
+
+"Keychain configuration failed (status %@)." = "Keychain configuration failed (status %@).";
+
+"Keychain credential data is invalid." = "Keychain credential data is invalid.";
+
+"Keychain protected data is unavailable (status %@)." = "Keychain protected data is unavailable (status %@).";
+
+"Labels unavailable" = "Labels unavailable";
+
+"Labels unavailable." = "Labels unavailable.";
+
+"Larger Text" = "Larger Text";
+
+"Layout not saved" = "Layout not saved";
+
+/* Reading mode */
+"Left to Right" = "Left to Right";
+
+"Legacy archive" = "Legacy archive";
+
+"Legacy credential cleanup could not be verified." = "Legacy credential cleanup could not be verified.";
+
+"Legacy credential removal could not be verified." = "Legacy credential removal could not be verified.";
+
+"Less Line Spacing" = "Less Line Spacing";
+
+/* Backup component name for library entries */
+"Library" = "Library";
+
+"Library Updates" = "Library Updates";
+
+"Library item \"%@\" belongs to \"%@\", not \"%@\"." = "Library item \"%1$@\" belongs to \"%2$@\", not \"%3$@\".";
+
+"Library items were remapped, but this mapping could not be remembered for future imports." = "Library items were remapped, but this mapping could not be remembered for future imports.";
+
+"Light" = "Light";
+
+"Line Spacing" = "Line Spacing";
+
+"Line spacing %lld" = "Line spacing %lld";
+
+"Link to Source" = "Link to Source";
+
+"Linking…" = "Linking…";
+
+"List" = "List";
+
+"List Assignment Not Saved" = "List Assignment Not Saved";
+
+"List Change Failed" = "List Change Failed";
+
+"List Name" = "List Name";
+
+"List Not Created" = "List Not Created";
+
+"List Not Deleted" = "List Not Deleted";
+
+"List Not Renamed" = "List Not Renamed";
+
+"List assignment not saved" = "List assignment not saved";
+
+"List not created" = "List not created";
+
+"List not deleted" = "List not deleted";
+
+"List not renamed" = "List not renamed";
+
+"Lists Not Reordered" = "Lists Not Reordered";
+
+"Lists not reordered" = "Lists not reordered";
+
+"Load Next Page" = "Load Next Page";
+
+"Load more" = "Load more";
+
+"Loading %@..." = "Loading %@...";
+
+"Loading Chapter..." = "Loading Chapter...";
+
+"Loading Next Chapter..." = "Loading Next Chapter...";
+
+"Loading Previous Chapter..." = "Loading Previous Chapter...";
+
+"Loading Source..." = "Loading Source...";
+
+"Loading label…" = "Loading label…";
+
+"Loading more sources..." = "Loading more sources...";
+
+"Loading source settings…" = "Loading source settings…";
+
+"Loading was cancelled." = "Loading was cancelled.";
+
+"Loading..." = "Loading...";
+
+"Loading…" = "Loading…";
+
+"Local State" = "Local State";
+
+"Local progress not updated" = "Local progress not updated";
+
+"Logged in" = "Logged in";
+
+"Logged in as %@" = "Logged in as %@";
+
+"Logout failed. Please try again." = "Logout failed. Please try again.";
+
+"Low Match" = "Low Match";
+
+"Low to High" = "Low to High";
+
+"MainTabView requires a prepared runtime" = "MainTabView requires a prepared runtime";
+
+"Manage Lists" = "Manage Lists";
+
+"Manage plugin repositories" = "Manage plugin repositories";
+
+/* Discord status */
+"Managing Library" = "Managing Library";
+
+/* Manga format */
+"Manga" = "Manga";
+
+"Manga, Anime, and Novels" = "Manga, Anime, and Novels";
+
+"Manga, anime, and novels you save\nwill appear here." = "Manga, anime, and novels you save\nwill appear here.";
+
+"MangaBaka could not be reached." = "MangaBaka could not be reached.";
+
+"MangaBaka merged this series into series %@. Stop tracking it and link it again." = "MangaBaka merged this series into series %@. Stop tracking it and link it again.";
+
+"MangaBaka no longer accepts the saved token. Sign in again." = "MangaBaka no longer accepts the saved token. Sign in again.";
+
+"MangaBaka reports the library state %@, which Ito does not support yet." = "MangaBaka reports the library state %@, which Ito does not support yet.";
+
+"Maximum" = "Maximum";
+
+"Media details are unavailable." = "Media details are unavailable.";
+
+"Merge" = "Merge";
+
+"Merge Check Failed" = "Merge Check Failed";
+
+"Merge Conflicts (%lld)" = "Merge Conflicts (%lld)";
+
+"Merge with Current Library" = "Merge with Current Library";
+
+"Merging adds missing items and lets you choose which version to keep when an item differs. Wiping deletes your current library and replaces it with the backup." = "Merging adds missing items and lets you choose which version to keep when an item differs. Wiping deletes your current library and replaces it with the backup.";
+
+"Migration details" = "Migration details";
+
+"Migration remediation is unavailable." = "Migration remediation is unavailable.";
+
+"Minimum" = "Minimum";
+
+/* Reader background theme */
+"Mint" = "Mint";
+
+"Mode" = "Mode";
+
+/* Reading font: generic monospaced face */
+"Monospace" = "Monospace";
+
+"More Like This" = "More Like This";
+
+"More Line Spacing" = "More Line Spacing";
+
+"More Options" = "More Options";
+
+"More options could not be loaded." = "More options could not be loaded.";
+
+"Move" = "Move";
+
+/* Anime format: movie */
+"Movie" = "Movie";
+
+"Multiple imported items would map to \"%@\"." = "Multiple imported items would map to \"%@\".";
+
+/* Anime format: music video */
+"Music" = "Music";
+
+"MyAnimeList reports the list status %@, which Ito does not support yet." = "MyAnimeList reports the list status %@, which Ito does not support yet.";
+
+"Network" = "Network";
+
+"New List" = "New List";
+
+"New Update" = "New Update";
+
+"Newest" = "Newest";
+
+"Newest First" = "Newest First";
+
+"Next Chapter" = "Next Chapter";
+
+"Next Page" = "Next Page";
+
+"No History" = "No History";
+
+/* Source match: no match found */
+"No Match" = "No Match";
+
+"No Plugins Installed" = "No Plugins Installed";
+
+"No Repositories" = "No Repositories";
+
+"No Results" = "No Results";
+
+"No Trackers Authenticated" = "No Trackers Authenticated";
+
+"No content found." = "No content found.";
+
+"No custom lists yet" = "No custom lists yet";
+
+"No items in %@." = "No items in %@.";
+
+"No local reading or watching history was found for this series." = "No local reading or watching history was found for this series.";
+
+"No logs from the last 24 hours." = "No logs from the last 24 hours.";
+
+"No logs match your search." = "No logs match your search.";
+
+"No matches found" = "No matches found";
+
+"No options available" = "No options available";
+
+"No options found." = "No options found.";
+
+"No packages match your search." = "No packages match your search.";
+
+"No playable streams found." = "No playable streams found.";
+
+"No plugins installed" = "No plugins installed";
+
+"No results found" = "No results found";
+
+"No results found." = "No results found.";
+
+"No results found. Try again." = "No results found. Try again.";
+
+"No sources installed" = "No sources installed";
+
+"No tags matching \"%@\"" = "No tags matching \"%@\"";
+
+"None" = "None";
+
+"None selected" = "None selected";
+
+"Not Found" = "Not Found";
+
+"Not Now" = "Not Now";
+
+"Not on list" = "Not on list";
+
+"Not saved" = "Not saved";
+
+"Not selected" = "Not selected";
+
+"Not set" = "Not set";
+
+"Not signed in to MangaBaka." = "Not signed in to MangaBaka.";
+
+"Not signed in to MyAnimeList." = "Not signed in to MyAnimeList.";
+
+"Not tracked" = "Not tracked";
+
+"Nothing in your library matches\n\"%@\"." = "Nothing in your library matches\n\"%@\".";
+
+"Notification permission was denied, but the preference could not be disabled. Please try again." = "Notification permission was denied, but the preference could not be disabled. Please try again.";
+
+"Notifications Disabled" = "Notifications Disabled";
+
+"Notify on New Chapters" = "Notify on New Chapters";
+
+/* Manga format: light novel */
+"Novel" = "Novel";
+
+"Number of images ahead of your current position to preload. Higher values use more data but reduce loading times." = "Number of images ahead of your current position to preload. Higher values use more data but reduce loading times.";
+
+"OK" = "OK";
+
+/* Anime format: original net animation */
+"ONA" = "ONA";
+
+/* Anime format: original video animation */
+"OVA" = "OVA";
+
+"Off" = "Off";
+
+/* Discord status: chapter from the official release */
+"Official" = "Official";
+
+"Oldest First" = "Oldest First";
+
+/* Manga format: single chapter */
+"One Shot" = "One Shot";
+
+"Ongoing" = "Ongoing";
+
+"Open" = "Open";
+
+"Open Settings" = "Open Settings";
+
+"Optional" = "Optional";
+
+"Options could not be loaded." = "Options could not be loaded.";
+
+"Options unavailable" = "Options unavailable";
+
+"Options unavailable." = "Options unavailable.";
+
+/* Discord status: video in its original language */
+"Original" = "Original";
+
+"Packages" = "Packages";
+
+/* Accessibility label of a manga page; number is its position in the chapter */
+"Page %lld" = "Page %lld";
+
+"Page %lld of %lld" = "Page %1$lld of %2$lld";
+
+"Paginating..." = "Paginating...";
+
+"Paging" = "Paging";
+
+"Part of the backup is damaged or from an unsupported version." = "Part of the backup is damaged or from an unsupported version.";
+
+"Paused" = "Paused";
+
+"Paused read progress for this source is deleted without being sent. Your local reading history is unchanged." = "Paused read progress for this source is deleted without being sent. Your local reading history is unchanged.";
+
+"Paused read progress was recorded before this source's server or account settings changed. It is sent to the server and account configured now. Nothing is sent until you confirm." = "Paused read progress was recorded before this source's server or account settings changed. It is sent to the server and account configured now. Nothing is sent until you confirm.";
+
+"Personal Access Token" = "Personal Access Token";
+
+"Planning" = "Planning";
+
+"Please drop a valid .ito plugin file." = "Please drop a valid .ito plugin file.";
+
+"Please enable notifications for Ito in your device Settings to receive update alerts." = "Please enable notifications for Ito in your device Settings to receive update alerts.";
+
+"Please try again." = "Please try again.";
+
+"Plugin identities" = "Plugin identities";
+
+"Plugin missing" = "Plugin missing";
+
+"Plugin removal encountered an error. Refresh plugin state before retrying." = "Plugin removal encountered an error. Refresh plugin state before retrying.";
+
+"Plugin settings" = "Plugin settings";
+
+"Plugin settings could not be loaded." = "Plugin settings could not be loaded.";
+
+"Plugin settings could not be loaded. No changes were applied." = "Plugin settings could not be loaded. No changes were applied.";
+
+"Plugin settings could not be reloaded." = "Plugin settings could not be reloaded.";
+
+"Popular" = "Popular";
+
+"Popular This Season" = "Popular This Season";
+
+"Preference not saved" = "Preference not saved";
+
+"Preferences" = "Preferences";
+
+"Preload Images" = "Preload Images";
+
+"Preloading" = "Preloading";
+
+"Preparing plugin settings…" = "Preparing plugin settings…";
+
+"Preparing your library…" = "Preparing your library…";
+
+"Preserved local" = "Preserved local";
+
+"Previous Chapter" = "Previous Chapter";
+
+"Previous Page" = "Previous Page";
+
+"Privacy" = "Privacy";
+
+"Progress" = "Progress";
+
+"Re-link failed. Please try again." = "Re-link failed. Please try again.";
+
+"Read Progress Sync" = "Read Progress Sync";
+
+"Read progress and resume" = "Read progress and resume";
+
+"Read with Plugins" = "Read with Plugins";
+
+"Read/Watched" = "Read/Watched";
+
+"Reader Settings" = "Reader Settings";
+
+/* Reader settings tab: reading options */
+"Reading" = "Reading";
+
+/* Discord status: the chapter being read */
+"Reading %@" = "Reading %@";
+
+"Reading Mode" = "Reading Mode";
+
+"Reading fonts" = "Reading fonts";
+
+/* Discord status: scanlation group, then source name */
+"Reading from %@ at %@" = "Reading from %1$@ at %2$@";
+
+"Reading history" = "Reading history";
+
+"Reading history \"%@\" matches multiple imported items." = "Reading history \"%@\" matches multiple imported items.";
+
+"Ready" = "Ready";
+
+"Recent Searches" = "Recent Searches";
+
+"Refine your search." = "Refine your search.";
+
+"Refresh Logs" = "Refresh Logs";
+
+"Reject" = "Reject";
+
+"Reject Source?" = "Reject Source?";
+
+/* Series status: still airing or publishing */
+"Releasing" = "Releasing";
+
+"Reloading plugin settings…" = "Reloading plugin settings…";
+
+"Remap" = "Remap";
+
+"Remap Failed" = "Remap Failed";
+
+"Remap Partially Saved" = "Remap Partially Saved";
+
+"Remap Source" = "Remap Source";
+
+"Remapping \"%@\" would not change its identifier." = "Remapping \"%@\" would not change its identifier.";
+
+"Remove" = "Remove";
+
+"Remove %@" = "Remove %@";
+
+"Remove %@ filter" = "Remove %@ filter";
+
+"Remove %@?" = "Remove %@?";
+
+"Remove Plugin" = "Remove Plugin";
+
+"Remove Repository" = "Remove Repository";
+
+"Remove from Library" = "Remove from Library";
+
+"Remove from Library?" = "Remove from Library?";
+
+"Remove unavailable" = "Remove unavailable";
+
+"Removes all cookies, cached website data and Cloudflare clearance. Sources that use a website login will need you to sign in again." = "Removes all cookies, cached website data and Cloudflare clearance. Sources that use a website login will need you to sign in again.";
+
+"Removes this series from the list" = "Removes this series from the list";
+
+"Repeating" = "Repeating";
+
+"Replaced" = "Replaced";
+
+"Repositories" = "Repositories";
+
+"RepositoriesView requires a prepared runtime" = "RepositoriesView requires a prepared runtime";
+
+"Repository" = "Repository";
+
+"Repository Search Failed" = "Repository Search Failed";
+
+"Repository URL" = "Repository URL";
+
+"Repository added" = "Repository added";
+
+"Required runtime services are unavailable. Retry to prepare them again." = "Required runtime services are unavailable. Retry to prepare them again.";
+
+"Required runtime services were unavailable." = "Required runtime services were unavailable.";
+
+"Requires a newer Ito" = "Requires a newer Ito";
+
+"Requires v%@" = "Requires v%@";
+
+"Reset" = "Reset";
+
+"Reset Filters" = "Reset Filters";
+
+"Resolve Conflicting Data" = "Resolve Conflicting Data";
+
+"Restore" = "Restore";
+
+"Restore Failed" = "Restore Failed";
+
+"Restore Report" = "Restore Report";
+
+"Restore a backup by merging it into your current library, or by replacing your library with it." = "Restore a backup by merging it into your current library, or by replacing your library with it.";
+
+"Restore committed; refresh pending" = "Restore committed; refresh pending";
+
+"Restore from Backup" = "Restore from Backup";
+
+"Restore report was already acknowledged." = "Restore report was already acknowledged.";
+
+"Resume" = "Resume";
+
+"Retry" = "Retry";
+
+"Retry Install" = "Retry Install";
+
+"Retry Reload" = "Retry Reload";
+
+"Retry Validation" = "Retry Validation";
+
+"Retry labels" = "Retry labels";
+
+"Retry with Current Account…" = "Retry with Current Account…";
+
+"Return to this source's home layout." = "Return to this source's home layout.";
+
+"Revert" = "Revert";
+
+/* Reading mode */
+"Right to Left" = "Right to Left";
+
+/* Reading font: the system rounded face */
+"Rounded" = "Rounded";
+
+"Run" = "Run";
+
+"Save" = "Save";
+
+"Saved" = "Saved";
+
+"Saved Source • %@ • Confirmed" = "Saved Source • %@ • Confirmed";
+
+"Saved credentials are currently unavailable." = "Saved credentials are currently unavailable.";
+
+"Saved credentials will be checked when protected data is available." = "Saved credentials will be checked when protected data is available.";
+
+"Saved sign-in data in the backup could not be used." = "Saved sign-in data in the backup could not be used.";
+
+"Saved to Uncategorized" = "Saved to Uncategorized";
+
+"Saved value isn't valid; the source uses the default." = "Saved value isn't valid; the source uses the default.";
+
+"Saving" = "Saving";
+
+"Scope" = "Scope";
+
+"Score" = "Score";
+
+"Score and dates come from %@. Change them on %@." = "Score and dates come from %1$@. Change them on %2$@.";
+
+"Scrolling" = "Scrolling";
+
+"Seamless Reading" = "Seamless Reading";
+
+"Search" = "Search";
+
+"Search %@" = "Search %@";
+
+"Search & Link" = "Search & Link";
+
+"Search Again" = "Search Again";
+
+"Search Other Sources" = "Search Other Sources";
+
+"Search Repositories & Install" = "Search Repositories & Install";
+
+"Search anime..." = "Search anime...";
+
+"Search cancelled." = "Search cancelled.";
+
+"Search could not be completed." = "Search could not be completed.";
+
+"Search error: %@" = "Search error: %@";
+
+"Search failed" = "Search failed";
+
+"Search failed. Please try again." = "Search failed. Please try again.";
+
+"Search library" = "Search library";
+
+"Search manga..." = "Search manga...";
+
+"Search on %@" = "Search on %@";
+
+"Search options" = "Search options";
+
+"Search packages" = "Search packages";
+
+"Search plugins…" = "Search plugins…";
+
+"Search source..." = "Search source...";
+
+"Search tags..." = "Search tags...";
+
+"Search was cancelled." = "Search was cancelled.";
+
+"Searching for \"%@\"…" = "Searching for \"%@\"…";
+
+"Searching installed sources..." = "Searching installed sources...";
+
+"Searching plugins..." = "Searching plugins...";
+
+"Searching repositories…" = "Searching repositories…";
+
+"Searching source..." = "Searching source...";
+
+"Searching..." = "Searching...";
+
+"Season" = "Season";
+
+"Secure credential verification failed." = "Secure credential verification failed.";
+
+"Select Audio Track" = "Select Audio Track";
+
+"Select Quality" = "Select Quality";
+
+"Select Series" = "Select Series";
+
+"Select Subtitles" = "Select Subtitles";
+
+"Select Tracker" = "Select Tracker";
+
+"Selected" = "Selected";
+
+"Selection limit reached." = "Selection limit reached.";
+
+"Send paused progress to the current account?" = "Send paused progress to the current account?";
+
+"Send to Current Account" = "Send to Current Account";
+
+/* Reader background theme */
+"Sepia" = "Sepia";
+
+"Series Info" = "Series Info";
+
+"Series data from MangaBaka, licensed CC BY-NC-SA 4.0." = "Series data from MangaBaka, licensed CC BY-NC-SA 4.0.";
+
+"Series from these sources stay in your library. Install their sources from Browse to read them again." = "Series from these sources stay in your library. Install their sources from Browse to read them again.";
+
+/* Reading font: generic serif face */
+"Serif" = "Serif";
+
+"Server URL (e.g. ws://127.0.0.1:3000)" = "Server URL (e.g. ws://127.0.0.1:3000)";
+
+"Set" = "Set";
+
+"Set the maximum amount of disk space Ito is allowed to use for caching images and network responses." = "Set the maximum amount of disk space Ito is allowed to use for caching images and network responses.";
+
+"Settings" = "Settings";
+
+"Settings not saved" = "Settings not saved";
+
+"Settings reload failed" = "Settings reload failed";
+
+"Settings unavailable" = "Settings unavailable";
+
+"Show" = "Show";
+
+"Show less" = "Show less";
+
+"Show more" = "Show more";
+
+"Show the list picker when saving a new series." = "Show the list picker when saving a new series.";
+
+"Shows what you're reading or watching on your Discord profile. Needs a Rich Presence bridge running at the server address." = "Shows what you're reading or watching on your Discord profile. Needs a Rich Presence bridge running at the server address.";
+
+"Sign In" = "Sign In";
+
+"Sign In to %@" = "Sign In to %@";
+
+"Sign In with %@" = "Sign In with %@";
+
+"Sign Out" = "Sign Out";
+
+"Sign in to MangaBaka again." = "Sign in to MangaBaka again.";
+
+"Sign in to this source to continue." = "Sign in to this source to continue.";
+
+"Site Data" = "Site Data";
+
+"Site Data Cleared" = "Site Data Cleared";
+
+"Skip" = "Skip";
+
+"Skip Completed Series" = "Skip Completed Series";
+
+"Skipped" = "Skipped";
+
+"Smaller Text" = "Smaller Text";
+
+"Some filter options couldn't be loaded." = "Some filter options couldn't be loaded.";
+
+"Some plugins failed: %@" = "Some plugins failed: %@";
+
+"Some repositories could not be refreshed. Please try again." = "Some repositories could not be refreshed. Please try again.";
+
+"Some settings of this source couldn't be shown." = "Some settings of this source couldn't be shown.";
+
+"Some sources could not be searched." = "Some sources could not be searched.";
+
+"Some sources couldn't update" = "Some sources couldn't update";
+
+"Some website data could not be removed. Try again." = "Some website data could not be removed. Try again.";
+
+"Sort" = "Sort";
+
+"Sort By" = "Sort By";
+
+"Sort Order" = "Sort Order";
+
+"Sorting is only available without search text." = "Sorting is only available without search text.";
+
+"Source" = "Source";
+
+"Source Settings" = "Source Settings";
+
+"Source home" = "Source home";
+
+"Source loading was cancelled." = "Source loading was cancelled.";
+
+"Source mappings" = "Source mappings";
+
+"Source settings" = "Source settings";
+
+"Sources" = "Sources";
+
+/* Country of origin */
+"South Korea" = "South Korea";
+
+/* Anime format: special episode or release */
+"Special" = "Special";
+
+/* Anime season */
+"Spring" = "Spring";
+
+"Start" = "Start";
+
+"Start Over" = "Start Over";
+
+"Started" = "Started";
+
+"Status" = "Status";
+
+"Still in library" = "Still in library";
+
+"Stop Tracking" = "Stop Tracking";
+
+"Stop Tracking removes the link in Ito. Your %@ list entry is kept." = "Stop Tracking removes the link in Ito. Your %@ list entry is kept.";
+
+"Stopping tracking" = "Stopping tracking";
+
+"Storage" = "Storage";
+
+/* Subtitle button when no subtitle is selected */
+"Subtitles" = "Subtitles";
+
+/* Anime season */
+"Summer" = "Summer";
+
+"Switch to sectioned layout" = "Switch to sectioned layout";
+
+"Switch to tabbed layout" = "Switch to tabbed layout";
+
+"Sync" = "Sync";
+
+"Sync Local History" = "Sync Local History";
+
+"Sync Trackers to Local Library" = "Sync Trackers to Local Library";
+
+"Sync your progress automatically with %@." = "Sync your progress automatically with %@.";
+
+/* Reader background theme: follows the system appearance
+Reading font: the system font */
+"System" = "System";
+
+"System follows your device's Light or Dark Mode setting." = "System follows your device's Light or Dark Mode setting.";
+
+/* Anime format: TV series */
+"TV" = "TV";
+
+/* Anime format: short TV series */
+"TV Short" = "TV Short";
+
+"Tags" = "Tags";
+
+/* Country of origin */
+"Taiwan" = "Taiwan";
+
+"Tap Done to save. Going back discards your changes." = "Tap Done to save. Going back discards your changes.";
+
+"Tap a list to add or remove this series. Series always remain in your library even if removed from all lists." = "Tap a list to add or remove this series. Series always remain in your library even if removed from all lists.";
+
+"Tap to Load Next Chapter" = "Tap to Load Next Chapter";
+
+"Tap to Load Previous Chapter" = "Tap to Load Previous Chapter";
+
+"Tests use unsaved secret values when provided, otherwise saved values." = "Tests use unsaved secret values when provided, otherwise saved values.";
+
+/* Reader settings tab: font size and family */
+"Text" = "Text";
+
+"The AniList API has been temporarily disabled due to stability issues. This is an external factor and not a bug in the app." = "The AniList API has been temporarily disabled due to stability issues. This is an external factor and not a bug in the app.";
+
+"The Keychain could not save the change (status %@)." = "The Keychain could not save the change (status %@).";
+
+"The MangaBaka session expired. Sign in again." = "The MangaBaka session expired. Sign in again.";
+
+"The MyAnimeList session expired. Sign in again." = "The MyAnimeList session expired. Sign in again.";
+
+"The account this progress was recorded under could not be verified." = "The account this progress was recorded under could not be verified.";
+
+"The backup contains the same series more than once." = "The backup contains the same series more than once.";
+
+"The backup has settings for a source it does not include." = "The backup has settings for a source it does not include.";
+
+"The backup's format information is damaged or from an unsupported version." = "The backup's format information is damaged or from an unsupported version.";
+
+"The certificate couldn't be saved. Try again." = "The certificate couldn't be saved. Try again.";
+
+"The configured repositories could not be refreshed. Please try again." = "The configured repositories could not be refreshed. Please try again.";
+
+"The extension \"%@\" was not found in any of your repositories." = "The extension \"%@\" was not found in any of your repositories.";
+
+"The extension could not be installed. Please try again." = "The extension could not be installed. Please try again.";
+
+"The history item couldn't be deleted. Please try again." = "The history item couldn't be deleted. Please try again.";
+
+"The image URL is invalid." = "The image URL is invalid.";
+
+"The image URL origin is not permitted." = "The image URL origin is not permitted.";
+
+"The image URL scheme must be HTTP or HTTPS." = "The image URL scheme must be HTTP or HTTPS.";
+
+"The image could not be downloaded. Check the connection and source settings." = "The image could not be downloaded. Check the connection and source settings.";
+
+"The imported library item \"%@\" no longer exists." = "The imported library item \"%@\" no longer exists.";
+
+"The installed extension could not be loaded." = "The installed extension could not be loaded.";
+
+"The library backup could not be exported. Please try again." = "The library backup could not be exported. Please try again.";
+
+"The library backup could not be generated. Please try again." = "The library backup could not be generated. Please try again.";
+
+"The library change could not be saved. Please try again." = "The library change could not be saved. Please try again.";
+
+"The library item could not be removed. Please try again." = "The library item could not be removed. Please try again.";
+
+"The library layout could not be saved. Please try again." = "The library layout could not be saved. Please try again.";
+
+"The library update check could not finish. Please try again." = "The library update check could not finish. Please try again.";
+
+"The linked MangaBaka id is invalid." = "The linked MangaBaka id is invalid.";
+
+"The linked MyAnimeList id is invalid." = "The linked MyAnimeList id is invalid.";
+
+"The list assignment couldn't be saved. Please try again." = "The list assignment couldn't be saved. Please try again.";
+
+"The local tracker link could not be removed." = "The local tracker link could not be removed.";
+
+"The new list and assignment couldn't be saved. Please try again." = "The new list and assignment couldn't be saved. Please try again.";
+
+"The operation failed." = "The operation failed.";
+
+"The package installation failed and the previous plugin could not be restored." = "The package installation failed and the previous plugin could not be restored.";
+
+"The package is no longer available from the repository." = "The package is no longer available from the repository.";
+
+"The plugin changed after this screen was opened. Refresh and try again." = "The plugin changed after this screen was opened. Refresh and try again.";
+
+"The plugin file is outside the configured plugins directory." = "The plugin file is outside the configured plugins directory.";
+
+"The plugin file no longer exists." = "The plugin file no longer exists.";
+
+"The plugin removal failed and the original file could not be restored." = "The plugin removal failed and the original file could not be restored.";
+
+"The plugin setting could not be saved." = "The plugin setting could not be saved.";
+
+"The plugins directory is unavailable." = "The plugins directory is unavailable.";
+
+"The queued progress could not be updated. Try again." = "The queued progress could not be updated. Try again.";
+
+"The queued read progress could not be read or updated." = "The queued read progress could not be read or updated.";
+
+"The remote entry changed, but its local link still needs to be saved." = "The remote entry changed, but its local link still needs to be saved.";
+
+"The remote tracker entry could not be updated." = "The remote tracker entry could not be updated.";
+
+"The repository index could not be loaded. Pull to refresh or check the repository URL." = "The repository index could not be loaded. Pull to refresh or check the repository URL.";
+
+"The repository package identifier is invalid." = "The repository package identifier is invalid.";
+
+"The saved item and extension types do not match." = "The saved item and extension types do not match.";
+
+"The saved media data is invalid or incompatible." = "The saved media data is invalid or incompatible.";
+
+"The saved source could not be opened. Please try again." = "The saved source could not be opened. Please try again.";
+
+"The selected file is not an Ito plugin." = "The selected file is not an Ito plugin.";
+
+"The server did not return a valid HTTP response." = "The server did not return a valid HTTP response.";
+
+"The server or account settings changed, or are incomplete." = "The server or account settings changed, or are incomplete.";
+
+"The server returned a non-success response." = "The server returned a non-success response.";
+
+"The setting could not be saved." = "The setting could not be saved.";
+
+"The sign-in couldn't be saved. Try again." = "The sign-in couldn't be saved. Try again.";
+
+"The source could not be saved. Please try again." = "The source could not be saved. Please try again.";
+
+"The source could not complete the search." = "The source could not complete the search.";
+
+"The source couldn't complete this request." = "The source couldn't complete this request.";
+
+"The source is not installed or is unavailable." = "The source is not installed or is unavailable.";
+
+"The source is not ready." = "The source is not ready.";
+
+"The source must be updated before it can sync progress." = "The source must be updated before it can sync progress.";
+
+"The source rejected the saved credentials." = "The source rejected the saved credentials.";
+
+"The source rejection could not be saved. Please try again." = "The source rejection could not be saved. Please try again.";
+
+"The source reported an error." = "The source reported an error.";
+
+"The source sent something this version of Ito can't read. Update the source or Ito." = "The source sent something this version of Ito can't read. Update the source or Ito.";
+
+"The source stopped unexpectedly. Try again." = "The source stopped unexpectedly. Try again.";
+
+"The source was saved, but could not be opened. Try Open again." = "The source was saved, but could not be opened. Try Open again.";
+
+"The source's web page failed: %@" = "The source's web page failed: %@";
+
+"The specified HTTP header is prohibited." = "The specified HTTP header is prohibited.";
+
+"The title could not be found on the server." = "The title could not be found on the server.";
+
+"The token was not accepted." = "The token was not accepted.";
+
+"The token was not accepted. Check that it was copied completely and has not been revoked." = "The token was not accepted. Check that it was copied completely and has not been revoked.";
+
+"The tracker entry was updated remotely, but the local link was not saved. Please retry to finish linking." = "The tracker entry was updated remotely, but the local link was not saved. Please retry to finish linking.";
+
+"The tracker page could not be opened." = "The tracker page could not be opened.";
+
+"Theme" = "Theme";
+
+"These settings can't be shown." = "These settings can't be shown.";
+
+"This action is unsupported by the source." = "This action is unsupported by the source.";
+
+"This control type (%u) is not supported." = "This control type (%u) is not supported.";
+
+"This control type is not supported." = "This control type is not supported.";
+
+"This extension requires Ito %@ or later." = "This extension requires Ito %@ or later.";
+
+"This extension requires a newer version of Ito." = "This extension requires a newer version of Ito.";
+
+"This extension was not found in your configured repositories." = "This extension was not found in your configured repositories.";
+
+"This filter requires a newer version of Ito." = "This filter requires a newer version of Ito.";
+
+"This is an ambiguous match. Are you sure you want to link it?" = "This is an ambiguous match. Are you sure you want to link it?";
+
+"This item may have been imported with an incompatible content key. Search this source to link it to the correct entry." = "This item may have been imported with an incompatible content key. Search this source to link it to the correct entry.";
+
+"This page has no valid image address" = "This page has no valid image address";
+
+"This permanently deletes your current library before restoring the backup. This action cannot be undone." = "This permanently deletes your current library before restoring the backup. This action cannot be undone.";
+
+"This permanently removes the archived plugin from this device." = "This permanently removes the archived plugin from this device.";
+
+"This plugin is no longer maintained." = "This plugin is no longer maintained.";
+
+"This plugin is no longer maintained.\nReason: %@" = "This plugin is no longer maintained.\nReason: %@";
+
+"This plugin will be permanently removed from your device." = "This plugin will be permanently removed from your device.";
+
+"This removes all reading and watch history." = "This removes all reading and watch history.";
+
+"This repository and all its associated data will be removed." = "This repository and all its associated data will be removed.";
+
+"This repository is already in your list." = "This repository is already in your list.";
+
+"This series is no longer available on MangaBaka. Stop tracking it and link it again." = "This series is no longer available on MangaBaka. Stop tracking it and link it again.";
+
+"This source could not be searched." = "This source could not be searched.";
+
+"This source does not offer settings." = "This source does not offer settings.";
+
+"This source is no longer installed." = "This source is no longer installed.";
+
+"This source needs Ito %@ or later. Update Ito to use it." = "This source needs Ito %@ or later. Update Ito to use it.";
+
+"This source needs a newer version of Ito. Update Ito to use it." = "This source needs a newer version of Ito. Update Ito to use it.";
+
+"To read this content, you must install the '%@' extension." = "To read this content, you must install the '%@' extension.";
+
+"Too many attempts failed." = "Too many attempts failed.";
+
+"Top Rated" = "Top Rated";
+
+"Totals" = "Totals";
+
+"Track" = "Track";
+
+"Track Series" = "Track Series";
+
+"Tracked" = "Tracked";
+
+"Tracker Change Not Saved" = "Tracker Change Not Saved";
+
+"Tracker link not saved" = "Tracker link not saved";
+
+"Tracker links" = "Tracker links";
+
+"Tracker not updated" = "Tracker not updated";
+
+"Tracker page unavailable" = "Tracker page unavailable";
+
+"Tracker progress is unavailable." = "Tracker progress is unavailable.";
+
+"Tracker sync settings could not be saved." = "Tracker sync settings could not be saved.";
+
+"Trackers" = "Trackers";
+
+"Tracking" = "Tracking";
+
+"Tracking could not be stopped locally. Please try again." = "Tracking could not be stopped locally. Please try again.";
+
+"Tracking not stopped" = "Tracking not stopped";
+
+"Tracking succeeded, but local progress could not be saved." = "Tracking succeeded, but local progress could not be saved.";
+
+"Trending" = "Trending";
+
+"Trending Now" = "Trending Now";
+
+"Trust" = "Trust";
+
+"Trust Certificate" = "Trust Certificate";
+
+"Trust Certificate…" = "Trust Certificate…";
+
+"Trusting this certificate allows connections to this server. Only trust certificates from servers you own or control." = "Trusting this certificate allows connections to this server. Only trust certificates from servers you own or control.";
+
+"Try Again" = "Try Again";
+
+"Try different search terms or adjust your filters" = "Try different search terms or adjust your filters";
+
+"Type" = "Type";
+
+"URL Open error: The plugin could not be imported." = "URL Open error: The plugin could not be imported.";
+
+"Unable to Clear Site Data" = "Unable to Clear Site Data";
+
+"Unable to Copy Logs" = "Unable to Copy Logs";
+
+"Unable to Disable Notifications" = "Unable to Disable Notifications";
+
+"Unable to Fetch Logs" = "Unable to Fetch Logs";
+
+"Unable to Load Content" = "Unable to Load Content";
+
+"Unable to Open Settings" = "Unable to Open Settings";
+
+"Unable to Save Settings" = "Unable to Save Settings";
+
+"Unable to search sources. Please try again." = "Unable to search sources. Please try again.";
+
+"Unavailable" = "Unavailable";
+
+"Unavailable option" = "Unavailable option";
+
+"Uncategorized" = "Uncategorized";
+
+"Unknown" = "Unknown";
+
+"Unknown Chapter" = "Unknown Chapter";
+
+"Unknown Plugin" = "Unknown Plugin";
+
+"Unknown Repository" = "Unknown Repository";
+
+"Unmatched Sources" = "Unmatched Sources";
+
+"Unread/Unwatched" = "Unread/Unwatched";
+
+"Unresolved" = "Unresolved";
+
+"Unresolved legacy media" = "Unresolved legacy media";
+
+"Unsupported component type." = "Unsupported component type.";
+
+/* Series status: not released yet */
+"Upcoming" = "Upcoming";
+
+"Update" = "Update";
+
+"Update Entry" = "Update Entry";
+
+"Update Frequency" = "Update Frequency";
+
+"Update badges" = "Update badges";
+
+"Update check failed" = "Update check failed";
+
+"Update failed. Please try again." = "Update failed. Please try again.";
+
+"Updates Available" = "Updates Available";
+
+"Updating queued progress…" = "Updating queued progress…";
+
+"Use a Personal Access Token" = "Use a Personal Access Token";
+
+"Use this when a source stays blocked by Cloudflare or a website login stops working." = "Use this when a source stays blocked by Cloudflare or a website login stops working.";
+
+"Validating plugin settings…" = "Validating plugin settings…";
+
+"Validation could not be completed." = "Validation could not be completed.";
+
+"Version" = "Version";
+
+/* Reading mode */
+"Vertical" = "Vertical";
+
+/* Discord status button */
+"View App On GitHub" = "View App On GitHub";
+
+"View on %@" = "View on %@";
+
+/* Discord status */
+"Viewing Details" = "Viewing Details";
+
+"Warnings" = "Warnings";
+
+"Watching" = "Watching";
+
+/* Discord status: the episode being watched */
+"Watching %@" = "Watching %@";
+
+/* Discord status: language group, then source name */
+"Watching from %@ at %@" = "Watching from %1$@ at %2$@";
+
+"We found active data in your local library that differs from the backup. Choose which data to keep for each item." = "We found active data in your local library that differs from the backup. Choose which data to keep for each item.";
+
+"We found local reading/watching history up to chapter/episode %lld. Do you want to update your %@ progress to match?" = "We found local reading/watching history up to chapter/episode %1$lld. Do you want to update your %2$@ progress to match?";
+
+/* Reading mode */
+"Webtoon" = "Webtoon";
+
+"When Incognito Mode is enabled, items you read or watch will not be saved to your History. Your library and progress trackers will still be updated." = "When Incognito Mode is enabled, items you read or watch will not be saved to your History. Your library and progress trackers will still be updated.";
+
+"When on, Ito checks your library for new chapters while the app is closed. iOS decides the exact timing." = "When on, Ito checks your library for new chapters while the app is closed. iOS decides the exact timing.";
+
+"When on, saving a new series opens the list picker instead of saving to Uncategorized. Only applies when you have at least one list of your own." = "When on, saving a new series opens the list picker instead of saving to Uncategorized. Only applies when you have at least one list of your own.";
+
+"When updating or tracking a series, automatically mark all previous chapters or episodes as read/watched in your local library." = "When updating or tracking a series, automatically mark all previous chapters or episodes as read/watched in your local library.";
+
+/* Reader background theme */
+"White" = "White";
+
+/* Anime season */
+"Winter" = "Winter";
+
+"Wipe and Replace" = "Wipe and Replace";
+
+"Wipe and Replace Library" = "Wipe and Replace Library";
+
+"Wipe and Replace Library?" = "Wipe and Replace Library?";
+
+"Wipe and replace" = "Wipe and replace";
+
+"Year" = "Year";
+
+"Year & Season" = "Year & Season";
+
+"You stopped this episode at %@." = "You stopped this episode at %@.";
+
+"Your Library is Empty" = "Your Library is Empty";
+
+"Your Lists" = "Your Lists";
+
+"Your changes could not be saved. Please try again." = "Your changes could not be saved. Please try again.";
+
+"Your history couldn't be cleared. Please try again." = "Your history couldn't be cleared. Please try again.";
+
+"Your list couldn't be created. Please try again." = "Your list couldn't be created. Please try again.";
+
+"Your list couldn't be deleted. Please try again." = "Your list couldn't be deleted. Please try again.";
+
+"Your list couldn't be renamed. Please try again." = "Your list couldn't be renamed. Please try again.";
+
+"Your list order couldn't be saved. Please try again." = "Your list order couldn't be saved. Please try again.";
+
+"Your restored data is saved. Refresh must finish before a report can be shown." = "Your restored data is saved. Refresh must finish before a report can be shown.";
+
+"Your restored data is saved. Refresh must finish before the app can continue." = "Your restored data is saved. Refresh must finish before the app can continue.";
+
+"Your tracker change couldn't be saved. Please try again." = "Your tracker change couldn't be saved. Please try again.";
+
+"Your tracker entry could not be updated. Please try again." = "Your tracker entry could not be updated. Please try again.";
+
+"https://example.com/repo" = "https://example.com/repo";
+
+"inserted %lld" = "inserted %lld";
+
+"preserved %lld" = "preserved %lld";
+
+"repaired %lld" = "repaired %lld";
+
+"replaced %lld" = "replaced %lld";
+
+"skipped %lld" = "skipped %lld";
+
+/* Between the minimum and maximum fields of a number range */
+"to" = "to";
+
+"unresolved %lld" = "unresolved %lld";
+
+"v%@" = "v%@";
+
+"v%@ available" = "v%@ available";
+
+"v%@ • %@" = "v%1$@ • %2$@";
+
+"· %lld of %lld" = "· %1$lld of %2$lld";

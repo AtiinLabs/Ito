@@ -77,7 +77,7 @@ struct MergeConflictRow: View {
 }
 
 struct ConflictDetailCard: View {
-    let title: String
+    let title: LocalizedStringKey
     let category: String?
     let history: Int
     let isSelected: Bool
@@ -105,11 +105,11 @@ struct ConflictDetailCard: View {
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Label(category ?? "Uncategorized", systemImage: "folder")
+                    Label(category ?? String(localized: "Uncategorized"), systemImage: "folder")
                         .font(.caption2)
                         .foregroundColor(isSelected ? .itoOnAccent : .primary)
 
-                    Label(history == 1 ? "1 history entry" : "\(history) history entries", systemImage: "text.book.closed")
+                    Label("\(history) history entries", systemImage: "text.book.closed")
                         .font(.caption2)
                         .foregroundColor(isSelected ? .itoOnAccent : .primary)
                 }

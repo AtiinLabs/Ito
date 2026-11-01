@@ -681,7 +681,7 @@ private extension DiscoverViewModel {
         } catch is CancellationError {
             return .cancelled
         } catch {
-            return .failure(homeFailureMessage(for: section, mediaType: mediaType, error: error))
+            return .failure(homeFailureMessage(for: section, error: error))
         }
     }
 
@@ -755,20 +755,16 @@ private extension DiscoverViewModel {
         }
     }
 
-    static func homeFailureMessage(
-        for section: DiscoverHomeSection,
-        mediaType: DiscoverMediaType,
-        error: any Error
-    ) -> String {
+    static func homeFailureMessage(for section: DiscoverHomeSection, error: any Error) -> String {
         switch section {
         case .trending:
-            return "Failed to load trending_\(mediaType.rawValue): \(error.localizedDescription)"
+            return String(localized: "Couldn't load trending titles: \(error.localizedDescription)")
         case .popular:
-            return "Failed to load popular_\(mediaType.rawValue): \(error.localizedDescription)"
+            return String(localized: "Couldn't load popular titles: \(error.localizedDescription)")
         case .topRated:
-            return "Failed to load topRated_\(mediaType.rawValue): \(error.localizedDescription)"
+            return String(localized: "Couldn't load top-rated titles: \(error.localizedDescription)")
         case .seasonal:
-            return "Failed to load Seasonal Anime: \(error.localizedDescription)"
+            return String(localized: "Couldn't load this season's anime: \(error.localizedDescription)")
         }
     }
 }

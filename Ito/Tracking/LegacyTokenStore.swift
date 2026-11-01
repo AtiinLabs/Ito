@@ -9,7 +9,7 @@ nonisolated enum LegacyTokenStoreError: Error, Equatable, Sendable, LocalizedErr
     case removalNotVerified
 
     var errorDescription: String? {
-        "Legacy credential removal could not be verified."
+        String(localized: "Legacy credential removal could not be verified.")
     }
 }
 

@@ -79,257 +79,259 @@ extension AppMessageKind {
         case .browseUpdateFailed:
             return .init(
                 style: .error,
-                title: "Error",
-                detail: "Update failed. Please try again."
+                title: String(localized: "Error"),
+                detail: String(localized: "Update failed. Please try again.")
             )
         case .browseDeleteFailed:
             return .init(
                 style: .error,
-                title: "Error",
-                detail: "Failed to remove plugin. Please try again."
+                title: String(localized: "Error"),
+                detail: String(localized: "Failed to remove plugin. Please try again.")
             )
         case .browseDropLoadFailed:
             return .init(
                 style: .error,
-                title: "Error",
-                detail: "Failed to load dropped file."
+                title: String(localized: "Error"),
+                detail: String(localized: "Failed to load dropped file.")
             )
         case .browseUnsupportedPluginFile:
             return .init(
                 style: .error,
-                title: "Error",
-                detail: "Please drop a valid .ito plugin file."
+                title: String(localized: "Error"),
+                detail: String(localized: "Please drop a valid .ito plugin file.")
             )
         case .browsePluginDirectoryUnavailable:
             return .init(
                 style: .error,
-                title: "Error",
-                detail: "Failed to access plugins directory."
+                title: String(localized: "Error"),
+                detail: String(localized: "Failed to access plugins directory.")
             )
         case .browseImportFailed(let source):
-            let prefix = source == .drop ? "File copy error" : "URL Open error"
+            let detail = source == .drop
+                ? String(localized: "File copy error: The plugin could not be imported.")
+                : String(localized: "URL Open error: The plugin could not be imported.")
             return .init(
                 style: .error,
-                title: "Error",
-                detail: "\(prefix): The plugin could not be imported."
+                title: String(localized: "Error"),
+                detail: detail
             )
         case .repositoryAdded:
             return .init(
                 style: .success,
-                title: "Repository added",
+                title: String(localized: "Repository added"),
                 detail: nil
             )
         case .repositoryAlreadyAdded:
             return .init(
                 style: .info,
-                title: "Already added",
-                detail: "This repository is already in your list."
+                title: String(localized: "Already added"),
+                detail: String(localized: "This repository is already in your list.")
             )
         case .repositoryAddFailed:
             return .init(
                 style: .error,
-                title: "Error",
-                detail: "Failed to add repository. Please try again."
+                title: String(localized: "Error"),
+                detail: String(localized: "Failed to add repository. Please try again.")
             )
         case .repositoryRemoveFailed:
             return .init(
                 style: .error,
-                title: "Error",
-                detail: "Failed to remove repository. Please try again."
+                title: String(localized: "Error"),
+                detail: String(localized: "Failed to remove repository. Please try again.")
             )
         case .repositoryRefreshFailed:
             return .init(
                 style: .error,
-                title: "Error",
-                detail: "Some repositories could not be refreshed. Please try again."
+                title: String(localized: "Error"),
+                detail: String(localized: "Some repositories could not be refreshed. Please try again.")
             )
         case .repositoryInstallFailed:
             return .init(
                 style: .error,
-                title: "Error",
-                detail: "Failed to install package. Please try again."
+                title: String(localized: "Error"),
+                detail: String(localized: "Failed to install package. Please try again.")
             )
         case .debugLogsCopied:
             return .init(
                 style: .success,
-                title: "Copied to clipboard",
+                title: String(localized: "Copied to clipboard"),
                 detail: nil
             )
         case .sourceLoadFailed:
             return .init(
                 style: .error,
-                title: "Failed to load source",
-                detail: "Please try again."
+                title: String(localized: "Failed to load source"),
+                detail: String(localized: "Please try again.")
             )
         case .sourceSearchFailed:
             return .init(
                 style: .error,
-                title: "Search failed",
-                detail: "The source could not complete the search."
+                title: String(localized: "Search failed"),
+                detail: String(localized: "The source could not complete the search.")
             )
         case .pluginSettingsLoadFailed:
             return .init(
                 style: .error,
-                title: "Settings unavailable",
-                detail: "Plugin settings could not be loaded."
+                title: String(localized: "Settings unavailable"),
+                detail: String(localized: "Plugin settings could not be loaded.")
             )
         case .pluginSettingsPersistenceFailed:
             return .init(
                 style: .error,
-                title: "Settings not saved",
-                detail: "The plugin setting could not be saved."
+                title: String(localized: "Settings not saved"),
+                detail: String(localized: "The plugin setting could not be saved.")
             )
         case .pluginSettingsReloadFailed:
             return .init(
                 style: .error,
-                title: "Settings reload failed",
-                detail: "Plugin settings could not be reloaded."
+                title: String(localized: "Settings reload failed"),
+                detail: String(localized: "Plugin settings could not be reloaded.")
             )
         case .sourceArchivedPluginDeleteFailed:
             return .init(
                 style: .error,
-                title: "Failed to remove plugin",
-                detail: "Plugin removal encountered an error. Refresh plugin state before retrying."
+                title: String(localized: "Failed to remove plugin"),
+                detail: String(localized: "Plugin removal encountered an error. Refresh plugin state before retrying.")
             )
         case .discoverDetailRefreshFailed:
             return .init(
                 style: .error,
-                title: "Details unavailable",
-                detail: "Full media details could not be refreshed. The available summary is still shown."
+                title: String(localized: "Details unavailable"),
+                detail: String(localized: "Full media details could not be refreshed. The available summary is still shown.")
             )
         case .trackingPreferencePersistenceFailed:
             return .init(
                 style: .error,
-                title: "Preference not saved",
-                detail: "Tracker sync settings could not be saved."
+                title: String(localized: "Preference not saved"),
+                detail: String(localized: "Tracker sync settings could not be saved.")
             )
         case .trackingRemoteUpdateFailed:
             return .init(
                 style: .error,
-                title: "Tracker not updated",
-                detail: "The remote tracker entry could not be updated."
+                title: String(localized: "Tracker not updated"),
+                detail: String(localized: "The remote tracker entry could not be updated.")
             )
         case .trackingLinkPersistenceFailed:
             return .init(
                 style: .error,
-                title: "Tracker link not saved",
-                detail: "The remote entry changed, but its local link still needs to be saved."
+                title: String(localized: "Tracker link not saved"),
+                detail: String(localized: "The remote entry changed, but its local link still needs to be saved.")
             )
         case .trackingUnlinkFailed:
             return .init(
                 style: .error,
-                title: "Tracking not stopped",
-                detail: "The local tracker link could not be removed."
+                title: String(localized: "Tracking not stopped"),
+                detail: String(localized: "The local tracker link could not be removed.")
             )
         case .trackingExternalPageOpenFailed:
             return .init(
                 style: .error,
-                title: "Tracker page unavailable",
-                detail: "The tracker page could not be opened."
+                title: String(localized: "Tracker page unavailable"),
+                detail: String(localized: "The tracker page could not be opened.")
             )
         case .mediaDetailLoadFailed:
             return .init(
                 style: .error,
-                title: "Failed to load details",
-                detail: "Please try again."
+                title: String(localized: "Failed to load details"),
+                detail: String(localized: "Please try again.")
             )
         case .mediaDetailSaveFailed:
             return .init(
                 style: .error,
-                title: "Not saved",
-                detail: "The library change could not be saved. Please try again."
+                title: String(localized: "Not saved"),
+                detail: String(localized: "The library change could not be saved. Please try again.")
             )
         case .mediaDetailUnsaveFailed:
             return .init(
                 style: .error,
-                title: "Still in library",
-                detail: "The library change could not be saved. Please try again."
+                title: String(localized: "Still in library"),
+                detail: String(localized: "The library change could not be saved. Please try again.")
             )
         case .mediaDetailSaved(let actionToken):
             return .init(
                 style: .success,
-                title: "Saved to Uncategorized",
+                title: String(localized: "Saved to Uncategorized"),
                 detail: nil,
-                actionTitle: "Move",
+                actionTitle: String(localized: "Move"),
                 actionID: actionToken.uuidString
             )
         case .mediaDetailTrackerProgressFailed:
             return .init(
                 style: .error,
-                title: "Local progress not updated",
-                detail: "Tracking succeeded, but local progress could not be saved."
+                title: String(localized: "Local progress not updated"),
+                detail: String(localized: "Tracking succeeded, but local progress could not be saved.")
             )
         case .libraryLayoutPersistenceFailed:
             return .init(
                 style: .error,
-                title: "Layout not saved",
-                detail: "The library layout could not be saved. Please try again."
+                title: String(localized: "Layout not saved"),
+                detail: String(localized: "The library layout could not be saved. Please try again.")
             )
         case .libraryItemRemovalFailed:
             return .init(
                 style: .error,
-                title: "Still in library",
-                detail: "The library item could not be removed. Please try again."
+                title: String(localized: "Still in library"),
+                detail: String(localized: "The library item could not be removed. Please try again.")
             )
         case .libraryUpdateFailed:
             return .init(
                 style: .error,
-                title: "Update check failed",
-                detail: "The library update check could not finish. Please try again."
+                title: String(localized: "Update check failed"),
+                detail: String(localized: "The library update check could not finish. Please try again.")
             )
         case .libraryNoUpdateSources:
             return .init(
                 style: .info,
-                title: "No sources installed",
-                detail: "Install a source in Browse to check your library for updates."
+                title: String(localized: "No sources installed"),
+                detail: String(localized: "Install a source in Browse to check your library for updates.")
             )
         case .categoryCreateFailed:
             return .init(
                 style: .error,
-                title: "List not created",
-                detail: "Your list couldn't be created. Please try again."
+                title: String(localized: "List not created"),
+                detail: String(localized: "Your list couldn't be created. Please try again.")
             )
         case .categoryRenameFailed:
             return .init(
                 style: .error,
-                title: "List not renamed",
-                detail: "Your list couldn't be renamed. Please try again."
+                title: String(localized: "List not renamed"),
+                detail: String(localized: "Your list couldn't be renamed. Please try again.")
             )
         case .categoryDeleteFailed:
             return .init(
                 style: .error,
-                title: "List not deleted",
-                detail: "Your list couldn't be deleted. Please try again."
+                title: String(localized: "List not deleted"),
+                detail: String(localized: "Your list couldn't be deleted. Please try again.")
             )
         case .categoryReorderFailed:
             return .init(
                 style: .error,
-                title: "Lists not reordered",
-                detail: "Your list order couldn't be saved. Please try again."
+                title: String(localized: "Lists not reordered"),
+                detail: String(localized: "Your list order couldn't be saved. Please try again.")
             )
         case .categoryAssignmentFailed:
             return .init(
                 style: .error,
-                title: "List assignment not saved",
-                detail: "The list assignment couldn't be saved. Please try again."
+                title: String(localized: "List assignment not saved"),
+                detail: String(localized: "The list assignment couldn't be saved. Please try again.")
             )
         case .categoryCreateAndAssignFailed:
             return .init(
                 style: .error,
-                title: "List not created",
-                detail: "The new list and assignment couldn't be saved. Please try again."
+                title: String(localized: "List not created"),
+                detail: String(localized: "The new list and assignment couldn't be saved. Please try again.")
             )
         case .historyDeleteFailed:
             return .init(
                 style: .error,
-                title: "History item not deleted",
-                detail: "The history item couldn't be deleted. Please try again."
+                title: String(localized: "History item not deleted"),
+                detail: String(localized: "The history item couldn't be deleted. Please try again.")
             )
         case .historyClearFailed:
             return .init(
                 style: .error,
-                title: "History not cleared",
-                detail: "Your history couldn't be cleared. Please try again."
+                title: String(localized: "History not cleared"),
+                detail: String(localized: "Your history couldn't be cleared. Please try again.")
             )
         }
     }
