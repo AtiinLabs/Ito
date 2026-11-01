@@ -150,9 +150,12 @@ final class MangaContinuousCollectionViewController: UIViewController,
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         // Text, dividers and prompts follow Dynamic Type; their measured heights change with it.
-        guard previousTraitCollection?.preferredContentSizeCategory
-                != traitCollection.preferredContentSizeCategory else { return }
-        measuredHeights = [:]
+        let textSizeChanged = previousTraitCollection?.preferredContentSizeCategory
+            != traitCollection.preferredContentSizeCategory
+        // Image rows end on whole screen pixels, which depend on the display scale.
+        let scaleChanged = previousTraitCollection?.displayScale != traitCollection.displayScale
+        guard textSizeChanged || scaleChanged else { return }
+        if textSizeChanged { measuredHeights = [:] }
         commitAnchored {}
     }
 
@@ -271,15 +274,24 @@ final class MangaContinuousCollectionViewController: UIViewController,
             guard let page = pagesByID[pageID] else { return 1 }
             switch page.page.content {
             case .url:
-                guard let key = imageKeyByPageID[pageID] else { return (width * Self.fallbackImageRatio).rounded(.up) }
+                guard let key = imageKeyByPageID[pageID] else { return imageHeight(width: width, ratio: Self.fallbackImageRatio) }
                 let ratio = pixelSizes[key].map { $0.height / $0.width } ?? Self.fallbackImageRatio
-                let height = (width * ratio).rounded(.up)
+                let height = imageHeight(width: width, ratio: ratio)
                 // A failed page needs room for its message and Try Again, however wide the image.
                 return failedKeys.contains(key) ? max(height, Self.promptHeight) : height
             case .text(let text):
                 return measured("text|\(pageID)", width: width, minimum: 1) { MangaContinuousTextPage(text: text) }
             }
         }
+    }
+
+    /// The row height of an image shown `width` points wide: the image's height rounded down to a
+    /// whole screen pixel. The image overhangs its row by less than a pixel and is clipped there,
+    /// so it covers the row completely and the next row starts exactly where it ends. Rounding up
+    /// instead leaves a strip of background between consecutive pages.
+    private func imageHeight(width: CGFloat, ratio: CGFloat) -> CGFloat {
+        let scale = max(traitCollection.displayScale, 1)
+        return max((width * ratio * scale).rounded(.down), 1) / scale
     }
 
     /// The fitting height of a text page, prompt or divider at `width`, cached per content, width
@@ -524,6 +536,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
                 headers: page.page.headers,
                 session: viewModel.imageSession,
                 pageID: page.id,
+                fillsRowWidth: true,
                 onImageTap: { [weak self] in self?.onToggleUI() },
                 imageLabel: String(localized: "Page \(page.chapterPosition + 1)", comment: "Accessibility label of a manga page; number is its position in the chapter")
             ))

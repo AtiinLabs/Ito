@@ -7,6 +7,10 @@ struct MangaImage: View {
     let session: ReaderPageImageSession
     let pageID: String
     var foreground: Color = .white
+    /// Shows the image at the full width it is offered and its own height, even where that is a
+    /// fraction of a pixel taller than the space offered. The continuous reader sizes each row to
+    /// the image rounded down to a whole pixel and clips the rest, so pages meet without a gap.
+    var fillsRowWidth = false
     var onImageTap: (() -> Void)?
     var imageLabel = String(localized: "Illustration", comment: "Accessibility label of a manga page image")
 
@@ -87,13 +91,12 @@ struct MangaImage: View {
 
     @ViewBuilder
     private func loadedImage(_ image: Image) -> some View {
+        let page = image.resizable().scaledToFit().fixedSize(horizontal: false, vertical: fillsRowWidth)
         if let onImageTap {
-            ZoomablePage(onTap: onImageTap) {
-                image.resizable().scaledToFit()
-            }
-            .accessibilityLabel(imageLabel)
+            ZoomablePage(onTap: onImageTap) { page }
+                .accessibilityLabel(imageLabel)
         } else {
-            image.resizable().scaledToFit().accessibilityLabel(imageLabel)
+            page.accessibilityLabel(imageLabel)
         }
     }
 

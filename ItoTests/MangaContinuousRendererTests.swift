@@ -107,6 +107,48 @@ final class MangaContinuousRendererTests: XCTestCase {
         XCTAssertEqual(second.minY, first.maxY)
     }
 
+    func testWebtoonPagesMeetWithoutABackgroundLineBetweenThem() async throws {
+        let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 3)
+        reader.subject.viewModel.setViewerOverride(.Webtoon)
+        reader.subject.viewModel.imageSession.setPrefetch(try ["a#0", "a#1"].map(reader.descriptor))
+        // At 390 points wide these pages are 998.4 points tall: not a whole number of points.
+        try await reader.respond("a#0", width: 400, height: 1_024)
+        try await reader.respond("a#1", width: 400, height: 1_024)
+        _ = try reader.scroll(toPage: "a#1", pixelOffset: 400)
+
+        let window = try XCTUnwrap(window)
+        let seam = try XCTUnwrap(reader.controller.pageFrame("a#1")).minY
+            - reader.controller.collectionView.contentOffset.y
+        // Both pages are on screen once the rows three pixels either side of the seam are lit.
+        await waitUntil {
+            let rows = Self.pixelRows(in: window, around: seam)
+            return rows.count == 7 && rows[0] > 0 && rows[6] > 0
+        }
+        let rows = Self.pixelRows(in: window, around: seam)
+        XCTAssertTrue(rows.allSatisfy { $0 > 0 }, "Brightness by pixel row around the seam: \(rows)")
+    }
+
+    /// The brightness of the screen pixels in the middle column from three pixels above `y` to
+    /// three below it, as the window draws them.
+    private static func pixelRows(in window: UIWindow, around y: CGFloat) -> [UInt8] {
+        let scale = window.screen.scale
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale
+        let image = UIGraphicsImageRenderer(bounds: window.bounds, format: format).image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        guard let cgImage = image.cgImage,
+              let data = cgImage.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else { return [] }
+        let column = cgImage.width / 2
+        let center = Int((y * scale).rounded())
+        return (center - 3...center + 3).compactMap { row in
+            guard (0..<cgImage.height).contains(row) else { return nil }
+            let offset = row * cgImage.bytesPerRow + column * cgImage.bitsPerPixel / 8
+            return max(bytes[offset], bytes[offset + 1], bytes[offset + 2])
+        }
+    }
+
     func testSavedPageIsRestoredWithoutRecordingTheFirstPage() async throws {
         let reader = try await openReader(
             chapters: [chapter("a", 1)],
@@ -264,8 +306,10 @@ private struct RendererFixture {
         images.respond(url, width: width, height: height)
         await test.fulfillment(of: [decoded], timeout: 5)
         observation.cancel()
-        let expected = (controller.collectionView.bounds.width * CGFloat(height) / CGFloat(width)).rounded(.up)
-        XCTAssertEqual(controller.pageFrame(pageID)?.height, expected)
+        // The row is the image's height at the reader's width, rounded down to a whole pixel.
+        let scale = controller.traitCollection.displayScale
+        let imageHeight = controller.collectionView.bounds.width * CGFloat(height) / CGFloat(width)
+        XCTAssertEqual(controller.pageFrame(pageID)?.height, (imageHeight * scale).rounded(.down) / scale)
     }
 }
 
