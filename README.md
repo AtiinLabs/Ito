@@ -57,6 +57,8 @@ Let Swift packages resolve, select your signing team and device, then run with `
 
 Focused pull requests and bug reports are welcome. Follow SwiftLint and include behavioral tests. Join the [Discord](https://discord.gg/Es5qTB9BcN) for discussion.
 
+Help translate Ito on [Weblate](https://hosted.weblate.org/projects/ito/).
+
 ## License
 
 Ito is licensed under the [Mozilla Public License 2.0](LICENSE).
