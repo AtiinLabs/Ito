@@ -11,6 +11,9 @@
     <a href="LICENSE">
       <img src="https://img.shields.io/badge/License-MPL--2.0-blue?style=flat-square" alt="MPL 2.0 license" />
     </a>
+    <a href="https://discord.gg/kewAMeJypQ">
+      <img src="https://img.shields.io/discord/1475329802532552869?color=5865F2&label=Discord&logo=discord&logoColor=white&style=flat-square" alt="Discord" />
+    </a>
   </p>
 </div>
 
@@ -55,7 +58,7 @@ Let Swift packages resolve, select your signing team and device, then run with `
 
 ## Contributing
 
-Focused pull requests and bug reports are welcome. Follow SwiftLint and include behavioral tests. Join the [Discord](https://discord.gg/Es5qTB9BcN) for discussion.
+Focused pull requests and bug reports are welcome. Follow SwiftLint and include behavioral tests. Join the [Discord](https://discord.gg/kewAMeJypQ) for discussion.
 
 Help translate Ito on [Weblate](https://hosted.weblate.org/projects/ito/).
 

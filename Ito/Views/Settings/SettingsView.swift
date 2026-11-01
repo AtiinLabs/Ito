@@ -11,6 +11,11 @@ enum SettingsDestination: CaseIterable {
     case debugLogs
 }
 
+private enum CommunityLink {
+    static let discord = URL(string: "https://discord.gg/kewAMeJypQ")!
+    static let newGitHubIssue = URL(string: "https://github.com/AtiinLabs/Ito/issues/new")!
+}
+
 struct SettingsView: View {
     let viewFactory: AppViewFactory
 
@@ -47,6 +52,22 @@ struct SettingsView: View {
                 Section(header: Text("Developer")) {
                     NavigationLink(destination: viewFactory.makeSettingsDestination(for: .debugLogs)) {
                         Label("Debug Logs", systemImage: "ladybug")
+                    }
+                }
+
+                Section(header: Text("Community")) {
+                    Link(destination: CommunityLink.discord) {
+                        Label("Join the Ito Discord", systemImage: "bubble.left.and.bubble.right")
+                    }
+                    Menu {
+                        Link(destination: CommunityLink.discord) {
+                            Label("Ask on Discord", systemImage: "bubble.left.and.bubble.right")
+                        }
+                        Link(destination: CommunityLink.newGitHubIssue) {
+                            Label("Report on GitHub", systemImage: "exclamationmark.bubble")
+                        }
+                    } label: {
+                        Label("Get Help or Report a Bug", systemImage: "questionmark.circle")
                     }
                 }
 
