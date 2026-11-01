@@ -116,15 +116,17 @@ final class MangaContinuousRendererTests: XCTestCase {
         try await reader.respond("a#1", width: 400, height: 1_024)
         _ = try reader.scroll(toPage: "a#1", pixelOffset: 400)
 
+        // Both pages show their images once the session holds them; the window then draws them.
+        let session = reader.subject.viewModel.imageSession
+        let keys = try ["a#0", "a#1"].map { try reader.descriptor($0).key }
+        await waitUntil {
+            keys.allSatisfy { if case .ready = session.state(for: $0).phase { true } else { false } }
+        }
         let window = try XCTUnwrap(window)
         let seam = try XCTUnwrap(reader.controller.pageFrame("a#1")).minY
             - reader.controller.collectionView.contentOffset.y
-        // Both pages are on screen once the rows three pixels either side of the seam are lit.
-        await waitUntil {
-            let rows = Self.pixelRows(in: window, around: seam)
-            return rows.count == 7 && rows[0] > 0 && rows[6] > 0
-        }
         let rows = Self.pixelRows(in: window, around: seam)
+        XCTAssertEqual(rows.count, 7)
         XCTAssertTrue(rows.allSatisfy { $0 > 0 }, "Brightness by pixel row around the seam: \(rows)")
     }
 
@@ -313,7 +315,10 @@ private struct RendererFixture {
     }
 }
 
-/// Holds image requests until the test answers them with a PNG of a chosen size.
+/// Holds image requests until the test answers them with a PNG of a chosen size. Once a URL is
+/// answered, later requests for it get the same image at once: the reader may cancel a request
+/// and make it again as cells and prefetch windows change, and the answer must not depend on
+/// which of those requests was pending when the test answered.
 final class GatedImageLoader: DataLoading, @unchecked Sendable {
     private struct Pending {
         let didReceiveData: @Sendable (Data, URLResponse) -> Void
@@ -324,6 +329,7 @@ final class GatedImageLoader: DataLoading, @unchecked Sendable {
     private var pending: [URL: [Pending]] = [:]
     private var waiters: [URL: [CheckedContinuation<Void, Never>]] = [:]
     private var requests = 0
+    private var answers: [URL: Data] = [:]
 
     /// Every request the pipeline has made so far.
     var requestCount: Int { lock.withLock { requests } }
@@ -353,17 +359,21 @@ final class GatedImageLoader: DataLoading, @unchecked Sendable {
             completion(URLError(.badURL))
             return GatedImageCancellation()
         }
-        let resumed = lock.withLock {
+        let (answer, resumed) = lock.withLock { () -> (Data?, [CheckedContinuation<Void, Never>]) in
             requests += 1
+            if let answer = answers[url] { return (answer, []) }
             pending[url, default: []].append(Pending(didReceiveData: didReceiveData, completion: completion))
-            return waiters.removeValue(forKey: url) ?? []
+            return (nil, waiters.removeValue(forKey: url) ?? [])
+        }
+        if let answer {
+            didReceiveData(answer, Self.response(url, answer))
+            completion(nil)
         }
         resumed.forEach { $0.resume() }
         return GatedImageCancellation()
     }
 
     func respond(_ url: URL, width: Int, height: Int) {
-        let waiting = lock.withLock { pending.removeValue(forKey: url) ?? [] }
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         let data = UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: format)
@@ -371,11 +381,18 @@ final class GatedImageLoader: DataLoading, @unchecked Sendable {
                 UIColor.gray.setFill()
                 context.fill(CGRect(x: 0, y: 0, width: width, height: height))
             }
-        let response = URLResponse(url: url, mimeType: "image/png", expectedContentLength: data.count, textEncodingName: nil)
+        let waiting = lock.withLock {
+            answers[url] = data
+            return pending.removeValue(forKey: url) ?? []
+        }
         for request in waiting {
-            request.didReceiveData(data, response)
+            request.didReceiveData(data, Self.response(url, data))
             request.completion(nil)
         }
+    }
+
+    private static func response(_ url: URL, _ data: Data) -> URLResponse {
+        URLResponse(url: url, mimeType: "image/png", expectedContentLength: data.count, textEncodingName: nil)
     }
 }
 
