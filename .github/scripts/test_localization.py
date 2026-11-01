@@ -53,8 +53,7 @@ class LocalizationTests(unittest.TestCase):
             body = "".join(f'"{localization.escape(k)}" = "{localization.escape(v)}";\n' for k, v in strings.items())
             (directory / "Localizable.strings").write_text(body, encoding="utf-8")
         if plurals is not None:
-            entries = {key: localization.stringsdict_entry(forms, forms["other"]) for key, forms in plurals.items()}
-            (directory / "Localizable.stringsdict").write_bytes(plistlib.dumps(entries))
+            (directory / "Localizable.json").write_text(json.dumps(plurals, ensure_ascii=False), encoding="utf-8")
         return directory
 
     def installed(self, name, table):
@@ -65,8 +64,8 @@ class LocalizationTests(unittest.TestCase):
     def test_export_lists_only_translatable_strings_with_their_english_text(self):
         strings = localization.read_strings(self.root / "Localization/en.lproj/Localizable.strings")
         self.assertEqual(strings, {"Library": "Library", "Close": "Done", "Read %@ by %@": "Read %@ by %@"})
-        plurals = localization.read_stringsdict(self.root / "Localization/en.lproj/Localizable.stringsdict")
-        self.assertEqual(localization.plural_forms(plurals["%lld chapters"]), {"one": "%lld chapter", "other": "%lld chapters"})
+        plurals = json.loads((self.root / "Localization/en.lproj/Localizable.json").read_text(encoding="utf-8"))
+        self.assertEqual(plurals, {"%lld chapters": {"one": "%lld chapter", "other": "%lld chapters"}})
         self.assertIn("/* Tab title */", (self.root / "Localization/en.lproj/Localizable.strings").read_text(encoding="utf-8"))
 
     def test_untranslated_strings_fall_back_to_english_in_the_installed_table(self):
@@ -90,10 +89,12 @@ class LocalizationTests(unittest.TestCase):
         self.assertFalse(localization.compatible("%lld chapter", "%@ chapitre"))
         self.assertFalse(localization.compatible("Read %@", "Lu %@ %@"))
 
-    def test_translated_plurals_are_installed_with_the_languages_own_forms(self):
-        self.language("pl", plurals={"%lld chapters": {"one": "%lld rozdział", "few": "%lld rozdziały", "many": "%lld rozdziałów", "other": "%lld rozdziału"}})
+    def test_plurals_without_an_other_form_are_completed_for_apple(self):
+        # Weblate writes Polish and Russian integer forms only; their "other" is for fractions.
+        self.language("pl", plurals={"%lld chapters": {"one": "%lld rozdział", "few": "%lld rozdziały", "many": "%lld rozdziałów"}})
         entry = self.installed("pl", "Localizable.stringsdict")["%lld chapters"]
         self.assertEqual(entry["value"]["few"], "%lld rozdziały")
+        self.assertEqual(entry["value"]["other"], "%lld rozdziałów")
         self.assertEqual(entry["value"]["NSStringFormatValueTypeKey"], "lld")
         self.assertEqual(localization.check(self.root), [])
 
@@ -110,9 +111,10 @@ class LocalizationTests(unittest.TestCase):
 
     def test_a_plural_with_other_arguments_chooses_its_form_by_the_number(self):
         forms = {"one": "%@ has %lld new chapter.", "other": "%@ has %lld new chapters."}
-        entry = localization.stringsdict_data({"%@ has %lld new chapters.": localization.Entry(None, forms, None)})["%@ has %lld new chapters."]
+        english = localization.english_plurals({"%@ has %lld new chapters.": localization.Entry(None, forms, None)})
+        self.assertEqual(english["%@ has %lld new chapters."]["one"], "%1$@ has %2$lld new chapter.")
+        entry = localization.stringsdict_entry({"one": "%1$@ a %2$lld nouveau chapitre.", "other": "%@ a %lld nouveaux chapitres."}, english["%@ has %lld new chapters."]["other"])
         self.assertEqual(entry["NSStringLocalizedFormatKey"], "%2$#@value@")
-        self.assertEqual(entry["value"]["one"], "%1$@ has %2$lld new chapter.")
         self.assertEqual(entry["value"]["NSStringFormatValueTypeKey"], "lld")
 
     def test_formats_the_tool_cannot_read_are_never_treated_as_safe(self):
@@ -132,28 +134,22 @@ class LocalizationTests(unittest.TestCase):
             '/* Tab title */\n"Library" = "Bibliothek \\U00fcber \\UD83D\\UDE00";\n\n"Close" = "Schließen";\n',
             encoding="utf-8",
         )
-        (directory / "Localizable.stringsdict").write_text(
-            """<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>%lld chapters</key><dict>
-<key>NSStringLocalizedFormatKey</key><string>%#@value@</string>
-<key>value</key><dict>
-<key>NSStringFormatSpecTypeKey</key><string>NSStringPluralRuleType</string>
-<key>NSStringFormatValueTypeKey</key><string>lld</string>
-<key>zero</key><string>Keine Kapitel</string>
-<key>one</key><string>%lld Kapitel</string>
-<key>other</key><string>%lld Kapitel</string>
-</dict></dict></dict></plist>""",
+        (directory / "Localizable.json").write_text(
+            '{\n    "%lld chapters": {\n        "zero": "Keine Kapitel",\n        "one": "%lld Kapitel",\n        "other": "%lld Kapitel"\n    }\n}\n',
             encoding="utf-8",
         )
         self.assertEqual(self.installed("de", "Localizable.strings")["Library"], "Bibliothek über 😀")
         self.assertEqual(self.installed("de", "Localizable.stringsdict")["%lld chapters"]["value"]["zero"], "Keine Kapitel")
         self.assertEqual(localization.check(self.root), [])
 
+    def test_single_form_languages_written_as_plain_strings_are_installed(self):
+        self.language("ja", plurals={"%lld chapters": "%lld 章"})
+        self.assertEqual(self.installed("ja", "Localizable.stringsdict")["%lld chapters"]["value"]["other"], "%lld 章")
+
     def test_an_english_plural_form_that_shifts_arguments_is_rejected(self):
         forms = {"one": "One item in %@", "other": "%lld items in %@"}
         with self.assertRaises(localization.LocalizationError):
-            localization.stringsdict_data({"%lld items in %@": localization.Entry(None, forms, None)})
+            localization.english_plurals({"%lld items in %@": localization.Entry(None, forms, None)})
 
 
 if __name__ == "__main__":

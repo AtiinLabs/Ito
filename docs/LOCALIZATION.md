@@ -23,13 +23,18 @@ flowchart LR
   `Localization/<language>.lproj` (for example `fr.lproj`, `pt-BR.lproj`,
   `zh-Hans.lproj`). Never edit translations anywhere else.
 - **The build installs them.** The app target's *Install translations* build phase
-  copies every language in `Localization/` into the app. A string a language has not
-  translated yet shows in English. A translation whose placeholders don't match English
-  (for example `%@` where English has `%lld`) is left out with a build warning, so a
-  mistake shows English instead of crashing.
-- Weblate cannot read String Catalogs, which is why the English text is also written
-  to plain `.strings` and `.stringsdict` files. `.github/scripts/localization.py` keeps
-  the two in step.
+  copies every language in `Localization/` into the app as `.strings` and
+  `.stringsdict` tables. A string a language has not translated yet shows in English.
+  A translation whose placeholders don't match English (for example `%@` where English
+  has `%lld`) is left out with a build warning, so a mistake shows English instead of
+  crashing.
+- Weblate cannot read String Catalogs, so `.github/scripts/localization.py` writes the
+  English text to files it can: `.strings` for plain strings, and `Localizable.json`
+  (Weblate's *go-i18n v2 JSON* format, which names each plural form) for plurals. Apple's
+  own `.stringsdict` is not used on Weblate: Weblate does not write Russian, Ukrainian
+  or Polish plurals to it, and it changes keys that contain a colon. The build turns the
+  JSON into `.stringsdict`, adding the `other` form Apple needs where a language only
+  uses it for fractions.
 
 ## Writing strings in code
 
@@ -89,24 +94,28 @@ the simulator's Settings or with the launch arguments `-AppleLanguages (<languag
 ## Weblate project setup (maintainers)
 
 Create a project for Ito on Weblate and connect it to `AtiinLabs/Ito` (`main` branch)
-with *GitHub pull requests* as the version control integration, so translations arrive
-as pull requests. Add three components that share the repository:
+with *GitHub* as the version control system, so translations arrive as pull requests
+instead of direct pushes. Add three components that share the repository:
 
 | Setting | App strings | App plurals | File types |
 |---|---|---|---|
-| File format | iOS strings | Stringsdict file | iOS strings |
-| File mask | `Localization/*.lproj/Localizable.strings` | `Localization/*.lproj/Localizable.stringsdict` | `Localization/*.lproj/InfoPlist.strings` |
-| Monolingual base language file | `Localization/en.lproj/Localizable.strings` | `Localization/en.lproj/Localizable.stringsdict` | `Localization/en.lproj/InfoPlist.strings` |
-| Edit base file | Off | Off | Off |
+| File format | iOS strings | go-i18n v2 JSON file | iOS strings |
+| File mask | `Localization/*.lproj/Localizable.strings` | `Localization/*.lproj/Localizable.json` | `Localization/*.lproj/InfoPlist.strings` |
+| Monolingual base language file | `Localization/en.lproj/Localizable.strings` | `Localization/en.lproj/Localizable.json` | `Localization/en.lproj/InfoPlist.strings` |
+| Template for new translations | empty | empty | empty |
+| Edit base file | off | off | off |
+| Adding new translation | Create new language file | same | same |
 | File encoding | UTF-8 | — | UTF-8 |
 | Language code style | BCP style using hyphen as a separator | same | same |
+| Translation flags | — (added by the format) | `objc-format` | — (added by the format) |
+| Enforced checks | Objective-C format | Objective-C format | Objective-C format |
 
 - Source language: English. The English text comes from the code, so translators
   cannot edit it on Weblate.
-- Enable the *Cleanup translation files* add-on so keys removed from English leave every
-  language.
-- Add *Objective-C format* to the components' *Enforced checks*, so a translation with
-  placeholders that don't match English can't be saved. CI rejects such translations,
-  and the app shows English for them.
-- Languages are added by contributors; a language appears in the app once its folder is
-  merged.
+- In the project settings, set *Translation quality filter* to *Skip translations
+  marked as needing editing*. Together with the enforced Objective-C format check, a
+  translation whose placeholders don't match English is never committed, so it can't
+  fail CI on a Weblate pull request.
+- Enable the *Cleanup translation files* add-on on each component so keys removed from
+  English leave every language.
+- A language appears in the app once Weblate's pull request adding its folder is merged.

@@ -2,10 +2,11 @@
 """Keeps Ito's String Catalogs and the Weblate translation files in step.
 
 The String Catalogs in `Ito/` hold the English source strings. Weblate cannot read
-catalogs, so this tool writes their English text to `Localization/en.lproj` as plain
-`.strings` and `.stringsdict` files, which Weblate uses as the base for every
-language. Weblate commits translations to `Localization/<language>.lproj`, and the
-app build installs them next to the catalog's English tables.
+catalogs, so this tool writes their English text to `Localization/en.lproj` as files
+Weblate translates: `.strings` for plain strings and a JSON file (Weblate's "go-i18n v2
+JSON" format, which names each plural form) for plurals. Weblate commits translations
+to `Localization/<language>.lproj`, and the app build installs them next to the
+catalog's English tables as `.strings` and `.stringsdict`.
 
 Commands:
   sync     Add strings found by a build to Localizable.xcstrings, then export.
@@ -158,7 +159,9 @@ def stringsdict_entry(forms: dict[str, str], english_other: str) -> dict:
     return {"NSStringLocalizedFormatKey": format_key, PLURAL_VARIABLE: rule}
 
 
-def stringsdict_data(entries: dict[str, Entry]) -> dict:
+def english_plurals(entries: dict[str, Entry]) -> dict[str, dict[str, str]]:
+    """English plural forms by key, numbered (`%1$@ … %2$lld`) when a string has more
+    than one argument, as Xcode compiles them."""
     result = {}
     for key in sorted(entries):
         forms = entries[key].plural
@@ -173,7 +176,41 @@ def stringsdict_data(entries: dict[str, Entry]) -> dict:
             for form, text in forms.items():
                 if not compatible(forms["other"], text):
                     raise LocalizationError(f"plural '{key}': the '{form}' form must number its arguments (%1$@, %2$lld)")
-        result[key] = stringsdict_entry(forms, forms["other"])
+        result[key] = forms
+    return result
+
+
+def plurals_json(entries: dict[str, Entry]) -> bytes:
+    """The English plural base in Weblate's go-i18n v2 JSON layout:
+    `{"key": {"description": …, "one": …, "other": …}}`."""
+    document = {}
+    for key, forms in english_plurals(entries).items():
+        item = {"description": entries[key].comment} if entries[key].comment else {}
+        item.update(forms)
+        document[key] = item
+    return (json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def read_plurals(path: Path) -> dict[str, dict[str, str]]:
+    """Plural forms by key from a go-i18n v2 JSON file, keeping only plural categories."""
+    try:
+        data = json.loads(path.read_bytes().decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise LocalizationError(f"{path}: not valid UTF-8 JSON ({error})") from None
+    if not isinstance(data, dict):
+        raise LocalizationError(f"{path}: expected an object of plural strings")
+    result = {}
+    for key, item in data.items():
+        if isinstance(item, str):
+            # Languages with a single plural form (Japanese, Chinese, …) are written as a
+            # plain string.
+            forms = {"other": item} if item else {}
+        elif isinstance(item, dict):
+            forms = {form: text for form in PLURAL_FORMS if isinstance(text := item.get(form), str) and text}
+        else:
+            continue
+        if forms:
+            result[key] = forms
     return result
 
 
@@ -283,16 +320,6 @@ def read_strings(path: Path) -> dict[str, str]:
     return parse_strings(text, str(path))
 
 
-def read_stringsdict(path: Path) -> dict:
-    try:
-        data = plistlib.loads(path.read_bytes())
-    except Exception:
-        raise LocalizationError(f"{path}: not a valid stringsdict file") from None
-    if not isinstance(data, dict):
-        raise LocalizationError(f"{path}: expected a dictionary")
-    return data
-
-
 # ---------------------------------------------------------------- placeholders
 
 
@@ -357,19 +384,6 @@ def compatible(english: str, translation: str) -> bool:
     return all(source.get(position) == kind for position, kind in target.items())
 
 
-def plural_forms(entry: object) -> dict[str, str] | None:
-    """The forms of a single-variable plural stringsdict entry, or None if it is not one."""
-    if not isinstance(entry, dict):
-        return None
-    format_key = entry.get("NSStringLocalizedFormatKey")
-    if not isinstance(format_key, str) or not re.fullmatch(rf"%(\d+\$)?#@{PLURAL_VARIABLE}@", format_key):
-        return None
-    rule = entry.get(PLURAL_VARIABLE)
-    if not isinstance(rule, dict) or rule.get("NSStringFormatSpecTypeKey") != "NSStringPluralRuleType":
-        return None
-    forms = {form: rule[form] for form in PLURAL_FORMS if isinstance(rule.get(form), str)}
-    return forms if "other" in forms else None
-
 
 # ---------------------------------------------------------------- commands
 
@@ -384,9 +398,8 @@ def base_files(root: Path) -> dict[Path, bytes]:
             continue
         entries = catalog_entries(path)
         files[base / f"{table}.strings"] = strings_text(entries).encode("utf-8")
-        plurals = stringsdict_data(entries)
-        if plurals:
-            files[base / f"{table}.stringsdict"] = plistlib.dumps(plurals, sort_keys=True)
+        if any(entry.plural is not None for entry in entries.values()):
+            files[base / f"{table}.json"] = plurals_json(entries)
     return files
 
 
@@ -434,23 +447,25 @@ def merged_tables(root: Path, language: Path, problems: list[str]) -> dict[str, 
                     else:
                         problems.append(f"{translated_path.relative_to(root)}: '{key}' has placeholders that do not match English")
             tables[f"{table}.strings"] = merged
-        english_dict_path = base / f"{table}.stringsdict"
-        if english_dict_path.exists():
-            english_dict = read_stringsdict(english_dict_path)
-            merged_dict = dict(english_dict)
-            translated_dict_path = language / f"{table}.stringsdict"
-            if translated_dict_path.exists():
-                for key, entry in translations(translated_dict_path, read_stringsdict, root, problems).items():
-                    source = plural_forms(english_dict.get(key))
-                    forms = plural_forms(entry)
-                    if source is None or forms is None:
-                        if key in english_dict:
-                            problems.append(f"{translated_dict_path.relative_to(root)}: '{key}' is not a plural entry")
+        english_plurals_path = base / f"{table}.json"
+        if english_plurals_path.exists():
+            english_forms = read_plurals(english_plurals_path)
+            merged_dict = {key: stringsdict_entry(forms, forms["other"]) for key, forms in english_forms.items()}
+            translated_plurals_path = language / f"{table}.json"
+            if translated_plurals_path.exists():
+                for key, forms in translations(translated_plurals_path, read_plurals, root, problems).items():
+                    source = english_forms.get(key)
+                    if source is None:
                         continue
+                    forms = dict(forms)
+                    if "other" not in forms:
+                        # Apple needs an "other" form. Where a language uses it only for
+                        # fractions (Russian, Polish, …), Weblate offers no field for it.
+                        forms["other"] = forms.get("many") or list(forms.values())[-1]
                     if all(compatible(source["other"], text) for text in forms.values()):
                         merged_dict[key] = stringsdict_entry(forms, source["other"])
                     else:
-                        problems.append(f"{translated_dict_path.relative_to(root)}: '{key}' has placeholders that do not match English")
+                        problems.append(f"{translated_plurals_path.relative_to(root)}: '{key}' has placeholders that do not match English")
             tables[f"{table}.stringsdict"] = merged_dict
     return tables
 
