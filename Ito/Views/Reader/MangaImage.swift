@@ -7,9 +7,10 @@ struct MangaImage: View {
     let session: ReaderPageImageSession
     let pageID: String
     var foreground: Color = .white
-    /// Shows the image at the full width it is offered and its own height, even where that is a
-    /// fraction of a pixel taller than the space offered. The continuous reader sizes each row to
-    /// the image rounded down to a whole pixel and clips the rest, so pages meet without a gap.
+    /// Draws the image exactly as wide as its row and as tall as that width makes it, top-aligned,
+    /// with an explicit frame so every iOS version lays it out the same. The continuous reader
+    /// sizes each row to the image rounded down to a whole pixel and clips the rest, so pages
+    /// meet without a gap.
     var fillsRowWidth = false
     var onImageTap: (() -> Void)?
     var imageLabel = String(localized: "Illustration", comment: "Accessibility label of a manga page image")
@@ -54,9 +55,9 @@ struct MangaImage: View {
         }
     }
 
-    private var readyImage: Image? {
+    private var readyImage: UIImage? {
         guard case .ready(let image) = imageState.phase else { return nil }
-        return Image(uiImage: image)
+        return image
     }
 
     private var failureView: some View {
@@ -90,13 +91,28 @@ struct MangaImage: View {
     }
 
     @ViewBuilder
-    private func loadedImage(_ image: Image) -> some View {
-        let page = image.resizable().scaledToFit().fixedSize(horizontal: false, vertical: fillsRowWidth)
+    private func loadedImage(_ image: UIImage) -> some View {
         if let onImageTap {
-            ZoomablePage(onTap: onImageTap) { page }
+            ZoomablePage(onTap: onImageTap) { page(image) }
                 .accessibilityLabel(imageLabel)
         } else {
-            page.accessibilityLabel(imageLabel)
+            page(image).accessibilityLabel(imageLabel)
+        }
+    }
+
+    @ViewBuilder
+    private func page(_ image: UIImage) -> some View {
+        if fillsRowWidth, image.size.width > 0, image.size.height > 0 {
+            // Fixed sizes rather than fitting: how SwiftUI fits an image into an open-ended height
+            // differs between iOS versions, and older ones left a band of background at the seams.
+            GeometryReader { proxy in
+                Image(uiImage: image)
+                    .resizable()
+                    .frame(width: proxy.size.width, height: proxy.size.width * image.size.height / image.size.width)
+                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            }
+        } else {
+            Image(uiImage: image).resizable().scaledToFit()
         }
     }
 
