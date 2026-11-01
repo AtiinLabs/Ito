@@ -154,3 +154,13 @@ jobs:
             Ito/TestResults.xcresult
           if-no-files-found: ignore
           retention-days: 14
+
+  publish-dev:
+    name: Publish dev
+    needs: [development-team, localization, build-and-test]
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    permissions:
+      contents: write
+    uses: ./.github/workflows/dev-unsigned.yml

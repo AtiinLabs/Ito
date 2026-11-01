@@ -1,16 +1,14 @@
 name: Publish dev unsigned IPA
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: write
 
-# A newer main supersedes an in-progress dev build. gh-pages writes are
-# serialized by .github/scripts/gh_pages.sh, not by this group.
+# Called by CI only after validation succeeds for the same event commit.
+# Keep this group distinct from the caller's CI group to avoid self-cancellation.
+# gh-pages writes are serialized by .github/scripts/gh_pages.sh.
 concurrency:
   group: ito-dev
   cancel-in-progress: true
@@ -23,13 +21,15 @@ env:
 
 jobs:
   dev:
-    name: Test, package, and publish dev
-    if: github.ref == 'refs/heads/main'
+    name: Package and publish dev
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: macos-26
     timeout-minutes: 60
 
     steps:
-      - name: Checkout the pushed main commit
+      - name: Checkout the validated main commit
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
@@ -82,30 +82,6 @@ jobs:
           echo "tag=dev-${BUILD}" >> "$GITHUB_OUTPUT"
           echo "build=$BUILD" >> "$GITHUB_OUTPUT"
           echo "sha_short=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
-
-      - name: Select an available iPhone simulator
-        id: simulator
-        working-directory: Ito
-        shell: bash
-        run: echo "id=$(python3 .github/scripts/select_simulator.py)" >> "$GITHUB_OUTPUT"
-
-      - name: Run unit tests before dev publication
-        working-directory: Ito
-        run: |
-          set -o pipefail
-          rm -rf TestResults.xcresult
-          xcodebuild test \
-            -project "$PROJECT" \
-            -scheme "$SCHEME" \
-            -configuration Debug \
-            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
-            -only-testing:ItoTests \
-            -parallel-testing-enabled NO \
-            -enableCodeCoverage NO \
-            -resultBundlePath TestResults.xcresult \
-            -skipPackagePluginValidation \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            | tee test.log
 
       - name: Build unsigned dev IPA
         id: ipa

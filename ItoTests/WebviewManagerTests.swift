@@ -118,6 +118,18 @@ private func closeButton(in view: UIView) -> UIButton? {
     return nil
 }
 
+/// Releases a test-owned manager's WebView from the app window.
+@MainActor
+private func dispose(_ manager: WebviewManager) {
+    // Ending a presentation returns its view to the app window. Do that synchronously
+    // before detaching, so queued task cancellation cannot reattach it afterwards.
+    if let overlay = presentedOverlay(of: manager) {
+        _ = overlay.view.accessibilityPerformEscape()
+    }
+    manager.webView?.stopLoading()
+    manager.webView?.removeFromSuperview()
+}
+
 // Serialized: the tests share the app's windows and key window, which overlays change.
 @MainActor
 @Suite("Web view page loads", .serialized)
@@ -125,6 +137,7 @@ struct WebviewManagerTests {
     @Test func aPageThatNeverAnswersTimesOut() async throws {
         let server = try SilentServer()
         let manager = WebviewManager(pageLoadDeadline: 0.3)
+        defer { dispose(manager) }
 
         await #expect(throws: URLError(.timedOut)) {
             try await manager.loadUrl(request: WebviewRequest(url: await server.url(), script: nil))
@@ -134,12 +147,13 @@ struct WebviewManagerTests {
     @Test func cancellingTheCallerEndsTheLoad() async throws {
         let server = try SilentServer()
         let manager = WebviewManager()
+        defer { dispose(manager) }
         let url = await server.url()
 
         let load = Task { try await manager.loadUrl(request: WebviewRequest(url: url, script: nil)) }
+        defer { load.cancel() }
         await server.connectionArrived()
         load.cancel()
-
         await #expect(throws: CancellationError.self) { try await load.value }
     }
 
@@ -147,12 +161,14 @@ struct WebviewManagerTests {
         let server = try SilentServer()
         let replacementServer = try SilentServer()
         let manager = WebviewManager()
+        defer { dispose(manager) }
         let url = await server.url()
         let replacementURL = await replacementServer.url()
 
         let first = Task { try await manager.loadUrl(request: WebviewRequest(url: url, script: nil)) }
         await server.connectionArrived()
         let second = Task { try await manager.loadUrl(request: WebviewRequest(url: replacementURL, script: nil)) }
+        defer { first.cancel(); second.cancel() }
         await #expect(throws: URLError(.cancelled)) { try await first.value }
 
         // Distinct endpoints require a new navigation request, not a second connection for
@@ -161,6 +177,7 @@ struct WebviewManagerTests {
             await replacementServer.connectionArrived()
             second.cancel()
         }
+        defer { cancellation.cancel() }
         await #expect(throws: CancellationError.self) { try await second.value }
         cancellation.cancel()
         await cancellation.value
@@ -168,9 +185,10 @@ struct WebviewManagerTests {
 
     @Test func cancellingAPendingAsyncScriptEndsItAndLaterScriptsStillRun() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
-
         let pending = await startNeverSettlingScript(on: manager)
+        defer { pending.cancel() }
         pending.cancel()
         await #expect(throws: CancellationError.self) { try await pending.value }
 
@@ -180,8 +198,10 @@ struct WebviewManagerTests {
 
     @Test func loadingAnotherPageEndsPendingAsyncScriptsWithCancelled() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>one</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
+        defer { pending.cancel() }
 
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>two</p>", script: nil))
         await #expect(throws: URLError(.cancelled)) { try await pending.value }
@@ -189,8 +209,10 @@ struct WebviewManagerTests {
 
     @Test func aPageNavigationEndsPendingAsyncScriptsWithCancelled() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
+        defer { pending.cancel() }
 
         // WebKit refuses script-initiated reloads of data URLs. about:blank is a real,
         // permitted replacement document and exercises the navigation delegate's commit.
@@ -200,8 +222,10 @@ struct WebviewManagerTests {
 
     @Test func aFragmentChangeInThePageKeepsPendingAsyncScripts() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
+        defer { pending.cancel() }
 
         // A same-document navigation does not replace the document, so the script is still pending.
         _ = try await manager.executeJs(script: "location.hash = 'next'; 'changed'")
@@ -211,8 +235,10 @@ struct WebviewManagerTests {
 
     @Test func aWaitingScriptCanShowThePageInAModalOverlay() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
+        defer { pending.cancel() }
 
         #expect(try await askToShowPage(on: manager) == "true")
 
@@ -230,8 +256,10 @@ struct WebviewManagerTests {
 
     @Test func releasingTheLastWaitingScriptHidesThePage() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
+        defer { pending.cancel() }
         #expect(try await askToShowPage(on: manager) == "true")
 
         _ = try await manager.executeJs(script: "window.__itoRelease('done'); 'released'")
@@ -241,9 +269,11 @@ struct WebviewManagerTests {
 
     @Test func thePageStaysUpUntilItsLastWaitingScriptEnds() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let first = await startNeverSettlingScript(on: manager)
         let last = await startNeverSettlingScript(on: manager)
+        defer { first.cancel(); last.cancel() }
         #expect(try await askToShowPage(on: manager) == "true")
 
         first.cancel()
@@ -257,9 +287,11 @@ struct WebviewManagerTests {
 
     @Test func aRejectedWaitingScriptHidesThePage() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startAsyncScript(
             "await new Promise(resolve => { window.__itoRelease = resolve; }); throw new Error('boom');", on: manager)
+        defer { pending.cancel() }
         #expect(try await askToShowPage(on: manager) == "true")
 
         _ = try await manager.executeJs(script: "window.__itoRelease('x'); 'released'")
@@ -269,8 +301,10 @@ struct WebviewManagerTests {
 
     @Test func aCancelledWaitingScriptHidesThePage() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
+        defer { pending.cancel() }
         #expect(try await askToShowPage(on: manager) == "true")
 
         pending.cancel()
@@ -280,8 +314,10 @@ struct WebviewManagerTests {
 
     @Test func navigatingThePageAwayHidesIt() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
+        defer { pending.cancel() }
         #expect(try await askToShowPage(on: manager) == "true")
 
         _ = try await manager.executeJs(script: "setTimeout(() => { location.href = 'about:blank'; }, 0); 'scheduled'")
@@ -291,8 +327,10 @@ struct WebviewManagerTests {
 
     @Test func loadingAnotherPageHidesIt() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>one</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
+        defer { pending.cancel() }
         #expect(try await askToShowPage(on: manager) == "true")
 
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>two</p>", script: nil))
@@ -302,8 +340,10 @@ struct WebviewManagerTests {
 
     @Test func closingThePageFailsItsScriptsAndDeclinesTheOriginUntilTheAppReturns() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
+        defer { pending.cancel() }
         #expect(try await askToShowPage(on: manager) == "true")
 
         let overlay = try #require(presentedOverlay(of: manager))
@@ -320,6 +360,7 @@ struct WebviewManagerTests {
 
         // The closed origin is declined, even with a script waiting, until the app becomes active.
         let waiting = await startNeverSettlingScript(on: manager)
+        defer { waiting.cancel() }
         #expect(try await askToShowPage(on: manager) == "false")
         expectHome(manager)
 
@@ -333,8 +374,10 @@ struct WebviewManagerTests {
 
     @Test func theAccessibilityEscapeClosesThePageLikeClose() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
+        defer { pending.cancel() }
         #expect(try await askToShowPage(on: manager) == "true")
 
         let overlay = try #require(presentedOverlay(of: manager))
@@ -347,6 +390,7 @@ struct WebviewManagerTests {
 
         // Same as Close: the origin is now declined until the app becomes active.
         let waiting = await startNeverSettlingScript(on: manager)
+        defer { waiting.cancel() }
         #expect(try await askToShowPage(on: manager) == "false")
         _ = try await manager.executeJs(script: "window.__itoRelease('done'); 'released'")
         #expect(try await waiting.value == "done")
@@ -354,9 +398,9 @@ struct WebviewManagerTests {
 
     @Test func aPostWithNoWaitingScriptIsRefused() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let decisions = showPageDecisions(on: manager)
-
         _ = try await manager.executeJs(script: "window.webkit.messageHandlers.itoShowPage.postMessage(null); 'posted'")
         #expect(await nextDecision(decisions) == false)
         expectHome(manager)
@@ -364,8 +408,10 @@ struct WebviewManagerTests {
 
     @Test func aPostFromASubframeIsRefusedWhileAScriptWaits() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
+        defer { pending.cancel() }
         let decisions = showPageDecisions(on: manager)
 
         _ = try await manager.executeJs(script: "const frame = document.createElement('iframe'); frame.srcdoc = \"<script>window.webkit.messageHandlers.itoShowPage.postMessage(null)</script>\"; document.body.appendChild(frame); 'framed'")
@@ -378,8 +424,10 @@ struct WebviewManagerTests {
 
     @Test func aPageIsNotShownWhileTheAppIsNotInteractive() async throws {
         let manager = WebviewManager(isInteractive: { false })
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
+        defer { pending.cancel() }
         let decisions = showPageDecisions(on: manager)
 
         #expect(try await askToShowPage(on: manager) == "false")
@@ -392,6 +440,7 @@ struct WebviewManagerTests {
 
     @Test func aShowPagePostNotAwaitedByItsScriptLeavesNoPageBehind() async throws {
         let manager = WebviewManager()
+        defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let decisions = showPageDecisions(on: manager)
 
@@ -400,5 +449,28 @@ struct WebviewManagerTests {
         #expect(result == "x")
         _ = await nextDecision(decisions)
         expectHome(manager)
+    }
+
+    @Test func failedPresentedPageScopeStaysDetachedAfterItsScriptCompletes() async throws {
+        enum FixtureFailure: Error { case expected }
+        let manager = WebviewManager()
+        defer { dispose(manager) }
+        var pending: Task<String, Error>?
+        do {
+            defer { dispose(manager) }
+            _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
+            let script = await startNeverSettlingScript(on: manager)
+            pending = script
+            defer { script.cancel() }
+            #expect(try await askToShowPage(on: manager) == "true")
+            throw FixtureFailure.expected
+        } catch FixtureFailure.expected {
+            // The scope failed with its overlay still visible and its script pending.
+        }
+        let script = try #require(pending)
+        await #expect(throws: ItoError.hostModuleError(domain: "webview", message: "Verification was closed.")) { try await script.value }
+        let webView = try #require(manager.webView)
+        #expect(webView.superview == nil)
+        #expect(webView.window == nil)
     }
 }
