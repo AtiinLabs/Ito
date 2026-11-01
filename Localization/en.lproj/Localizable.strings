@@ -105,6 +105,8 @@
 
 "Are you sure you want to reject this match?" = "Are you sure you want to reject this match?";
 
+"Ask on Discord" = "Ask on Discord";
+
 /* Audio track button when no track is selected */
 "Audio" = "Audio";
 
@@ -230,6 +232,8 @@
 "Close Reader" = "Close Reader";
 
 "Close Settings" = "Close Settings";
+
+"Community" = "Community";
 
 "Completed" = "Completed";
 
@@ -478,6 +482,8 @@
 
 "Genres" = "Genres";
 
+"Get Help or Report a Bug" = "Get Help or Report a Bug";
+
 "Go to Settings > Trackers and sign in to AniList or MyAnimeList to track anime." = "Go to Settings > Trackers and sign in to AniList or MyAnimeList to track anime.";
 
 "Go to Settings > Trackers and sign in to AniList, MyAnimeList or MangaBaka before tracking." = "Go to Settings > Trackers and sign in to AniList, MyAnimeList or MangaBaka before tracking.";
@@ -566,6 +572,8 @@
 
 /* Country of origin */
 "Japan" = "Japan";
+
+"Join the Ito Discord" = "Join the Ito Discord";
 
 "Keep All Backup" = "Keep All Backup";
 
@@ -1040,6 +1048,8 @@
 "Repeating" = "Repeating";
 
 "Replaced" = "Replaced";
+
+"Report on GitHub" = "Report on GitHub";
 
 "Repositories" = "Repositories";
 

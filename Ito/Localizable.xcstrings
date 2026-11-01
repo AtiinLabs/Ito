@@ -560,6 +560,9 @@
     "Are you sure you want to reject this match?" : {
 
     },
+    "Ask on Discord" : {
+
+    },
     "Audio" : {
       "comment" : "Audio track button when no track is selected"
     },
@@ -760,6 +763,9 @@
 
     },
     "Close Settings" : {
+
+    },
+    "Community" : {
 
     },
     "Completed" : {
@@ -1173,6 +1179,9 @@
     "Genres" : {
 
     },
+    "Get Help or Report a Bug" : {
+
+    },
     "Go to Settings > Trackers and sign in to AniList or MyAnimeList to track anime." : {
 
     },
@@ -1301,6 +1310,9 @@
     },
     "Japan" : {
       "comment" : "Country of origin"
+    },
+    "Join the Ito Discord" : {
+
     },
     "Keep All Backup" : {
 
@@ -2013,6 +2025,9 @@
 
     },
     "Replaced" : {
+
+    },
+    "Report on GitHub" : {
 
     },
     "Repositories" : {
