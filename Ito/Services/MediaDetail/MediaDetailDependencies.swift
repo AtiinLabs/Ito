@@ -272,6 +272,10 @@ enum MediaDetailMessage: Equatable {
     case saveFailed
     case unsaveFailed
     case trackerProgressFailed
+    /// History asked for a chapter the source no longer lists.
+    case chapterUnavailable(isEpisode: Bool)
+    /// History asked for a chapter that is now locked.
+    case chapterLocked(isEpisode: Bool)
 }
 
 @MainActor
@@ -298,6 +302,10 @@ final class AppMessageMediaDetailPresenter: MediaDetailMessagePresenting {
             messageCenter.publish(.mediaDetailUnsaveFailed)
         case .trackerProgressFailed:
             messageCenter.publish(.mediaDetailTrackerProgressFailed)
+        case .chapterUnavailable(let isEpisode):
+            messageCenter.publish(.mediaDetailChapterUnavailable(isEpisode: isEpisode))
+        case .chapterLocked(let isEpisode):
+            messageCenter.publish(.mediaDetailChapterLocked(isEpisode: isEpisode))
         }
     }
 

@@ -478,7 +478,7 @@
       }
     },
     "%lld%%" : {
-
+      "comment" : "History: percentage of a novel chapter read"
     },
     "(%lld)" : {
 
@@ -566,6 +566,9 @@
     },
     "Already added" : {
 
+    },
+    "Also read on %@" : {
+      "comment" : "History: other sources the same series was read on"
     },
     "An HTTP header name contains invalid characters." : {
 
@@ -734,6 +737,12 @@
           }
         }
       }
+    },
+    "Chapter locked" : {
+
+    },
+    "Chapter no longer listed" : {
+
     },
     "Chapters" : {
 
@@ -1066,6 +1075,12 @@
     },
     "Episode %@" : {
       "comment" : "Discord status: episode number\nHistory: an episode without a title"
+    },
+    "Episode locked" : {
+
+    },
+    "Episode no longer listed" : {
+
     },
     "Episodes" : {
 
@@ -1867,7 +1882,7 @@
 
     },
     "Page %lld" : {
-      "comment" : "Accessibility label of a manga page; number is its position in the chapter"
+      "comment" : "Accessibility label of a manga page; number is its position in the chapter\nHistory: the page a chapter was left on"
     },
     "Page %lld of %lld" : {
       "localizations" : {
@@ -1973,6 +1988,9 @@
 
     },
     "Re-link failed. Please try again." : {
+
+    },
+    "Read Again" : {
 
     },
     "Read Progress Sync" : {
@@ -2567,6 +2585,9 @@
     "Stop Tracking removes the link in Ito. Your %@ list entry is kept." : {
 
     },
+    "Stopped at %@" : {
+      "comment" : "History: where an episode was left, such as 12:34"
+    },
     "Stopping tracking" : {
 
     },
@@ -2813,6 +2834,12 @@
     "The source must be updated before it can sync progress." : {
 
     },
+    "The source no longer lists this chapter." : {
+
+    },
+    "The source no longer lists this episode." : {
+
+    },
     "The source rejected the saved credentials." : {
 
     },
@@ -2861,10 +2888,16 @@
     "This action is unsupported by the source." : {
 
     },
+    "This chapter is locked on the source." : {
+
+    },
     "This control type (%u) is not supported." : {
 
     },
     "This control type is not supported." : {
+
+    },
+    "This episode is locked on the source." : {
 
     },
     "This extension requires Ito %@ or later." : {
@@ -3140,7 +3173,32 @@
     "Viewing Details" : {
       "comment" : "Discord status"
     },
+    "Vol. %@ Ch. %@" : {
+      "comment" : "History: a chapter without a title, by volume and chapter number",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Vol. %1$@ Ch. %2$@"
+          }
+        }
+      }
+    },
+    "Vol. %@ · %@" : {
+      "comment" : "History: volume and chapter title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Vol. %1$@ · %2$@"
+          }
+        }
+      }
+    },
     "Warnings" : {
+
+    },
+    "Watch Again" : {
 
     },
     "Watched to the End" : {

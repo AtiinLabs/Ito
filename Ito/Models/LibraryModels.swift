@@ -116,6 +116,16 @@ public struct ItemCategoryLink: Codable, Hashable, Sendable, FetchableRecord, Pe
     }
 }
 
+/// Which reader recorded a history row, and so what its saved position counts.
+public enum HistoryReaderFormat: String, Codable, Sendable {
+    /// Manga pages; the position is a page index.
+    case pages
+    /// Text; the position is an offset into the chapter's text.
+    case text
+    /// Video; the position is a time in seconds.
+    case video
+}
+
 // MARK: - Reading History Record
 
 public struct ReadingHistoryRecord: Codable, Identifiable, Hashable, Sendable, FetchableRecord, PersistableRecord {
@@ -134,6 +144,14 @@ public struct ReadingHistoryRecord: Codable, Identifiable, Hashable, Sendable, F
     public var chapterTitle: String?
     /// The chapter or episode number; nil when the source gives none and for rows before v17.
     public var chapterNumber: Double?
+    /// The volume the chapter belongs to, for series whose chapter numbers restart each volume.
+    public var volume: Double?
+    /// The scanlation group, or for episodes the language (such as "SUB" or "DUB").
+    public var scanlator: String?
+    /// The reader the chapter was opened in; nil for rows before v17.
+    public var format: HistoryReaderFormat?
+    /// Loaded novel body length in the same UTF-16 units as its saved offset. Unknown for old rows.
+    public var textLength: Int?
     public var readAt: Date
 
     public init(
@@ -147,6 +165,10 @@ public struct ReadingHistoryRecord: Codable, Identifiable, Hashable, Sendable, F
         chapterKey: String,
         chapterTitle: String?,
         chapterNumber: Double? = nil,
+        volume: Double? = nil,
+        scanlator: String? = nil,
+        format: HistoryReaderFormat? = nil,
+        textLength: Int? = nil,
         readAt: Date = Date()
     ) {
         self.id = id
@@ -159,6 +181,10 @@ public struct ReadingHistoryRecord: Codable, Identifiable, Hashable, Sendable, F
         self.chapterKey = chapterKey
         self.chapterTitle = chapterTitle
         self.chapterNumber = chapterNumber
+        self.volume = volume
+        self.scanlator = scanlator
+        self.format = format
+        self.textLength = textLength
         self.readAt = readAt
     }
 
@@ -173,6 +199,10 @@ public struct ReadingHistoryRecord: Codable, Identifiable, Hashable, Sendable, F
         public static let chapterKey = Column(CodingKeys.chapterKey)
         public static let chapterTitle = Column(CodingKeys.chapterTitle)
         public static let chapterNumber = Column(CodingKeys.chapterNumber)
+        public static let volume = Column(CodingKeys.volume)
+        public static let scanlator = Column(CodingKeys.scanlator)
+        public static let format = Column(CodingKeys.format)
+        public static let textLength = Column(CodingKeys.textLength)
         public static let readAt = Column(CodingKeys.readAt)
     }
 }

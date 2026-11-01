@@ -29,6 +29,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.events.events, ["history:a"])
         XCTAssertNil(subject.history.requests[0].chapterTitle)
         XCTAssertEqual(subject.history.requests[0].chapterNumber, 12.75)
+        XCTAssertEqual(subject.history.requests[0].format, .text)
         XCTAssertEqual(subject.history.requests[0].pluginID, "plugin.test")
 
         let loaded = subject.viewModel.loadedChapters[0]
@@ -69,6 +70,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         await subject.viewModel.waitForAllOperationsForTesting()
 
         let loaded = subject.viewModel.loadedChapters[0]
+        XCTAssertEqual(subject.history.requests[0].textLength, 41)
         XCTAssertEqual(subject.viewModel.restoreAnchor, NovelReadingAnchor(chapterID: loaded.id, offset: 20))
         XCTAssertEqual(NovelTextOffsets.blockIndex(containing: 20, in: loaded.pages), 1)
         subject.viewModel.consumeRestoreAnchor(NovelReadingAnchor(chapterID: loaded.id, offset: 20))
@@ -78,6 +80,32 @@ final class NovelReaderViewModelTests: XCTestCase {
         await subject.viewModel.waitForAllOperationsForTesting()
         XCTAssertEqual(subject.progress.savedOffsetWrites.map(\.offset), [34])
         XCTAssertTrue(subject.progress.requests.isEmpty)
+    }
+
+    func testLoadedTextLengthAndOffsetsUseTheSameUTF16Boundaries() async {
+        let chapter = makeChapter("a", number: 1)
+        let subject = makeSubject(chapters: [chapter], initial: chapter)
+        subject.loader.enqueue(.suspended, for: "a")
+        subject.viewModel.start()
+        await subject.loader.waitForPendingCount(1, for: "a")
+        XCTAssertTrue(subject.history.requests.isEmpty)
+
+        // A supplementary character uses two UTF-16 units; each text block adds a separator.
+        subject.loader.resolveFirst(for: "a", with: .success([
+            page(0, text: "😀ab"), page(1, text: "cd")
+        ]))
+        await subject.viewModel.waitForAllOperationsForTesting()
+        let loaded = subject.viewModel.loadedChapters[0]
+        XCTAssertEqual(subject.history.requests[0].textLength, 10)
+
+        for (offset, expected) in [(-1, 0), (5, 5), (10, 10), (Int.max, 10)] {
+            subject.viewModel.readingPositionChanged(chapterID: loaded.id, offset: offset, reachedEnd: false)
+            await subject.viewModel.waitForAllOperationsForTesting()
+            XCTAssertEqual(subject.progress.savedOffsets["a"], expected)
+        }
+        subject.viewModel.readingPositionChanged(chapterID: loaded.id, offset: 0, reachedEnd: true)
+        await subject.viewModel.waitForAllOperationsForTesting()
+        XCTAssertEqual(subject.progress.savedOffsets["a"], subject.history.requests[0].textLength)
     }
 
     func testFinishedChapterStartsOverInsteadOfRestoringItsEnd() async {

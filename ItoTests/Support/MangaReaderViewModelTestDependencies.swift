@@ -160,6 +160,8 @@ final class MangaReaderHistoryFake: MangaReaderHistoryRecording {
         let chapterKey: String
         let chapterTitle: String?
         let chapterNumber: Float?
+        let scanlator: String?
+        let format: HistoryReaderFormat
         let pluginID: String
     }
 
@@ -178,6 +180,8 @@ final class MangaReaderHistoryFake: MangaReaderHistoryRecording {
                 chapterKey: chapter.key,
                 chapterTitle: chapter.title,
                 chapterNumber: chapter.number,
+                scanlator: chapter.scanlator,
+                format: chapter.format,
                 pluginID: pluginID
             )
         )

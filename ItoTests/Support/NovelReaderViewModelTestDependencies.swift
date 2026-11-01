@@ -248,6 +248,9 @@ final class NovelReaderHistoryFake: NovelReaderHistoryRecording {
         let chapterKey: String
         let chapterTitle: String?
         let chapterNumber: Float?
+        let scanlator: String?
+        let format: HistoryReaderFormat
+        let textLength: Int?
         let pluginID: String
     }
 
@@ -268,6 +271,9 @@ final class NovelReaderHistoryFake: NovelReaderHistoryRecording {
                 chapterKey: chapter.key,
                 chapterTitle: chapter.title,
                 chapterNumber: chapter.number,
+                scanlator: chapter.scanlator,
+                format: chapter.format,
+                textLength: chapter.textLength,
                 pluginID: pluginID
             )
         )

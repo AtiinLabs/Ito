@@ -45,7 +45,7 @@ final class DeferredPluginViewModelTests: XCTestCase {
             item: encodedItem(.manga(Manga(key: "manga", title: "Manga")), pluginType: .manga),
             installedPluginIDs: ["plugin.exact"],
             runnerResponses: [.immediate(.success(ItoRunner())), .immediate(.success(ItoRunner()))],
-            openIntent: .resume
+            openIntent: .resume(preferredScanlator: nil)
         )
 
         var readyRoutes: [DeferredPluginRoute] = []
@@ -65,7 +65,7 @@ final class DeferredPluginViewModelTests: XCTestCase {
         subject.viewModel.appear()
         await fulfillment(of: [secondReady], timeout: 2)
 
-        XCTAssertEqual(readyRoutes.map(\.openIntent), [.resume, nil])
+        XCTAssertEqual(readyRoutes.map(\.openIntent), [.resume(preferredScanlator: nil), nil])
         XCTAssertNotEqual(readyRoutes[0].id, readyRoutes[1].id)
     }
 

@@ -195,7 +195,8 @@ struct PreparedApplicationDependencies {
                 libraryManager: libraryManager,
                 historyManager: historyManager,
                 pluginManager: pluginManager,
-                readProgressManager: readProgressManager
+                readProgressManager: readProgressManager,
+                trackerManager: trackerManager
             ),
             searchExecutor: PluginManagerSearchExecutor(pluginManager: pluginManager),
             recentSearchStore: UserDefaultsRecentSearchStore(defaults: recentSearchDefaults),

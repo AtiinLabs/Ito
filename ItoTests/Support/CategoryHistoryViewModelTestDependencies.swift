@@ -296,9 +296,9 @@ final class HistoryServiceFake: HistoryServing {
         publish(subject.value.filter { $0.seriesKey != series || $0.record.chapterKey != chapterKey })
     }
 
-    func removeSeries(_ series: HistorySeriesKey) async throws {
+    func removeSeries(_ series: [HistorySeriesKey]) async throws {
         try await awaitDelete(.series(series))
-        publish(subject.value.filter { $0.seriesKey != series })
+        publish(subject.value.filter { !series.contains($0.seriesKey) })
     }
 
     private func awaitDelete(_ removal: HistoryRemoval) async throws {
@@ -341,6 +341,7 @@ final class HistoryServiceFake: HistoryServing {
 final class HistoryProgressFake: HistoryProgressReading {
     private let subject = PassthroughSubject<Void, Never>()
     var finishedChapterKeys: Set<String> = []
+    var positions: [String: Double] = [:]
 
     var progressWillChange: AnyPublisher<Void, Never> {
         subject.eraseToAnyPublisher()
@@ -350,6 +351,24 @@ final class HistoryProgressFake: HistoryProgressReading {
         _ = series
         _ = chapterNumber
         return finishedChapterKeys.contains(chapterKey)
+    }
+
+    func savedPosition(_ series: HistorySeriesKey, chapterKey: String) -> Double? {
+        _ = series
+        return positions[chapterKey]
+    }
+}
+
+@MainActor
+final class HistorySeriesLinksFake: HistorySeriesLinking {
+    let subject: CurrentValueSubject<[MediaIdentity: [String: String]], Never>
+
+    init(links: [MediaIdentity: [String: String]] = [:]) {
+        subject = CurrentValueSubject(links)
+    }
+
+    var trackerLinksPublisher: AnyPublisher<[MediaIdentity: [String: String]], Never> {
+        subject.eraseToAnyPublisher()
     }
 }
 
@@ -385,7 +404,11 @@ func pr11bHistoryEntry(
     chapterKey: String? = nil,
     chapterTitle: String?? = .none,
     chapterNumber: Double? = nil,
-    title: String? = nil
+    title: String? = nil,
+    plugin: String = "plugin",
+    volume: Double? = nil,
+    scanlator: String? = nil,
+    format: HistoryReaderFormat? = nil
 ) -> HistoryEntry {
     HistoryEntry(
         record: ReadingHistoryRecord(
@@ -393,11 +416,14 @@ func pr11bHistoryEntry(
             mediaKey: media ?? "media-\(id)",
             title: title ?? "Title \(media ?? id)",
             coverUrl: nil,
-            pluginId: "plugin",
+            pluginId: plugin,
             mediaKind: kind,
             chapterKey: chapterKey ?? "chapter-\(id)",
             chapterTitle: chapterTitle ?? "Chapter \(id)",
             chapterNumber: chapterNumber,
+            volume: volume,
+            scanlator: scanlator,
+            format: format,
             readAt: Date(timeIntervalSince1970: readAt)
         )
     )

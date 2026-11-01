@@ -109,9 +109,11 @@ struct HistoryView: View {
             series: series,
             chapterLabel: viewModel.chapterLabel(for: series.latest),
             isFinished: viewModel.isFinished(series.latest),
-            sourceName: viewModel.sourceName(for: series.latest),
-            open: { open(series, intent: nil) },
-            resume: { open(series, intent: .resume) }
+            position: viewModel.positionLabel(for: series.latest),
+            sourceLine: Self.joined([viewModel.sourceName(for: series.latest), viewModel.groupName(for: series.latest)]),
+            otherSources: viewModel.otherSourceNames(for: series),
+            open: { open(viewModel.libraryItem(for: series), intent: nil) },
+            resume: { resume(series) }
         )
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
@@ -119,16 +121,16 @@ struct HistoryView: View {
             } label: {
                 Label("Remove", systemImage: "trash")
             }
-            .disabled(viewModel.isRemoving(.series(series.key)))
+            .disabled(viewModel.isRemoving(.series(series.members)))
         }
         .contextMenu {
             Button {
-                open(series, intent: .resume)
+                resume(series)
             } label: {
                 Label("Continue", systemImage: series.key.mediaKind == .anime ? "play.fill" : "book.fill")
             }
             Button {
-                open(series, intent: nil)
+                open(viewModel.libraryItem(for: series), intent: nil)
             } label: {
                 Label("Open Series", systemImage: "info.circle")
             }
@@ -145,10 +147,14 @@ struct HistoryView: View {
                 ForEach(series.earlierChapters) { entry in
                     HistoryChapterRow(
                         label: viewModel.chapterLabel(for: entry),
+                        detail: Self.joined([
+                            series.isOnSeveralSources ? viewModel.sourceName(for: entry) : nil,
+                            viewModel.groupName(for: entry)
+                        ]),
                         readAt: entry.record.readAt,
                         isFinished: viewModel.isFinished(entry),
                         isEpisode: entry.record.mediaKind == .anime,
-                        open: { open(series, intent: .chapter(key: entry.record.chapterKey)) }
+                        open: { openChapter(entry) }
                     )
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button(role: .destructive) {
@@ -156,7 +162,7 @@ struct HistoryView: View {
                         } label: {
                             Label("Remove", systemImage: "trash")
                         }
-                        .disabled(viewModel.isRemoving(.chapter(series.key, chapterKey: entry.record.chapterKey)))
+                        .disabled(viewModel.isRemoving(.chapter(entry.seriesKey, chapterKey: entry.record.chapterKey)))
                     }
                 }
             }
@@ -192,10 +198,36 @@ struct HistoryView: View {
         .buttonStyle(.borderless)
     }
 
-    private func open(_ series: HistorySeries, intent: MediaDetailOpenIntent?) {
-        guard let item = viewModel.libraryItem(for: series) else { return }
+    /// Opens a series where it was left off, preferring the group read last.
+    private func resume(_ series: HistorySeries) {
+        open(
+            viewModel.libraryItem(for: series),
+            intent: .resume(preferredScanlator: series.latest.record.scanlator)
+        )
+    }
+
+    /// Opens one chapter on the source it was read on.
+    private func openChapter(_ entry: HistoryEntry) {
+        let record = entry.record
+        let reference = MediaDetailChapterReference(
+            key: record.chapterKey,
+            number: record.chapterNumber.map(Float.init),
+            volume: record.volume.map(Float.init),
+            scanlator: record.scanlator
+        )
+        open(viewModel.libraryItem(for: entry), intent: .chapter(reference))
+    }
+
+    private func open(_ item: LibraryItem?, intent: MediaDetailOpenIntent?) {
+        guard let item else { return }
         route = HistoryRoute(item: item, openIntent: intent)
         isRouteActive = true
+    }
+
+    /// Joins the parts that are present with " · ".
+    private static func joined(_ parts: [String?]) -> String? {
+        let present = parts.compactMap { $0 }
+        return present.isEmpty ? nil : present.joined(separator: " · ")
     }
 
     private var routeLink: some View {
@@ -270,7 +302,12 @@ private struct HistorySeriesRow: View {
     let series: HistorySeries
     let chapterLabel: String
     let isFinished: Bool
-    let sourceName: String
+    /// Where an unfinished chapter was left, such as "Page 13".
+    let position: String?
+    /// The source, and the group when known.
+    let sourceLine: String?
+    /// Other sources the same series was read on.
+    let otherSources: [String]
     let open: () -> Void
     let resume: () -> Void
 
@@ -285,16 +322,35 @@ private struct HistorySeriesRow: View {
                             .lineLimit(2)
                         HistoryChapterLabel(label: chapterLabel, isFinished: isFinished, isEpisode: series.key.mediaKind == .anime)
                             .font(.subheadline)
-                        HistoryRelativeTime(date: series.latest.record.readAt)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        HStack(spacing: 4) {
+                            HistoryRelativeTime(date: series.latest.record.readAt)
+                            if let position {
+                                Text(verbatim: "·")
+                                    .accessibilityHidden(true)
+                                Text(position)
+                            }
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                         HStack(spacing: 4) {
                             Image(systemName: series.key.mediaKind.historySymbol)
                                 .accessibilityLabel(series.key.mediaKind.historyName)
-                            Text(sourceName)
+                            if let sourceLine {
+                                Text(sourceLine)
+                                    .lineLimit(1)
+                            }
                         }
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        if !otherSources.isEmpty {
+                            Text(
+                                "Also read on \(otherSources.formatted(.list(type: .and)))",
+                                comment: "History: other sources the same series was read on"
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        }
                     }
                     Spacer(minLength: 0)
                 }
@@ -345,6 +401,8 @@ private struct HistorySeriesRow: View {
 /// An earlier chapter of a series; tapping it opens that chapter.
 private struct HistoryChapterRow: View {
     let label: String
+    /// The group, and the source when the series was read on several.
+    let detail: String?
     let readAt: Date
     let isFinished: Bool
     let isEpisode: Bool
@@ -353,8 +411,16 @@ private struct HistoryChapterRow: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: 8) {
-                HistoryChapterLabel(label: label, isFinished: isFinished, isEpisode: isEpisode)
-                    .font(.subheadline)
+                VStack(alignment: .leading, spacing: 2) {
+                    HistoryChapterLabel(label: label, isFinished: isFinished, isEpisode: isEpisode)
+                        .font(.subheadline)
+                    if let detail {
+                        Text(detail)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
                 Spacer(minLength: 8)
                 HistoryRelativeTime(date: readAt)
                     .font(.caption)

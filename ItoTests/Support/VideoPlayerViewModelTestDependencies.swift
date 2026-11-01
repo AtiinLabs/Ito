@@ -351,6 +351,8 @@ final class VideoPlayerHistoryFake: VideoPlayerHistoryRecording {
         let episodeKey: String
         let episodeTitle: String?
         let episodeNumber: Float?
+        let language: String?
+        let format: HistoryReaderFormat
         let pluginID: String
     }
 
@@ -369,6 +371,8 @@ final class VideoPlayerHistoryFake: VideoPlayerHistoryRecording {
                 episodeKey: episode.key,
                 episodeTitle: episode.title,
                 episodeNumber: episode.number,
+                language: episode.scanlator,
+                format: episode.format,
                 pluginID: pluginID
             )
         )

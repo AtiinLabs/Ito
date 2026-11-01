@@ -55,7 +55,8 @@ protocol HistoryServing: AnyObject {
     var historySnapshotPublisher: AnyPublisher<[HistoryEntry], Never> { get }
 
     func removeChapter(_ series: HistorySeriesKey, chapterKey: String) async throws
-    func removeSeries(_ series: HistorySeriesKey) async throws
+    /// Removes every series given, together.
+    func removeSeries(_ series: [HistorySeriesKey]) async throws
     func clearHistory() async throws
 }
 
@@ -70,7 +71,7 @@ extension HistoryManager: HistoryServing {
         try await removeChapterDurably(series, chapterKey: chapterKey)
     }
 
-    func removeSeries(_ series: HistorySeriesKey) async throws {
+    func removeSeries(_ series: [HistorySeriesKey]) async throws {
         try await removeSeriesDurably(series)
     }
 
@@ -79,13 +80,16 @@ extension HistoryManager: HistoryServing {
     }
 }
 
-/// Whether a chapter in history has been read or watched to the end.
+/// Whether a chapter in history has been read or watched to the end, and where it was left.
 @MainActor
 protocol HistoryProgressReading: AnyObject {
     /// Fires before read progress changes.
     var progressWillChange: AnyPublisher<Void, Never> { get }
 
     func isFinished(_ series: HistorySeriesKey, chapterKey: String, chapterNumber: Float?) -> Bool
+    /// The saved position inside the chapter, if it is the series' last-read chapter: a page
+    /// index, a text offset or seconds, by the reader the chapter was opened in.
+    func savedPosition(_ series: HistorySeriesKey, chapterKey: String) -> Double?
 }
 
 extension ReadProgressManager: HistoryProgressReading {
@@ -94,13 +98,22 @@ extension ReadProgressManager: HistoryProgressReading {
     }
 
     func isFinished(_ series: HistorySeriesKey, chapterKey: String, chapterNumber: Float?) -> Bool {
-        isRead(
-            media: MediaIdentity(pluginId: series.pluginId, canonicalMediaId: series.mediaKey, mediaKind: series.mediaKind),
-            chapterId: chapterKey,
-            chapterNum: chapterNumber
-        )
+        isRead(media: series.mediaIdentity, chapterId: chapterKey, chapterNum: chapterNumber)
+    }
+
+    func savedPosition(_ series: HistorySeriesKey, chapterKey: String) -> Double? {
+        savedPosition(media: series.mediaIdentity, chapterKey: chapterKey)
     }
 }
+
+/// The tracker entries series are linked to, so one series read on several sources shows once.
+@MainActor
+protocol HistorySeriesLinking: AnyObject {
+    /// Every series' links, provider to remote id; emits the current links on subscription.
+    var trackerLinksPublisher: AnyPublisher<[MediaIdentity: [String: String]], Never> { get }
+}
+
+extension TrackerManager: HistorySeriesLinking {}
 
 /// What opening a series from history shows: its saved library item, else one made from what
 /// history recorded, which the series' screen then loads in full from its source.
@@ -247,19 +260,22 @@ struct PreparedCategoryHistoryDependencies {
     let sourceNames: any HistorySourceNaming
     let progress: any HistoryProgressReading
     let libraryLookup: any HistoryLibraryLookup
+    let links: any HistorySeriesLinking
 
     static func production(
         libraryManager: LibraryManager,
         historyManager: HistoryManager,
         pluginManager: PluginManager,
-        readProgressManager: ReadProgressManager
+        readProgressManager: ReadProgressManager,
+        trackerManager: TrackerManager
     ) -> Self {
         Self(
             organization: libraryManager,
             history: historyManager,
             sourceNames: pluginManager,
             progress: readProgressManager,
-            libraryLookup: libraryManager
+            libraryLookup: libraryManager,
+            links: trackerManager
         )
     }
 
@@ -270,7 +286,8 @@ struct PreparedCategoryHistoryDependencies {
             history: dependency,
             sourceNames: dependency,
             progress: dependency,
-            libraryLookup: dependency
+            libraryLookup: dependency,
+            links: dependency
         )
     }
 }
@@ -281,7 +298,7 @@ private enum UnavailableCategoryHistoryDependencyError: Error {
 
 @MainActor
 private final class UnavailableCategoryHistoryDependency: LibraryOrganizationServing,
-    HistoryServing, HistorySourceNaming, HistoryProgressReading, HistoryLibraryLookup {
+    HistoryServing, HistorySourceNaming, HistoryProgressReading, HistoryLibraryLookup, HistorySeriesLinking {
     let organizationSnapshot = LibraryOrganizationSnapshot(categories: [], links: [])
     let historySnapshot: [HistoryEntry] = []
 
@@ -297,6 +314,10 @@ private final class UnavailableCategoryHistoryDependency: LibraryOrganizationSer
         Empty().eraseToAnyPublisher()
     }
 
+    var trackerLinksPublisher: AnyPublisher<[MediaIdentity: [String: String]], Never> {
+        Just([:]).eraseToAnyPublisher()
+    }
+
     func displayName(for pluginID: String) -> String? {
         _ = pluginID
         return nil
@@ -307,6 +328,12 @@ private final class UnavailableCategoryHistoryDependency: LibraryOrganizationSer
         _ = chapterKey
         _ = chapterNumber
         return false
+    }
+
+    func savedPosition(_ series: HistorySeriesKey, chapterKey: String) -> Double? {
+        _ = series
+        _ = chapterKey
+        return nil
     }
 
     func libraryItem(for record: ReadingHistoryRecord) -> LibraryItem? {
@@ -353,7 +380,7 @@ private final class UnavailableCategoryHistoryDependency: LibraryOrganizationSer
         throw UnavailableCategoryHistoryDependencyError.unavailable
     }
 
-    func removeSeries(_ series: HistorySeriesKey) async throws {
+    func removeSeries(_ series: [HistorySeriesKey]) async throws {
         _ = series
         throw UnavailableCategoryHistoryDependencyError.unavailable
     }

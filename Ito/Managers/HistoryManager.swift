@@ -24,6 +24,10 @@ public struct HistorySeriesKey: Hashable, Sendable {
     public let pluginId: String
     public let mediaKind: MediaKind
     public let mediaKey: String
+
+    var mediaIdentity: MediaIdentity {
+        MediaIdentity(pluginId: pluginId, canonicalMediaId: mediaKey, mediaKind: mediaKind)
+    }
 }
 
 /// A chapter or episode as the reader or player knows it when it is opened.
@@ -31,11 +35,43 @@ public struct HistoryChapter: Sendable {
     public let key: String
     public let title: String?
     public let number: Float?
+    public let volume: Float?
+    public let scanlator: String?
+    public let format: HistoryReaderFormat
+    public let textLength: Int?
 
-    public init(key: String, title: String?, number: Float?) {
+    public init(
+        key: String,
+        title: String?,
+        number: Float?,
+        volume: Float? = nil,
+        scanlator: String? = nil,
+        format: HistoryReaderFormat,
+        textLength: Int? = nil
+    ) {
         self.key = key
         self.title = title.flatMap { $0.isEmpty ? nil : $0 }
         self.number = number
+        self.volume = volume
+        self.scanlator = scanlator.flatMap { $0.isEmpty ? nil : $0 }
+        self.format = format
+        self.textLength = textLength
+    }
+}
+
+extension HistoryChapter {
+    /// A manga or novel chapter, opened in the reader for `format`.
+    init(_ chapter: Chapter, format: HistoryReaderFormat, textLength: Int? = nil) {
+        self.init(
+            key: chapter.key, title: chapter.title, number: chapter.chapter,
+            volume: chapter.volume, scanlator: chapter.scanlator, format: format,
+            textLength: textLength
+        )
+    }
+
+    /// An episode; its language stands in for a group.
+    init(_ episode: Anime.Episode) {
+        self.init(key: episode.key, title: episode.title, number: episode.episode, scanlator: episode.scanlator, format: .video)
     }
 }
 
@@ -191,7 +227,11 @@ public class HistoryManager: ObservableObject {
             mediaKind: mediaKind,
             chapterKey: chapter.key,
             chapterTitle: chapter.title,
-            chapterNumber: chapter.number.map(Double.init)
+            chapterNumber: chapter.number.map(Double.init),
+            volume: chapter.volume.map(Double.init),
+            scanlator: chapter.scanlator,
+            format: chapter.format,
+            textLength: chapter.textLength
         )
         return Task {
             do {
@@ -256,10 +296,12 @@ public class HistoryManager: ObservableObject {
         }
     }
 
-    /// Removes every row of a series.
-    func removeSeriesDurably(_ series: HistorySeriesKey) async throws {
+    /// Removes every row of the given series, together.
+    func removeSeriesDurably(_ series: [HistorySeriesKey]) async throws {
         try await deleteDurably { db in
-            try Self.seriesRows(series).deleteAll(db)
+            try series.reduce(0) { count, series in
+                count + (try Self.seriesRows(series).deleteAll(db))
+            }
         }
     }
 

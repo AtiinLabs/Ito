@@ -79,6 +79,9 @@ History filter: every kind of media */
 
 "Already added" = "Already added";
 
+/* History: other sources the same series was read on */
+"Also read on %@" = "Also read on %@";
+
 "An HTTP header name contains invalid characters." = "An HTTP header name contains invalid characters.";
 
 "An HTTP header value contains invalid newline characters." = "An HTTP header value contains invalid newline characters.";
@@ -187,6 +190,10 @@ History: kind of media */
 
 /* Novel chapter heading: number, then chapter title */
 "Chapter %@ - %@" = "Chapter %1$@ - %2$@";
+
+"Chapter locked" = "Chapter locked";
+
+"Chapter no longer listed" = "Chapter no longer listed";
 
 "Chapters" = "Chapters";
 
@@ -394,6 +401,10 @@ History: kind of media */
 /* Discord status: episode number
 History: an episode without a title */
 "Episode %@" = "Episode %@";
+
+"Episode locked" = "Episode locked";
+
+"Episode no longer listed" = "Episode no longer listed";
 
 "Episodes" = "Episodes";
 
@@ -933,7 +944,8 @@ Manga format: light novel */
 
 "Packages" = "Packages";
 
-/* Accessibility label of a manga page; number is its position in the chapter */
+/* Accessibility label of a manga page; number is its position in the chapter
+History: the page a chapter was left on */
 "Page %lld" = "Page %lld";
 
 "Page %lld of %lld" = "Page %1$lld of %2$lld";
@@ -1001,6 +1013,8 @@ Manga format: light novel */
 "Progress" = "Progress";
 
 "Re-link failed. Please try again." = "Re-link failed. Please try again.";
+
+"Read Again" = "Read Again";
 
 "Read Progress Sync" = "Read Progress Sync";
 
@@ -1384,6 +1398,9 @@ Manga format: light novel */
 
 "Stop Tracking removes the link in Ito. Your %@ list entry is kept." = "Stop Tracking removes the link in Ito. Your %@ list entry is kept.";
 
+/* History: where an episode was left, such as 12:34 */
+"Stopped at %@" = "Stopped at %@";
+
 "Stopping tracking" = "Stopping tracking";
 
 "Storage" = "Storage";
@@ -1556,6 +1573,10 @@ Reading font: the system font */
 
 "The source must be updated before it can sync progress." = "The source must be updated before it can sync progress.";
 
+"The source no longer lists this chapter." = "The source no longer lists this chapter.";
+
+"The source no longer lists this episode." = "The source no longer lists this episode.";
+
 "The source rejected the saved credentials." = "The source rejected the saved credentials.";
 
 "The source rejection could not be saved. Please try again." = "The source rejection could not be saved. Please try again.";
@@ -1588,9 +1609,13 @@ Reading font: the system font */
 
 "This action is unsupported by the source." = "This action is unsupported by the source.";
 
+"This chapter is locked on the source." = "This chapter is locked on the source.";
+
 "This control type (%u) is not supported." = "This control type (%u) is not supported.";
 
 "This control type is not supported." = "This control type is not supported.";
+
+"This episode is locked on the source." = "This episode is locked on the source.";
 
 "This extension requires Ito %@ or later." = "This extension requires Ito %@ or later.";
 
@@ -1777,7 +1802,15 @@ Reading font: the system font */
 /* Discord status */
 "Viewing Details" = "Viewing Details";
 
+/* History: a chapter without a title, by volume and chapter number */
+"Vol. %@ Ch. %@" = "Vol. %1$@ Ch. %2$@";
+
+/* History: volume and chapter title */
+"Vol. %@ · %@" = "Vol. %1$@ · %2$@";
+
 "Warnings" = "Warnings";
+
+"Watch Again" = "Watch Again";
 
 /* History: the episode was watched to the end */
 "Watched to the End" = "Watched to the End";

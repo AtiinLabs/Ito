@@ -204,6 +204,9 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     private var hasStarted = false
     /// Applied after the first successful detail load, then cleared.
     private var pendingOpenIntent: MediaDetailOpenIntent?
+    /// The group History last saw for this series, used when the series' own record cannot name
+    /// one (such as after it moved to another source).
+    private var historyScanlator: String?
     private var isAppeared = false
     private var cancellables = Set<AnyCancellable>()
 
@@ -324,27 +327,25 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         }
     }
 
-    /// The last unfinished chapter, else the first unread one, else the last. A known lock on
-    /// that target is a boundary, not a reason to silently skip ahead.
+    /// What Resume opens; a known lock on it is a boundary, not a reason to skip ahead.
     var resumeChapter: M.Chapter? {
-        guard let chapters = media.chapterList, !chapters.isEmpty else { return nil }
-        let identity = mediaIdentity
-        if let lastKey = dependencies.progress.lastReadChapter(for: identity),
-           let last = chapters.first(where: { $0.key == lastKey }),
-           !isRead(last) {
-            return last.isPaywalled ? nil : last
-        }
-        let ascending = chapters.sorted {
-            ($0.chapterNumber ?? Float.infinity) < ($1.chapterNumber ?? Float.infinity)
-        }
-        let candidate = ascending.first {
-            !dependencies.progress.isRead(
-                media: identity,
-                chapterID: $0.key,
-                chapterNumber: $0.chapterNumber
-            )
-        } ?? ascending.last
-        return candidate?.isPaywalled == false ? candidate : nil
+        guard let candidate = resumeTarget?.chapter, !candidate.isPaywalled else { return nil }
+        return candidate
+    }
+
+    /// Whether Resume starts a finished series over.
+    var isResumeRereading: Bool {
+        resumeTarget?.isRereading == true
+    }
+
+    private var resumeTarget: MediaDetailResumeTarget<M.Chapter>? {
+        MediaDetailResumeTarget(
+            chapters: media.chapterList ?? [],
+            lastReadKey: dependencies.progress.lastReadChapter(for: mediaIdentity),
+            fallbackGroup: historyScanlator,
+            isCompleted: media.isCompleted,
+            isRead: isRead
+        )
     }
 
     func isRead(_ chapter: M.Chapter) -> Bool {
@@ -905,18 +906,17 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         }
     }
 
+    /// Opens what History asked for, or says why it cannot.
     private func performPendingOpenIntent() {
         guard let intent = pendingOpenIntent else { return }
         pendingOpenIntent = nil
-        let target: M.Chapter?
-        switch intent {
-        case .resume:
-            target = resumeChapter
-        case .chapter(let key):
-            target = media.chapterList?.first { $0.key == key }
-        }
-        if let target {
-            selectChapter(target)
+        historyScanlator = intent.preferredScanlator
+        let isEpisode = media.mediaKind == .anime
+        switch intent.target(in: media.chapterList ?? [], resume: resumeTarget?.continuationChapter) {
+        case .open(let chapter): selectChapter(chapter)
+        case .locked: messagePresenter.present(.chapterLocked(isEpisode: isEpisode))
+        case .unavailable: messagePresenter.present(.chapterUnavailable(isEpisode: isEpisode))
+        case nil: break
         }
     }
 

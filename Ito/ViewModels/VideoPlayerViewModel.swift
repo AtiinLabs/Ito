@@ -201,7 +201,7 @@ final class VideoPlayerViewModel: ObservableObject {
 
         dependencies.history.recordEpisode(
             of: anime,
-            episode: HistoryChapter(key: episode.key, title: episode.title, number: episode.episode),
+            episode: HistoryChapter(episode),
             pluginID: pluginID
         )
 

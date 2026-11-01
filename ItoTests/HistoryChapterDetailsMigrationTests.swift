@@ -3,8 +3,8 @@ import GRDB
 import XCTest
 @testable import Ito
 
-final class HistoryChapterNumberMigrationTests: XCTestCase {
-    func testRowsWithoutTheColumnStillDecodeAndKeepTheirFieldsAfterV17() throws {
+final class HistoryChapterDetailsMigrationTests: XCTestCase {
+    func testRowsWithoutTheNewColumnsStillDecodeAndKeepTheirFieldsAfterV17() throws {
         let dbQueue = try DatabaseQueue()
         let migrator = AppDatabase.makeMigrator()
         try migrator.migrate(dbQueue, upTo: "v16")
@@ -20,10 +20,13 @@ final class HistoryChapterNumberMigrationTests: XCTestCase {
             )
         }
 
-        // A database or backup written before v17 has no chapterNumber column.
+        // A database or backup written before v17 has none of the new columns.
         let beforeV17 = try dbQueue.read(ReadingHistoryRecord.fetchAll)
         XCTAssertEqual(beforeV17.map(\.id), ["row"])
         XCTAssertNil(beforeV17[0].chapterNumber)
+        XCTAssertNil(beforeV17[0].scanlator)
+        XCTAssertNil(beforeV17[0].format)
+        XCTAssertNil(beforeV17[0].textLength)
 
         try migrator.migrate(dbQueue)
 
@@ -31,13 +34,23 @@ final class HistoryChapterNumberMigrationTests: XCTestCase {
         XCTAssertEqual(migrated.chapterKey, "chapter-7")
         XCTAssertEqual(migrated.chapterTitle, "chapter-7")
         XCTAssertNil(migrated.chapterNumber)
+        XCTAssertNil(migrated.volume)
+        XCTAssertNil(migrated.textLength)
         XCTAssertEqual(migrated.readAt, readAt)
 
-        var numbered = migrated
-        numbered.chapterNumber = 7.5
-        try dbQueue.write { try numbered.update($0) }
+        var detailed = migrated
+        detailed.chapterNumber = 7.5
+        detailed.volume = 2
+        detailed.scanlator = "Group A"
+        detailed.format = .pages
+        detailed.textLength = 10
+        try dbQueue.write { try detailed.update($0) }
         let reread = try dbQueue.read { try ReadingHistoryRecord.fetchOne($0, key: "row") }
-        XCTAssertEqual(reread?.chapterNumber, 7.5)
+        XCTAssertEqual(reread, detailed)
+        let backupData = try JSONEncoder().encode(detailed)
+        XCTAssertEqual(try JSONDecoder().decode(ReadingHistoryRecord.self, from: backupData), detailed)
+        let oldBackupData = try JSONEncoder().encode(migrated)
+        XCTAssertNil(try JSONDecoder().decode(ReadingHistoryRecord.self, from: oldBackupData).textLength)
     }
 
     func testV17FoldsEarlierVisitsToTheSameChapterIntoTheNewest() throws {

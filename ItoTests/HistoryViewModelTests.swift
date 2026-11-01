@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 import ito_runner
 @testable import Ito
@@ -133,6 +134,200 @@ final class HistoryViewModelTests: XCTestCase {
         XCTAssertEqual(label(.anime, key: "ep-7", title: "ep-7", number: nil), "Unknown Episode")
     }
 
+    func testVolumesDisambiguateBothTitledAndUntitledChapters() {
+        let volumed = pr11bHistoryEntry(id: "v", readAt: 1, chapterTitle: .some(nil), chapterNumber: 5, volume: 2)
+        XCTAssertEqual(HistoryViewModel.chapterLabel(for: volumed.record), "Vol. 2 Ch. 5")
+        let chapters = [1.0, 2.0].map { (volume: Double) -> HistoryEntry in
+            pr11bHistoryEntry(id: "v\(volume)", readAt: 1, chapterTitle: "Chapter 5", chapterNumber: 5, volume: volume)
+        }
+        XCTAssertEqual(chapters.map { HistoryViewModel.chapterLabel(for: $0.record) }, ["Vol. 1 · Chapter 5", "Vol. 2 · Chapter 5"])
+        let titled = pr11bHistoryEntry(id: "t", readAt: 1, chapterTitle: "Reunion", chapterNumber: 5, volume: 2)
+        XCTAssertEqual(HistoryViewModel.chapterLabel(for: titled.record), "Vol. 2 · Reunion")
+    }
+
+    func testPositionShowsWhereAnUnfinishedChapterWasLeft() {
+        let harness = makeViewModel()
+        let pages = pr11bHistoryEntry(id: "p", readAt: 1, chapterKey: "pages", format: .pages)
+        let video = pr11bHistoryEntry(id: "v", readAt: 1, kind: .anime, chapterKey: "video", format: .video)
+        let text = pr11bHistoryEntry(id: "t", readAt: 1, kind: .novel, chapterKey: "text", format: .text)
+        let legacy = pr11bHistoryEntry(id: "l", readAt: 1, chapterKey: "legacy")
+        harness.progress.positions = ["pages": 12, "video": 754.9, "text": 5_000, "legacy": 3]
+
+        XCTAssertEqual(harness.viewModel.positionLabel(for: pages), "Page 13")
+        XCTAssertEqual(harness.viewModel.positionLabel(for: video), "Stopped at 12:34")
+        // Text without a loaded body length and rows without a recorded format stay unknown.
+        XCTAssertNil(harness.viewModel.positionLabel(for: text))
+        XCTAssertNil(harness.viewModel.positionLabel(for: legacy))
+
+        // The first page, or a finished chapter, says nothing more.
+        harness.progress.positions["pages"] = 0
+        XCTAssertNil(harness.viewModel.positionLabel(for: pages))
+        harness.progress.finishedChapterKeys = ["video"]
+        XCTAssertNil(harness.viewModel.positionLabel(for: video))
+    }
+
+    func testPagePositionRejectsValuesThatCannotBecomeOneBasedIntegers() {
+        let harness = makeViewModel()
+        let entry = pr11bHistoryEntry(id: "p", readAt: 1, chapterKey: "pages", format: .pages)
+        for position in [Double(Int.max), Double.greatestFiniteMagnitude, .infinity, .nan, -1] {
+            harness.progress.positions["pages"] = position
+            XCTAssertNil(harness.viewModel.positionLabel(for: entry))
+        }
+        harness.progress.positions["pages"] = 12.75
+        XCTAssertEqual(harness.viewModel.positionLabel(for: entry), "Page 13")
+    }
+
+    func testNovelPercentageUsesRealTextOffsetUnitsAndClampsAtTheEnd() {
+        let harness = makeViewModel()
+        var record = pr11bHistoryEntry(
+            id: "text", readAt: 1, kind: .novel, chapterKey: "text", format: .text
+        ).record
+        let body = [
+            Page(index: 0, content: .text("😀ab")),
+            Page(index: 1, content: .text("cd"))
+        ]
+        record.textLength = NovelTextOffsets.bodyLength(body)
+        XCTAssertEqual(record.textLength, 10)
+        let entry = HistoryEntry(record: record)
+        for (offset, expected) in [
+            (0.0, "0%"), (5, "50%"), (9, "90%"), (10, "100%"), (100, "100%")
+        ] {
+            harness.progress.positions["text"] = offset
+            XCTAssertEqual(harness.viewModel.positionLabel(for: entry), expected)
+        }
+        for offset in [-1.0, .nan, .infinity] {
+            harness.progress.positions["text"] = offset
+            XCTAssertNil(harness.viewModel.positionLabel(for: entry))
+        }
+        harness.progress.positions["text"] = 5
+        for total in [nil, 0, -1] as [Int?] {
+            record.textLength = total
+            XCTAssertNil(harness.viewModel.positionLabel(for: HistoryEntry(record: record)))
+        }
+        harness.progress.finishedChapterKeys = ["text"]
+        XCTAssertNil(harness.viewModel.positionLabel(for: entry))
+    }
+
+    // MARK: - One series on several sources
+
+    func testASeriesLinkedToTheSameTrackerEntryOnTwoSourcesShowsOnce() {
+        let onA = pr11bHistoryEntry(id: "a2", readAt: 4, media: "a-key", chapterKey: "a-c2", plugin: "source.a")
+        let other = pr11bHistoryEntry(id: "x", readAt: 3, media: "x", plugin: "source.a")
+        let onB = pr11bHistoryEntry(id: "b1", readAt: 2, media: "b-key", chapterKey: "b-c1", plugin: "source.b")
+        let harness = makeViewModel(
+            history: [onA, other, onB],
+            sourceNames: ["source.a": "Source A", "source.b": "Source B"],
+            links: [
+                onA.seriesKey.mediaIdentity: ["anilist": "21"],
+                onB.seriesKey.mediaIdentity: ["anilist": "21", "myanimelist": "manga:13"]
+            ]
+        )
+
+        let series = harness.viewModel.sections.flatMap(\.series)
+        XCTAssertEqual(series.map(\.key), [onA.seriesKey, other.seriesKey])
+        XCTAssertEqual(series[0].members, [onA.seriesKey, onB.seriesKey])
+        XCTAssertEqual(series[0].chapters.map(\.id), ["a2", "b1"])
+        XCTAssertEqual(harness.viewModel.otherSourceNames(for: series[0]), ["Source B"])
+        // An earlier chapter opens on the source it was read on.
+        XCTAssertEqual(harness.viewModel.libraryItem(for: series[0].chapters[1])?.pluginId, "source.b")
+    }
+
+    func testSeriesAreMergedThroughAChainOfSharedLinksButNotAcrossKinds() {
+        let one = pr11bHistoryEntry(id: "1", readAt: 4, media: "1", plugin: "source.a")
+        let two = pr11bHistoryEntry(id: "2", readAt: 3, media: "2", plugin: "source.b")
+        let three = pr11bHistoryEntry(id: "3", readAt: 2, media: "3", plugin: "source.c")
+        let anime = pr11bHistoryEntry(id: "4", readAt: 1, media: "4", kind: .anime, plugin: "source.d")
+        let harness = makeViewModel(
+            history: [one, two, three, anime],
+            links: [
+                one.seriesKey.mediaIdentity: ["anilist": "1"],
+                three.seriesKey.mediaIdentity: ["myanimelist": "9"],
+                // Shares AniList with the first and MyAnimeList with the third.
+                two.seriesKey.mediaIdentity: ["anilist": "1", "myanimelist": "9"],
+                anime.seriesKey.mediaIdentity: ["anilist": "1"]
+            ]
+        )
+
+        let series = harness.viewModel.sections.flatMap(\.series)
+        XCTAssertEqual(series.map(\.members), [[one.seriesKey, two.seriesKey, three.seriesKey], [anime.seriesKey]])
+    }
+
+    func testSharedTrackerIDDoesNotOverrideAnotherProvidersConflict() {
+        let one = pr11bHistoryEntry(id: "1", readAt: 3, media: "1", plugin: "source.a")
+        let two = pr11bHistoryEntry(id: "2", readAt: 2, media: "2", plugin: "source.b")
+        let three = pr11bHistoryEntry(id: "3", readAt: 1, media: "3", plugin: "source.c")
+        let links = [
+            one.seriesKey.mediaIdentity: ["anilist": "1", "myanimelist": "9"],
+            two.seriesKey.mediaIdentity: ["anilist": "1", "myanimelist": "8"],
+            three.seriesKey.mediaIdentity: ["anilist": "1", "myanimelist": "8"]
+        ]
+
+        let conflicting = HistoryViewModel.series(from: [one, two], links: links)
+        XCTAssertEqual(conflicting.map(\.members), [[one.seriesKey], [two.seriesKey]])
+        // The conflicting newest owner must not hide a compatible older owner of the same ID.
+        let series = HistoryViewModel.series(from: [one, two, three], links: links)
+        XCTAssertEqual(series.map(\.members), [[one.seriesKey], [two.seriesKey, three.seriesKey]])
+        XCTAssertEqual(series.map { $0.chapters.map(\.id) }, [["1"], ["2", "3"]])
+    }
+
+    func testContradictoryBridgeJoinsOnlyTheNewestCompatibleComponent() {
+        let one = pr11bHistoryEntry(id: "1", readAt: 3, media: "1", plugin: "source.a")
+        let two = pr11bHistoryEntry(id: "2", readAt: 2, media: "2", plugin: "source.b")
+        let bridge = pr11bHistoryEntry(id: "3", readAt: 1, media: "3", plugin: "source.c")
+        let links = [
+            one.seriesKey.mediaIdentity: ["anilist": "1", "myanimelist": "9"],
+            two.seriesKey.mediaIdentity: ["kitsu": "3", "myanimelist": "8"],
+            bridge.seriesKey.mediaIdentity: ["anilist": "1", "kitsu": "3"]
+        ]
+
+        let series = HistoryViewModel.series(from: [one, two, bridge], links: links)
+        XCTAssertEqual(series.map(\.members), [[one.seriesKey, bridge.seriesKey], [two.seriesKey]])
+        // The input is newest-first: reversing the candidate priority reverses the bridge's owner.
+        let reversed = HistoryViewModel.series(from: [two, one, bridge], links: links)
+        XCTAssertEqual(reversed.map(\.members), [[two.seriesKey, bridge.seriesKey], [one.seriesKey]])
+    }
+
+    func testTransitiveComponentRetainsEveryProvidersIDWhenCheckingConflicts() {
+        let one = pr11bHistoryEntry(id: "1", readAt: 4, media: "1", plugin: "source.a")
+        let two = pr11bHistoryEntry(id: "2", readAt: 3, media: "2", plugin: "source.b")
+        let three = pr11bHistoryEntry(id: "3", readAt: 2, media: "3", plugin: "source.c")
+        let conflict = pr11bHistoryEntry(id: "4", readAt: 1, media: "4", plugin: "source.d")
+        let series = HistoryViewModel.series(
+            from: [one, two, three, conflict],
+            links: [
+                one.seriesKey.mediaIdentity: ["anilist": "1"],
+                two.seriesKey.mediaIdentity: ["anilist": "1", "myanimelist": "9"],
+                three.seriesKey.mediaIdentity: ["myanimelist": "9", "kitsu": "3"],
+                conflict.seriesKey.mediaIdentity: ["kitsu": "3", "anilist": "2"]
+            ]
+        )
+
+        XCTAssertEqual(
+            series.map(\.members),
+            [[one.seriesKey, two.seriesKey, three.seriesKey], [conflict.seriesKey]]
+        )
+        XCTAssertEqual(series.map { $0.chapters.map(\.id) }, [["1", "2", "3"], ["4"]])
+    }
+
+    func testLinkingASeriesLaterMergesItAndRemovalRemovesEverySource() async {
+        let onA = pr11bHistoryEntry(id: "a", readAt: 2, media: "a", plugin: "source.a")
+        let onB = pr11bHistoryEntry(id: "b", readAt: 1, media: "b", plugin: "source.b")
+        let harness = makeViewModel(history: [onA, onB])
+        XCTAssertEqual(harness.viewModel.sections.flatMap(\.series).count, 2)
+
+        harness.links.subject.send([
+            onA.seriesKey.mediaIdentity: ["anilist": "5"],
+            onB.seriesKey.mediaIdentity: ["anilist": "5"]
+        ])
+        let merged = harness.viewModel.sections.flatMap(\.series)
+        XCTAssertEqual(merged.map(\.members), [[onA.seriesKey, onB.seriesKey]])
+
+        await harness.viewModel.removeSeries(merged[0])
+
+        XCTAssertEqual(harness.service.deleteRequests, [.series([onA.seriesKey, onB.seriesKey])])
+        XCTAssertEqual(harness.viewModel.phase, .empty)
+    }
+
     func testSourceNameIsThePluginNameOrANoteWhenUninstalled() {
         let entry = pr11bHistoryEntry(id: "one", readAt: 1)
         let installed = makeViewModel(sourceNames: ["plugin": "Atsumaru"]).viewModel
@@ -208,7 +403,7 @@ final class HistoryViewModelTests: XCTestCase {
 
         await harness.viewModel.removeSeries(series)
 
-        XCTAssertEqual(harness.service.deleteRequests, [.series(series.key)])
+        XCTAssertEqual(harness.service.deleteRequests, [.series([series.key])])
         XCTAssertEqual(harness.viewModel.history.map(\.id), ["b1"])
     }
 
@@ -316,16 +511,21 @@ final class HistoryViewModelTests: XCTestCase {
 
     private func makeViewModel(
         history: [HistoryEntry] = [],
-        sourceNames: [String: String] = [:]
+        sourceNames: [String: String] = [:],
+        links: [MediaIdentity: [String: String]] = [:]
     ) -> (
         viewModel: HistoryViewModel,
         service: HistoryServiceFake,
         library: HistoryLibraryLookupFake,
+        progress: HistoryProgressFake,
+        links: HistorySeriesLinksFake,
         messages: CategoryHistoryMessageSpy,
         logger: CategoryHistoryPresentationLogSpy
     ) {
         let service = HistoryServiceFake(history: history)
         let library = HistoryLibraryLookupFake()
+        let progress = HistoryProgressFake()
+        let linksFake = HistorySeriesLinksFake(links: links)
         let messages = CategoryHistoryMessageSpy()
         let logger = CategoryHistoryPresentationLogSpy()
         var calendar = Calendar(identifier: .gregorian)
@@ -335,8 +535,9 @@ final class HistoryViewModelTests: XCTestCase {
             HistoryViewModel(
                 historyService: service,
                 sourceNames: HistorySourceNamesFake(names: sourceNames),
-                progress: HistoryProgressFake(),
+                progress: progress,
                 libraryLookup: library,
+                links: linksFake,
                 messagePresenter: messages,
                 presentationLogger: logger,
                 calendar: calendar,
@@ -344,6 +545,8 @@ final class HistoryViewModelTests: XCTestCase {
             ),
             service,
             library,
+            progress,
+            linksFake,
             messages,
             logger
         )

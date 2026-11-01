@@ -47,6 +47,7 @@ struct CategoryHistoryViewFactory {
             sourceNames: dependencies.sourceNames,
             progress: dependencies.progress,
             libraryLookup: dependencies.libraryLookup,
+            links: dependencies.links,
             messagePresenter: messagePresenter,
             presentationLogger: presentationLogger
         )

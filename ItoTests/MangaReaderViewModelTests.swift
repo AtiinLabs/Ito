@@ -22,6 +22,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         // A chapter without a title is recorded by number, not by its key.
         XCTAssertNil(subject.history.requests[0].chapterTitle)
         XCTAssertEqual(subject.history.requests[0].chapterNumber, 12.75)
+        XCTAssertEqual(subject.history.requests[0].format, .pages)
         XCTAssertEqual(subject.history.requests[0].pluginID, "plugin.test")
         XCTAssertEqual(subject.history.requests[0].entry.key, "manga")
         XCTAssertTrue(subject.progress.requests.isEmpty)

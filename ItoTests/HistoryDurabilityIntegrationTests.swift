@@ -46,6 +46,7 @@ final class HistoryDurabilityIntegrationTests: XCTestCase {
             sourceNames: HistorySourceNamesFake(),
             progress: HistoryProgressFake(),
             libraryLookup: HistoryLibraryLookupFake(),
+            links: HistorySeriesLinksFake(),
             messagePresenter: messages,
             presentationLogger: CategoryHistoryPresentationLogSpy()
         )
@@ -194,6 +195,7 @@ final class HistoryDurabilityIntegrationTests: XCTestCase {
             sourceNames: HistorySourceNamesFake(),
             progress: HistoryProgressFake(),
             libraryLookup: HistoryLibraryLookupFake(),
+            links: HistorySeriesLinksFake(),
             messagePresenter: messages,
             presentationLogger: CategoryHistoryPresentationLogSpy()
         )
