@@ -59,7 +59,7 @@ struct HistoryView: View {
                     Button(role: .destructive) {
                         viewModel.requestClear()
                     } label: {
-                        Text("Clear")
+                        Text("Clear", comment: "Button: clear all history entries")
                     }
                     .disabled(viewModel.isClearing)
                 }
@@ -80,14 +80,14 @@ struct HistoryView: View {
             Text("This removes all reading and watch history.")
         }
         .alert(
-            viewModel.failure?.alertTitle ?? "History Change Failed",
+            viewModel.failure?.alertTitle ?? String(localized: "History Change Failed"),
             isPresented: failureBinding
         ) {
             Button("OK", role: .cancel) {
                 viewModel.dismissFailure()
             }
         } message: {
-            Text(viewModel.failure?.alertMessage ?? "Please try again.")
+            Text(viewModel.failure?.alertMessage ?? String(localized: "Please try again."))
         }
     }
 

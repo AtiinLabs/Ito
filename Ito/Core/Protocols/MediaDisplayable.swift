@@ -22,10 +22,10 @@ nonisolated extension Manga: MediaDisplayable {
     public var studios: [String]? { nil }
     public var displayStatus: String? {
         switch self.status {
-        case .Ongoing: return "Ongoing"
-        case .Completed: return "Completed"
-        case .Cancelled: return "Cancelled"
-        case .Hiatus: return "Hiatus"
+        case .Ongoing: return String(localized: "Ongoing")
+        case .Completed: return String(localized: "Completed")
+        case .Cancelled: return String(localized: "Cancelled")
+        case .Hiatus: return String(localized: "Hiatus")
         case .Unknown: return nil
         }
     }
@@ -37,10 +37,10 @@ nonisolated extension Anime: MediaDisplayable {
     public var chapterList: [Anime.Episode]? { episodes }
     public var displayStatus: String? {
         switch self.status {
-        case .Ongoing: return "Ongoing"
-        case .Completed: return "Completed"
-        case .Cancelled: return "Cancelled"
-        case .Hiatus: return "Hiatus"
+        case .Ongoing: return String(localized: "Ongoing")
+        case .Completed: return String(localized: "Completed")
+        case .Cancelled: return String(localized: "Cancelled")
+        case .Hiatus: return String(localized: "Hiatus")
         case .Unknown: return nil
         }
     }
@@ -52,10 +52,10 @@ nonisolated extension Novel: MediaDisplayable {
     public var studios: [String]? { nil }
     public var displayStatus: String? {
         switch self.status {
-        case .Ongoing: return "Ongoing"
-        case .Completed: return "Completed"
-        case .Cancelled: return "Cancelled"
-        case .Hiatus: return "Hiatus"
+        case .Ongoing: return String(localized: "Ongoing")
+        case .Completed: return String(localized: "Completed")
+        case .Cancelled: return String(localized: "Cancelled")
+        case .Hiatus: return String(localized: "Hiatus")
         case .Unknown: return nil
         }
     }

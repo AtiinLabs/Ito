@@ -541,7 +541,7 @@ public final class SourceResolverViewModel: ObservableObject {
             }
         } catch {
             guard isCurrent() else { return }
-            publish(.fatalFailure(error: "Unable to search sources. Please try again."))
+            publish(.fatalFailure(error: String(localized: "Unable to search sources. Please try again.")))
         }
     }
 
@@ -717,8 +717,8 @@ public final class SourceResolverViewModel: ObservableObject {
                     return
                 }
                 self?.pluginSearchError = didPersist
-                    ? "The source was saved, but could not be opened. Try Open again."
-                    : "The source could not be saved. Please try again."
+                    ? String(localized: "The source was saved, but could not be opened. Try Open again.")
+                    : String(localized: "The source could not be saved. Please try again.")
                 self?.finishAction(operationID, identity: identity)
             }
         }
@@ -771,7 +771,7 @@ public final class SourceResolverViewModel: ObservableObject {
                 guard self?.isCurrentAction(operationID, identity: identity) == true else {
                     return
                 }
-                self?.pluginSearchError = "The saved source could not be opened. Please try again."
+                self?.pluginSearchError = String(localized: "The saved source could not be opened. Please try again.")
                 self?.finishAction(operationID, identity: identity)
             }
         }
@@ -811,7 +811,7 @@ public final class SourceResolverViewModel: ObservableObject {
                 guard self?.isCurrentAction(operationID, identity: identity) == true else {
                     return
                 }
-                self?.pluginSearchError = "The source rejection could not be saved. Please try again."
+                self?.pluginSearchError = String(localized: "The source rejection could not be saved. Please try again.")
                 self?.finishAction(operationID, identity: identity)
             }
         }

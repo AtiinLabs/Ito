@@ -8,7 +8,7 @@ struct MangaImage: View {
     let pageID: String
     var foreground: Color = .white
     var onImageTap: (() -> Void)?
-    var imageLabel = "Illustration"
+    var imageLabel = String(localized: "Illustration", comment: "Accessibility label of a manga page image")
 
     @State private var imageState = ReaderPageImageState(phase: .idle, pixelSize: nil, revision: 0)
     @State private var lease: ReaderImageLease?

@@ -40,11 +40,11 @@ nonisolated enum AppVersion {
 nonisolated struct PluginRequiresNewerAppError: LocalizedError, Equatable {
     let minimumAppVersion: String?
 
-    static let unnamedVersionMessage = "This source needs a newer version of Ito. Update Ito to use it."
+    static let unnamedVersionMessage = String(localized: "This source needs a newer version of Ito. Update Ito to use it.")
 
     var errorDescription: String? {
         guard let minimumAppVersion else { return Self.unnamedVersionMessage }
-        return "This source needs Ito \(minimumAppVersion) or later. Update Ito to use it."
+        return String(localized: "This source needs Ito \(minimumAppVersion) or later. Update Ito to use it.")
     }
 
     /// Why a plugin with these requirements can't run in this Ito, or nil when it can. `abi` and

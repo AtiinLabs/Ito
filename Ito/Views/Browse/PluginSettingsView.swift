@@ -11,14 +11,14 @@ struct PluginSettingsView: View {
 
     private var recoveryConfirmationTitle: String {
         viewModel.completionRecoveryRequest == .discard
-            ? "Discard paused progress?"
-            : "Send paused progress to the current account?"
+            ? String(localized: "Discard paused progress?")
+            : String(localized: "Send paused progress to the current account?")
     }
 
     private var recoveryConfirmationMessage: String {
         viewModel.completionRecoveryRequest == .discard
-            ? "Paused read progress for this source is deleted without being sent. Your local reading history is unchanged."
-            : "Paused read progress was recorded before this source's server or account settings changed. It is sent to the server and account configured now. Nothing is sent until you confirm."
+            ? String(localized: "Paused read progress for this source is deleted without being sent. Your local reading history is unchanged.")
+            : String(localized: "Paused read progress was recorded before this source's server or account settings changed. It is sent to the server and account configured now. Nothing is sent until you confirm.")
     }
 
     var body: some View {
@@ -350,7 +350,7 @@ private struct SecretSettingRow: View {
                 }
             }
             SecureField(
-                placeholder ?? (isSaved ? "Enter a new value to replace it" : control.title),
+                placeholder ?? (isSaved ? String(localized: "Enter a new value to replace it") : control.title),
                 text: Binding(
                     get: { viewModel.secretDraft(key: control.id) },
                     set: { viewModel.updateSecretDraft(key: control.id, value: $0) }

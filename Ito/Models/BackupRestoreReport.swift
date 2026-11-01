@@ -118,23 +118,23 @@ nonisolated public enum BackupPreflightReason: Codable, Equatable, Sendable {
     public var userMessage: String {
         switch self {
         case .invalidCapabilityMetadata:
-            "The backup's format information is damaged or from an unsupported version."
+            String(localized: "The backup's format information is damaged or from an unsupported version.")
         case .invalidLibraryClosure:
-            "A series in the backup belongs to a list the backup does not include."
+            String(localized: "A series in the backup belongs to a list the backup does not include.")
         case .mediaIdentityCollision:
-            "The backup contains the same series more than once."
+            String(localized: "The backup contains the same series more than once.")
         case .ambiguousPluginIdentity:
-            "A source in the backup matches more than one installed source."
+            String(localized: "A source in the backup matches more than one installed source.")
         case .missingPluginIdentity:
-            "A series in the backup has no source."
+            String(localized: "A series in the backup has no source.")
         case .orphanedRetainedPluginState:
-            "The backup has settings for a source it does not include."
+            String(localized: "The backup has settings for a source it does not include.")
         case .credentialPayloadRejected:
-            "Saved sign-in data in the backup could not be used."
+            String(localized: "Saved sign-in data in the backup could not be used.")
         case .invalidComponentData:
-            "Part of the backup is damaged or from an unsupported version."
+            String(localized: "Part of the backup is damaged or from an unsupported version.")
         case .invalidKeyData:
-            "A setting in the backup is damaged or from an unsupported version."
+            String(localized: "A setting in the backup is damaged or from an unsupported version.")
         }
     }
 }

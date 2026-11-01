@@ -703,7 +703,7 @@ private enum SourceDependencyUnavailableErrorForPresentation: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .runnerUnavailable:
-            "The source is not ready."
+            String(localized: "The source is not ready.")
         case .loadFailed(let reason):
             reason
         }

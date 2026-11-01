@@ -1,0 +1,3237 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+
+    },
+    "%@ %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@"
+          }
+        }
+      }
+    },
+    "%@ (Hardsub)" : {
+      "comment" : "Subtitle track: language, burned into the video"
+    },
+    "%@ (Softsub)" : {
+      "comment" : "Subtitle track: language, separate track"
+    },
+    "%@ Settings" : {
+
+    },
+    "%@ already contains state for destination media \"%@\"." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ already contains state for destination media \"%2$@\"."
+          }
+        }
+      }
+    },
+    "%@ has %lld new chapters." : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ has %lld new chapter."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ has %lld new chapters."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%@ has %lld new episodes." : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ has %lld new episode."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ has %lld new episodes."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%@ is also removed from your lists. Reading history and progress are kept." : {
+
+    },
+    "%@ is not a library state MangaBaka supports." : {
+
+    },
+    "%@ is not a list status MyAnimeList supports." : {
+
+    },
+    "%@ progress only moves forward from Ito. Choose Repeating to start over, or change it on %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ progress only moves forward from Ito. Choose Repeating to start over, or change it on %2$@."
+          }
+        }
+      }
+    },
+    "%@ theme" : {
+
+    },
+    "%@ —" : {
+
+    },
+    "%@ • %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ • %2$@"
+          }
+        }
+      }
+    },
+    "%@, maximum" : {
+
+    },
+    "%@, minimum" : {
+
+    },
+    "%lld" : {
+
+    },
+    "%lld / %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld / %2$lld"
+          }
+        }
+      }
+    },
+    "%lld GB" : {
+
+    },
+    "%lld Hours" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Hour"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Hours"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld Series in %lld Categories" : {
+      "comment" : "Discord status: library size",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld Series in %2$lld Categories"
+          }
+        }
+      }
+    },
+    "%lld chapters" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld chapter"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld chapters"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld episodes" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld episode"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld episodes"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld history entries" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld history entry"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld history entries"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld images" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld image"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld images"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld items affected" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld item affected"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld items affected"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld items imported" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld item imported"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld items imported"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld packages" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld package"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld packages"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld paused" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld paused"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld paused"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld percent" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld percent"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld percent"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld sources need attention" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld source needs attention"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld sources need attention"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld titles have new updates, including %@" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld title has new updates, including %@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld titles have new updates, including %@"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld waiting to sync" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld waiting to sync"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld waiting to sync"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld%%" : {
+
+    },
+    "(%lld)" : {
+
+    },
+    "/ %lld" : {
+
+    },
+    "/ ?" : {
+
+    },
+    "0" : {
+
+    },
+    "A library item already exists at the destination \"%@\"." : {
+
+    },
+    "A series in the backup belongs to a list that could not be found, so nothing was merged." : {
+
+    },
+    "A series in the backup belongs to a list the backup does not include." : {
+
+    },
+    "A series in the backup could not be given a place in your library, so nothing was merged." : {
+
+    },
+    "A series in the backup has no source." : {
+
+    },
+    "A series in the backup matches more than one series in your library, so nothing was merged." : {
+
+    },
+    "A setting in the backup is damaged or from an unsupported version." : {
+
+    },
+    "A source in the backup matches more than one installed source." : {
+
+    },
+    "A web view is not available during settings diagnostics." : {
+
+    },
+    "A web view is not available while syncing read progress." : {
+
+    },
+    "About" : {
+
+    },
+    "Acknowledge" : {
+
+    },
+    "Acknowledgment Failed" : {
+
+    },
+    "Action completed successfully." : {
+
+    },
+    "Add" : {
+
+    },
+    "Add Repository" : {
+
+    },
+    "Add a repository URL to discover and install plugins." : {
+
+    },
+    "Add to List" : {
+
+    },
+    "Add to List..." : {
+
+    },
+    "Added" : {
+
+    },
+    "Adds this series to the list" : {
+
+    },
+    "All" : {
+      "comment" : "Filter chip: show every list"
+    },
+    "All sources resolved" : {
+
+    },
+    "All-Time Popular" : {
+
+    },
+    "Already added" : {
+
+    },
+    "An HTTP header name contains invalid characters." : {
+
+    },
+    "An HTTP header value contains invalid newline characters." : {
+
+    },
+    "An unknown error occurred while running the diagnostic." : {
+
+    },
+    "AniList Service Unavailable" : {
+
+    },
+    "AniList couldn't complete this request: %@" : {
+
+    },
+    "Anime" : {
+
+    },
+    "App preferences" : {
+
+    },
+    "Appearance" : {
+      "comment" : "Reader settings tab: colors and brightness"
+    },
+    "Apply" : {
+
+    },
+    "Archived" : {
+
+    },
+    "Archived Plugin" : {
+
+    },
+    "Archived plugins cannot be installed or updated." : {
+
+    },
+    "Are you sure you want to reject this match?" : {
+
+    },
+    "Audio" : {
+      "comment" : "Audio track button when no track is selected"
+    },
+    "Authentication failed. Please try again." : {
+
+    },
+    "Automatic" : {
+      "comment" : "Reading mode: follow the series' default direction"
+    },
+    "Automatic Updates" : {
+
+    },
+    "Automatic progress updates are off while this entry is %@. Set it to %@ to resume them." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Automatic progress updates are off while this entry is %1$@. Set it to %2$@ to resume them."
+          }
+        }
+      }
+    },
+    "Automatic reads right to left, since this series does not specify a mode." : {
+
+    },
+    "Automatic update checks are skipped on cellular data and personal hotspots. Refreshing the library by hand always checks." : {
+
+    },
+    "Automatic uses this series' mode: %@." : {
+
+    },
+    "Automatically fetch and append the next chapter as you approach the end of the current one." : {
+
+    },
+    "Available Plugins" : {
+
+    },
+    "A⁺" : {
+      "shouldTranslate" : false
+    },
+    "A⁻" : {
+      "shouldTranslate" : false
+    },
+    "Back" : {
+
+    },
+    "Background Updates" : {
+
+    },
+    "Backup & Restore" : {
+
+    },
+    "Backup & Restore is unavailable." : {
+
+    },
+    "Backup Error" : {
+
+    },
+    "Backup State" : {
+
+    },
+    "Best Match" : {
+
+    },
+    "Brightness" : {
+
+    },
+    "Browse" : {
+
+    },
+    "Browse Discover" : {
+
+    },
+    "Browse Repositories" : {
+
+    },
+    "BrowseView requires a prepared runtime" : {
+
+    },
+    "Browsing %@" : {
+      "comment" : "Discord status: the library list being viewed"
+    },
+    "Browsing Collection" : {
+      "comment" : "Discord status"
+    },
+    "Browsing Library" : {
+      "comment" : "Discord status"
+    },
+    "Browsing at %@" : {
+      "comment" : "Discord status: source name"
+    },
+    "Cache Limit" : {
+
+    },
+    "Cached images and pages are removed and downloaded again when needed." : {
+
+    },
+    "Calculating…" : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Cancel Action" : {
+
+    },
+    "Cancelled" : {
+      "comment" : "Series status"
+    },
+    "Certificate Fingerprint (SHA-256)" : {
+
+    },
+    "Chapter %@" : {
+
+    },
+    "Chapter %@ - %@" : {
+      "comment" : "Novel chapter heading: number, then chapter title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Chapter %1$@ - %2$@"
+          }
+        }
+      }
+    },
+    "Chapters" : {
+
+    },
+    "Check AniList Discord Status" : {
+
+    },
+    "Check for Updates" : {
+
+    },
+    "Check in Background" : {
+
+    },
+    "Check on Wi-Fi Only" : {
+
+    },
+    "Check your internet connection or try again later." : {
+
+    },
+    "Checking existing progress..." : {
+
+    },
+    "Checking for updates... %lld/%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Checking for updates... %1$lld/%2$lld"
+          }
+        }
+      }
+    },
+    "Checking saved credentials…" : {
+
+    },
+    "Checking…" : {
+
+    },
+    "China" : {
+      "comment" : "Country of origin"
+    },
+    "Choose List on Save" : {
+
+    },
+    "Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports." : {
+
+    },
+    "Clear" : {
+      "comment" : "Button: clear all history entries"
+    },
+    "Clear All History?" : {
+
+    },
+    "Clear Cache" : {
+
+    },
+    "Clear Cache?" : {
+
+    },
+    "Clear Cookies and Site Data" : {
+
+    },
+    "Clear History" : {
+
+    },
+    "Clear selection" : {
+
+    },
+    "Close" : {
+
+    },
+    "Close Reader" : {
+
+    },
+    "Close Settings" : {
+
+    },
+    "Completed" : {
+
+    },
+    "Completed and cancelled series are not checked for new chapters, in the background or when you refresh the library." : {
+
+    },
+    "Components" : {
+
+    },
+    "Confirm" : {
+
+    },
+    "Confirm Merge" : {
+
+    },
+    "Confirm Source?" : {
+
+    },
+    "Connected" : {
+
+    },
+    "Connecting..." : {
+
+    },
+    "Connection unexpectedly closed" : {
+
+    },
+    "Content Not Found" : {
+
+    },
+    "Continue Watching?" : {
+
+    },
+    "Continue from %@" : {
+
+    },
+    "Cookies, website data and Cloudflare clearance were removed." : {
+
+    },
+    "Copied to clipboard" : {
+
+    },
+    "Copy Logs" : {
+
+    },
+    "Could not install \"%@\": %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Could not install \"%1$@\": %2$@"
+          }
+        }
+      }
+    },
+    "Could not read installed plugin metadata for %@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Could not read installed plugin metadata for %1$@: %2$@"
+          }
+        }
+      }
+    },
+    "Couldn't Load Plugin" : {
+
+    },
+    "Couldn't Load Saved Item" : {
+
+    },
+    "Couldn't load popular titles: %@" : {
+
+    },
+    "Couldn't load the next chapter" : {
+
+    },
+    "Couldn't load the next chapter. Tap to try again." : {
+
+    },
+    "Couldn't load the previous chapter. Tap to try again." : {
+
+    },
+    "Couldn't load this chapter" : {
+
+    },
+    "Couldn't load this page" : {
+
+    },
+    "Couldn't load this season's anime: %@" : {
+
+    },
+    "Couldn't load top-rated titles: %@" : {
+
+    },
+    "Couldn't load trending titles: %@" : {
+
+    },
+    "Couldn’t prepare your library" : {
+
+    },
+    "Couldn’t start the app" : {
+
+    },
+    "Country" : {
+
+    },
+    "Cream" : {
+      "comment" : "Reader background theme"
+    },
+    "Create" : {
+
+    },
+    "Create Backup" : {
+
+    },
+    "Create a Personal Access Token in your %@ settings, then paste it here." : {
+
+    },
+    "Create a Token on %@" : {
+
+    },
+    "Create a list below to organize your library." : {
+
+    },
+    "Credentials or user information are not allowed in image URLs." : {
+
+    },
+    "Cross-origin redirects are blocked for plugin image requests." : {
+
+    },
+    "Current Usage" : {
+
+    },
+    "Dark" : {
+      "comment" : "Reader background theme"
+    },
+    "Data" : {
+
+    },
+    "Dates" : {
+
+    },
+    "Debug Logs" : {
+
+    },
+    "Debug logs could not be copied. Please try again." : {
+
+    },
+    "Debug logs could not be loaded. Please try again." : {
+
+    },
+    "Delete" : {
+
+    },
+    "Delete %@?" : {
+
+    },
+    "Delete List" : {
+
+    },
+    "Dependency repaired" : {
+
+    },
+    "Details unavailable" : {
+
+    },
+    "Developer" : {
+
+    },
+    "Diagnostics & Actions" : {
+
+    },
+    "Discard" : {
+
+    },
+    "Discard Paused Progress…" : {
+
+    },
+    "Discard paused progress?" : {
+
+    },
+    "Disconnected" : {
+
+    },
+    "Discord Integration" : {
+
+    },
+    "Discord Rich Presence" : {
+
+    },
+    "Discover" : {
+      "comment" : "Header label for a title without a format"
+    },
+    "DiscoverView requires a prepared runtime" : {
+
+    },
+    "Done" : {
+
+    },
+    "Drop a .ito plugin file here, or browse repositories to find and install plugins." : {
+
+    },
+    "Dropped" : {
+
+    },
+    "Edit" : {
+
+    },
+    "Edit List" : {
+
+    },
+    "Enter a name for your new list." : {
+
+    },
+    "Enter a new value to replace it" : {
+
+    },
+    "Enter a whole number between %@ and %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Enter a whole number between %1$@ and %2$@."
+          }
+        }
+      }
+    },
+    "Enter a ws:// or wss:// address, such as ws://127.0.0.1:3000." : {
+
+    },
+    "Enter at least 3 characters to search MyAnimeList." : {
+
+    },
+    "Enter the full URL to the repository. The app will fetch index.json from this address." : {
+
+    },
+    "Enter values between %@ and %@, with minimum no greater than maximum." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Enter values between %1$@ and %2$@, with minimum no greater than maximum."
+          }
+        }
+      }
+    },
+    "Episode %@" : {
+      "comment" : "Discord status: episode number"
+    },
+    "Episodes" : {
+
+    },
+    "Error" : {
+
+    },
+    "Error Loading Video" : {
+
+    },
+    "Error: %@" : {
+
+    },
+    "Exact Alt Match" : {
+      "comment" : "Source match: exact match on an alternative title"
+    },
+    "Exact Match" : {
+      "comment" : "Source match: exact title match"
+    },
+    "Exclude" : {
+
+    },
+    "Existing tracker progress could not be checked. Please retry before saving." : {
+
+    },
+    "Explore" : {
+
+    },
+    "Export" : {
+
+    },
+    "Export Failed" : {
+
+    },
+    "Export Library" : {
+
+    },
+    "Extension Incompatible" : {
+
+    },
+    "Extension Not Found" : {
+
+    },
+    "Extension Required" : {
+
+    },
+    "Extension Type Mismatch" : {
+
+    },
+    "Extracting Video Streams..." : {
+
+    },
+    "Failed to access plugins directory." : {
+
+    },
+    "Failed to add repository. Please check the URL and try again." : {
+
+    },
+    "Failed to add repository. Please try again." : {
+
+    },
+    "Failed to install package. Please try again." : {
+
+    },
+    "Failed to load details" : {
+
+    },
+    "Failed to load details. Please try again." : {
+
+    },
+    "Failed to load dropped file." : {
+
+    },
+    "Failed to load source" : {
+
+    },
+    "Failed to refresh %@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Failed to refresh %1$@: %2$@"
+          }
+        }
+      }
+    },
+    "Failed to refresh %lld repositories." : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Failed to refresh %lld repository."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Failed to refresh %lld repositories."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Failed to remove plugin" : {
+
+    },
+    "Failed to remove plugin. Please try again." : {
+
+    },
+    "Failed to remove repository. Please try again." : {
+
+    },
+    "Fall" : {
+      "comment" : "Anime season: autumn"
+    },
+    "Fetching Logs..." : {
+
+    },
+    "File copy error: The plugin could not be imported." : {
+
+    },
+    "Filtered" : {
+
+    },
+    "Filters" : {
+      "comment" : "Filter button"
+    },
+    "Filters are only available without search text." : {
+
+    },
+    "Filters, active" : {
+      "comment" : "Filter button when filters are applied"
+    },
+    "Find Manga, Anime, and Novels across all your plugins." : {
+
+    },
+    "Finished" : {
+      "comment" : "Series status: complete"
+    },
+    "Format" : {
+
+    },
+    "Full details could not be refreshed." : {
+
+    },
+    "Full media details could not be refreshed. The available summary is still shown." : {
+
+    },
+    "Fuzzy (%.0f%%)" : {
+      "comment" : "Source match: approximate match, score as percent"
+    },
+    "General" : {
+
+    },
+    "Genres" : {
+
+    },
+    "Go to Settings > Trackers and sign in to AniList or MyAnimeList to track anime." : {
+
+    },
+    "Go to Settings > Trackers and sign in to AniList, MyAnimeList or MangaBaka before tracking." : {
+
+    },
+    "HTTPS to HTTP redirect downgrades are prohibited." : {
+
+    },
+    "Hiatus" : {
+      "comment" : "Series status: paused"
+    },
+    "High to Low" : {
+
+    },
+    "History" : {
+
+    },
+    "History Change Failed" : {
+
+    },
+    "History Item Not Deleted" : {
+
+    },
+    "History Not Cleared" : {
+
+    },
+    "History item not deleted" : {
+
+    },
+    "History not cleared" : {
+
+    },
+    "Host" : {
+
+    },
+    "How would you like to restore?" : {
+
+    },
+    "Illustration" : {
+      "comment" : "Accessibility label of a manga page image"
+    },
+    "Image & Network Cache" : {
+
+    },
+    "Import" : {
+
+    },
+    "Import Failed" : {
+
+    },
+    "Import Results" : {
+
+    },
+    "Importer aliases" : {
+
+    },
+    "Include" : {
+
+    },
+    "Incognito Mode" : {
+
+    },
+    "Index Unavailable" : {
+
+    },
+    "Inserted" : {
+
+    },
+    "Install" : {
+
+    },
+    "Install a source in Browse to check your library for updates." : {
+
+    },
+    "Install missing extensions, remap them to an existing Ito plugin, or skip to handle later from your library." : {
+
+    },
+    "Install plugins from the Browse tab to source content." : {
+
+    },
+    "Installation Failed" : {
+
+    },
+    "Installed" : {
+
+    },
+    "Installed plugins changed during removal. Refresh and try again." : {
+
+    },
+    "Installing extension…" : {
+
+    },
+    "Invalid Server Address" : {
+
+    },
+    "Invalid URL" : {
+
+    },
+    "Items only in this list move to %@. Nothing is removed from your library." : {
+
+    },
+    "Items you read or watch\nwill appear here." : {
+
+    },
+    "Ito could not open the device Settings app. Please try again." : {
+
+    },
+    "Ito is still preparing your library. Try again in a moment." : {
+
+    },
+    "Ito keeps the token in the Keychain on this device. Revoke it on %@ when you no longer need it." : {
+
+    },
+    "Ito marks this entry %@ when you start chapter 1." : {
+
+    },
+    "Ito marks this entry %@ when you start episode 1." : {
+
+    },
+    "Ito syncs progress for series you are watching or reading on MyAnimeList. Automatic sync only moves progress forward. Ito never deletes entries or changes scores, dates, tags or comments." : {
+
+    },
+    "Ito updates chapter progress for manga and novels you are reading on MangaBaka. Ratings, dates and notes are left as they are. Series data from MangaBaka is licensed CC BY-NC-SA 4.0." : {
+
+    },
+    "Japan" : {
+      "comment" : "Country of origin"
+    },
+    "Keep All Backup" : {
+
+    },
+    "Keep All Local" : {
+
+    },
+    "Key: %@" : {
+
+    },
+    "Keychain %@ failed (status %@)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Keychain %1$@ failed (status %2$@)."
+          }
+        }
+      }
+    },
+    "Keychain access was denied (status %@)." : {
+
+    },
+    "Keychain configuration failed (status %@)." : {
+
+    },
+    "Keychain credential data is invalid." : {
+
+    },
+    "Keychain protected data is unavailable (status %@)." : {
+
+    },
+    "Labels unavailable" : {
+
+    },
+    "Labels unavailable." : {
+
+    },
+    "Larger Text" : {
+
+    },
+    "Layout not saved" : {
+
+    },
+    "Left to Right" : {
+      "comment" : "Reading mode"
+    },
+    "Legacy archive" : {
+
+    },
+    "Legacy credential cleanup could not be verified." : {
+
+    },
+    "Legacy credential removal could not be verified." : {
+
+    },
+    "Less Line Spacing" : {
+
+    },
+    "Library" : {
+      "comment" : "Backup component name for library entries"
+    },
+    "Library Updates" : {
+
+    },
+    "Library item \"%@\" belongs to \"%@\", not \"%@\"." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Library item \"%1$@\" belongs to \"%2$@\", not \"%3$@\"."
+          }
+        }
+      }
+    },
+    "Library items were remapped, but this mapping could not be remembered for future imports." : {
+
+    },
+    "Light" : {
+
+    },
+    "Line Spacing" : {
+
+    },
+    "Line spacing %lld" : {
+
+    },
+    "Link to Source" : {
+
+    },
+    "Linking…" : {
+
+    },
+    "List" : {
+
+    },
+    "List Assignment Not Saved" : {
+
+    },
+    "List Change Failed" : {
+
+    },
+    "List Name" : {
+
+    },
+    "List Not Created" : {
+
+    },
+    "List Not Deleted" : {
+
+    },
+    "List Not Renamed" : {
+
+    },
+    "List assignment not saved" : {
+
+    },
+    "List not created" : {
+
+    },
+    "List not deleted" : {
+
+    },
+    "List not renamed" : {
+
+    },
+    "Lists Not Reordered" : {
+
+    },
+    "Lists not reordered" : {
+
+    },
+    "Load Next Page" : {
+
+    },
+    "Load more" : {
+
+    },
+    "Loading %@..." : {
+
+    },
+    "Loading Chapter..." : {
+
+    },
+    "Loading Next Chapter..." : {
+
+    },
+    "Loading Previous Chapter..." : {
+
+    },
+    "Loading Source..." : {
+
+    },
+    "Loading label…" : {
+
+    },
+    "Loading more sources..." : {
+
+    },
+    "Loading source settings…" : {
+
+    },
+    "Loading was cancelled." : {
+
+    },
+    "Loading..." : {
+
+    },
+    "Loading…" : {
+
+    },
+    "Local State" : {
+
+    },
+    "Local progress not updated" : {
+
+    },
+    "Logged in" : {
+
+    },
+    "Logged in as %@" : {
+
+    },
+    "Logout failed. Please try again." : {
+
+    },
+    "Low Match" : {
+
+    },
+    "Low to High" : {
+
+    },
+    "MainTabView requires a prepared runtime" : {
+
+    },
+    "Manage Lists" : {
+
+    },
+    "Manage plugin repositories" : {
+
+    },
+    "Managing Library" : {
+      "comment" : "Discord status"
+    },
+    "Manga" : {
+      "comment" : "Manga format"
+    },
+    "Manga, Anime, and Novels" : {
+
+    },
+    "Manga, anime, and novels you save\nwill appear here." : {
+
+    },
+    "MangaBaka could not be reached." : {
+
+    },
+    "MangaBaka merged this series into series %@. Stop tracking it and link it again." : {
+
+    },
+    "MangaBaka no longer accepts the saved token. Sign in again." : {
+
+    },
+    "MangaBaka reports the library state %@, which Ito does not support yet." : {
+
+    },
+    "Maximum" : {
+
+    },
+    "Media details are unavailable." : {
+
+    },
+    "Merge" : {
+
+    },
+    "Merge Check Failed" : {
+
+    },
+    "Merge Conflicts (%lld)" : {
+
+    },
+    "Merge with Current Library" : {
+
+    },
+    "Merging adds missing items and lets you choose which version to keep when an item differs. Wiping deletes your current library and replaces it with the backup." : {
+
+    },
+    "Migration details" : {
+
+    },
+    "Migration remediation is unavailable." : {
+
+    },
+    "Minimum" : {
+
+    },
+    "Mint" : {
+      "comment" : "Reader background theme"
+    },
+    "Mode" : {
+
+    },
+    "Monospace" : {
+      "comment" : "Reading font: generic monospaced face"
+    },
+    "More Like This" : {
+
+    },
+    "More Line Spacing" : {
+
+    },
+    "More Options" : {
+
+    },
+    "More options could not be loaded." : {
+
+    },
+    "Move" : {
+
+    },
+    "Movie" : {
+      "comment" : "Anime format: movie"
+    },
+    "Multiple imported items would map to \"%@\"." : {
+
+    },
+    "Music" : {
+      "comment" : "Anime format: music video"
+    },
+    "MyAnimeList reports the list status %@, which Ito does not support yet." : {
+
+    },
+    "Network" : {
+
+    },
+    "New List" : {
+
+    },
+    "New Update" : {
+
+    },
+    "Newest" : {
+
+    },
+    "Newest First" : {
+
+    },
+    "Next Chapter" : {
+
+    },
+    "Next Page" : {
+
+    },
+    "No History" : {
+
+    },
+    "No Match" : {
+      "comment" : "Source match: no match found"
+    },
+    "No Plugins Installed" : {
+
+    },
+    "No Repositories" : {
+
+    },
+    "No Results" : {
+
+    },
+    "No Trackers Authenticated" : {
+
+    },
+    "No content found." : {
+
+    },
+    "No custom lists yet" : {
+
+    },
+    "No items in %@." : {
+
+    },
+    "No local reading or watching history was found for this series." : {
+
+    },
+    "No logs from the last 24 hours." : {
+
+    },
+    "No logs match your search." : {
+
+    },
+    "No matches found" : {
+
+    },
+    "No options available" : {
+
+    },
+    "No options found." : {
+
+    },
+    "No packages match your search." : {
+
+    },
+    "No playable streams found." : {
+
+    },
+    "No plugins installed" : {
+
+    },
+    "No results found" : {
+
+    },
+    "No results found." : {
+
+    },
+    "No results found. Try again." : {
+
+    },
+    "No sources installed" : {
+
+    },
+    "No tags matching \"%@\"" : {
+
+    },
+    "None" : {
+
+    },
+    "None selected" : {
+
+    },
+    "Not Found" : {
+
+    },
+    "Not Now" : {
+
+    },
+    "Not on list" : {
+
+    },
+    "Not saved" : {
+
+    },
+    "Not selected" : {
+
+    },
+    "Not set" : {
+
+    },
+    "Not signed in to MangaBaka." : {
+
+    },
+    "Not signed in to MyAnimeList." : {
+
+    },
+    "Not tracked" : {
+
+    },
+    "Nothing in your library matches\n\"%@\"." : {
+
+    },
+    "Notification permission was denied, but the preference could not be disabled. Please try again." : {
+
+    },
+    "Notifications Disabled" : {
+
+    },
+    "Notify on New Chapters" : {
+
+    },
+    "Novel" : {
+      "comment" : "Manga format: light novel"
+    },
+    "Number of images ahead of your current position to preload. Higher values use more data but reduce loading times." : {
+
+    },
+    "OK" : {
+
+    },
+    "ONA" : {
+      "comment" : "Anime format: original net animation"
+    },
+    "OVA" : {
+      "comment" : "Anime format: original video animation"
+    },
+    "Off" : {
+
+    },
+    "Official" : {
+      "comment" : "Discord status: chapter from the official release"
+    },
+    "Oldest First" : {
+
+    },
+    "One Shot" : {
+      "comment" : "Manga format: single chapter"
+    },
+    "Ongoing" : {
+
+    },
+    "Open" : {
+
+    },
+    "Open Settings" : {
+
+    },
+    "Optional" : {
+
+    },
+    "Options could not be loaded." : {
+
+    },
+    "Options unavailable" : {
+
+    },
+    "Options unavailable." : {
+
+    },
+    "Original" : {
+      "comment" : "Discord status: video in its original language"
+    },
+    "Packages" : {
+
+    },
+    "Page %lld" : {
+      "comment" : "Accessibility label of a manga page; number is its position in the chapter"
+    },
+    "Page %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Page %1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "Paginating..." : {
+
+    },
+    "Paging" : {
+
+    },
+    "Part of the backup is damaged or from an unsupported version." : {
+
+    },
+    "Paused" : {
+
+    },
+    "Paused read progress for this source is deleted without being sent. Your local reading history is unchanged." : {
+
+    },
+    "Paused read progress was recorded before this source's server or account settings changed. It is sent to the server and account configured now. Nothing is sent until you confirm." : {
+
+    },
+    "Personal Access Token" : {
+
+    },
+    "Planning" : {
+
+    },
+    "Please drop a valid .ito plugin file." : {
+
+    },
+    "Please enable notifications for Ito in your device Settings to receive update alerts." : {
+
+    },
+    "Please try again." : {
+
+    },
+    "Plugin identities" : {
+
+    },
+    "Plugin missing" : {
+
+    },
+    "Plugin removal encountered an error. Refresh plugin state before retrying." : {
+
+    },
+    "Plugin settings" : {
+
+    },
+    "Plugin settings could not be loaded." : {
+
+    },
+    "Plugin settings could not be loaded. No changes were applied." : {
+
+    },
+    "Plugin settings could not be reloaded." : {
+
+    },
+    "Popular" : {
+
+    },
+    "Popular This Season" : {
+
+    },
+    "Preference not saved" : {
+
+    },
+    "Preferences" : {
+
+    },
+    "Preload Images" : {
+
+    },
+    "Preloading" : {
+
+    },
+    "Preparing plugin settings…" : {
+
+    },
+    "Preparing your library…" : {
+
+    },
+    "Preserved local" : {
+
+    },
+    "Previous Chapter" : {
+
+    },
+    "Previous Page" : {
+
+    },
+    "Privacy" : {
+
+    },
+    "Progress" : {
+
+    },
+    "Re-link failed. Please try again." : {
+
+    },
+    "Read Progress Sync" : {
+
+    },
+    "Read progress and resume" : {
+
+    },
+    "Read with Plugins" : {
+
+    },
+    "Read/Watched" : {
+
+    },
+    "Reader Settings" : {
+
+    },
+    "Reading" : {
+      "comment" : "Reader settings tab: reading options"
+    },
+    "Reading %@" : {
+      "comment" : "Discord status: the chapter being read"
+    },
+    "Reading Mode" : {
+
+    },
+    "Reading fonts" : {
+
+    },
+    "Reading from %@ at %@" : {
+      "comment" : "Discord status: scanlation group, then source name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Reading from %1$@ at %2$@"
+          }
+        }
+      }
+    },
+    "Reading history" : {
+
+    },
+    "Reading history \"%@\" matches multiple imported items." : {
+
+    },
+    "Ready" : {
+
+    },
+    "Recent Searches" : {
+
+    },
+    "Redeliver Repository Deep Link" : {
+      "shouldTranslate" : false
+    },
+    "Refine your search." : {
+
+    },
+    "Refresh Logs" : {
+
+    },
+    "Reject" : {
+
+    },
+    "Reject Source?" : {
+
+    },
+    "Releasing" : {
+      "comment" : "Series status: still airing or publishing"
+    },
+    "Reloading plugin settings…" : {
+
+    },
+    "Remap" : {
+
+    },
+    "Remap Failed" : {
+
+    },
+    "Remap Partially Saved" : {
+
+    },
+    "Remap Source" : {
+
+    },
+    "Remapping \"%@\" would not change its identifier." : {
+
+    },
+    "Remove" : {
+
+    },
+    "Remove %@" : {
+
+    },
+    "Remove %@ filter" : {
+
+    },
+    "Remove %@?" : {
+
+    },
+    "Remove Plugin" : {
+
+    },
+    "Remove Repository" : {
+
+    },
+    "Remove from Library" : {
+
+    },
+    "Remove from Library?" : {
+
+    },
+    "Remove unavailable" : {
+
+    },
+    "Removes all cookies, cached website data and Cloudflare clearance. Sources that use a website login will need you to sign in again." : {
+
+    },
+    "Removes this series from the list" : {
+
+    },
+    "Repeating" : {
+
+    },
+    "Replaced" : {
+
+    },
+    "Repositories" : {
+
+    },
+    "RepositoriesView requires a prepared runtime" : {
+
+    },
+    "Repository" : {
+
+    },
+    "Repository Search Failed" : {
+
+    },
+    "Repository URL" : {
+
+    },
+    "Repository added" : {
+
+    },
+    "Required runtime services are unavailable. Retry to prepare them again." : {
+
+    },
+    "Required runtime services were unavailable." : {
+
+    },
+    "Requires a newer Ito" : {
+
+    },
+    "Requires v%@" : {
+
+    },
+    "Reset" : {
+
+    },
+    "Reset Filters" : {
+
+    },
+    "Resolve Conflicting Data" : {
+
+    },
+    "Restore" : {
+
+    },
+    "Restore Failed" : {
+
+    },
+    "Restore Report" : {
+
+    },
+    "Restore a backup by merging it into your current library, or by replacing your library with it." : {
+
+    },
+    "Restore committed; refresh pending" : {
+
+    },
+    "Restore from Backup" : {
+
+    },
+    "Restore report was already acknowledged." : {
+
+    },
+    "Resume" : {
+
+    },
+    "Retry" : {
+
+    },
+    "Retry Install" : {
+
+    },
+    "Retry Reload" : {
+
+    },
+    "Retry Validation" : {
+
+    },
+    "Retry labels" : {
+
+    },
+    "Retry with Current Account…" : {
+
+    },
+    "Return to this source's home layout." : {
+
+    },
+    "Revert" : {
+
+    },
+    "Right to Left" : {
+      "comment" : "Reading mode"
+    },
+    "Rounded" : {
+      "comment" : "Reading font: the system rounded face"
+    },
+    "Run" : {
+
+    },
+    "Save" : {
+
+    },
+    "Saved" : {
+
+    },
+    "Saved Source • %@ • Confirmed" : {
+
+    },
+    "Saved credentials are currently unavailable." : {
+
+    },
+    "Saved credentials will be checked when protected data is available." : {
+
+    },
+    "Saved sign-in data in the backup could not be used." : {
+
+    },
+    "Saved to Uncategorized" : {
+
+    },
+    "Saved value isn't valid; the source uses the default." : {
+
+    },
+    "Saving" : {
+
+    },
+    "Scope" : {
+
+    },
+    "Score" : {
+
+    },
+    "Score and dates come from %@. Change them on %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Score and dates come from %1$@. Change them on %2$@."
+          }
+        }
+      }
+    },
+    "Score: %lld percent" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Score: %lld percent"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Score: %lld percent"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Scrolling" : {
+
+    },
+    "Seamless Reading" : {
+
+    },
+    "Search" : {
+
+    },
+    "Search %@" : {
+
+    },
+    "Search & Link" : {
+
+    },
+    "Search Again" : {
+
+    },
+    "Search Other Sources" : {
+
+    },
+    "Search Repositories & Install" : {
+
+    },
+    "Search anime..." : {
+
+    },
+    "Search cancelled." : {
+
+    },
+    "Search could not be completed." : {
+
+    },
+    "Search error: %@" : {
+
+    },
+    "Search failed" : {
+
+    },
+    "Search failed. Please try again." : {
+
+    },
+    "Search library" : {
+
+    },
+    "Search manga..." : {
+
+    },
+    "Search on %@" : {
+
+    },
+    "Search options" : {
+
+    },
+    "Search packages" : {
+
+    },
+    "Search plugins…" : {
+
+    },
+    "Search source..." : {
+
+    },
+    "Search tags..." : {
+
+    },
+    "Search was cancelled." : {
+
+    },
+    "Searching for \"%@\"…" : {
+
+    },
+    "Searching installed sources..." : {
+
+    },
+    "Searching plugins..." : {
+
+    },
+    "Searching repositories…" : {
+
+    },
+    "Searching source..." : {
+
+    },
+    "Searching..." : {
+
+    },
+    "Season" : {
+
+    },
+    "Secure credential verification failed." : {
+
+    },
+    "Select Audio Track" : {
+
+    },
+    "Select Quality" : {
+
+    },
+    "Select Series" : {
+
+    },
+    "Select Subtitles" : {
+
+    },
+    "Select Tracker" : {
+
+    },
+    "Selected" : {
+
+    },
+    "Selection limit reached." : {
+
+    },
+    "Send paused progress to the current account?" : {
+
+    },
+    "Send to Current Account" : {
+
+    },
+    "Sepia" : {
+      "comment" : "Reader background theme"
+    },
+    "Series Info" : {
+
+    },
+    "Series data from MangaBaka, licensed CC BY-NC-SA 4.0." : {
+
+    },
+    "Series from these sources stay in your library. Install their sources from Browse to read them again." : {
+
+    },
+    "Serif" : {
+      "comment" : "Reading font: generic serif face"
+    },
+    "Server URL (e.g. ws://127.0.0.1:3000)" : {
+
+    },
+    "Set" : {
+
+    },
+    "Set the maximum amount of disk space Ito is allowed to use for caching images and network responses." : {
+
+    },
+    "Settings" : {
+
+    },
+    "Settings not saved" : {
+
+    },
+    "Settings reload failed" : {
+
+    },
+    "Settings unavailable" : {
+
+    },
+    "Show" : {
+
+    },
+    "Show less" : {
+
+    },
+    "Show more" : {
+
+    },
+    "Show the list picker when saving a new series." : {
+
+    },
+    "Showing the %lld most recent entries." : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Showing the %lld most recent entry."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Showing the %lld most recent entries."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Shows what you're reading or watching on your Discord profile. Needs a Rich Presence bridge running at the server address." : {
+
+    },
+    "Sign In" : {
+
+    },
+    "Sign In to %@" : {
+
+    },
+    "Sign In with %@" : {
+
+    },
+    "Sign Out" : {
+
+    },
+    "Sign in to MangaBaka again." : {
+
+    },
+    "Sign in to this source to continue." : {
+
+    },
+    "Site Data" : {
+
+    },
+    "Site Data Cleared" : {
+
+    },
+    "Skip" : {
+
+    },
+    "Skip Completed Series" : {
+
+    },
+    "Skipped" : {
+
+    },
+    "Smaller Text" : {
+
+    },
+    "Some filter options couldn't be loaded." : {
+
+    },
+    "Some plugins failed: %@" : {
+
+    },
+    "Some repositories could not be refreshed. Please try again." : {
+
+    },
+    "Some settings of this source couldn't be shown." : {
+
+    },
+    "Some sources could not be searched." : {
+
+    },
+    "Some sources couldn't update" : {
+
+    },
+    "Some website data could not be removed. Try again." : {
+
+    },
+    "Sort" : {
+
+    },
+    "Sort By" : {
+
+    },
+    "Sort Order" : {
+
+    },
+    "Sorting is only available without search text." : {
+
+    },
+    "Source" : {
+
+    },
+    "Source Settings" : {
+
+    },
+    "Source home" : {
+
+    },
+    "Source loading was cancelled." : {
+
+    },
+    "Source mappings" : {
+
+    },
+    "Source settings" : {
+
+    },
+    "Sources" : {
+
+    },
+    "South Korea" : {
+      "comment" : "Country of origin"
+    },
+    "Special" : {
+      "comment" : "Anime format: special episode or release"
+    },
+    "Spring" : {
+      "comment" : "Anime season"
+    },
+    "Start" : {
+
+    },
+    "Start Over" : {
+
+    },
+    "Started" : {
+
+    },
+    "Status" : {
+
+    },
+    "Still in library" : {
+
+    },
+    "Stop Tracking" : {
+
+    },
+    "Stop Tracking removes the link in Ito. Your %@ list entry is kept." : {
+
+    },
+    "Stopping tracking" : {
+
+    },
+    "Storage" : {
+
+    },
+    "Subtitles" : {
+      "comment" : "Subtitle button when no subtitle is selected"
+    },
+    "Summer" : {
+      "comment" : "Anime season"
+    },
+    "Switch to sectioned layout" : {
+
+    },
+    "Switch to tabbed layout" : {
+
+    },
+    "Sync" : {
+
+    },
+    "Sync Local History" : {
+
+    },
+    "Sync Trackers to Local Library" : {
+
+    },
+    "Sync your progress automatically with %@." : {
+
+    },
+    "System" : {
+      "comment" : "Reader background theme: follows the system appearance\nReading font: the system font"
+    },
+    "System follows your device's Light or Dark Mode setting." : {
+
+    },
+    "TV" : {
+      "comment" : "Anime format: TV series"
+    },
+    "TV Short" : {
+      "comment" : "Anime format: short TV series"
+    },
+    "Tags" : {
+
+    },
+    "Taiwan" : {
+      "comment" : "Country of origin"
+    },
+    "Tap Done to save. Going back discards your changes." : {
+
+    },
+    "Tap a list to add or remove this series. Series always remain in your library even if removed from all lists." : {
+
+    },
+    "Tap to Load Next Chapter" : {
+
+    },
+    "Tap to Load Previous Chapter" : {
+
+    },
+    "Tests use unsaved secret values when provided, otherwise saved values." : {
+
+    },
+    "Text" : {
+      "comment" : "Reader settings tab: font size and family"
+    },
+    "The AniList API has been temporarily disabled due to stability issues. This is an external factor and not a bug in the app." : {
+
+    },
+    "The Keychain could not save the change (status %@)." : {
+
+    },
+    "The MangaBaka session expired. Sign in again." : {
+
+    },
+    "The MyAnimeList session expired. Sign in again." : {
+
+    },
+    "The account this progress was recorded under could not be verified." : {
+
+    },
+    "The backup contains the same series more than once." : {
+
+    },
+    "The backup has settings for a source it does not include." : {
+
+    },
+    "The backup's format information is damaged or from an unsupported version." : {
+
+    },
+    "The certificate couldn't be saved. Try again." : {
+
+    },
+    "The configured repositories could not be refreshed. Please try again." : {
+
+    },
+    "The extension \"%@\" was not found in any of your repositories." : {
+
+    },
+    "The extension could not be installed. Please try again." : {
+
+    },
+    "The history item couldn't be deleted. Please try again." : {
+
+    },
+    "The image URL is invalid." : {
+
+    },
+    "The image URL origin is not permitted." : {
+
+    },
+    "The image URL scheme must be HTTP or HTTPS." : {
+
+    },
+    "The image could not be downloaded. Check the connection and source settings." : {
+
+    },
+    "The imported library item \"%@\" no longer exists." : {
+
+    },
+    "The installed extension could not be loaded." : {
+
+    },
+    "The library backup could not be exported. Please try again." : {
+
+    },
+    "The library backup could not be generated. Please try again." : {
+
+    },
+    "The library change could not be saved. Please try again." : {
+
+    },
+    "The library item could not be removed. Please try again." : {
+
+    },
+    "The library layout could not be saved. Please try again." : {
+
+    },
+    "The library update check could not finish. Please try again." : {
+
+    },
+    "The linked MangaBaka id is invalid." : {
+
+    },
+    "The linked MyAnimeList id is invalid." : {
+
+    },
+    "The list assignment couldn't be saved. Please try again." : {
+
+    },
+    "The local tracker link could not be removed." : {
+
+    },
+    "The new list and assignment couldn't be saved. Please try again." : {
+
+    },
+    "The operation failed." : {
+
+    },
+    "The package installation failed and the previous plugin could not be restored." : {
+
+    },
+    "The package is no longer available from the repository." : {
+
+    },
+    "The plugin changed after this screen was opened. Refresh and try again." : {
+
+    },
+    "The plugin file is outside the configured plugins directory." : {
+
+    },
+    "The plugin file no longer exists." : {
+
+    },
+    "The plugin removal failed and the original file could not be restored." : {
+
+    },
+    "The plugin setting could not be saved." : {
+
+    },
+    "The plugins directory is unavailable." : {
+
+    },
+    "The queued progress could not be updated. Try again." : {
+
+    },
+    "The queued read progress could not be read or updated." : {
+
+    },
+    "The remote entry changed, but its local link still needs to be saved." : {
+
+    },
+    "The remote tracker entry could not be updated." : {
+
+    },
+    "The repository index could not be loaded. Pull to refresh or check the repository URL." : {
+
+    },
+    "The repository package identifier is invalid." : {
+
+    },
+    "The saved item and extension types do not match." : {
+
+    },
+    "The saved media data is invalid or incompatible." : {
+
+    },
+    "The saved source could not be opened. Please try again." : {
+
+    },
+    "The selected file is not an Ito plugin." : {
+
+    },
+    "The server did not return a valid HTTP response." : {
+
+    },
+    "The server or account settings changed, or are incomplete." : {
+
+    },
+    "The server returned a non-success response." : {
+
+    },
+    "The setting could not be saved." : {
+
+    },
+    "The sign-in couldn't be saved. Try again." : {
+
+    },
+    "The source could not be saved. Please try again." : {
+
+    },
+    "The source could not complete the search." : {
+
+    },
+    "The source couldn't complete this request." : {
+
+    },
+    "The source is not installed or is unavailable." : {
+
+    },
+    "The source is not ready." : {
+
+    },
+    "The source must be updated before it can sync progress." : {
+
+    },
+    "The source rejected the saved credentials." : {
+
+    },
+    "The source rejection could not be saved. Please try again." : {
+
+    },
+    "The source reported an error." : {
+
+    },
+    "The source sent something this version of Ito can't read. Update the source or Ito." : {
+
+    },
+    "The source stopped unexpectedly. Try again." : {
+
+    },
+    "The source was saved, but could not be opened. Try Open again." : {
+
+    },
+    "The source's web page failed: %@" : {
+
+    },
+    "The specified HTTP header is prohibited." : {
+
+    },
+    "The title could not be found on the server." : {
+
+    },
+    "The token was not accepted." : {
+
+    },
+    "The token was not accepted. Check that it was copied completely and has not been revoked." : {
+
+    },
+    "The tracker entry was updated remotely, but the local link was not saved. Please retry to finish linking." : {
+
+    },
+    "The tracker page could not be opened." : {
+
+    },
+    "Theme" : {
+
+    },
+    "These settings can't be shown." : {
+
+    },
+    "This action is unsupported by the source." : {
+
+    },
+    "This control type (%u) is not supported." : {
+
+    },
+    "This control type is not supported." : {
+
+    },
+    "This extension requires Ito %@ or later." : {
+
+    },
+    "This extension requires a newer version of Ito." : {
+
+    },
+    "This extension was not found in your configured repositories." : {
+
+    },
+    "This filter requires a newer version of Ito." : {
+
+    },
+    "This is an ambiguous match. Are you sure you want to link it?" : {
+
+    },
+    "This item may have been imported with an incompatible content key. Search this source to link it to the correct entry." : {
+
+    },
+    "This page has no valid image address" : {
+
+    },
+    "This permanently deletes your current library before restoring the backup. This action cannot be undone." : {
+
+    },
+    "This permanently removes the archived plugin from this device." : {
+
+    },
+    "This plugin is no longer maintained." : {
+
+    },
+    "This plugin is no longer maintained.\nReason: %@" : {
+
+    },
+    "This plugin will be permanently removed from your device." : {
+
+    },
+    "This removes all reading and watch history." : {
+
+    },
+    "This repository and all its associated data will be removed." : {
+
+    },
+    "This repository is already in your list." : {
+
+    },
+    "This series is no longer available on MangaBaka. Stop tracking it and link it again." : {
+
+    },
+    "This source could not be searched." : {
+
+    },
+    "This source does not offer settings." : {
+
+    },
+    "This source is no longer installed." : {
+
+    },
+    "This source needs Ito %@ or later. Update Ito to use it." : {
+
+    },
+    "This source needs a newer version of Ito. Update Ito to use it." : {
+
+    },
+    "To read this content, you must install the '%@' extension." : {
+
+    },
+    "Too many attempts failed." : {
+
+    },
+    "Top Rated" : {
+
+    },
+    "Totals" : {
+
+    },
+    "Track" : {
+
+    },
+    "Track Series" : {
+
+    },
+    "Tracked" : {
+
+    },
+    "Tracker Change Not Saved" : {
+
+    },
+    "Tracker link not saved" : {
+
+    },
+    "Tracker links" : {
+
+    },
+    "Tracker not updated" : {
+
+    },
+    "Tracker page unavailable" : {
+
+    },
+    "Tracker progress is unavailable." : {
+
+    },
+    "Tracker sync settings could not be saved." : {
+
+    },
+    "Trackers" : {
+
+    },
+    "Tracking" : {
+
+    },
+    "Tracking could not be stopped locally. Please try again." : {
+
+    },
+    "Tracking not stopped" : {
+
+    },
+    "Tracking succeeded, but local progress could not be saved." : {
+
+    },
+    "Trending" : {
+
+    },
+    "Trending Now" : {
+
+    },
+    "Trust" : {
+
+    },
+    "Trust Certificate" : {
+
+    },
+    "Trust Certificate…" : {
+
+    },
+    "Trusting this certificate allows connections to this server. Only trust certificates from servers you own or control." : {
+
+    },
+    "Try Again" : {
+
+    },
+    "Try different search terms or adjust your filters" : {
+
+    },
+    "Type" : {
+
+    },
+    "UI Test Fixture" : {
+      "shouldTranslate" : false
+    },
+    "URL Open error: The plugin could not be imported." : {
+
+    },
+    "Unable to Clear Site Data" : {
+
+    },
+    "Unable to Copy Logs" : {
+
+    },
+    "Unable to Disable Notifications" : {
+
+    },
+    "Unable to Fetch Logs" : {
+
+    },
+    "Unable to Load Content" : {
+
+    },
+    "Unable to Open Settings" : {
+
+    },
+    "Unable to Save Settings" : {
+
+    },
+    "Unable to search sources. Please try again." : {
+
+    },
+    "Unavailable" : {
+
+    },
+    "Unavailable option" : {
+
+    },
+    "Uncategorized" : {
+
+    },
+    "Unknown" : {
+
+    },
+    "Unknown Chapter" : {
+
+    },
+    "Unknown Plugin" : {
+
+    },
+    "Unknown Repository" : {
+
+    },
+    "Unmatched Sources" : {
+
+    },
+    "Unread/Unwatched" : {
+
+    },
+    "Unresolved" : {
+
+    },
+    "Unresolved legacy media" : {
+
+    },
+    "Unsupported component type." : {
+
+    },
+    "Upcoming" : {
+      "comment" : "Series status: not released yet"
+    },
+    "Update" : {
+
+    },
+    "Update Entry" : {
+
+    },
+    "Update Frequency" : {
+
+    },
+    "Update badges" : {
+
+    },
+    "Update check failed" : {
+
+    },
+    "Update failed. Please try again." : {
+
+    },
+    "Updates Available" : {
+
+    },
+    "Updating queued progress…" : {
+
+    },
+    "Use a Personal Access Token" : {
+
+    },
+    "Use this when a source stays blocked by Cloudflare or a website login stops working." : {
+
+    },
+    "Validating plugin settings…" : {
+
+    },
+    "Validation could not be completed." : {
+
+    },
+    "Version" : {
+
+    },
+    "Vertical" : {
+      "comment" : "Reading mode"
+    },
+    "View App On GitHub" : {
+      "comment" : "Discord status button"
+    },
+    "View on %@" : {
+
+    },
+    "Viewing Details" : {
+      "comment" : "Discord status"
+    },
+    "Warnings" : {
+
+    },
+    "Watching" : {
+
+    },
+    "Watching %@" : {
+      "comment" : "Discord status: the episode being watched"
+    },
+    "Watching from %@ at %@" : {
+      "comment" : "Discord status: language group, then source name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Watching from %1$@ at %2$@"
+          }
+        }
+      }
+    },
+    "We found active data in your local library that differs from the backup. Choose which data to keep for each item." : {
+
+    },
+    "We found local reading/watching history up to chapter/episode %lld. Do you want to update your %@ progress to match?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "We found local reading/watching history up to chapter/episode %1$lld. Do you want to update your %2$@ progress to match?"
+          }
+        }
+      }
+    },
+    "Webtoon" : {
+      "comment" : "Reading mode"
+    },
+    "When Incognito Mode is enabled, items you read or watch will not be saved to your History. Your library and progress trackers will still be updated." : {
+
+    },
+    "When on, Ito checks your library for new chapters while the app is closed. iOS decides the exact timing." : {
+
+    },
+    "When on, saving a new series opens the list picker instead of saving to Uncategorized. Only applies when you have at least one list of your own." : {
+
+    },
+    "When updating or tracking a series, automatically mark all previous chapters or episodes as read/watched in your local library." : {
+
+    },
+    "White" : {
+      "comment" : "Reader background theme"
+    },
+    "Winter" : {
+      "comment" : "Anime season"
+    },
+    "Wipe and Replace" : {
+
+    },
+    "Wipe and Replace Library" : {
+
+    },
+    "Wipe and Replace Library?" : {
+
+    },
+    "Wipe and replace" : {
+
+    },
+    "Year" : {
+
+    },
+    "Year & Season" : {
+
+    },
+    "You stopped this episode at %@." : {
+
+    },
+    "Your Library is Empty" : {
+
+    },
+    "Your Lists" : {
+
+    },
+    "Your changes could not be saved. Please try again." : {
+
+    },
+    "Your history couldn't be cleared. Please try again." : {
+
+    },
+    "Your list couldn't be created. Please try again." : {
+
+    },
+    "Your list couldn't be deleted. Please try again." : {
+
+    },
+    "Your list couldn't be renamed. Please try again." : {
+
+    },
+    "Your list order couldn't be saved. Please try again." : {
+
+    },
+    "Your restored data is saved. Refresh must finish before a report can be shown." : {
+
+    },
+    "Your restored data is saved. Refresh must finish before the app can continue." : {
+
+    },
+    "Your tracker change couldn't be saved. Please try again." : {
+
+    },
+    "Your tracker entry could not be updated. Please try again." : {
+
+    },
+    "https://example.com/repo" : {
+
+    },
+    "inserted %lld" : {
+
+    },
+    "preserved %lld" : {
+
+    },
+    "repaired %lld" : {
+
+    },
+    "replaced %lld" : {
+
+    },
+    "skipped %lld" : {
+
+    },
+    "to" : {
+      "comment" : "Between the minimum and maximum fields of a number range"
+    },
+    "unresolved %lld" : {
+
+    },
+    "v%@" : {
+
+    },
+    "v%@ available" : {
+
+    },
+    "v%@ • %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "v%1$@ • %2$@"
+          }
+        }
+      }
+    },
+    "·" : {
+
+    },
+    "·  %lld" : {
+
+    },
+    "· %lld" : {
+
+    },
+    "· %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "· %1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "• %@" : {
+
+    },
+    "★ %lld%%" : {
+
+    }
+  },
+  "version" : "1.0"
+}

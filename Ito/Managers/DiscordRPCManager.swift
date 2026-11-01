@@ -32,7 +32,7 @@ public class DiscordRPCManager: NSObject, ObservableObject, URLSessionWebSocketD
 
     // Current Activity Cache
     private var currentActivityDetails: String = "Ito"
-    private var currentActivityState: String = "Browsing Library"
+    private var currentActivityState: String = String(localized: "Browsing Library", comment: "Discord status")
     private var currentActivityType: Int = 0
     private var currentActivityDetailsUrl: String?
     private var currentActivityStateUrl: String?
@@ -111,7 +111,7 @@ public class DiscordRPCManager: NSObject, ObservableObject, URLSessionWebSocketD
         guard webSocketTask == nil else { return }
 
         guard let url = URL(string: wsUrl) else {
-            state = .error("Invalid URL")
+            state = .error(String(localized: "Invalid URL"))
             return
         }
 
@@ -157,7 +157,7 @@ public class DiscordRPCManager: NSObject, ObservableObject, URLSessionWebSocketD
             if self.isIntentionalDisconnect {
                 self.state = .disconnected
             } else {
-                let msg = error?.localizedDescription ?? "Connection unexpectedly closed"
+                let msg = error?.localizedDescription ?? String(localized: "Connection unexpectedly closed")
                 self.state = .error(msg)
 
                 // Silent reconnect strategy with backoff
@@ -271,14 +271,16 @@ public class DiscordRPCManager: NSObject, ObservableObject, URLSessionWebSocketD
         let itemCount = libraryManager.items.count
         let categoryCount = libraryManager.categories.count
 
-        let details = lastLibraryCategoryName.flatMap { "Browsing \($0)" } ?? "Browsing Collection"
-        let state = "\(itemCount) Series in \(categoryCount) Categories"
+        let details = lastLibraryCategoryName.map {
+            String(localized: "Browsing \($0)", comment: "Discord status: the library list being viewed")
+        } ?? String(localized: "Browsing Collection", comment: "Discord status")
+        let state = String(localized: "\(itemCount) Series in \(categoryCount) Categories", comment: "Discord status: library size")
 
         setActivity(
             details: details,
             state: state,
             activityType: 3, // "Watching Ito"
-            largeImageText: "Managing Library",
+            largeImageText: String(localized: "Managing Library", comment: "Discord status"),
             imageUrl: nil // Falls back to ito_logo
         )
     }
@@ -326,7 +328,7 @@ public class DiscordRPCManager: NSObject, ObservableObject, URLSessionWebSocketD
 
         // Match user requested button layout
         buttons.append([
-            "label": "View App On GitHub",
+            "label": String(localized: "View App On GitHub", comment: "Discord status button"),
             "url": "https://github.com/itoapp/Ito"
         ])
 

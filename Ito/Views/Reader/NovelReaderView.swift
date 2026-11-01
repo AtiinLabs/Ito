@@ -348,11 +348,11 @@ struct NovelReaderView: View {
     private func chapterTitle(_ chapter: Novel.Chapter) -> String {
         if let number = chapter.chapter {
             if let title = chapter.title, !title.isEmpty {
-                return "Chapter \(number.formatted()) - \(title)"
+                return String(localized: "Chapter \(number.formatted()) - \(title)", comment: "Novel chapter heading: number, then chapter title")
             }
-            return "Chapter \(number.formatted())"
+            return String(localized: "Chapter \(number.formatted())")
         }
-        return chapter.title ?? "Unknown Chapter"
+        return chapter.title ?? String(localized: "Unknown Chapter")
     }
 }
 
@@ -463,6 +463,17 @@ enum NovelTheme: String, CaseIterable, Identifiable {
     case dark = "Dark"
     var id: String { rawValue }
 
+    var localizedTitle: String {
+        switch self {
+        case .system: return String(localized: "System", comment: "Reader background theme: follows the system appearance")
+        case .white: return String(localized: "White", comment: "Reader background theme")
+        case .cream: return String(localized: "Cream", comment: "Reader background theme")
+        case .mint: return String(localized: "Mint", comment: "Reader background theme")
+        case .sepia: return String(localized: "Sepia", comment: "Reader background theme")
+        case .dark: return String(localized: "Dark", comment: "Reader background theme")
+        }
+    }
+
     var backgroundColor: Color {
         switch self {
         case .system: return Color(UIColor.systemBackground)
@@ -505,6 +516,16 @@ enum NovelFont: String, CaseIterable, Identifiable {
     case merriweather = "Merriweather"
 
     var id: String { rawValue }
+
+    var localizedTitle: String {
+        switch self {
+        case .system: return String(localized: "System", comment: "Reading font: the system font")
+        case .serif: return String(localized: "Serif", comment: "Reading font: generic serif face")
+        case .monospaced: return String(localized: "Monospace", comment: "Reading font: generic monospaced face")
+        case .rounded: return String(localized: "Rounded", comment: "Reading font: the system rounded face")
+        case .lora, .karla, .rubik, .cardo, .nunito, .merriweather: return rawValue
+        }
+    }
 
     func swiftUIFont(size: CGFloat, weight: Font.Weight = .regular) -> Font {
         switch self {
@@ -649,15 +670,15 @@ struct NovelReaderSettingsView: View {
             HStack {
                 Spacer()
 
-                tabButton(.typography, systemName: "textformat", label: "Text")
+                tabButton(.typography, systemName: "textformat", label: String(localized: "Text", comment: "Reader settings tab: font size and family"))
 
                 Spacer()
 
-                tabButton(.theme, systemName: "sun.max.fill", label: "Appearance")
+                tabButton(.theme, systemName: "sun.max.fill", label: String(localized: "Appearance", comment: "Reader settings tab: colors and brightness"))
 
                 Spacer()
 
-                tabButton(.reading, systemName: "book.fill", label: "Reading")
+                tabButton(.reading, systemName: "book.fill", label: String(localized: "Reading", comment: "Reader settings tab: reading options"))
 
                 Spacer()
             }
@@ -708,7 +729,7 @@ struct NovelReaderSettingsView: View {
                 // Top Row: Font Family Selector
                 Menu {
                     ForEach(NovelFont.allCases) { f in
-                        Button(f.rawValue) { fontFamily = f }
+                        Button(f.localizedTitle) { fontFamily = f }
                     }
                 } label: {
                     HStack {
@@ -720,7 +741,7 @@ struct NovelReaderSettingsView: View {
                             Text("Reading fonts")
                                 .font(.subheadline.weight(.medium))
                                 .foregroundColor(.primary)
-                            Text(fontFamily.rawValue)
+                            Text(fontFamily.localizedTitle)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -814,7 +835,7 @@ struct NovelReaderSettingsView: View {
                         }
                         .frame(width: 50, height: 50)
                     }
-                    .accessibilityLabel("\(t.rawValue) theme")
+                    .accessibilityLabel("\(t.localizedTitle) theme")
                     .accessibilityAddTraits(theme == t ? .isSelected : [])
                     Spacer()
                 }

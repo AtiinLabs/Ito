@@ -1,4 +1,5 @@
 import Combine
+import Foundation
 
 @MainActor
 final class StorageSettingsViewModel: ObservableObject {
@@ -62,6 +63,6 @@ final class StorageSettingsViewModel: ObservableObject {
     }
 
     private static func formattedUsage(_ storageAccess: any SettingsStorageAccessing) -> String {
-        storageAccess.currentCacheSizeBytes.map { storageAccess.formatBytes($0) } ?? "Calculating…"
+        storageAccess.currentCacheSizeBytes.map { storageAccess.formatBytes($0) } ?? String(localized: "Calculating…")
     }
 }

@@ -312,7 +312,7 @@ final class PluginSettingsViewModel: ObservableObject {
             guard let self else { return }
             isRecoveringCompletion = false
             if failed {
-                completionRecoveryError = "The queued progress could not be updated. Try again."
+                completionRecoveryError = String(localized: "The queued progress could not be updated. Try again.")
             }
         }
     }
@@ -360,7 +360,7 @@ final class PluginSettingsViewModel: ObservableObject {
 
     private func finishPersistence(_ succeeded: Bool) -> Bool {
         guard succeeded else {
-            persistenceError = "The setting could not be saved."
+            persistenceError = String(localized: "The setting could not be saved.")
             messagePresenter.present(.settingsPersistenceFailed(pluginName: plugin.info.name))
             return false
         }
@@ -540,9 +540,9 @@ final class PluginSettingsViewModel: ObservableObject {
                     self.actionErrorMessage = Self.diagnosticErrorMessage(for: capturedError)
                 } else if let result {
                     // nil indicates unsupported / absent action in runner; non-nil is result string
-                    self.actionSuccessMessage = result.isEmpty ? "Action completed successfully." : result
+                    self.actionSuccessMessage = result.isEmpty ? String(localized: "Action completed successfully.") : result
                 } else {
-                    self.actionErrorMessage = "This action is unsupported by the source."
+                    self.actionErrorMessage = String(localized: "This action is unsupported by the source.")
                 }
             }
 
@@ -568,7 +568,7 @@ final class PluginSettingsViewModel: ObservableObject {
         if let pluginCall = wrapped as? PluginCallError {
             return pluginCall.localizedDescription
         }
-        return "An unknown error occurred while running the diagnostic."
+        return String(localized: "An unknown error occurred while running the diagnostic.")
     }
 
     private func scheduleReload() {

@@ -1,0 +1,8 @@
+/* File type name for Ito's backup files. */
+"Ito Backup Database" = "Ito Backup Database";
+
+/* File type name for a packaged source plugin. */
+"Plugin archive" = "Plugin archive";
+
+/* File type name for a source plugin's JSON manifest. */
+"json plugin manifest" = "json plugin manifest";

@@ -21,6 +21,15 @@ enum ChapterSortOrder: String, CaseIterable {
         case .dateAscending: return "calendar"
         }
     }
+
+    var localizedTitle: String {
+        switch self {
+        case .descending: return String(localized: "High to Low")
+        case .ascending: return String(localized: "Low to High")
+        case .dateDescending: return String(localized: "Newest First")
+        case .dateAscending: return String(localized: "Oldest First")
+        }
+    }
 }
 
 enum ChapterFilterOption: String, CaseIterable {
@@ -33,6 +42,14 @@ enum ChapterFilterOption: String, CaseIterable {
         case .all: return "list.bullet"
         case .unread: return "circle"
         case .read: return "checkmark.circle.fill"
+        }
+    }
+
+    var localizedTitle: String {
+        switch self {
+        case .all: return String(localized: "All")
+        case .unread: return String(localized: "Unread/Unwatched")
+        case .read: return String(localized: "Read/Watched")
         }
     }
 }
@@ -824,14 +841,14 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             "https://anilist.co/\(media is Anime ? "anime" : "manga")/\($0)"
         }
         let pluginName = dependencies.pluginMetadata.displayName(for: pluginID)
-            ?? "Unknown Plugin"
+            ?? String(localized: "Unknown Plugin")
         dependencies.discord.present(
             MediaDetailDiscordActivity(
                 details: media.title,
-                state: "Viewing Details",
+                state: String(localized: "Viewing Details", comment: "Discord status"),
                 activityType: 3,
                 detailsURL: detailsURL,
-                largeImageText: "Browsing at \(pluginName)",
+                largeImageText: String(localized: "Browsing at \(pluginName)", comment: "Discord status: source name"),
                 imageURL: media.cover,
                 resetTimer: true
             )
@@ -869,7 +886,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         guard isCurrentDetailOperation(operationID, mediaKey: mediaKey) else { return }
         detailOperationID = nil
         detailTask = nil
-        detailLoadState = .failure("Failed to load details. Please try again.")
+        detailLoadState = .failure(String(localized: "Failed to load details. Please try again."))
         messagePresenter.present(.detailLoadFailed)
         logFinished(
             kind: .detailLoad,
@@ -928,7 +945,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         relinkSearchOperationID = nil
         relinkSearchTask = nil
         relinkSearchResults = []
-        relinkSearchState = .failure("Search failed. Please try again.")
+        relinkSearchState = .failure(String(localized: "Search failed. Please try again."))
         logFinished(
             kind: .relinkSearch,
             operationID: operationID,
@@ -946,7 +963,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     private func publishRelinkFailure(operationID: UUID) {
         guard relinkMutationOperationID == operationID else { return }
         relinkMutationOperationID = nil
-        relinkMutationState = .failure("Re-link failed. Please try again.")
+        relinkMutationState = .failure(String(localized: "Re-link failed. Please try again."))
         logFinished(
             kind: .relink,
             operationID: operationID,

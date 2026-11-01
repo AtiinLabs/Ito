@@ -22,19 +22,19 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
         var errorDescription: String? {
             switch self {
             case .sourceNotFound(let itemId):
-                return "The imported library item \"\(itemId)\" no longer exists."
+                return String(localized: "The imported library item \"\(itemId)\" no longer exists.")
             case .sourceOwnershipMismatch(let itemId, let expected, let actual):
-                return "Library item \"\(itemId)\" belongs to \"\(actual)\", not \"\(expected)\"."
+                return String(localized: "Library item \"\(itemId)\" belongs to \"\(actual)\", not \"\(expected)\".")
             case .noOpMapping(let itemId):
-                return "Remapping \"\(itemId)\" would not change its identifier."
+                return String(localized: "Remapping \"\(itemId)\" would not change its identifier.")
             case .destinationExists(let itemId):
-                return "A library item already exists at the destination \"\(itemId)\"."
+                return String(localized: "A library item already exists at the destination \"\(itemId)\".")
             case .intraBatchDestinationCollision(let destinationId, _):
-                return "Multiple imported items would map to \"\(destinationId)\"."
+                return String(localized: "Multiple imported items would map to \"\(destinationId)\".")
             case .ambiguousHistoryAssociation(let historyId, _):
-                return "Reading history \"\(historyId)\" matches multiple imported items."
+                return String(localized: "Reading history \"\(historyId)\" matches multiple imported items.")
             case .mediaStateDestinationCollision(let table, let canonicalMediaId):
-                return "\(table) already contains state for destination media \"\(canonicalMediaId)\"."
+                return String(localized: "\(table) already contains state for destination media \"\(canonicalMediaId)\".")
             }
         }
     }

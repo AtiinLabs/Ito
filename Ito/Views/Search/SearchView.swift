@@ -74,7 +74,7 @@ struct SearchView: View {
     private var scopePicker: some View {
         Picker("Scope", selection: $viewModel.searchScope) {
             ForEach(SearchScope.allCases) { scope in
-                Text(scope.rawValue).tag(scope)
+                Text(scope.localizedTitle).tag(scope)
             }
         }
         .pickerStyle(.segmented)
@@ -233,7 +233,7 @@ struct SearchView: View {
     private var emptyContent: some View {
         statusContent(
             systemImage: "doc.text.magnifyingglass",
-            message: "No results found."
+            message: String(localized: "No results found.")
         )
     }
 
@@ -242,7 +242,7 @@ struct SearchView: View {
         if viewModel.pluginFailures.isEmpty {
             statusContent(
                 systemImage: "exclamationmark.triangle",
-                message: "Some sources could not be searched."
+                message: String(localized: "Some sources could not be searched.")
             )
         } else {
             pluginFailureRows
@@ -254,7 +254,7 @@ struct SearchView: View {
         if viewModel.pluginFailures.isEmpty {
             statusContent(
                 systemImage: "exclamationmark.triangle",
-                message: "Search could not be completed."
+                message: String(localized: "Search could not be completed.")
             )
         } else {
             pluginFailureRows
@@ -296,7 +296,7 @@ struct SearchView: View {
     private var cancelledContent: some View {
         statusContent(
             systemImage: "xmark.circle",
-            message: "Search cancelled."
+            message: String(localized: "Search cancelled.")
         )
     }
 

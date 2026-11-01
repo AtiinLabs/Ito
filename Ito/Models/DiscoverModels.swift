@@ -45,11 +45,11 @@ public enum DiscoverSort: String, CaseIterable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .trending: return "Trending"
-        case .popularity: return "Popular"
-        case .score: return "Top Rated"
-        case .newest: return "Newest"
-        case .searchMatch: return "Best Match"
+        case .trending: return String(localized: "Trending")
+        case .popularity: return String(localized: "Popular")
+        case .score: return String(localized: "Top Rated")
+        case .newest: return String(localized: "Newest")
+        case .searchMatch: return String(localized: "Best Match")
         }
     }
 }

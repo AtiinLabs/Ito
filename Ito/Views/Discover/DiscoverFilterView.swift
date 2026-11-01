@@ -11,31 +11,23 @@ struct DiscoverFilterView: View {
     @State private var localFilters: DiscoverFilters = DiscoverFilters()
     @State private var tagSearchText = ""
 
-    private var animeFormats: [(String, String)] {
-        [("TV", "TV"), ("TV_SHORT", "TV Short"), ("MOVIE", "Movie"),
-         ("SPECIAL", "Special"), ("OVA", "OVA"), ("ONA", "ONA"), ("MUSIC", "Music")]
+    private var animeFormats: [String] {
+        ["TV", "TV_SHORT", "MOVIE", "SPECIAL", "OVA", "ONA", "MUSIC"]
     }
 
-    private var mangaFormats: [(String, String)] {
-        [("MANGA", "Manga"), ("ONE_SHOT", "One Shot"), ("NOVEL", "Novel")]
+    private var mangaFormats: [String] {
+        ["MANGA", "ONE_SHOT", "NOVEL"]
     }
 
-    private var formats: [(String, String)] {
+    private var formats: [String] {
         mediaType == .anime ? animeFormats : mangaFormats
     }
 
-    private let statuses: [(String, String)] = [
-        ("RELEASING", "Releasing"), ("FINISHED", "Finished"),
-        ("NOT_YET_RELEASED", "Upcoming"), ("CANCELLED", "Cancelled"), ("HIATUS", "Hiatus")
-    ]
+    private let statuses = ["RELEASING", "FINISHED", "NOT_YET_RELEASED", "CANCELLED", "HIATUS"]
 
-    private let countries: [(String, String)] = [
-        ("JP", "Japan"), ("KR", "South Korea"), ("CN", "China"), ("TW", "Taiwan")
-    ]
+    private let countries = ["JP", "KR", "CN", "TW"]
 
-    private let seasons: [(String, String)] = [
-        ("WINTER", "Winter"), ("SPRING", "Spring"), ("SUMMER", "Summer"), ("FALL", "Fall")
-    ]
+    private let seasons = ["WINTER", "SPRING", "SUMMER", "FALL"]
 
     private var filteredTags: [DiscoverTag] {
         let nonAdult = viewModel.availableTags.filter { $0.isAdult != true }
@@ -148,12 +140,12 @@ struct DiscoverFilterView: View {
                         .foregroundStyle(.secondary)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
-                            ForEach(seasons, id: \.0) { value, label in
+                            ForEach(seasons, id: \.self) { value in
                                 let isSelected = localFilters.season == value
                                 Button {
                                     localFilters.season = isSelected ? nil : value
                                 } label: {
-                                    Text(label)
+                                    Text(DiscoverOptionLabels.season(value))
                                         .font(.caption.weight(.medium))
                                         .padding(.horizontal, 14)
                                         .padding(.vertical, 8)
@@ -206,12 +198,12 @@ struct DiscoverFilterView: View {
 
     private var formatSection: some View {
         Section("Format") {
-            ForEach(formats, id: \.0) { value, label in
+            ForEach(formats, id: \.self) { value in
                 Button {
                     localFilters.format = localFilters.format == value ? nil : value
                 } label: {
                     HStack {
-                        Text(label).foregroundColor(.primary)
+                        Text(DiscoverOptionLabels.format(value)).foregroundColor(.primary)
                         Spacer()
                         if localFilters.format == value {
                             Image(systemName: "checkmark")
@@ -229,12 +221,12 @@ struct DiscoverFilterView: View {
 
     private var statusSection: some View {
         Section("Status") {
-            ForEach(statuses, id: \.0) { value, label in
+            ForEach(statuses, id: \.self) { value in
                 Button {
                     localFilters.status = localFilters.status == value ? nil : value
                 } label: {
                     HStack {
-                        Text(label).foregroundColor(.primary)
+                        Text(DiscoverOptionLabels.status(value)).foregroundColor(.primary)
                         Spacer()
                         if localFilters.status == value {
                             Image(systemName: "checkmark")
@@ -252,12 +244,12 @@ struct DiscoverFilterView: View {
 
     private var countrySection: some View {
         Section("Country") {
-            ForEach(countries, id: \.0) { value, label in
+            ForEach(countries, id: \.self) { value in
                 Button {
                     localFilters.countryOfOrigin = localFilters.countryOfOrigin == value ? nil : value
                 } label: {
                     HStack {
-                        Text(label).foregroundColor(.primary)
+                        Text(DiscoverOptionLabels.country(value)).foregroundColor(.primary)
                         Spacer()
                         if localFilters.countryOfOrigin == value {
                             Image(systemName: "checkmark")
@@ -423,6 +415,63 @@ struct DiscoverFilterView: View {
         } else {
             localFilters.tags.append(item)
         }
+    }
+}
+
+// MARK: - Option labels
+
+/// Display names for AniList option values. The values are API data and are sent as they are;
+/// only the labels people see are copy. A value without a label shows its own words.
+enum DiscoverOptionLabels {
+    static func format(_ value: String) -> String {
+        switch value {
+        case "TV": return String(localized: "TV", comment: "Anime format: TV series")
+        case "TV_SHORT": return String(localized: "TV Short", comment: "Anime format: short TV series")
+        case "MOVIE": return String(localized: "Movie", comment: "Anime format: movie")
+        case "SPECIAL": return String(localized: "Special", comment: "Anime format: special episode or release")
+        case "OVA": return String(localized: "OVA", comment: "Anime format: original video animation")
+        case "ONA": return String(localized: "ONA", comment: "Anime format: original net animation")
+        case "MUSIC": return String(localized: "Music", comment: "Anime format: music video")
+        case "MANGA": return String(localized: "Manga", comment: "Manga format")
+        case "ONE_SHOT": return String(localized: "One Shot", comment: "Manga format: single chapter")
+        case "NOVEL": return String(localized: "Novel", comment: "Manga format: light novel")
+        default: return words(value)
+        }
+    }
+
+    static func status(_ value: String) -> String {
+        switch value {
+        case "RELEASING": return String(localized: "Releasing", comment: "Series status: still airing or publishing")
+        case "FINISHED": return String(localized: "Finished", comment: "Series status: complete")
+        case "NOT_YET_RELEASED": return String(localized: "Upcoming", comment: "Series status: not released yet")
+        case "CANCELLED": return String(localized: "Cancelled", comment: "Series status")
+        case "HIATUS": return String(localized: "Hiatus", comment: "Series status: paused")
+        default: return words(value)
+        }
+    }
+
+    static func country(_ value: String) -> String {
+        switch value {
+        case "JP": return String(localized: "Japan", comment: "Country of origin")
+        case "KR": return String(localized: "South Korea", comment: "Country of origin")
+        case "CN": return String(localized: "China", comment: "Country of origin")
+        case "TW": return String(localized: "Taiwan", comment: "Country of origin")
+        default: return words(value)
+        }
+    }
+
+    static func season(_ value: String) -> String {
+        switch value {
+        case "WINTER": return String(localized: "Winter", comment: "Anime season")
+        case "SPRING": return String(localized: "Spring", comment: "Anime season")
+        case "SUMMER": return String(localized: "Summer", comment: "Anime season")
+        case "FALL": return String(localized: "Fall", comment: "Anime season: autumn")
+        default: return words(value)
+        }
+    }
+
+    private static func words(_ value: String) -> String {
+        value.replacingOccurrences(of: "_", with: " ").capitalized
     }
 }
 

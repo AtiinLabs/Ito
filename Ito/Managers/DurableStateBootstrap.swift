@@ -211,7 +211,7 @@ public final class DurableStateBootstrap: ObservableObject {
             return false
         }
         clearRuntime()
-        state = .failed("Required runtime services were unavailable.")
+        state = .failed(String(localized: "Required runtime services were unavailable."))
         return await retry()
     }
 
@@ -226,7 +226,7 @@ public final class DurableStateBootstrap: ObservableObject {
                 operationId: report.operationId
             ) else {
                 clearRuntime()
-                state = .failed("Restore report was already acknowledged.")
+                state = .failed(String(localized: "Restore report was already acknowledged."))
                 return false
             }
             if try await hasPendingRestoreJournalEntries() {
@@ -706,7 +706,7 @@ enum InstalledPluginSuiteDiscoveryError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .metadataExtractionFailed(let filename, let reason):
-            "Could not read installed plugin metadata for \(filename): \(reason)"
+            String(localized: "Could not read installed plugin metadata for \(filename): \(reason)")
         }
     }
 }

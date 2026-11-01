@@ -30,9 +30,9 @@ actor AniListCredentialRepository {
         var errorDescription: String? {
             switch self {
             case .verificationFailed:
-                "Secure credential verification failed."
+                String(localized: "Secure credential verification failed.")
             case .legacyCleanupFailed:
-                "Legacy credential cleanup could not be verified."
+                String(localized: "Legacy credential cleanup could not be verified.")
             case .storage(let error):
                 error.errorDescription
             }

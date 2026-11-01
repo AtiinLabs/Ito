@@ -7,7 +7,7 @@ nonisolated enum PluginCompletionRecoveryError: Error, Equatable, Sendable, Loca
     case queueUnavailable
 
     var errorDescription: String? {
-        "The queued read progress could not be read or updated."
+        String(localized: "The queued read progress could not be read or updated.")
     }
 }
 

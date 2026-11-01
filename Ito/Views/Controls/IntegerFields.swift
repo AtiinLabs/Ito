@@ -31,8 +31,9 @@ struct IntegerControlDraft {
     private mutating func validate(kind: ControlKind) {
         if parsedValue(kind: kind) != nil { error = nil; return }
         switch kind {
-        case .integer(let spec): error = "Enter a whole number between \(spec.min) and \(spec.max)."
-        case .integerRange(let spec): error = "Enter values between \(spec.min) and \(spec.max), with minimum no greater than maximum."
+        // Limits print as plain digits, the way they are typed into the field.
+        case .integer(let spec): error = String(localized: "Enter a whole number between \(String(spec.min)) and \(String(spec.max)).")
+        case .integerRange(let spec): error = String(localized: "Enter values between \(String(spec.min)) and \(String(spec.max)), with minimum no greater than maximum.")
         default: error = nil
         }
     }
@@ -122,7 +123,7 @@ struct IntegerRangeControlRow: View {
                 .focused($focused, equals: .lower)
                 .onSubmit(commit)
                 .accessibilityLabel("\(control.title), minimum")
-                Text("to").foregroundColor(.secondary)
+                Text("to", comment: "Between the minimum and maximum fields of a number range").foregroundColor(.secondary)
                 TextField("Maximum", text: Binding(
                     get: { draft.upper },
                     set: { draft.edit(upper: $0, kind: control.kind) }

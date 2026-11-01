@@ -84,22 +84,22 @@ private struct SelectionSummary: View {
     }
 
     private var summary: String {
-        guard !selected.isEmpty else { return "None selected" }
+        guard !selected.isEmpty else { return String(localized: "None selected") }
         if let error = resolution?.error { return error }
         let options: OptionSource
         switch control.kind {
         case .select(let spec): options = spec.options
         case .multiSelect(let spec): options = spec.options
-        default: return "None selected"
+        default: return String(localized: "None selected")
         }
         return selected.map { value in
             if case .inline(let inline) = options {
-                return inline.first(where: { $0.value.utf8.elementsEqual(value.utf8) })?.label ?? "Unavailable option"
+                return inline.first(where: { $0.value.utf8.elementsEqual(value.utf8) })?.label ?? String(localized: "Unavailable option")
             }
             let identity = Data(value.utf8)
             if let label = resolution?.labels[identity] { return label }
-            if resolution?.unavailable.contains(identity) == true { return "Unavailable option" }
-            return catalog == nil ? "Labels unavailable." : "Loading label…"
+            if resolution?.unavailable.contains(identity) == true { return String(localized: "Unavailable option") }
+            return catalog == nil ? String(localized: "Labels unavailable.") : String(localized: "Loading label…")
         }.joined(separator: ", ")
     }
 

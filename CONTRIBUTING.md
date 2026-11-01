@@ -59,6 +59,10 @@ CI builds and tests with code signing disabled. Locally, select an iOS Simulator
 
 To run on a device, set your team in Xcode and leave that change uncommitted. The pre-commit hook and the `CI / No development team` check reject a `DEVELOPMENT_TEAM` value in `project.pbxproj` or an `.xcconfig` file. If you stage the project file for another change, stage only the hunks you mean to commit (`git add -p`).
 
+## Strings and translations
+
+Every string shown in the app is translated on Weblate. Write new strings as described in `docs/LOCALIZATION.md` and sync the String Catalog before opening a pull request; translations themselves are contributed on Weblate, not by editing `Localization/`.
+
 ## Build channels
 
 - **Stable:** tags such as `v1.3.0`, created only on a commit already contained in `main`.

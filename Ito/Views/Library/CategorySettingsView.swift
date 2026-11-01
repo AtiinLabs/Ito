@@ -11,7 +11,7 @@ struct CategorySettingsView: View {
         List {
             Section {
                 if let systemCategory = viewModel.systemCategory {
-                    Text(systemCategory.name)
+                    Text(systemCategory.displayName)
                         .foregroundColor(.secondary)
                         .deleteDisabled(true)
                         .moveDisabled(true)
@@ -49,12 +49,13 @@ struct CategorySettingsView: View {
                     viewModel.presentAddCategory()
                 } label: {
                     Image(systemName: "plus")
+                        .accessibilityLabel("New List")
                 }
                 .disabled(viewModel.isCreating)
             }
         }
         .confirmationDialog(
-            "Delete \(viewModel.categoryPendingDeletion?.name ?? "List")?",
+            "Delete \(viewModel.categoryPendingDeletion?.name ?? String(localized: "List"))?",
             isPresented: deleteConfirmationBinding,
             titleVisibility: .visible
         ) {
@@ -72,21 +73,20 @@ struct CategorySettingsView: View {
             addCategorySheet
         }
         .alert(
-            viewModel.failure?.alertTitle ?? "List Change Failed",
+            viewModel.failure?.alertTitle ?? String(localized: "List Change Failed"),
             isPresented: settingsFailureBinding
         ) {
             Button("OK", role: .cancel) {
                 viewModel.dismissFailure()
             }
         } message: {
-            Text(viewModel.failure?.alertMessage ?? "Please try again.")
+            Text(viewModel.failure?.alertMessage ?? String(localized: "Please try again."))
         }
     }
 
     private var deleteMessage: String {
-        let fallbackName = viewModel.systemCategory?.name ?? "Uncategorized"
-        return "Items only in this list move to \(fallbackName). "
-            + "Nothing is removed from your library."
+        let fallbackName = viewModel.systemCategory?.displayName ?? String(localized: "Uncategorized")
+        return String(localized: "Items only in this list move to \(fallbackName). Nothing is removed from your library.")
     }
 
     private var deleteConfirmationBinding: Binding<Bool> {
@@ -146,14 +146,14 @@ struct CategorySettingsView: View {
         }
         .interactiveDismissDisabled(viewModel.isCreating)
         .alert(
-            viewModel.failure?.alertTitle ?? "List Not Created",
+            viewModel.failure?.alertTitle ?? String(localized: "List Not Created"),
             isPresented: createFailureBinding
         ) {
             Button("OK", role: .cancel) {
                 viewModel.dismissFailure()
             }
         } message: {
-            Text(viewModel.failure?.alertMessage ?? "Please try again.")
+            Text(viewModel.failure?.alertMessage ?? String(localized: "Please try again."))
         }
     }
 
@@ -203,14 +203,14 @@ struct EditCategoryView: View {
             dismiss()
         }
         .alert(
-            viewModel.failure?.alertTitle ?? "List Not Renamed",
+            viewModel.failure?.alertTitle ?? String(localized: "List Not Renamed"),
             isPresented: renameFailureBinding
         ) {
             Button("OK", role: .cancel) {
                 viewModel.dismissFailure()
             }
         } message: {
-            Text(viewModel.failure?.alertMessage ?? "Please try again.")
+            Text(viewModel.failure?.alertMessage ?? String(localized: "Please try again."))
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {

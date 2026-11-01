@@ -42,7 +42,7 @@ nonisolated struct PluginSignInTarget: Identifiable, Equatable, Sendable {
 /// Keeps the cookies a sign-in left for one source and reloads that source.
 @MainActor
 final class PluginSignInViewModel: ObservableObject {
-    static let saveFailureMessage = "The sign-in couldn't be saved. Try again."
+    static var saveFailureMessage: String { String(localized: "The sign-in couldn't be saved. Try again.") }
 
     let target: PluginSignInTarget
     @Published private(set) var errorMessage: String?

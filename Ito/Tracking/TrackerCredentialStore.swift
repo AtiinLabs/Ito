@@ -24,15 +24,15 @@ nonisolated enum TrackerCredentialStoreError: Error, Equatable, Sendable, Locali
     var errorDescription: String? {
         switch self {
         case .protectedDataUnavailable(let status):
-            "Keychain protected data is unavailable (status \(status))."
+            String(localized: "Keychain protected data is unavailable (status \(String(status))).")
         case .accessDenied(let status):
-            "Keychain access was denied (status \(status))."
+            String(localized: "Keychain access was denied (status \(String(status))).")
         case .invalidData:
-            "Keychain credential data is invalid."
+            String(localized: "Keychain credential data is invalid.")
         case .configuration(let status):
-            "Keychain configuration failed (status \(status))."
+            String(localized: "Keychain configuration failed (status \(String(status))).")
         case .unexpected(let operation, let status):
-            "Keychain \(operation.rawValue) failed (status \(status))."
+            String(localized: "Keychain \(operation.rawValue) failed (status \(String(status))).")
         }
     }
 }

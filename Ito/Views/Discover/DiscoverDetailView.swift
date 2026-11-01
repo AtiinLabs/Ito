@@ -70,8 +70,8 @@ struct DiscoverDetailView: View {
                         backdropURL: media.bannerImage,
                         coverURL: media.coverImage,
                         authorOrStudio: media.titleRomaji != media.title ? media.titleRomaji : nil,
-                        statusLabel: media.status?.replacingOccurrences(of: "_", with: " ").capitalized,
-                        sourceLabel: media.averageScore != nil ? "★ \(media.averageScore!)%" : (media.format?.replacingOccurrences(of: "_", with: " ") ?? "Discover"),
+                        statusLabel: media.status.map(DiscoverOptionLabels.status),
+                        sourceLabel: media.averageScore != nil ? "★ \(media.averageScore!)%" : (media.format.map(DiscoverOptionLabels.format) ?? String(localized: "Discover", comment: "Header label for a title without a format")),
                         onImageLoaded: { uiImage in
                             viewModel.heroImageLoaded(uiImage)
                         }
@@ -192,19 +192,19 @@ struct DiscoverDetailView: View {
                     infoChip(label: "Chapters", value: "\(chs)")
                 }
                 if let season = media.season, let year = media.seasonYear {
-                    infoChip(label: "Season", value: "\(season.capitalized) \(year)")
+                    infoChip(label: "Season", value: "\(DiscoverOptionLabels.season(season)) \(year)")
                 } else if let year = media.seasonYear {
                     infoChip(label: "Year", value: "\(year)")
                 }
                 if let type = media.format {
-                    infoChip(label: "Format", value: type.replacingOccurrences(of: "_", with: " "))
+                    infoChip(label: "Format", value: DiscoverOptionLabels.format(type))
                 }
             }
             .padding(.horizontal, 16)
         }
     }
 
-    private func infoChip(label: String, value: String) -> some View {
+    private func infoChip(label: LocalizedStringKey, value: String) -> some View {
         VStack(spacing: 2) {
             Text(value)
                 .font(.subheadline.weight(.semibold))
@@ -657,10 +657,10 @@ private struct ResolvedSourceRow: View {
 
     private func matchMethodString(_ method: MatchMethod) -> String {
         switch method {
-        case .exactPreferred: return "Exact Match"
-        case .exactAlternative: return "Exact Alt Match"
-        case .fuzzy: return String(format: "Fuzzy (%.0f%%)", match.score * 100)
-        case .none: return "No Match"
+        case .exactPreferred: return String(localized: "Exact Match", comment: "Source match: exact title match")
+        case .exactAlternative: return String(localized: "Exact Alt Match", comment: "Source match: exact match on an alternative title")
+        case .fuzzy: return String(format: String(localized: "Fuzzy (%.0f%%)", comment: "Source match: approximate match, score as percent"), match.score * 100)
+        case .none: return String(localized: "No Match", comment: "Source match: no match found")
         }
     }
 }

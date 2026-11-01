@@ -10,7 +10,7 @@ struct BackupRestoreReportView: View {
                 Section("Restore") {
                     valueRow(
                         "Mode",
-                        report.mode == .wipe ? "Wipe and replace" : "Merge"
+                        report.mode == .wipe ? String(localized: "Wipe and replace") : String(localized: "Merge")
                     )
                 }
 
@@ -75,7 +75,7 @@ struct BackupRestoreReportView: View {
         }
     }
 
-    private func valueRow(_ title: String, _ value: String) -> some View {
+    private func valueRow(_ title: LocalizedStringKey, _ value: String) -> some View {
         HStack {
             Text(title)
             Spacer()
@@ -89,19 +89,19 @@ struct BackupRestoreReportView: View {
 private extension BackupComponent {
     var displayName: String {
         switch self {
-        case .libraryCore: "Library"
-        case .readingHistory: "Reading history"
-        case .sourceMappings: "Source mappings"
-        case .scalarAppPreferences: "App preferences"
-        case .readProgressAndResume: "Read progress and resume"
-        case .trackerLinks: "Tracker links"
-        case .updateBadges: "Update badges"
-        case .repositories: "Repositories"
-        case .userImporterAliases: "Importer aliases"
-        case .pluginIdentityAndAliases: "Plugin identities"
-        case .pluginSettings: "Plugin settings"
-        case .legacyUnscopedMediaState: "Unresolved legacy media"
-        case .legacyStateArchive: "Legacy archive"
+        case .libraryCore: String(localized: "Library", comment: "Backup component name for library entries")
+        case .readingHistory: String(localized: "Reading history")
+        case .sourceMappings: String(localized: "Source mappings")
+        case .scalarAppPreferences: String(localized: "App preferences")
+        case .readProgressAndResume: String(localized: "Read progress and resume")
+        case .trackerLinks: String(localized: "Tracker links")
+        case .updateBadges: String(localized: "Update badges")
+        case .repositories: String(localized: "Repositories")
+        case .userImporterAliases: String(localized: "Importer aliases")
+        case .pluginIdentityAndAliases: String(localized: "Plugin identities")
+        case .pluginSettings: String(localized: "Plugin settings")
+        case .legacyUnscopedMediaState: String(localized: "Unresolved legacy media")
+        case .legacyStateArchive: String(localized: "Legacy archive")
         }
     }
 }
@@ -109,12 +109,12 @@ private extension BackupComponent {
 private extension ComponentOutcome {
     var summary: String {
         [
-            "inserted \(inserted)",
-            "replaced \(replaced)",
-            "preserved \(preservedLocal)",
-            "skipped \(skipped)",
-            "unresolved \(unresolved)",
-            "repaired \(dependencyRepaired)"
+            String(localized: "inserted \(inserted)"),
+            String(localized: "replaced \(replaced)"),
+            String(localized: "preserved \(preservedLocal)"),
+            String(localized: "skipped \(skipped)"),
+            String(localized: "unresolved \(unresolved)"),
+            String(localized: "repaired \(dependencyRepaired)")
         ].joined(separator: " · ")
     }
 }

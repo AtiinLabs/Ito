@@ -156,6 +156,15 @@ public enum SearchScope: String, CaseIterable, Identifiable {
 
     public var id: String { rawValue }
 
+    public var localizedTitle: String {
+        switch self {
+        case .all: return String(localized: "All")
+        case .manga: return String(localized: "Manga")
+        case .anime: return String(localized: "Anime")
+        case .novel: return String(localized: "Novel")
+        }
+    }
+
     var mediaKind: MediaKind? {
         switch self {
         case .all: return nil

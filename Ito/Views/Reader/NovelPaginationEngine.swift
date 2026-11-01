@@ -95,11 +95,11 @@ nonisolated enum NovelPaginationEngine {
     static func formattedTitle(for chapter: Novel.Chapter) -> String {
         if let number = chapter.chapter {
             if let title = chapter.title, !title.isEmpty {
-                return "Chapter \(number.formatted()) - \(title)"
+                return String(localized: "Chapter \(number.formatted()) - \(title)", comment: "Novel chapter heading: number, then chapter title")
             }
-            return "Chapter \(number.formatted())"
+            return String(localized: "Chapter \(number.formatted())")
         }
-        return chapter.title ?? "Unknown Chapter"
+        return chapter.title ?? String(localized: "Unknown Chapter")
     }
 
     /// Lays out one chapter. Text between images flows across pages; each image is a page of

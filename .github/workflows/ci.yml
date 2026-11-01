@@ -31,6 +31,23 @@ jobs:
       - name: Check project files for a development team ID
         run: .github/scripts/check_development_team.sh
 
+  localization:
+    name: Localization files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Test the localization tool
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+
+      # English base files must match the catalogs, and every translation must be
+      # safe to ship (same placeholders as English). See docs/LOCALIZATION.md.
+      - name: Check Weblate files
+        run: python3 .github/scripts/localization.py check
+
   build-and-test:
     name: Build and unit test
     runs-on: macos-26
@@ -90,12 +107,19 @@ jobs:
             -scheme "$SCHEME" \
             -configuration Debug \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -derivedDataPath DerivedData \
             -enableCodeCoverage NO \
             -clonedSourcePackagesDirPath "$GITHUB_WORKSPACE/SourcePackages" \
             -skipPackagePluginValidation \
             DEVELOPMENT_TEAM= \
             COMPILER_INDEX_STORE_ENABLE=NO \
             | tee build.log
+
+      # Every string the build extracted must already be in the String Catalog,
+      # so Weblate offers it for translation.
+      - name: Check the String Catalog matches the code
+        working-directory: Ito
+        run: python3 .github/scripts/localization.py sync --derived-data DerivedData --check
 
       # Parallel testing clones the simulator. Every test ran on Clone 1, while
       # Clone 2 boot/launch failures exited 65 after all tests passed (#53, #76, #79).
@@ -111,6 +135,7 @@ jobs:
             -scheme "$SCHEME" \
             -configuration Debug \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -derivedDataPath DerivedData \
             -only-testing:ItoTests \
             -parallel-testing-enabled NO \
             -enableCodeCoverage NO \

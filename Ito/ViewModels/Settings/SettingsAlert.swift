@@ -14,38 +14,38 @@ enum SettingsAlert: Identifiable, Equatable {
     var title: String {
         switch self {
         case .saveFailed:
-            return "Unable to Save Settings"
+            return String(localized: "Unable to Save Settings")
         case .invalidDiscordURL:
-            return "Invalid Server Address"
+            return String(localized: "Invalid Server Address")
         case .notificationsDisabled:
-            return "Notifications Disabled"
+            return String(localized: "Notifications Disabled")
         case .notificationRollbackFailed:
-            return "Unable to Disable Notifications"
+            return String(localized: "Unable to Disable Notifications")
         case .applicationSettingsOpenFailed:
-            return "Unable to Open Settings"
+            return String(localized: "Unable to Open Settings")
         case .siteDataCleared:
-            return "Site Data Cleared"
+            return String(localized: "Site Data Cleared")
         case .siteDataClearFailed:
-            return "Unable to Clear Site Data"
+            return String(localized: "Unable to Clear Site Data")
         }
     }
 
     var message: String {
         switch self {
         case .saveFailed:
-            return "Your changes could not be saved. Please try again."
+            return String(localized: "Your changes could not be saved. Please try again.")
         case .invalidDiscordURL:
-            return "Enter a ws:// or wss:// address, such as ws://127.0.0.1:3000."
+            return String(localized: "Enter a ws:// or wss:// address, such as ws://127.0.0.1:3000.")
         case .notificationsDisabled:
-            return "Please enable notifications for Ito in your device Settings to receive update alerts."
+            return String(localized: "Please enable notifications for Ito in your device Settings to receive update alerts.")
         case .notificationRollbackFailed:
-            return "Notification permission was denied, but the preference could not be disabled. Please try again."
+            return String(localized: "Notification permission was denied, but the preference could not be disabled. Please try again.")
         case .applicationSettingsOpenFailed:
-            return "Ito could not open the device Settings app. Please try again."
+            return String(localized: "Ito could not open the device Settings app. Please try again.")
         case .siteDataCleared:
-            return "Cookies, website data and Cloudflare clearance were removed."
+            return String(localized: "Cookies, website data and Cloudflare clearance were removed.")
         case .siteDataClearFailed:
-            return "Some website data could not be removed. Try again."
+            return String(localized: "Some website data could not be removed. Try again.")
         }
     }
 }

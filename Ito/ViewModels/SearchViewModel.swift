@@ -185,7 +185,7 @@ public final class SearchViewModel: ObservableObject {
                     SearchPluginFailure(
                         pluginID: plugin.id,
                         pluginName: plugin.name,
-                        message: pluginError?.message ?? "This source could not be searched.",
+                        message: pluginError?.message ?? String(localized: "This source could not be searched."),
                         canOpenSettings: pluginError?.kind == .needsSettings,
                         canSignIn: pluginError?.kind == .needsLogin,
                         pendingTrust: searchExecutor.pendingTrust(for: plugin.id)

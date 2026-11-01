@@ -1,0 +1,15 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Ito Backup Database": {
+      "comment": "File type name for Ito's backup files."
+    },
+    "Plugin archive": {
+      "comment": "File type name for a packaged source plugin."
+    },
+    "json plugin manifest": {
+      "comment": "File type name for a source plugin's JSON manifest."
+    }
+  },
+  "version": "1.0"
+}

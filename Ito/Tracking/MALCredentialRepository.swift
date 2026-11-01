@@ -30,9 +30,9 @@ actor MALCredentialRepository {
         var errorDescription: String? {
             switch self {
             case .notSignedIn:
-                "Not signed in to MyAnimeList."
+                String(localized: "Not signed in to MyAnimeList.")
             case .sessionExpired:
-                "The MyAnimeList session expired. Sign in again."
+                String(localized: "The MyAnimeList session expired. Sign in again.")
             }
         }
     }

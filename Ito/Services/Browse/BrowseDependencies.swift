@@ -109,9 +109,9 @@ enum BrowsePluginFileError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unsupportedPluginFile:
-            return "The selected file is not an Ito plugin."
+            return String(localized: "The selected file is not an Ito plugin.")
         case .pluginsDirectoryUnavailable:
-            return "The plugins directory is unavailable."
+            return String(localized: "The plugins directory is unavailable.")
         }
     }
 }

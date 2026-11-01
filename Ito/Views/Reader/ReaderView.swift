@@ -205,7 +205,7 @@ struct ReaderView: View {
                 session: viewModel.imageSession,
                 pageID: pageID,
                 onImageTap: toggleUI,
-                imageLabel: "Page \(number)"
+                imageLabel: String(localized: "Page \(number)", comment: "Accessibility label of a manga page; number is its position in the chapter")
             )
         case .text(let text):
             Text(text)
@@ -248,7 +248,7 @@ struct ReaderSettingsView: View {
                 ) {
                     Picker("Preload Images", selection: $preloadCount) {
                         ForEach(ImagePreloadCountPreference.allCases, id: \.self) { option in
-                            Text(option == .none ? "Off" : "\(option.rawValue) images")
+                            Text(option.localizedTitle)
                                 .tag(option.rawValue)
                         }
                     }
@@ -266,19 +266,19 @@ struct ReaderSettingsView: View {
     /// What Automatic means for this series.
     private var automaticModeDescription: String {
         defaultViewer == .Default
-            ? "Automatic reads right to left, since this series does not specify a mode."
-            : "Automatic uses this series' mode: \(Self.modeName(defaultViewer))."
+            ? String(localized: "Automatic reads right to left, since this series does not specify a mode.")
+            : String(localized: "Automatic uses this series' mode: \(Self.modeName(defaultViewer)).")
     }
 
     static let modes: [Manga.Viewer] = [.Default, .Rtl, .Ltr, .Vertical, .Webtoon]
 
     static func modeName(_ mode: Manga.Viewer) -> String {
         switch mode {
-        case .Default: return "Automatic"
-        case .Rtl: return "Right to Left"
-        case .Ltr: return "Left to Right"
-        case .Vertical: return "Vertical"
-        case .Webtoon: return "Webtoon"
+        case .Default: return String(localized: "Automatic", comment: "Reading mode: follow the series' default direction")
+        case .Rtl: return String(localized: "Right to Left", comment: "Reading mode")
+        case .Ltr: return String(localized: "Left to Right", comment: "Reading mode")
+        case .Vertical: return String(localized: "Vertical", comment: "Reading mode")
+        case .Webtoon: return String(localized: "Webtoon", comment: "Reading mode")
         }
     }
 }
@@ -348,7 +348,7 @@ private struct ReaderFooterView: View {
         HStack {
             chapterButton(
                 systemName: "backward.end.fill",
-                label: isRightToLeft ? "Next Chapter" : "Previous Chapter",
+                label: isRightToLeft ? String(localized: "Next Chapter") : String(localized: "Previous Chapter"),
                 isAvailable: isRightToLeft ? hasNext : hasPrev,
                 action: isRightToLeft ? onNextChapter : onPrevChapter
             )
@@ -367,7 +367,7 @@ private struct ReaderFooterView: View {
             HStack(spacing: 24) {
                 pageButton(
                     systemName: "chevron.left",
-                    label: isRightToLeft ? "Next Page" : "Previous Page",
+                    label: isRightToLeft ? String(localized: "Next Page") : String(localized: "Previous Page"),
                     isEnabled: isRightToLeft ? canGoForward : canGoBack,
                     action: isRightToLeft ? onNextPage : onPrevPage
                 )
@@ -382,7 +382,7 @@ private struct ReaderFooterView: View {
 
                 pageButton(
                     systemName: "chevron.right",
-                    label: isRightToLeft ? "Previous Page" : "Next Page",
+                    label: isRightToLeft ? String(localized: "Previous Page") : String(localized: "Next Page"),
                     isEnabled: isRightToLeft ? canGoBack : canGoForward,
                     action: isRightToLeft ? onPrevPage : onNextPage
                 )
@@ -407,7 +407,7 @@ private struct ReaderFooterView: View {
 
             chapterButton(
                 systemName: "forward.end.fill",
-                label: isRightToLeft ? "Previous Chapter" : "Next Chapter",
+                label: isRightToLeft ? String(localized: "Previous Chapter") : String(localized: "Next Chapter"),
                 isAvailable: isRightToLeft ? hasPrev : hasNext,
                 action: isRightToLeft ? onPrevChapter : onNextChapter
             )

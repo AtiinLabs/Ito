@@ -85,40 +85,40 @@ enum CategoryHistoryMessage: Equatable {
     var alertTitle: String {
         switch self {
         case .categoryCreateFailed, .categoryCreateAndAssignFailed:
-            return "List Not Created"
+            return String(localized: "List Not Created")
         case .categoryRenameFailed:
-            return "List Not Renamed"
+            return String(localized: "List Not Renamed")
         case .categoryDeleteFailed:
-            return "List Not Deleted"
+            return String(localized: "List Not Deleted")
         case .categoryReorderFailed:
-            return "Lists Not Reordered"
+            return String(localized: "Lists Not Reordered")
         case .categoryAssignmentFailed:
-            return "List Assignment Not Saved"
+            return String(localized: "List Assignment Not Saved")
         case .historyDeleteFailed:
-            return "History Item Not Deleted"
+            return String(localized: "History Item Not Deleted")
         case .historyClearFailed:
-            return "History Not Cleared"
+            return String(localized: "History Not Cleared")
         }
     }
 
     var alertMessage: String {
         switch self {
         case .categoryCreateFailed:
-            return "Your list couldn't be created. Please try again."
+            return String(localized: "Your list couldn't be created. Please try again.")
         case .categoryRenameFailed:
-            return "Your list couldn't be renamed. Please try again."
+            return String(localized: "Your list couldn't be renamed. Please try again.")
         case .categoryDeleteFailed:
-            return "Your list couldn't be deleted. Please try again."
+            return String(localized: "Your list couldn't be deleted. Please try again.")
         case .categoryReorderFailed:
-            return "Your list order couldn't be saved. Please try again."
+            return String(localized: "Your list order couldn't be saved. Please try again.")
         case .categoryAssignmentFailed:
-            return "The list assignment couldn't be saved. Please try again."
+            return String(localized: "The list assignment couldn't be saved. Please try again.")
         case .categoryCreateAndAssignFailed:
-            return "The new list and assignment couldn't be saved. Please try again."
+            return String(localized: "The new list and assignment couldn't be saved. Please try again.")
         case .historyDeleteFailed:
-            return "The history item couldn't be deleted. Please try again."
+            return String(localized: "The history item couldn't be deleted. Please try again.")
         case .historyClearFailed:
-            return "Your history couldn't be cleared. Please try again."
+            return String(localized: "Your history couldn't be cleared. Please try again.")
         }
     }
 }

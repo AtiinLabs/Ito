@@ -47,22 +47,22 @@ enum MigrationReportAlert: Identifiable, Equatable {
 
     var title: String {
         switch self {
-        case .installFailed, .pluginNotFound: "Installation Failed"
-        case .remapFailed: "Remap Failed"
-        case .remapAliasNotSaved: "Remap Partially Saved"
+        case .installFailed, .pluginNotFound: String(localized: "Installation Failed")
+        case .remapFailed: String(localized: "Remap Failed")
+        case .remapAliasNotSaved: String(localized: "Remap Partially Saved")
         }
     }
 
     var message: String {
         switch self {
         case .installFailed(let foreignID, let reason):
-            "Could not install \"\(foreignID)\": \(reason)"
+            String(localized: "Could not install \"\(foreignID)\": \(reason)")
         case .pluginNotFound(let resolvedID):
-            "The extension \"\(resolvedID)\" was not found in any of your repositories."
+            String(localized: "The extension \"\(resolvedID)\" was not found in any of your repositories.")
         case .remapFailed(let reason):
             reason
         case .remapAliasNotSaved:
-            "Library items were remapped, but this mapping could not be remembered for future imports."
+            String(localized: "Library items were remapped, but this mapping could not be remembered for future imports.")
         }
     }
 }
