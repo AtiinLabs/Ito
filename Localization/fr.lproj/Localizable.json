@@ -1,1 +1,7 @@
-{}
+{
+    "%lld chapters": {
+        "one": "%lld chapitre",
+        "many": "%lld chapitres",
+        "other": "%lld chapitres"
+    }
+}
