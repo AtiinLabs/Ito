@@ -354,14 +354,14 @@ final class MultiKindDurableIdentityTests: XCTestCase {
 
         let mangaTask = history.recordManga(
             Manga(key: "42", title: "Manga 42"),
-            chapterKey: "m-ch1",
-            chapterTitle: "Chapter 1",
+            chapter: HistoryChapter(
+                key: "m-ch1", title: "Chapter 1", number: 1, volume: 3, scanlator: "Group A", format: .pages
+            ),
             pluginId: "source.multi"
         )
         let novelTask = history.recordNovel(
             Novel(key: "42", title: "Novel 42"),
-            chapterKey: "n-ch1",
-            chapterTitle: "Chapter 1",
+            chapter: HistoryChapter(key: "n-ch1", title: "Chapter 1", number: 1, format: .text),
             pluginId: "source.multi"
         )
         await mangaTask?.value
@@ -379,6 +379,10 @@ final class MultiKindDurableIdentityTests: XCTestCase {
         XCTAssertNil(mangaRecord?.libraryItemId)
         XCTAssertEqual(mangaRecord?.mediaKey, "42")
         XCTAssertEqual(mangaRecord?.mediaKind, .manga)
+        XCTAssertEqual(mangaRecord?.volume, 3)
+        XCTAssertEqual(mangaRecord?.scanlator, "Group A")
+        XCTAssertEqual(mangaRecord?.format, .pages)
+        XCTAssertNil(novelRecord?.scanlator)
 
         XCTAssertNotNil(novelRecord)
         XCTAssertEqual(novelRecord?.libraryItemId, novelID)

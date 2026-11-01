@@ -208,6 +208,11 @@ public final class TrackerManager: ObservableObject {
         trackerMappings[media]?[providerId]
     }
 
+    /// Every series' tracker links, provider to remote id; emits the current links on subscription.
+    var trackerLinksPublisher: AnyPublisher<[MediaIdentity: [String: String]], Never> {
+        $trackerMappings.eraseToAnyPublisher()
+    }
+
     /// Whether the media is linked to a tracker the user is signed in to. Links to signed-out trackers do not count.
     public func hasAuthenticatedLink(for media: MediaIdentity) -> Bool {
         authenticatedProviders.contains { trackerMappings[media]?[$0.identifier] != nil }

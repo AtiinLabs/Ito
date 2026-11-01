@@ -974,8 +974,7 @@ final class MangaReaderViewModel: ObservableObject {
         guard historyChapterKeys.insert(chapter.key).inserted else { return }
         dependencies.history.recordChapter(
             of: entry,
-            chapterKey: chapter.key,
-            chapterTitle: chapter.title ?? chapter.key,
+            chapter: HistoryChapter(chapter, format: .pages),
             pluginID: pluginID
         )
     }

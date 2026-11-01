@@ -69,7 +69,8 @@
 
 "Adds this series to the list" = "Adds this series to the list";
 
-/* Filter chip: show every list */
+/* Filter chip: show every list
+History filter: every kind of media */
 "All" = "All";
 
 "All sources resolved" = "All sources resolved";
@@ -77,6 +78,9 @@
 "All-Time Popular" = "All-Time Popular";
 
 "Already added" = "Already added";
+
+/* History: other sources the same series was read on */
+"Also read on %@" = "Also read on %@";
 
 "An HTTP header name contains invalid characters." = "An HTTP header name contains invalid characters.";
 
@@ -88,6 +92,8 @@
 
 "AniList couldn't complete this request: %@" = "AniList couldn't complete this request: %@";
 
+/* History filter
+History: kind of media */
 "Anime" = "Anime";
 
 "App preferences" = "App preferences";
@@ -185,6 +191,10 @@
 /* Novel chapter heading: number, then chapter title */
 "Chapter %@ - %@" = "Chapter %1$@ - %2$@";
 
+"Chapter locked" = "Chapter locked";
+
+"Chapter no longer listed" = "Chapter no longer listed";
+
 "Chapters" = "Chapters";
 
 "Check AniList Discord Status" = "Check AniList Discord Status";
@@ -254,6 +264,12 @@
 "Connection unexpectedly closed" = "Connection unexpectedly closed";
 
 "Content Not Found" = "Content Not Found";
+
+/* History: resume reading or watching a series */
+"Continue" = "Continue";
+
+/* History: resume button, with the series title */
+"Continue %@" = "Continue %@";
 
 "Continue Watching?" = "Continue Watching?";
 
@@ -329,8 +345,6 @@
 
 "Debug logs could not be loaded. Please try again." = "Debug logs could not be loaded. Please try again.";
 
-"Delete" = "Delete";
-
 "Delete %@?" = "Delete %@?";
 
 "Delete List" = "Delete List";
@@ -384,8 +398,13 @@
 
 "Enter values between %@ and %@, with minimum no greater than maximum." = "Enter values between %1$@ and %2$@, with minimum no greater than maximum.";
 
-/* Discord status: episode number */
+/* Discord status: episode number
+History: an episode without a title */
 "Episode %@" = "Episode %@";
+
+"Episode locked" = "Episode locked";
+
+"Episode no longer listed" = "Episode no longer listed";
 
 "Episodes" = "Episodes";
 
@@ -454,6 +473,9 @@
 
 "File copy error: The plugin could not be imported." = "File copy error: The plugin could not be imported.";
 
+/* History: filter button */
+"Filter" = "Filter";
+
 "Filtered" = "Filtered";
 
 /* Filter button */
@@ -492,6 +514,9 @@
 
 /* Series status: paused */
 "Hiatus" = "Hiatus";
+
+/* History: collapse a series' earlier chapters */
+"Hide Earlier" = "Hide Earlier";
 
 "High to Low" = "High to Low";
 
@@ -704,7 +729,9 @@
 /* Discord status */
 "Managing Library" = "Managing Library";
 
-/* Manga format */
+/* History filter
+History: kind of media
+Manga format */
 "Manga" = "Manga";
 
 "Manga, Anime, and Novels" = "Manga, Anime, and Novels";
@@ -850,6 +877,8 @@
 
 "Not tracked" = "Not tracked";
 
+"Nothing in your history matches this search or filter." = "Nothing in your history matches this search or filter.";
+
 "Nothing in your library matches\n\"%@\"." = "Nothing in your library matches\n\"%@\".";
 
 "Notification permission was denied, but the preference could not be disabled. Please try again." = "Notification permission was denied, but the preference could not be disabled. Please try again.";
@@ -858,8 +887,12 @@
 
 "Notify on New Chapters" = "Notify on New Chapters";
 
-/* Manga format: light novel */
+/* History: kind of media
+Manga format: light novel */
 "Novel" = "Novel";
+
+/* History filter */
+"Novels" = "Novels";
 
 "Number of images ahead of your current position to preload. Higher values use more data but reduce loading times." = "Number of images ahead of your current position to preload. Higher values use more data but reduce loading times.";
 
@@ -885,7 +918,18 @@
 
 "Open" = "Open";
 
+"Open Series" = "Open Series";
+
 "Open Settings" = "Open Settings";
+
+/* History: accessibility hint of a series row */
+"Opens the series" = "Opens the series";
+
+/* History: accessibility hint of an earlier chapter row */
+"Opens this chapter" = "Opens this chapter";
+
+/* History: accessibility hint of an earlier episode row */
+"Opens this episode" = "Opens this episode";
 
 "Optional" = "Optional";
 
@@ -900,7 +944,8 @@
 
 "Packages" = "Packages";
 
-/* Accessibility label of a manga page; number is its position in the chapter */
+/* Accessibility label of a manga page; number is its position in the chapter
+History: the page a chapter was left on */
 "Page %lld" = "Page %lld";
 
 "Page %lld of %lld" = "Page %1$lld of %2$lld";
@@ -969,9 +1014,14 @@
 
 "Re-link failed. Please try again." = "Re-link failed. Please try again.";
 
+"Read Again" = "Read Again";
+
 "Read Progress Sync" = "Read Progress Sync";
 
 "Read progress and resume" = "Read progress and resume";
+
+/* History: the chapter was read to the end */
+"Read to the End" = "Read to the End";
 
 "Read with Plugins" = "Read with Plugins";
 
@@ -1034,6 +1084,8 @@
 "Remove Plugin" = "Remove Plugin";
 
 "Remove Repository" = "Remove Repository";
+
+"Remove from History" = "Remove from History";
 
 "Remove from Library" = "Remove from Library";
 
@@ -1153,6 +1205,8 @@
 
 "Search Again" = "Search Again";
 
+"Search History" = "Search History";
+
 "Search Other Sources" = "Search Other Sources";
 
 "Search Repositories & Install" = "Search Repositories & Install";
@@ -1247,6 +1301,7 @@
 
 "Settings unavailable" = "Settings unavailable";
 
+/* History: which kinds of media to list */
 "Show" = "Show";
 
 "Show less" = "Show less";
@@ -1313,6 +1368,9 @@
 
 "Source mappings" = "Source mappings";
 
+/* History: the source a series was read on was removed */
+"Source not installed" = "Source not installed";
+
 "Source settings" = "Source settings";
 
 "Sources" = "Sources";
@@ -1339,6 +1397,9 @@
 "Stop Tracking" = "Stop Tracking";
 
 "Stop Tracking removes the link in Ito. Your %@ list entry is kept." = "Stop Tracking removes the link in Ito. Your %@ list entry is kept.";
+
+/* History: where an episode was left, such as 12:34 */
+"Stopped at %@" = "Stopped at %@";
 
 "Stopping tracking" = "Stopping tracking";
 
@@ -1512,6 +1573,10 @@ Reading font: the system font */
 
 "The source must be updated before it can sync progress." = "The source must be updated before it can sync progress.";
 
+"The source no longer lists this chapter." = "The source no longer lists this chapter.";
+
+"The source no longer lists this episode." = "The source no longer lists this episode.";
+
 "The source rejected the saved credentials." = "The source rejected the saved credentials.";
 
 "The source rejection could not be saved. Please try again." = "The source rejection could not be saved. Please try again.";
@@ -1544,9 +1609,13 @@ Reading font: the system font */
 
 "This action is unsupported by the source." = "This action is unsupported by the source.";
 
+"This chapter is locked on the source." = "This chapter is locked on the source.";
+
 "This control type (%u) is not supported." = "This control type (%u) is not supported.";
 
 "This control type is not supported." = "This control type is not supported.";
+
+"This episode is locked on the source." = "This episode is locked on the source.";
 
 "This extension requires Ito %@ or later." = "This extension requires Ito %@ or later.";
 
@@ -1591,6 +1660,9 @@ Reading font: the system font */
 "This source needs a newer version of Ito. Update Ito to use it." = "This source needs a newer version of Ito. Update Ito to use it.";
 
 "To read this content, you must install the '%@' extension." = "To read this content, you must install the '%@' extension.";
+
+/* History section */
+"Today" = "Today";
 
 "Too many attempts failed." = "Too many attempts failed.";
 
@@ -1674,6 +1746,8 @@ Reading font: the system font */
 
 "Unknown Chapter" = "Unknown Chapter";
 
+"Unknown Episode" = "Unknown Episode";
+
 "Unknown Plugin" = "Unknown Plugin";
 
 "Unknown Repository" = "Unknown Repository";
@@ -1728,7 +1802,18 @@ Reading font: the system font */
 /* Discord status */
 "Viewing Details" = "Viewing Details";
 
+/* History: a chapter without a title, by volume and chapter number */
+"Vol. %@ Ch. %@" = "Vol. %1$@ Ch. %2$@";
+
+/* History: volume and chapter title */
+"Vol. %@ · %@" = "Vol. %1$@ · %2$@";
+
 "Warnings" = "Warnings";
+
+"Watch Again" = "Watch Again";
+
+/* History: the episode was watched to the end */
+"Watched to the End" = "Watched to the End";
 
 "Watching" = "Watching";
 
@@ -1770,6 +1855,9 @@ Reading font: the system font */
 "Year" = "Year";
 
 "Year & Season" = "Year & Season";
+
+/* History section */
+"Yesterday" = "Yesterday";
 
 "You stopped this episode at %@." = "You stopped this episode at %@.";
 

@@ -40,6 +40,35 @@ final class DeferredPluginViewModelTests: XCTestCase {
         }
     }
 
+    func testOnlyTheFirstRouteCarriesTheOpenIntent() async throws {
+        let subject = try makeSubject(
+            item: encodedItem(.manga(Manga(key: "manga", title: "Manga")), pluginType: .manga),
+            installedPluginIDs: ["plugin.exact"],
+            runnerResponses: [.immediate(.success(ItoRunner())), .immediate(.success(ItoRunner()))],
+            openIntent: .resume(preferredScanlator: nil)
+        )
+
+        var readyRoutes: [DeferredPluginRoute] = []
+        let firstReady = expectation(description: "first route")
+        let secondReady = expectation(description: "rebuilt route")
+        let subscription = subject.viewModel.$phase.sink { phase in
+            guard case .ready(let route) = phase else { return }
+            readyRoutes.append(route)
+            (readyRoutes.count == 1 ? firstReady : secondReady).fulfill()
+        }
+        defer { subscription.cancel() }
+
+        subject.viewModel.appear()
+        await fulfillment(of: [firstReady], timeout: 2)
+        // Leaving and coming back builds a new route for the same series.
+        subject.viewModel.disappear()
+        subject.viewModel.appear()
+        await fulfillment(of: [secondReady], timeout: 2)
+
+        XCTAssertEqual(readyRoutes.map(\.openIntent), [.resume(preferredScanlator: nil), nil])
+        XCTAssertNotEqual(readyRoutes[0].id, readyRoutes[1].id)
+    }
+
     func testNovelLibraryItemOpensFromAMultiKindSourceAndInvalidatesIfNovelSupportIsRemoved() async throws {
         let runner = ItoRunner()
         let novel = Novel(key: "novel", title: "Novel")
@@ -557,7 +586,8 @@ final class DeferredPluginViewModelTests: XCTestCase {
         runnerResponses: [DeferredPluginFake.RunnerResponse] = [],
         lookupResponses: [DeferredInstallerFake.LookupResponse] = [],
         installResponses: [DeferredInstallerFake.InstallResponse] = [],
-        decoder: (any DeferredPluginPayloadDecoding)? = nil
+        decoder: (any DeferredPluginPayloadDecoding)? = nil,
+        openIntent: MediaDetailOpenIntent? = nil
     ) -> DeferredSubject {
         let plugins = DeferredPluginFake(
             installedPluginIDs: installedPluginIDs,
@@ -571,6 +601,7 @@ final class DeferredPluginViewModelTests: XCTestCase {
         let logger = PresentationEventCaptureSpy()
         let viewModel = DeferredPluginViewModel(
             item: item,
+            openIntent: openIntent,
             plugins: plugins,
             installer: installer,
             payloadDecoder: decoder ?? JSONDeferredPluginPayloadDecoder(),

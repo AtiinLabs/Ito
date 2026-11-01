@@ -271,7 +271,7 @@ final class HistoryServiceFake: HistoryServing {
     var clearResponses: [Response] = []
     private var deleteContinuations: [CheckedContinuation<Void, any Error>] = []
     private var clearContinuations: [CheckedContinuation<Void, any Error>] = []
-    private(set) var deleteRequests: [String] = []
+    private(set) var deleteRequests: [HistoryRemoval] = []
     private(set) var clearRequestCount = 0
 
     init(history: [HistoryEntry] = []) {
@@ -291,8 +291,18 @@ final class HistoryServiceFake: HistoryServing {
         subject.send(history)
     }
 
-    func removeEntry(id: String) async throws {
-        deleteRequests.append(id)
+    func removeChapter(_ series: HistorySeriesKey, chapterKey: String) async throws {
+        try await awaitDelete(.chapter(series, chapterKey: chapterKey))
+        publish(subject.value.filter { $0.seriesKey != series || $0.record.chapterKey != chapterKey })
+    }
+
+    func removeSeries(_ series: [HistorySeriesKey]) async throws {
+        try await awaitDelete(.series(series))
+        publish(subject.value.filter { !series.contains($0.seriesKey) })
+    }
+
+    private func awaitDelete(_ removal: HistoryRemoval) async throws {
+        deleteRequests.append(removal)
         let response = deleteResponses.isEmpty ? nil : deleteResponses.removeFirst()
         switch response {
         case .immediate(let result):
@@ -302,7 +312,6 @@ final class HistoryServiceFake: HistoryServing {
         case nil:
             break
         }
-        publish(subject.value.filter { $0.id != id })
     }
 
     func clearHistory() async throws {
@@ -328,6 +337,50 @@ final class HistoryServiceFake: HistoryServing {
     }
 }
 
+@MainActor
+final class HistoryProgressFake: HistoryProgressReading {
+    private let subject = PassthroughSubject<Void, Never>()
+    var finishedChapterKeys: Set<String> = []
+    var positions: [String: Double] = [:]
+
+    var progressWillChange: AnyPublisher<Void, Never> {
+        subject.eraseToAnyPublisher()
+    }
+
+    func isFinished(_ series: HistorySeriesKey, chapterKey: String, chapterNumber: Float?) -> Bool {
+        _ = series
+        _ = chapterNumber
+        return finishedChapterKeys.contains(chapterKey)
+    }
+
+    func savedPosition(_ series: HistorySeriesKey, chapterKey: String) -> Double? {
+        _ = series
+        return positions[chapterKey]
+    }
+}
+
+@MainActor
+final class HistorySeriesLinksFake: HistorySeriesLinking {
+    let subject: CurrentValueSubject<[MediaIdentity: [String: String]], Never>
+
+    init(links: [MediaIdentity: [String: String]] = [:]) {
+        subject = CurrentValueSubject(links)
+    }
+
+    var trackerLinksPublisher: AnyPublisher<[MediaIdentity: [String: String]], Never> {
+        subject.eraseToAnyPublisher()
+    }
+}
+
+@MainActor
+final class HistoryLibraryLookupFake: HistoryLibraryLookup {
+    var items: [HistorySeriesKey: LibraryItem] = [:]
+
+    func libraryItem(for record: ReadingHistoryRecord) -> LibraryItem? {
+        items[HistoryEntry(record: record).seriesKey] ?? (try? LibraryItem.unsaved(from: record))
+    }
+}
+
 func pr11bCategory(
     id: String,
     name: String? = nil,
@@ -343,17 +396,34 @@ func pr11bCategory(
     )
 }
 
-func pr11bHistoryEntry(id: String, readAt: TimeInterval) -> HistoryEntry {
+func pr11bHistoryEntry(
+    id: String,
+    readAt: TimeInterval,
+    media: String? = nil,
+    kind: MediaKind = .manga,
+    chapterKey: String? = nil,
+    chapterTitle: String?? = .none,
+    chapterNumber: Double? = nil,
+    title: String? = nil,
+    plugin: String = "plugin",
+    volume: Double? = nil,
+    scanlator: String? = nil,
+    format: HistoryReaderFormat? = nil
+) -> HistoryEntry {
     HistoryEntry(
         record: ReadingHistoryRecord(
             id: id,
-            mediaKey: "media-\(id)",
-            title: "Title \(id)",
+            mediaKey: media ?? "media-\(id)",
+            title: title ?? "Title \(media ?? id)",
             coverUrl: nil,
-            pluginId: "plugin",
-            mediaKind: .manga,
-            chapterKey: "chapter-\(id)",
-            chapterTitle: "Chapter \(id)",
+            pluginId: plugin,
+            mediaKind: kind,
+            chapterKey: chapterKey ?? "chapter-\(id)",
+            chapterTitle: chapterTitle ?? "Chapter \(id)",
+            chapterNumber: chapterNumber,
+            volume: volume,
+            scanlator: scanlator,
+            format: format,
             readAt: Date(timeIntervalSince1970: readAt)
         )
     )

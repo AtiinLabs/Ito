@@ -194,7 +194,9 @@ struct PreparedApplicationDependencies {
             categoryHistory: .production(
                 libraryManager: libraryManager,
                 historyManager: historyManager,
-                pluginManager: pluginManager
+                pluginManager: pluginManager,
+                readProgressManager: readProgressManager,
+                trackerManager: trackerManager
             ),
             searchExecutor: PluginManagerSearchExecutor(pluginManager: pluginManager),
             recentSearchStore: UserDefaultsRecentSearchStore(defaults: recentSearchDefaults),

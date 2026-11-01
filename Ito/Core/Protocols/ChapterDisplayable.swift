@@ -6,12 +6,15 @@ public protocol ChapterDisplayable: Identifiable {
     var title: String? { get }
     var chapterNumber: Float? { get }
     var scanlator: String? { get }
+    /// The volume, for series whose chapter numbers restart each volume.
+    var volumeNumber: Float? { get }
     var dateUpload: String? { get }
     var isPaywalled: Bool { get }
 }
 
 extension ChapterDisplayable {
     public var isPaywalled: Bool { false }
+    public var volumeNumber: Float? { nil }
 }
 
 extension Sequence where Element: ChapterDisplayable {
@@ -50,6 +53,7 @@ extension Sequence where Element: ChapterDisplayable {
 /// Manga and novel chapters (`Manga.Chapter`, `Novel.Chapter`).
 nonisolated extension Chapter: ChapterDisplayable {
     public var chapterNumber: Float? { chapter }
+    public var volumeNumber: Float? { volume }
     public var dateUpload: String? {
         guard let ts = dateUpdated else { return nil }
         return Date(timeIntervalSince1970: TimeInterval(ts)).formatted(date: .abbreviated, time: .omitted)

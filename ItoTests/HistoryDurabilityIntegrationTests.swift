@@ -6,14 +6,14 @@ import ito_runner
 
 @MainActor
 final class HistoryDurabilityIntegrationTests: XCTestCase {
-    func testDeleteCommitsExactRecordKeepsOthersAndPublishes() async throws {
+    func testRemovingAChapterCommitsOnlyThatChapterAndPublishes() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let records = makeRecords()
         try await seed(records, in: database)
         let managers = try await makeManagers(database)
 
-        try await managers.history.removeEntryDurably(id: records[0].id)
+        try await managers.history.removeChapterDurably(seriesKey(records[0]), chapterKey: records[0].chapterKey)
 
         let persisted = try await database.dbPool.read { db in
             try ReadingHistoryRecord
@@ -44,11 +44,14 @@ final class HistoryDurabilityIntegrationTests: XCTestCase {
         let viewModel = HistoryViewModel(
             historyService: managers.history,
             sourceNames: HistorySourceNamesFake(),
+            progress: HistoryProgressFake(),
+            libraryLookup: HistoryLibraryLookupFake(),
+            links: HistorySeriesLinksFake(),
             messagePresenter: messages,
             presentationLogger: CategoryHistoryPresentationLogSpy()
         )
 
-        await viewModel.deleteEntry(id: "newest")
+        await viewModel.removeChapter(HistoryEntry(record: records[0]))
 
         let persisted = try await database.dbPool.read(ReadingHistoryRecord.fetchAll)
         XCTAssertEqual(Set(persisted.map(\.id)), Set(records.map(\.id)))
@@ -106,7 +109,7 @@ final class HistoryDurabilityIntegrationTests: XCTestCase {
         }
         let stalePublication = await scheduler.nextPublication()
 
-        try await managers.history.removeEntryDurably(id: records[0].id)
+        try await managers.history.removeChapterDurably(seriesKey(records[0]), chapterKey: records[0].chapterKey)
         XCTAssertEqual(managers.history.history.map(\.id), [records[1].id, records[2].id])
 
         stalePublication.run()
@@ -143,7 +146,7 @@ final class HistoryDurabilityIntegrationTests: XCTestCase {
         let scheduler = ManualHistoryObservationScheduler()
         let managers = try await makeManagers(database, observationScheduler: scheduler)
 
-        try await managers.history.removeEntryDurably(id: records[0].id)
+        try await managers.history.removeChapterDurably(seriesKey(records[0]), chapterKey: records[0].chapterKey)
         XCTAssertEqual(managers.history.history.map(\.id), [records[1].id, records[2].id])
         let deletePublication = await scheduler.nextPublication()
         deletePublication.run()
@@ -190,6 +193,9 @@ final class HistoryDurabilityIntegrationTests: XCTestCase {
         let viewModel = HistoryViewModel(
             historyService: managers.history,
             sourceNames: HistorySourceNamesFake(),
+            progress: HistoryProgressFake(),
+            libraryLookup: HistoryLibraryLookupFake(),
+            links: HistorySeriesLinksFake(),
             messagePresenter: messages,
             presentationLogger: CategoryHistoryPresentationLogSpy()
         )
@@ -249,22 +255,100 @@ final class HistoryDurabilityIntegrationTests: XCTestCase {
         XCTAssertTrue(managers.history.history.isEmpty)
     }
 
-    func testReloadPreservesDescendingReadAtOrderingAndTwoHundredRecordLimit() async throws {
+    func testRevisitingAChapterMovesItsRowInsteadOfAddingOne() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let records = (0..<205).map {
-            pr11bHistoryRecord(id: "record-\($0)", readAt: TimeInterval($0))
-        }
-        try await seed(records, in: database)
-        let managers = try await makeManagers(database)
+        let first = pr11bHistoryRecord(id: "first", readAt: 1)
+        var duplicate = first
+        duplicate.id = "duplicate"
+        duplicate.readAt = Date(timeIntervalSince1970: 0)
+        try await seed([first, duplicate, pr11bHistoryRecord(id: "other", readAt: 2)], in: database)
 
-        XCTAssertEqual(managers.history.history.count, 200)
-        XCTAssertEqual(managers.history.history.first?.id, "record-204")
-        XCTAssertEqual(managers.history.history.last?.id, "record-5")
-        XCTAssertEqual(
-            managers.history.history.map(\.record.readAt),
-            managers.history.history.map(\.record.readAt).sorted(by: >)
-        )
+        var visit = first
+        visit.id = "new-visit"
+        visit.chapterTitle = "Renamed"
+        visit.chapterNumber = 3
+        visit.readAt = Date(timeIntervalSince1970: 5)
+        let recordedVisit = visit
+        try await database.dbPool.write { db in
+            try HistoryManager.recordVisit(recordedVisit, in: db)
+        }
+
+        let persisted = try await database.dbPool.read { db in
+            try ReadingHistoryRecord.order(ReadingHistoryRecord.Columns.readAt.desc).fetchAll(db)
+        }
+        XCTAssertEqual(persisted.map(\.id), ["first", "other"])
+        XCTAssertEqual(persisted[0].readAt, Date(timeIntervalSince1970: 5))
+        XCTAssertEqual(persisted[0].chapterTitle, "Renamed")
+        XCTAssertEqual(persisted[0].chapterNumber, 3)
+    }
+
+    func testRecordingAVisitDeletesTheOldestRowsBeyondTheRetentionLimit() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let limit = HistoryEntry.retentionLimit
+        try await seed((0..<limit).map { pr11bHistoryRecord(id: "record-\($0)", readAt: TimeInterval($0)) }, in: database)
+
+        try await database.dbPool.write { db in
+            try HistoryManager.recordVisit(pr11bHistoryRecord(id: "newest", readAt: TimeInterval(limit)), in: db)
+        }
+
+        let ids = try await database.dbPool.read { db in
+            try String.fetchSet(db, sql: "SELECT id FROM readingHistory")
+        }
+        XCTAssertEqual(ids.count, limit)
+        XCTAssertTrue(ids.contains("newest"))
+        XCTAssertFalse(ids.contains("record-0"))
+        XCTAssertTrue(ids.contains("record-1"))
+    }
+
+    func testDuplicateRowsAreFoldedBeforeTrimmingSoNoDistinctChapterIsLost() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let limit = HistoryEntry.retentionLimit
+        var rows = (0..<limit).map { pr11bHistoryRecord(id: "record-\($0)", readAt: TimeInterval($0)) }
+        // Older visits to a recent chapter, as restored from a backup or written before v17.
+        for copy in 0..<5 {
+            var duplicate = rows[limit - 1]
+            duplicate.id = "duplicate-\(copy)"
+            duplicate.readAt = Date(timeIntervalSince1970: TimeInterval(limit) - 1.5)
+            rows.append(duplicate)
+        }
+        try await seed(rows, in: database)
+
+        try await database.dbPool.write { db in
+            try HistoryManager.recordVisit(pr11bHistoryRecord(id: "newest", readAt: TimeInterval(limit)), in: db)
+        }
+
+        let ids = try await database.dbPool.read { db in
+            try String.fetchSet(db, sql: "SELECT id FROM readingHistory")
+        }
+        XCTAssertEqual(ids.count, limit)
+        XCTAssertFalse(ids.contains { $0.hasPrefix("duplicate-") })
+        XCTAssertFalse(ids.contains("record-0"))
+        XCTAssertTrue(ids.contains("record-1"))
+    }
+
+    func testALateVisitWriteNeverMovesAChapterBackInTime() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let recent = pr11bHistoryRecord(id: "row", readAt: 10)
+        try await seed([recent], in: database)
+
+        var late = recent
+        late.id = "late"
+        late.readAt = Date(timeIntervalSince1970: 5)
+        let lateVisit = late
+        try await database.dbPool.write { db in
+            try HistoryManager.recordVisit(lateVisit, in: db)
+        }
+
+        let stored = try await database.dbPool.read { try ReadingHistoryRecord.fetchOne($0, key: "row") }
+        XCTAssertEqual(stored?.readAt, Date(timeIntervalSince1970: 10))
+    }
+
+    private func seriesKey(_ record: ReadingHistoryRecord) -> HistorySeriesKey {
+        HistoryEntry(record: record).seriesKey
     }
 
     private func makeRecords() -> [ReadingHistoryRecord] {

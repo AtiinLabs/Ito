@@ -71,12 +71,7 @@ extension ReadProgressManager: MangaReaderProgressTracking {
 
 @MainActor
 protocol MangaReaderHistoryRecording: AnyObject {
-    func recordChapter(
-        of entry: MediaEntry,
-        chapterKey: String,
-        chapterTitle: String,
-        pluginID: String
-    )
+    func recordChapter(of entry: MediaEntry, chapter: HistoryChapter, pluginID: String)
 }
 
 @MainActor
@@ -299,15 +294,9 @@ private final class UnavailableMangaReaderDependencies:
         _ = chapterID
     }
 
-    func recordChapter(
-        of entry: MediaEntry,
-        chapterKey: String,
-        chapterTitle: String,
-        pluginID: String
-    ) {
+    func recordChapter(of entry: MediaEntry, chapter: HistoryChapter, pluginID: String) {
         _ = entry
-        _ = chapterKey
-        _ = chapterTitle
+        _ = chapter
         _ = pluginID
     }
 

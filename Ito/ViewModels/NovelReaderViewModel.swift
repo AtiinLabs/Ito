@@ -320,7 +320,7 @@ final class NovelReaderViewModel: ObservableObject {
         guard isActive,
               let loaded = loadedChapters.first(where: { $0.id == chapterID }) else { return }
         let bodyLength = NovelTextOffsets.bodyLength(loaded.pages)
-        let position = reachedEnd ? bodyLength : min(offset, bodyLength)
+        let position = reachedEnd ? bodyLength : min(max(0, offset), bodyLength)
         lastPosition = NovelReadingAnchor(chapterID: chapterID, offset: position)
         saveOffset(position, in: loaded.chapter)
         if reachedEnd {
@@ -645,11 +645,16 @@ final class NovelReaderViewModel: ObservableObject {
     /// Records the chapter in history once per reader session; crossing back and forth over a
     /// chapter boundary does not add a row each time.
     private func chapterOpened(_ chapter: Novel.Chapter) {
-        guard isActive, historyChapterKeys.insert(chapter.key).inserted else { return }
+        guard isActive,
+              let loaded = loadedChapters.first(where: { $0.chapter.key == chapter.key }),
+              historyChapterKeys.insert(chapter.key).inserted else { return }
         dependencies.history.recordChapter(
             of: entry,
-            chapterKey: chapter.key,
-            chapterTitle: chapter.title ?? chapter.key,
+            chapter: HistoryChapter(
+                chapter,
+                format: .text,
+                textLength: NovelTextOffsets.bodyLength(loaded.pages)
+            ),
             pluginID: pluginID
         )
     }

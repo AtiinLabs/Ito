@@ -246,7 +246,11 @@ final class NovelReaderHistoryFake: NovelReaderHistoryRecording {
     struct Request {
         let entry: MediaEntry
         let chapterKey: String
-        let chapterTitle: String
+        let chapterTitle: String?
+        let chapterNumber: Float?
+        let scanlator: String?
+        let format: HistoryReaderFormat
+        let textLength: Int?
         let pluginID: String
     }
 
@@ -258,19 +262,18 @@ final class NovelReaderHistoryFake: NovelReaderHistoryRecording {
         self.events = events
     }
 
-    func recordChapter(
-        of entry: MediaEntry,
-        chapterKey: String,
-        chapterTitle: String,
-        pluginID: String
-    ) {
+    func recordChapter(of entry: MediaEntry, chapter: HistoryChapter, pluginID: String) {
         onRecord?()
-        events.record("history:\(chapterKey)")
+        events.record("history:\(chapter.key)")
         requests.append(
             Request(
                 entry: entry,
-                chapterKey: chapterKey,
-                chapterTitle: chapterTitle,
+                chapterKey: chapter.key,
+                chapterTitle: chapter.title,
+                chapterNumber: chapter.number,
+                scanlator: chapter.scanlator,
+                format: chapter.format,
+                textLength: chapter.textLength,
                 pluginID: pluginID
             )
         )

@@ -45,12 +45,15 @@ struct CategoryHistoryViewFactory {
         HistoryViewModel(
             historyService: dependencies.history,
             sourceNames: dependencies.sourceNames,
+            progress: dependencies.progress,
+            libraryLookup: dependencies.libraryLookup,
+            links: dependencies.links,
             messagePresenter: messagePresenter,
             presentationLogger: presentationLogger
         )
     }
 
-    func makeHistoryView() -> HistoryView {
-        HistoryView(viewModel: makeHistoryViewModel())
+    func makeHistoryView(viewFactory: AppViewFactory) -> HistoryView {
+        HistoryView(viewModel: makeHistoryViewModel(), viewFactory: viewFactory)
     }
 }

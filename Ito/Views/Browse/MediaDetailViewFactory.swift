@@ -131,7 +131,8 @@ struct MediaDetailViewFactory {
         runner: ItoRunner,
         media: Manga,
         pluginID: String,
-        loader: @escaping (Manga) async throws -> Manga
+        loader: @escaping (Manga) async throws -> Manga,
+        openIntent: MediaDetailOpenIntent? = nil
     ) -> MediaDetailView<Manga> {
         let context = MediaDetailRouteContext<Manga>(
             loadDetails: loader,
@@ -144,14 +145,15 @@ struct MediaDetailViewFactory {
                 .reading(chapter, of: .manga(media), runner: runner, pluginID: pluginID)
             }
         )
-        return makeView(media: media, pluginID: pluginID, context: context)
+        return makeView(media: media, pluginID: pluginID, context: context, openIntent: openIntent)
     }
 
     func makeAnimeView(
         runner: ItoRunner,
         media: Anime,
         pluginID: String,
-        loader: @escaping (Anime) async throws -> Anime
+        loader: @escaping (Anime) async throws -> Anime,
+        openIntent: MediaDetailOpenIntent? = nil
     ) -> MediaDetailView<Anime> {
         let context = MediaDetailRouteContext<Anime>(
             loadDetails: loader,
@@ -170,14 +172,15 @@ struct MediaDetailViewFactory {
                 )
             }
         )
-        return makeView(media: media, pluginID: pluginID, context: context)
+        return makeView(media: media, pluginID: pluginID, context: context, openIntent: openIntent)
     }
 
     func makeNovelView(
         runner: ItoRunner,
         media: Novel,
         pluginID: String,
-        loader: @escaping (Novel) async throws -> Novel
+        loader: @escaping (Novel) async throws -> Novel,
+        openIntent: MediaDetailOpenIntent? = nil
     ) -> MediaDetailView<Novel> {
         let context = MediaDetailRouteContext<Novel>(
             loadDetails: loader,
@@ -190,13 +193,14 @@ struct MediaDetailViewFactory {
                 .reading(chapter, of: .novel(media), runner: runner, pluginID: pluginID)
             }
         )
-        return makeView(media: media, pluginID: pluginID, context: context)
+        return makeView(media: media, pluginID: pluginID, context: context, openIntent: openIntent)
     }
 
     private func makeView<M: MediaDisplayable>(
         media: M,
         pluginID: String,
-        context: MediaDetailRouteContext<M>
+        context: MediaDetailRouteContext<M>,
+        openIntent: MediaDetailOpenIntent?
     ) -> MediaDetailView<M> {
         MediaDetailView(
             viewModel: MediaDetailViewModel(
@@ -205,7 +209,8 @@ struct MediaDetailViewFactory {
                 routeContext: context,
                 dependencies: dependencies,
                 messagePresenter: messagePresenter,
-                presentationLogger: presentationLogger
+                presentationLogger: presentationLogger,
+                openIntent: openIntent
             ),
             trackingViewFactory: trackingViewFactory,
             readerViewFactory: readerViewFactory,

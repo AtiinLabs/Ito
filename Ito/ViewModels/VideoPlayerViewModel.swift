@@ -199,10 +199,9 @@ final class VideoPlayerViewModel: ObservableObject {
     private func beginStreamLoad() {
         guard isActive, streamLoadOperationID == nil else { return }
 
-        dependencies.history.recordAnime(
-            anime,
-            episodeKey: episode.key,
-            episodeTitle: episode.title ?? episode.key,
+        dependencies.history.recordEpisode(
+            of: anime,
+            episode: HistoryChapter(episode),
             pluginID: pluginID
         )
 

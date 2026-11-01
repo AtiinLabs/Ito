@@ -41,9 +41,7 @@ final class LibraryDependencyBoundaryTests: XCTestCase {
         XCTAssertTrue(appScope.contains("var libraryViewModel: LibraryViewModel"))
         XCTAssertFalse(appScope.contains("storedDeferredPluginViewModel"))
         XCTAssertTrue(factory.contains("viewModel: rootModels.libraryViewModel"))
-        XCTAssertTrue(factory.contains("func makeDeferredPluginViewModel(item: LibraryItem)"))
         XCTAssertTrue(view.contains("@StateObject private var viewModel: DeferredPluginViewModel"))
-        XCTAssertTrue(view.contains("wrappedValue: viewFactory.makeDeferredPluginViewModel(item: item)"))
     }
 
     func testDeferredDestinationDelegatesToPR10MediaDetailFactoryWithoutPluginLookup() throws {

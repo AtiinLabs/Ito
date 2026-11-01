@@ -11,6 +11,8 @@ public protocol MediaDisplayable: Identifiable, Codable, Sendable {
     var tags: [String]? { get }
     var description: String? { get }
     var displayStatus: String? { get }
+    /// The source marks the series finished; no more chapters are expected.
+    var isCompleted: Bool { get }
 
     associatedtype Chapter: ChapterDisplayable
     var chapterList: [Chapter]? { get }
@@ -20,6 +22,7 @@ nonisolated extension Manga: MediaDisplayable {
     public var mediaKind: MediaKind { .manga }
     public var chapterList: [Manga.Chapter]? { chapters }
     public var studios: [String]? { nil }
+    public var isCompleted: Bool { status == .Completed }
     public var displayStatus: String? {
         switch self.status {
         case .Ongoing: return String(localized: "Ongoing")
@@ -35,6 +38,7 @@ nonisolated extension Anime: MediaDisplayable {
     public var mediaKind: MediaKind { .anime }
     public var authors: [String]? { nil }
     public var chapterList: [Anime.Episode]? { episodes }
+    public var isCompleted: Bool { status == .Completed }
     public var displayStatus: String? {
         switch self.status {
         case .Ongoing: return String(localized: "Ongoing")
@@ -50,6 +54,7 @@ nonisolated extension Novel: MediaDisplayable {
     public var mediaKind: MediaKind { .novel }
     public var chapterList: [Novel.Chapter]? { chapters }
     public var studios: [String]? { nil }
+    public var isCompleted: Bool { status == .Completed }
     public var displayStatus: String? {
         switch self.status {
         case .Ongoing: return String(localized: "Ongoing")

@@ -10,8 +10,69 @@ public struct HistoryEntry: Identifiable, Hashable, Sendable {
     public var id: String { record.id }
     public let record: ReadingHistoryRecord
 
-    /// Maximum number of entries fetched and shown; older entries stay stored.
-    nonisolated public static let fetchLimit = 200
+    public var seriesKey: HistorySeriesKey {
+        HistorySeriesKey(pluginId: record.pluginId, mediaKind: record.mediaKind, mediaKey: record.mediaKey)
+    }
+
+    /// History keeps one row per chapter and at most this many rows, newest first. Older rows
+    /// are deleted when a chapter is recorded.
+    nonisolated public static let retentionLimit = 2_000
+}
+
+/// One series in history: the source, the kind of media and the source's key for it.
+public struct HistorySeriesKey: Hashable, Sendable {
+    public let pluginId: String
+    public let mediaKind: MediaKind
+    public let mediaKey: String
+
+    var mediaIdentity: MediaIdentity {
+        MediaIdentity(pluginId: pluginId, canonicalMediaId: mediaKey, mediaKind: mediaKind)
+    }
+}
+
+/// A chapter or episode as the reader or player knows it when it is opened.
+public struct HistoryChapter: Sendable {
+    public let key: String
+    public let title: String?
+    public let number: Float?
+    public let volume: Float?
+    public let scanlator: String?
+    public let format: HistoryReaderFormat
+    public let textLength: Int?
+
+    public init(
+        key: String,
+        title: String?,
+        number: Float?,
+        volume: Float? = nil,
+        scanlator: String? = nil,
+        format: HistoryReaderFormat,
+        textLength: Int? = nil
+    ) {
+        self.key = key
+        self.title = title.flatMap { $0.isEmpty ? nil : $0 }
+        self.number = number
+        self.volume = volume
+        self.scanlator = scanlator.flatMap { $0.isEmpty ? nil : $0 }
+        self.format = format
+        self.textLength = textLength
+    }
+}
+
+extension HistoryChapter {
+    /// A manga or novel chapter, opened in the reader for `format`.
+    init(_ chapter: Chapter, format: HistoryReaderFormat, textLength: Int? = nil) {
+        self.init(
+            key: chapter.key, title: chapter.title, number: chapter.chapter,
+            volume: chapter.volume, scanlator: chapter.scanlator, format: format,
+            textLength: textLength
+        )
+    }
+
+    /// An episode; its language stands in for a group.
+    init(_ episode: Anime.Episode) {
+        self.init(key: episode.key, title: episode.title, number: episode.episode, scanlator: episode.scanlator, format: .video)
+    }
 }
 
 nonisolated private struct HistoryPublication: Sendable {
@@ -122,112 +183,138 @@ public class HistoryManager: ObservableObject {
 
     // MARK: - Add History
 
-    public func addManga(_ manga: Manga, chapterKey: String, chapterTitle: String, pluginId: String) {
-        _ = recordManga(manga, chapterKey: chapterKey, chapterTitle: chapterTitle, pluginId: pluginId)
+    @discardableResult
+    func recordManga(_ manga: Manga, chapter: HistoryChapter, pluginId: String) -> Task<Void, Never>? {
+        record(
+            mediaKey: manga.key, title: manga.title, coverUrl: manga.cover,
+            mediaKind: .manga, chapter: chapter, pluginId: pluginId
+        )
     }
 
     @discardableResult
-    func recordManga(_ manga: Manga, chapterKey: String, chapterTitle: String, pluginId: String) -> Task<Void, Never>? {
+    func recordNovel(_ novel: Novel, chapter: HistoryChapter, pluginId: String) -> Task<Void, Never>? {
+        record(
+            mediaKey: novel.key, title: novel.title, coverUrl: novel.cover,
+            mediaKind: .novel, chapter: chapter, pluginId: pluginId
+        )
+    }
+
+    @discardableResult
+    func recordAnime(_ anime: Anime, episode: HistoryChapter, pluginId: String) -> Task<Void, Never>? {
+        record(
+            mediaKey: anime.key, title: anime.title, coverUrl: anime.cover,
+            mediaKind: .anime, chapter: episode, pluginId: pluginId
+        )
+    }
+
+    private func record(
+        mediaKey: String,
+        title: String,
+        coverUrl: String?,
+        mediaKind: MediaKind,
+        chapter: HistoryChapter,
+        pluginId: String
+    ) -> Task<Void, Never>? {
         guard settingsStore?.incognitoMode == false else { return nil }
-
-        let libraryItemId = libraryManager.savedItemID(
-            media: MediaIdentity(pluginId: pluginId, canonicalMediaId: manga.key, mediaKind: .manga)
-        )
-
         let record = ReadingHistoryRecord(
-            libraryItemId: libraryItemId,
-            mediaKey: manga.key,
-            title: manga.title,
-            coverUrl: manga.cover,
+            libraryItemId: libraryManager.savedItemID(
+                media: MediaIdentity(pluginId: pluginId, canonicalMediaId: mediaKey, mediaKind: mediaKind)
+            ),
+            mediaKey: mediaKey,
+            title: title,
+            coverUrl: coverUrl,
             pluginId: pluginId,
-            mediaKind: .manga,
-            chapterKey: chapterKey,
-            chapterTitle: chapterTitle
+            mediaKind: mediaKind,
+            chapterKey: chapter.key,
+            chapterTitle: chapter.title,
+            chapterNumber: chapter.number.map(Double.init),
+            volume: chapter.volume.map(Double.init),
+            scanlator: chapter.scanlator,
+            format: chapter.format,
+            textLength: chapter.textLength
         )
-        return insertRecord(record)
-    }
-
-    public func addNovel(_ novel: Novel, chapterKey: String, chapterTitle: String, pluginId: String) {
-        _ = recordNovel(novel, chapterKey: chapterKey, chapterTitle: chapterTitle, pluginId: pluginId)
-    }
-
-    @discardableResult
-    func recordNovel(_ novel: Novel, chapterKey: String, chapterTitle: String, pluginId: String) -> Task<Void, Never>? {
-        guard settingsStore?.incognitoMode == false else { return nil }
-
-        let libraryItemId = libraryManager.savedItemID(
-            media: MediaIdentity(pluginId: pluginId, canonicalMediaId: novel.key, mediaKind: .novel)
-        )
-
-        let record = ReadingHistoryRecord(
-            libraryItemId: libraryItemId,
-            mediaKey: novel.key,
-            title: novel.title,
-            coverUrl: novel.cover,
-            pluginId: pluginId,
-            mediaKind: .novel,
-            chapterKey: chapterKey,
-            chapterTitle: chapterTitle
-        )
-        return insertRecord(record)
-    }
-
-    public func addAnime(_ anime: Anime, episodeKey: String, episodeTitle: String, pluginId: String) {
-        _ = recordAnime(anime, episodeKey: episodeKey, episodeTitle: episodeTitle, pluginId: pluginId)
-    }
-
-    @discardableResult
-    func recordAnime(_ anime: Anime, episodeKey: String, episodeTitle: String, pluginId: String) -> Task<Void, Never>? {
-        guard settingsStore?.incognitoMode == false else { return nil }
-
-        let libraryItemId = libraryManager.savedItemID(
-            media: MediaIdentity(pluginId: pluginId, canonicalMediaId: anime.key, mediaKind: .anime)
-        )
-
-        let record = ReadingHistoryRecord(
-            libraryItemId: libraryItemId,
-            mediaKey: anime.key,
-            title: anime.title,
-            coverUrl: anime.cover,
-            pluginId: pluginId,
-            mediaKind: .anime,
-            chapterKey: episodeKey,
-            chapterTitle: episodeTitle
-        )
-        return insertRecord(record)
-    }
-
-    @discardableResult
-    private func insertRecord(_ record: ReadingHistoryRecord) -> Task<Void, Never> {
-        Task {
+        return Task {
             do {
                 try await dbPool.write { db in
-                    try record.insert(db)
+                    try Self.recordVisit(record, in: db)
                 }
             } catch {
-                AppLogger.general.error("[HistoryManager] Failed to insert: \(error)")
+                AppLogger.general.error("[HistoryManager] Failed to record a visit: \(error)")
             }
         }
     }
 
+    /// Keeps one row per chapter: a visit to a chapter already in history replaces its row, under
+    /// the row's existing id. Rows that arrived from elsewhere (older versions, restored backups)
+    /// are reduced to the newest row per chapter, then history is trimmed to
+    /// `HistoryEntry.retentionLimit` chapters.
+    nonisolated static func recordVisit(_ record: ReadingHistoryRecord, in db: Database) throws {
+        let kept = try chapterRows(
+            HistorySeriesKey(pluginId: record.pluginId, mediaKind: record.mediaKind, mediaKey: record.mediaKey),
+            chapterKey: record.chapterKey
+        )
+        .order(ReadingHistoryRecord.Columns.readAt.desc, ReadingHistoryRecord.Columns.id.desc)
+        .fetchOne(db)
+        if let kept {
+            var visit = record
+            visit.id = kept.id
+            // Visits are written by separate tasks; a late write never moves a chapter back.
+            visit.readAt = max(kept.readAt, record.readAt)
+            try visit.update(db)
+        } else {
+            try record.insert(db)
+        }
+        try db.execute(
+            sql: """
+                DELETE FROM readingHistory WHERE id IN (
+                    SELECT id FROM (
+                        SELECT id, ROW_NUMBER() OVER (
+                            PARTITION BY pluginId, mediaKind, mediaKey, chapterKey
+                            ORDER BY readAt DESC, id DESC
+                        ) AS position
+                        FROM readingHistory
+                    ) WHERE position > 1
+                )
+                """
+        )
+        try db.execute(
+            sql: """
+                DELETE FROM readingHistory WHERE id NOT IN (
+                    SELECT id FROM readingHistory ORDER BY readAt DESC, id DESC LIMIT ?
+                )
+                """,
+            arguments: [HistoryEntry.retentionLimit]
+        )
+    }
+
     // MARK: - Delete
 
-    func removeEntryDurably(id: String) async throws {
-        let publicationClock = publicationClock
-        let publication = try await dbPool.write { db in
-            let deleted = try ReadingHistoryRecord.deleteOne(db, key: id)
-            return HistoryPublication(
-                revision: publicationClock.revisionAfterCommit(changedHistory: deleted),
-                records: try Self.fetchHistory(db)
-            )
+    /// Removes every row of one chapter of a series.
+    func removeChapterDurably(_ series: HistorySeriesKey, chapterKey: String) async throws {
+        try await deleteDurably { db in
+            try Self.chapterRows(series, chapterKey: chapterKey).deleteAll(db)
         }
-        apply(publication)
+    }
+
+    /// Removes every row of the given series, together.
+    func removeSeriesDurably(_ series: [HistorySeriesKey]) async throws {
+        try await deleteDurably { db in
+            try series.reduce(0) { count, series in
+                count + (try Self.seriesRows(series).deleteAll(db))
+            }
+        }
     }
 
     func clearHistoryDurably() async throws {
+        try await deleteDurably { db in
+            try ReadingHistoryRecord.deleteAll(db)
+        }
+    }
+
+    private func deleteDurably(_ delete: @escaping @Sendable (Database) throws -> Int) async throws {
         let publicationClock = publicationClock
         let publication = try await dbPool.write { db in
-            let deletedCount = try ReadingHistoryRecord.deleteAll(db)
+            let deletedCount = try delete(db)
             return HistoryPublication(
                 revision: publicationClock.revisionAfterCommit(changedHistory: deletedCount > 0),
                 records: try Self.fetchHistory(db)
@@ -236,10 +323,24 @@ public class HistoryManager: ObservableObject {
         apply(publication)
     }
 
+    nonisolated private static func seriesRows(_ series: HistorySeriesKey) -> QueryInterfaceRequest<ReadingHistoryRecord> {
+        ReadingHistoryRecord
+            .filter(ReadingHistoryRecord.Columns.pluginId == series.pluginId)
+            .filter(ReadingHistoryRecord.Columns.mediaKind == series.mediaKind.rawValue)
+            .filter(ReadingHistoryRecord.Columns.mediaKey == series.mediaKey)
+    }
+
+    nonisolated private static func chapterRows(
+        _ series: HistorySeriesKey,
+        chapterKey: String
+    ) -> QueryInterfaceRequest<ReadingHistoryRecord> {
+        seriesRows(series).filter(ReadingHistoryRecord.Columns.chapterKey == chapterKey)
+    }
+
     nonisolated private static func fetchHistory(_ db: Database) throws -> [ReadingHistoryRecord] {
         try ReadingHistoryRecord
-            .order(ReadingHistoryRecord.Columns.readAt.desc)
-            .limit(HistoryEntry.fetchLimit)
+            .order(ReadingHistoryRecord.Columns.readAt.desc, ReadingHistoryRecord.Columns.id.desc)
+            .limit(HistoryEntry.retentionLimit)
             .fetchAll(db)
     }
 

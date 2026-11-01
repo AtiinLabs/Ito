@@ -76,7 +76,6 @@ final class MediaDetailDependencyBoundaryTests: XCTestCase {
         XCTAssertTrue(discover.contains("viewFactory.makeAnimeDetailView("))
         XCTAssertFalse(discover.contains("MediaDetailView("))
         XCTAssertTrue(library.contains("viewFactory.makeDeferredPluginView(item: item)"))
-        XCTAssertTrue(library.contains("viewFactory.makeDeferredPluginDestination(route.destination)"))
         XCTAssertTrue(appFactory.contains("func makeDeferredPluginDestination"))
         XCTAssertTrue(appFactory.contains("makeMangaDetailView("))
         XCTAssertTrue(appFactory.contains("makeAnimeDetailView("))

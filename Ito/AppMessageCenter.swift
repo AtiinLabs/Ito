@@ -32,6 +32,8 @@ enum AppMessageKind: Equatable {
     case mediaDetailUnsaveFailed
     case mediaDetailSaved(actionToken: UUID)
     case mediaDetailTrackerProgressFailed
+    case mediaDetailChapterUnavailable(isEpisode: Bool)
+    case mediaDetailChapterLocked(isEpisode: Bool)
     case libraryLayoutPersistenceFailed
     case libraryItemRemovalFailed
     case libraryUpdateFailed
@@ -260,6 +262,26 @@ extension AppMessageKind {
                 style: .error,
                 title: String(localized: "Local progress not updated"),
                 detail: String(localized: "Tracking succeeded, but local progress could not be saved.")
+            )
+        case .mediaDetailChapterUnavailable(let isEpisode):
+            return .init(
+                style: .info,
+                title: isEpisode
+                    ? String(localized: "Episode no longer listed")
+                    : String(localized: "Chapter no longer listed"),
+                detail: isEpisode
+                    ? String(localized: "The source no longer lists this episode.")
+                    : String(localized: "The source no longer lists this chapter.")
+            )
+        case .mediaDetailChapterLocked(let isEpisode):
+            return .init(
+                style: .info,
+                title: isEpisode
+                    ? String(localized: "Episode locked")
+                    : String(localized: "Chapter locked"),
+                detail: isEpisode
+                    ? String(localized: "This episode is locked on the source.")
+                    : String(localized: "This chapter is locked on the source.")
             )
         case .libraryLayoutPersistenceFailed:
             return .init(

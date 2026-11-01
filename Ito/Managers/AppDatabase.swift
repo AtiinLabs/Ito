@@ -540,6 +540,7 @@ public final class AppDatabase: Sendable {
         }
 
         registerMultiKindSourceMappingMigration(&migrator)
+        registerHistoryChapterDetailsMigration(&migrator)
         return migrator
     }
 

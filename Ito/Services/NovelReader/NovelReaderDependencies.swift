@@ -58,26 +58,16 @@ extension ReadProgressManager: NovelReaderProgressTracking {
 @MainActor
 protocol NovelReaderHistoryRecording: AnyObject {
     /// Records a chapter under its catalog entry's kind, independent of reader format.
-    func recordChapter(
-        of entry: MediaEntry,
-        chapterKey: String,
-        chapterTitle: String,
-        pluginID: String
-    )
+    func recordChapter(of entry: MediaEntry, chapter: HistoryChapter, pluginID: String)
 }
 
 extension HistoryManager: NovelReaderHistoryRecording, MangaReaderHistoryRecording {
-    func recordChapter(
-        of entry: MediaEntry,
-        chapterKey: String,
-        chapterTitle: String,
-        pluginID: String
-    ) {
+    func recordChapter(of entry: MediaEntry, chapter: HistoryChapter, pluginID: String) {
         switch entry {
         case .manga(let manga):
-            addManga(manga, chapterKey: chapterKey, chapterTitle: chapterTitle, pluginId: pluginID)
+            recordManga(manga, chapter: chapter, pluginId: pluginID)
         case .novel(let novel):
-            addNovel(novel, chapterKey: chapterKey, chapterTitle: chapterTitle, pluginId: pluginID)
+            recordNovel(novel, chapter: chapter, pluginId: pluginID)
         case .anime:
             // Anime has episodes and never opens either chapter reader.
             break
@@ -320,15 +310,9 @@ private final class UnavailableNovelReaderDependencies:
         _ = chapterID
     }
 
-    func recordChapter(
-        of entry: MediaEntry,
-        chapterKey: String,
-        chapterTitle: String,
-        pluginID: String
-    ) {
+    func recordChapter(of entry: MediaEntry, chapter: HistoryChapter, pluginID: String) {
         _ = entry
-        _ = chapterKey
-        _ = chapterTitle
+        _ = chapter
         _ = pluginID
     }
 

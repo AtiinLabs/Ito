@@ -247,12 +247,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 Button {
                     viewModel.selectChapter(target)
                 } label: {
-                    Label(
-                        viewModel.hasReadProgress ? "Resume" : "Start",
-                        systemImage: viewModel.media is Anime
-                            ? "play.fill"
-                            : (viewModel.hasReadProgress ? "book.fill" : "play.fill")
-                    )
+                    Label(resumeTitle, systemImage: resumeIcon)
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
                 }
@@ -280,6 +275,19 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 displayedChapterCount: displayedChapters.count
             )
         }
+    }
+
+    private var resumeTitle: String {
+        if viewModel.isResumeRereading {
+            return viewModel.media is Anime ? String(localized: "Watch Again") : String(localized: "Read Again")
+        }
+        return viewModel.hasReadProgress ? String(localized: "Resume") : String(localized: "Start")
+    }
+
+    private var resumeIcon: String {
+        if viewModel.isResumeRereading { return "arrow.counterclockwise" }
+        if viewModel.media is Anime { return "play.fill" }
+        return viewModel.hasReadProgress ? "book.fill" : "play.fill"
     }
 
     private func chapterControls(
