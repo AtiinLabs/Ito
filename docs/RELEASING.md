@@ -13,7 +13,9 @@ Ito currently distributes unsigned device IPAs. AltStore and SideStore can re-si
 
 ## Dev channel
 
-The dev workflow runs on every push to `main` and can also be started manually. A newer push to `main` cancels an in-progress dev run.
+CI validates every push to `main` once, then calls the dev packaging workflow only after its build/unit tests, localization checks and signing-configuration check succeed. The publisher checks out that exact validated commit; it does not repeat the unit suite. Pull requests run validation only.
+
+For a manual dev build, use **Actions → CI → Run workflow → main**. The same validation gates apply. A newer push to `main` cancels an in-progress CI/dev run. Stable tagged releases retain their separate verification of the tagged release candidate.
 
 It publishes:
 
