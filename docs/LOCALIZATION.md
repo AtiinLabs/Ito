@@ -1,7 +1,7 @@
 # Localization
 
-Ito's interface is translated by the community on Weblate. This page explains how the
-pieces fit together for developers, translators and maintainers.
+Help translate Ito on [Weblate](https://hosted.weblate.org/projects/ito/).
+This page explains how localization works for developers and translators.
 
 ## How it works
 
@@ -82,7 +82,8 @@ is out of date, or when a translation has placeholders that don't match English.
 
 ## Translating
 
-Translate on Weblate; pull requests that edit `Localization/` by hand are not accepted.
+Translate on [Weblate](https://hosted.weblate.org/projects/ito/); pull requests that edit
+`Localization/` by hand are not accepted.
 Placeholders such as `%@` and `%lld` stand for values the app fills in and must stay in
 the translation. Use `%1$@`, `%2$@` to change their order. Plural strings have one field
 per plural form of your language.
@@ -90,32 +91,3 @@ per plural form of your language.
 To test a translation locally, put the files Weblate produced in
 `Localization/<language>.lproj`, build, and run the app with that language selected in
 the simulator's Settings or with the launch arguments `-AppleLanguages (<language>)`.
-
-## Weblate project setup (maintainers)
-
-Create a project for Ito on Weblate and connect it to `AtiinLabs/Ito` (`main` branch)
-with *GitHub* as the version control system, so translations arrive as pull requests
-instead of direct pushes. Add three components that share the repository:
-
-| Setting | App strings | App plurals | File types |
-|---|---|---|---|
-| File format | iOS strings | go-i18n v2 JSON file | iOS strings |
-| File mask | `Localization/*.lproj/Localizable.strings` | `Localization/*.lproj/Localizable.json` | `Localization/*.lproj/InfoPlist.strings` |
-| Monolingual base language file | `Localization/en.lproj/Localizable.strings` | `Localization/en.lproj/Localizable.json` | `Localization/en.lproj/InfoPlist.strings` |
-| Template for new translations | empty | empty | empty |
-| Edit base file | off | off | off |
-| Adding new translation | Create new language file | same | same |
-| File encoding | UTF-8 | — | UTF-8 |
-| Language code style | BCP style using hyphen as a separator | same | same |
-| Translation flags | — (added by the format) | `objc-format` | — (added by the format) |
-| Enforced checks | Objective-C format | Objective-C format | Objective-C format |
-
-- Source language: English. The English text comes from the code, so translators
-  cannot edit it on Weblate.
-- In the project settings, set *Translation quality filter* to *Skip translations
-  marked as needing editing*. Together with the enforced Objective-C format check, a
-  translation whose placeholders don't match English is never committed, so it can't
-  fail CI on a Weblate pull request.
-- Enable the *Cleanup translation files* add-on on each component so keys removed from
-  English leave every language.
-- A language appears in the app once Weblate's pull request adding its folder is merged.
