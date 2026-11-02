@@ -42,6 +42,18 @@ Completed series offer **Read Again** or **Watch Again** on the series screen; H
 **Continue** does not restart an interrupted reread. History keeps at most 2,000 chapters.
 Older rows may lack chapter details or positions. Incognito reading is not recorded.
 
+### Tracker ratings
+
+AniList scores can be edited in the tracker entry sheet using the account's scoring format:
+100 points, 10 points with or without decimals, five stars, or three smileys. Choose **Not set**
+to clear a score. Unchanged scores are preserved, and rating-only edits do not overwrite loaded
+progress or status. Automatic progress updates never write scores.
+Drafts are tied to the signed-in account session; switching accounts requires reopening the entry.
+
+MyAnimeList supports personal scores from 0–10, and MangaBaka supports personal ratings from
+0–100. Ito displays those ratings but leaves editing to their websites under its existing
+write policies. Dates remain read-only for all trackers.
+
 ## Install
 
 Unsigned builds are published for sideloading. [atiinlabs.github.io/Ito](https://atiinlabs.github.io/Ito/) has one-tap install links for Stable, and [its builds page](https://atiinlabs.github.io/Ito/install/) for both channels.

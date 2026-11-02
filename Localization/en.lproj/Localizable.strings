@@ -220,6 +220,8 @@ History: kind of media */
 
 "Choose List on Save" = "Choose List on Save";
 
+"Choose a valid score for your scoring format." = "Choose a valid score for your scoring format.";
+
 "Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports." = "Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports.";
 
 /* Button: clear all history entries */
@@ -338,6 +340,8 @@ History: kind of media */
 "Data" = "Data";
 
 "Dates" = "Dates";
+
+"Dates come from %@. Change them on %@." = "Dates come from %1$@. Change them on %2$@.";
 
 "Debug Logs" = "Debug Logs";
 
@@ -1659,6 +1663,8 @@ Reading font: the system font */
 
 "This source needs a newer version of Ito. Update Ito to use it." = "This source needs a newer version of Ito. Update Ito to use it.";
 
+"This tracker does not support manual scoring." = "This tracker does not support manual scoring.";
+
 "To read this content, you must install the '%@' extension." = "To read this content, you must install the '%@' extension.";
 
 /* History section */
@@ -1881,6 +1887,12 @@ Reading font: the system font */
 
 "Your restored data is saved. Refresh must finish before the app can continue." = "Your restored data is saved. Refresh must finish before the app can continue.";
 
+"Your scoring format changed. Reopen this entry before saving." = "Your scoring format changed. Reopen this entry before saving.";
+
+"Your scoring format could not be loaded. Reopen this entry before saving." = "Your scoring format could not be loaded. Reopen this entry before saving.";
+
+"Your tracker account changed. Reopen this entry before saving." = "Your tracker account changed. Reopen this entry before saving.";
+
 "Your tracker change couldn't be saved. Please try again." = "Your tracker change couldn't be saved. Please try again.";
 
 "Your tracker entry could not be updated. Please try again." = "Your tracker entry could not be updated. Please try again.";
@@ -1909,3 +1921,9 @@ Reading font: the system font */
 "v%@ • %@" = "v%1$@ • %2$@";
 
 "· %lld of %lld" = "· %1$lld of %2$lld";
+
+"😐 Average" = "😐 Average";
+
+"🙁 Bad" = "🙁 Bad";
+
+"🙂 Good" = "🙂 Good";

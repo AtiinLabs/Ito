@@ -1,6 +1,24 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Choose a valid score for your scoring format." : {},
+    "Dates come from %@. Change them on %@." : {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Dates come from %1$@. Change them on %2$@."
+          }
+        }
+      }
+    },
+    "This tracker does not support manual scoring." : {},
+    "Your scoring format changed. Reopen this entry before saving." : {},
+    "Your scoring format could not be loaded. Reopen this entry before saving." : {},
+    "Your tracker account changed. Reopen this entry before saving." : {},
+    "😐 Average" : {},
+    "🙁 Bad" : {},
+    "🙂 Good" : {},
     "" : {
 
     },

@@ -473,17 +473,31 @@ struct TrackerDetailsSheet: View {
                     }
                 }
 
-                HStack {
-                    Text("Score")
-                    Spacer()
-                    Text(viewModel.scoreText)
-                        .foregroundColor(.secondary)
+                if let format = viewModel.scoreFormat {
+                    Picker("Score", selection: Binding(
+                        get: { ((viewModel.score ?? 0) / format.step).rounded() * format.step },
+                        set: { viewModel.setScore($0) }
+                    )) {
+                        ForEach(0...Int(format.maxScore / format.step), id: \.self) { index in
+                            let value = Double(index) * format.step
+                            Text(format.label(for: value)).tag(value)
+                        }
+                    }
+                } else {
+                    HStack {
+                        Text("Score")
+                        Spacer()
+                        Text(viewModel.scoreText)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
 
             Section(
                 header: Text("Dates"),
-                footer: Text("Score and dates come from \(viewModel.providerName). Change them on \(viewModel.providerName).")
+                footer: Text(viewModel.scoreFormat == nil
+                    ? String(localized: "Score and dates come from \(viewModel.providerName). Change them on \(viewModel.providerName).")
+                    : String(localized: "Dates come from \(viewModel.providerName). Change them on \(viewModel.providerName)."))
             ) {
                 HStack {
                     Text("Started")

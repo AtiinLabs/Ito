@@ -15,6 +15,7 @@ enum TrackerLocalProgressSyncCandidate: Equatable {
 
 enum TrackerDetailsFailure: Equatable {
     case remoteUpdate
+    case remoteUpdateExplanation(String)
     case linkPersistenceAfterRemoteUpdate
     case unlinkPersistence
     case progressWouldDecrease(providerName: String)
@@ -23,6 +24,8 @@ enum TrackerDetailsFailure: Equatable {
         switch self {
         case .remoteUpdate:
             return String(localized: "Your tracker entry could not be updated. Please try again.")
+        case .remoteUpdateExplanation(let message):
+            return message
         case .linkPersistenceAfterRemoteUpdate:
             return String(localized: "The tracker entry was updated remotely, but the local link was not saved. Please retry to finish linking.")
         case .unlinkPersistence:
@@ -66,6 +69,7 @@ final class TrackerDetailsViewModel: ObservableObject {
         }
     }
     @Published private(set) var score: Double?
+    @Published private(set) var scoreFormat: TrackerScoreFormat?
     @Published private(set) var startDate: Date?
     @Published private(set) var finishDate: Date?
     /// The tracker status of the entry as last loaded from the remote, or `nil` when there is none.
@@ -110,6 +114,8 @@ final class TrackerDetailsViewModel: ObservableObject {
     private var hasStarted = false
     /// The progress of the entry as last loaded from the remote; `nil` when there is none.
     private var loadedProgress: Int?
+    private var loadedScore: Double?
+    private var scoreSession: TrackerScoreSession?
     /// The tracker's own explanation of the last load failure, when it has one.
     private var remoteLoadFailureMessage: String?
 
@@ -153,7 +159,14 @@ final class TrackerDetailsViewModel: ObservableObject {
     }
 
     var scoreText: String {
-        score.map { String(format: "%.1f", $0) } ?? String(localized: "Not set")
+        if let scoreFormat { return scoreFormat.label(for: score ?? 0) }
+        return score.map { String(format: "%.1f", $0) } ?? String(localized: "Not set")
+    }
+
+    func setScore(_ value: Double) {
+        guard !isDurableOperationInFlight, remoteEntryState == .existing || remoteEntryState == .new,
+              let scoreFormat, scoreFormat.isValid(value) else { return }
+        score = value == 0 ? nil : value
     }
 
     var startDateText: String {
@@ -304,6 +317,16 @@ final class TrackerDetailsViewModel: ObservableObject {
         failure = nil
         let savedProgress = Int(progress)
         let savedStatus = status
+        // Only an explicit changed selection writes a score. Zero clears it; nil preserves it.
+        let selectedScore = score ?? 0
+        let savedScore = scoreFormat != nil && abs(selectedScore - (loadedScore ?? 0)) > 0.000_001
+            ? selectedScore : nil
+        let savedScoreSession = scoreSession
+        // A rating-only save must not overwrite progress advanced while the sheet was open.
+        let omitUnchanged = scoreFormat != nil && remoteEntryState == .existing
+        let submittedProgress = omitUnchanged && savedProgress == loadedProgress ? nil : savedProgress
+        let submittedStatus = omitUnchanged && savedStatus == loadedStatus ? nil : savedStatus
+        let needsRemoteUpdate = !omitUnchanged || submittedProgress != nil || submittedStatus != nil || savedScore != nil
         presentationLogger.log(
             .started(
                 feature: .trackerDetails,
@@ -315,12 +338,22 @@ final class TrackerDetailsViewModel: ObservableObject {
         saveTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                try await detailsService.updateProgress(
-                    providerID: providerID,
-                    mediaID: media.id,
-                    progress: savedProgress,
-                    status: savedStatus
-                )
+                if let savedScoreSession {
+                    try detailsService.validateScoreSession(providerID: providerID, scoreSession: savedScoreSession)
+                }
+                if needsRemoteUpdate {
+                    try await detailsService.updateEntry(
+                        providerID: providerID,
+                        mediaID: media.id,
+                        progress: submittedProgress,
+                        status: submittedStatus,
+                        score: savedScore,
+                        scoreSession: savedScoreSession
+                    )
+                }
+                if let savedScoreSession {
+                    try detailsService.validateScoreSession(providerID: providerID, scoreSession: savedScoreSession)
+                }
             } catch is CancellationError {
                 guard isCurrentSave(operationID) else {
                     logIgnoredStale(kind: .remoteUpdate, operationID: operationID)
@@ -333,7 +366,8 @@ final class TrackerDetailsViewModel: ObservableObject {
                     logIgnoredStale(kind: .remoteUpdate, operationID: operationID)
                     return
                 }
-                failure = .remoteUpdate
+                failure = (error as? any TrackerUserFacingError).map { .remoteUpdateExplanation($0.userMessage) }
+                    ?? .remoteUpdate
                 isPresentingFailureAlert = true
                 messagePresenter.present(.remoteUpdateFailed)
                 finishSave(
@@ -348,6 +382,11 @@ final class TrackerDetailsViewModel: ObservableObject {
                 logIgnoredStale(kind: .remoteUpdate, operationID: operationID)
                 return
             }
+            // Keep acknowledged values if linking fails, so retrying does not replay stale edits.
+            loadedProgress = savedProgress
+            loadedStatus = savedStatus
+            loadedScore = selectedScore == 0 ? nil : selectedScore
+            remoteEntryState = .existing
             presentationLogger.log(
                 .finished(
                     feature: .trackerDetails,
@@ -372,14 +411,22 @@ final class TrackerDetailsViewModel: ObservableObject {
                         providerID: providerID,
                         remoteMediaID: media.id
                     )
+                    if let savedScoreSession {
+                        try detailsService.validateScoreSession(providerID: providerID, scoreSession: savedScoreSession)
+                    }
                 } catch {
                     guard isCurrentSave(operationID), !Task.isCancelled else {
                         logIgnoredStale(kind: .link, operationID: operationID)
                         return
                     }
-                    failure = .linkPersistenceAfterRemoteUpdate
+                    if let explanation = error as? any TrackerUserFacingError {
+                        failure = .remoteUpdateExplanation(explanation.userMessage)
+                        messagePresenter.present(.remoteUpdateFailed)
+                    } else {
+                        failure = .linkPersistenceAfterRemoteUpdate
+                        messagePresenter.present(.linkPersistenceFailed)
+                    }
                     isPresentingFailureAlert = true
-                    messagePresenter.present(.linkPersistenceFailed)
                     finishSave(
                         operationID,
                         kind: .link,
@@ -514,6 +561,8 @@ final class TrackerDetailsViewModel: ObservableObject {
         let operationID = UUID()
         loadOperationID = operationID
         remoteLoadFailureMessage = nil
+        scoreFormat = nil
+        scoreSession = nil
         remoteEntryState = .loading
         presentationLogger.log(
             .started(
@@ -526,14 +575,21 @@ final class TrackerDetailsViewModel: ObservableObject {
         loadTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let entry = try await detailsService.getMediaListEntry(
-                    providerID: providerID,
-                    mediaID: media.id
-                )
+                let session = try await detailsService.getScoreFormat(providerID: providerID)
+                let entry: TrackerMediaEntry?
+                if let session {
+                    entry = try await detailsService.getScoredMediaListEntry(
+                        providerID: providerID, mediaID: media.id, scoreSession: session
+                    )
+                } else {
+                    entry = try await detailsService.getMediaListEntry(providerID: providerID, mediaID: media.id)
+                }
                 guard loadOperationID == operationID, !Task.isCancelled else {
                     logIgnoredStale(kind: .remoteLoad, operationID: operationID)
                     return
                 }
+                scoreSession = session
+                scoreFormat = session?.format
                 if let entry {
                     apply(entry)
                     remoteEntryState = .existing
@@ -541,6 +597,8 @@ final class TrackerDetailsViewModel: ObservableObject {
                     remoteEntryState = .new
                     loadedStatus = nil
                     loadedProgress = nil
+                    score = nil
+                    loadedScore = nil
                 }
                 finishLoad(operationID, outcome: .succeeded)
             } catch is CancellationError {
@@ -548,6 +606,7 @@ final class TrackerDetailsViewModel: ObservableObject {
                     logIgnoredStale(kind: .remoteLoad, operationID: operationID)
                     return
                 }
+                remoteEntryState = .failure
                 finishLoad(operationID, outcome: .cancelled)
             } catch {
                 guard loadOperationID == operationID, !Task.isCancelled else {
@@ -569,6 +628,7 @@ final class TrackerDetailsViewModel: ObservableObject {
         }
         status = entry.status ?? "PLANNING"
         score = entry.score.flatMap { $0 > 0 ? $0 : nil }
+        loadedScore = score
         startDate = entry.startDate
         finishDate = entry.finishDate
         loadedStatus = entry.status
