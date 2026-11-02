@@ -159,4 +159,93 @@ struct MALCredentialRepositoryTests {
         #expect(corruptResult.state == .ready)
         #expect(!corruptResult.isSignedIn)
     }
+
+    @Test(arguments: [false, true])
+    func replacementDuringRefreshPreservesReplacementSession(_ rejected: Bool) async throws {
+        let gate = AsyncTestGate()
+        let result: Result<MALToken, any Error> = rejected
+            ? .failure(MALError.httpError(statusCode: 401, error: "invalid_request", message: nil))
+            : .success(malTestToken("rotated"))
+        let repository = MALCredentialRepository(
+            store: FakeTrackerCredentialStore(initialToken: try malStoredJSON(expired)),
+            refresher: FakeMALTokenRefresher(results: [result], gate: gate)
+        )
+        _ = await repository.bootstrap()
+        let caller = Task { try await repository.validAccessToken() }
+        await gate.waitForAdmissions()
+        await repository.persist(malTestToken("replacement"))
+        let replacementIdentity = repository.scoreIdentity.current
+        await gate.open()
+        await #expect(throws: MALCredentialRepository.CredentialError.notSignedIn) { try await caller.value }
+        #expect(await repository.hasSession)
+        #expect(repository.scoreIdentity.current == replacementIdentity)
+        #expect(try await repository.validAccessToken() == "access-replacement")
+    }
+}
+
+extension MALCredentialRepositoryTests {
+    @Test func repositoryRejectionInvalidatesGuardBeforeCredentialRemovalCompletes() async throws {
+        let gate = AsyncTestGate()
+        let store = FakeTrackerCredentialStore(
+            initialToken: try malStoredJSON(malTestToken("old", issuedAt: .distantPast, expiresIn: 60)),
+            removeGates: [gate]
+        )
+        let repository = MALCredentialRepository(
+            store: store, refresher: FakeMALTokenRefresher(results: [
+                .failure(MALError.httpError(statusCode: 401, error: "invalid_request", message: nil))
+            ])
+        )
+        _ = await repository.bootstrap()
+        let authority = repository.scoreIdentity
+        let expected = authority.current
+        let refresh = Task { try await repository.validAccessToken() }
+        await gate.waitForAdmissions()
+        #expect(throws: TrackerScoreEditingError.accountChanged) {
+            try authority.withCurrentIdentity(expected) {}
+        }
+        #expect(await store.currentToken() != nil)
+        await gate.open()
+        await #expect(throws: MALCredentialRepository.CredentialError.sessionExpired) { try await refresh.value }
+    }
+
+    @Test(arguments: [false, true])
+    func accountMutationInvalidatesGuardBeforeStorageCompletes(logout: Bool) async throws {
+        let gate = AsyncTestGate()
+        let store = FakeTrackerCredentialStore(
+            initialToken: try malStoredJSON(malTestToken("old")),
+            setGates: logout ? [] : [gate],
+            removeGates: logout ? [gate] : []
+        )
+        let repository = MALCredentialRepository(store: store, refresher: FakeMALTokenRefresher(results: []))
+        _ = await repository.bootstrap()
+        let authority = repository.scoreIdentity
+        let expected = authority.current
+        let mutation = Task {
+            if logout {
+                try await repository.logout()
+            } else {
+                await repository.persist(malTestToken("replacement"))
+            }
+        }
+        await gate.waitForAdmissions()
+        #expect(throws: TrackerScoreEditingError.accountChanged) {
+            try authority.withCurrentIdentity(expected) {}
+        }
+        await gate.open()
+        try await mutation.value
+    }
+
+    @Test func ordinaryOAuthRefreshKeepsSameGuardAuthority() async throws {
+        let repository = MALCredentialRepository(
+            store: FakeTrackerCredentialStore(
+                initialToken: try malStoredJSON(malTestToken("old", issuedAt: .distantPast, expiresIn: 60))
+            ),
+            refresher: FakeMALTokenRefresher(results: [.success(malTestToken("new"))])
+        )
+        _ = await repository.bootstrap()
+        let authority = repository.scoreIdentity
+        let expected = authority.current
+        #expect(try await repository.validAccessToken() == "access-new")
+        #expect(authority.current == expected)
+    }
 }

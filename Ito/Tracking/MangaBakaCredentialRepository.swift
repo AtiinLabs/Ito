@@ -71,6 +71,7 @@ actor MangaBakaCredentialRepository {
     private var pendingPersistence: StoredCredential?
     /// Incremented on sign-in and sign-out so a refresh that finishes afterwards is discarded.
     private var sessionEpoch: UInt64 = 0
+    nonisolated let scoreIdentity = TrackerScoreIdentity()
     private var refreshTask: Task<MangaBakaToken, any Error>?
 
     init(
@@ -111,6 +112,7 @@ actor MangaBakaCredentialRepository {
     /// Stores a credential from a completed sign-in, replacing any earlier session. When the
     /// Keychain cannot take it yet, it is kept in memory and written on the next call.
     func persist(_ newCredential: StoredCredential) async {
+        scoreIdentity.rotate()
         sessionEpoch += 1
         refreshTask = nil
         credential = newCredential
@@ -130,6 +132,7 @@ actor MangaBakaCredentialRepository {
     func logout() async throws -> MangaBakaToken? {
         let previous = credential
         let previousPending = pendingPersistence
+        scoreIdentity.rotate()
         sessionEpoch += 1
         let epoch = sessionEpoch
         refreshTask = nil
@@ -188,6 +191,7 @@ actor MangaBakaCredentialRepository {
     func rejected(_ rejected: MangaBakaCredential) async -> CredentialError {
         guard let current = credential, current.requestCredential == rejected else { return .notSignedIn }
         AppLogger.auth.error("MangaBaka rejected the saved credential; signing out.")
+        scoreIdentity.rotate()
         sessionEpoch += 1
         refreshTask = nil
         credential = nil
@@ -224,6 +228,7 @@ actor MangaBakaCredentialRepository {
         } catch let error as MangaBakaOAuthError where error.isInvalidGrant {
             guard epoch == sessionEpoch else { throw CredentialError.notSignedIn }
             AppLogger.auth.error("MangaBaka rejected the refresh token; signing out.")
+            scoreIdentity.rotate()
             sessionEpoch += 1
             refreshTask = nil
             credential = nil

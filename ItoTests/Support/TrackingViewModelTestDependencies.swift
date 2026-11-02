@@ -419,6 +419,9 @@ final class TrackerLinkStoreFake: TrackerLinkPersisting {
     var suspendsLinks = false
     var suspendsUnlinks = false
     var linkError: (any Error)?
+    var scoreSessionValidator: ((String, TrackerScoreSession) throws -> Void)?
+    var onLinkStarted: (() -> Void)?
+    var onLinkCommitted: (() -> Void)?
     var unlinkError: (any Error)?
     private(set) var linkInvocations: [LinkInvocation] = []
     private(set) var unlinkInvocations: [UnlinkInvocation] = []
@@ -440,7 +443,8 @@ final class TrackerLinkStoreFake: TrackerLinkPersisting {
     func link(
         media: MediaIdentity,
         providerID: String,
-        remoteMediaID: String
+        remoteMediaID: String,
+        scoreSession: TrackerScoreSession?
     ) async throws {
         let invocation = LinkInvocation(
             media: media,
@@ -452,11 +456,16 @@ final class TrackerLinkStoreFake: TrackerLinkPersisting {
         if suspendsLinks {
             try await withCheckedThrowingContinuation { continuation in
                 pendingLinks.append(PendingLink(invocation: invocation, continuation: continuation))
+                onLinkStarted?()
             }
-            return
+        }
+        if let scoreSession {
+            guard let scoreSessionValidator else { throw TrackerScoreEditingError.unsupportedProvider }
+            try scoreSessionValidator(providerID, scoreSession)
         }
         if let linkError { throw linkError }
         remoteIDs[media, default: [:]][providerID] = remoteMediaID
+        onLinkCommitted?()
     }
 
     func unlink(media: MediaIdentity, providerID: String) async throws {
@@ -480,10 +489,6 @@ final class TrackerLinkStoreFake: TrackerLinkPersisting {
         with result: Result<Void, any Error>
     ) {
         let pending = pendingLinks.remove(at: index)
-        if case .success = result {
-            remoteIDs[pending.invocation.media, default: [:]][pending.invocation.providerID] =
-                pending.invocation.remoteMediaID
-        }
         pending.continuation.resume(with: result)
     }
 

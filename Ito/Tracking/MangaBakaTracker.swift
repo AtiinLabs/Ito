@@ -11,6 +11,8 @@ nonisolated enum MangaBakaTrackerError: Error, Equatable, Sendable, LocalizedErr
     case seriesMerged(into: Int)
     /// The linked series was removed from MangaBaka.
     case seriesUnavailable
+    case missingLibraryState
+    case invalidRemoteEntry
 
     var errorDescription: String? {
         switch self {
@@ -24,6 +26,10 @@ nonisolated enum MangaBakaTrackerError: Error, Equatable, Sendable, LocalizedErr
             String(localized: "MangaBaka merged this series into series \(String(id)). Stop tracking it and link it again.")
         case .seriesUnavailable:
             String(localized: "This series is no longer available on MangaBaka. Stop tracking it and link it again.")
+        case .missingLibraryState:
+            String(localized: "Choose a library status before adding this series to MangaBaka.")
+        case .invalidRemoteEntry:
+            String(localized: "MangaBaka returned an incomplete or mismatched library entry. Try again.")
         }
     }
 
@@ -64,9 +70,9 @@ nonisolated struct MangaBakaEntryPatch: Equatable, Sendable {
 }
 
 /// Decides what Ito may write to a MangaBaka library entry, so that Ito never damages a library:
-/// it never removes entries or lowers progress on its own, never touches ratings, dates, notes,
-/// priority, privacy or reread counts, and on automatic sync only moves an entry the user is
-/// actively reading.
+/// it never removes entries or lowers progress on its own, never touches dates, notes, priority,
+/// privacy or reread counts, and on automatic sync only moves an entry the user is actively
+/// reading. Ratings are written only by the separate, explicit score-editing capability.
 nonisolated enum MangaBakaWritePolicy {
     /// - Parameters:
     ///   - snapshot: The entry and series as just read from MangaBaka.
@@ -157,7 +163,7 @@ nonisolated enum MangaBakaWritePolicy {
 
 /// MangaBaka tracking for manga and novels. See `MangaBakaWritePolicy` for what it writes.
 @MainActor
-public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating {
+public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating, TrackerScoreEditing {
     /// Ito's MangaBaka OAuth client ID (a public application; public clients have no secret).
     static let clientID = "mIujtlrWyyjQyUEYToReIpJwsWeBJkaH"
     static let redirectURI = "ito://mangabaka-callback"
@@ -185,6 +191,8 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
     private let session: URLSession
     private let catalog: MangaBakaClient
     private var writeChains: [Int: Task<Void, any Error>] = [:]
+    var scoreIdentity: TrackerScoreIdentity { credentialRepository.scoreIdentity }
+    var scoreEditingIdentity: UUID { scoreIdentity.current }
 
     init(
         credentialRepository: MangaBakaCredentialRepository,
@@ -224,6 +232,7 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
             try? await oauth.revoke(token)
             throw error
         }
+        scoreIdentity.rotate()
         await credentialRepository.persist(.oauth(token))
         isSignedIn = true
         storeUsername(of: profile)
@@ -239,12 +248,14 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
         } catch MangaBakaError.unauthorized, MangaBakaError.forbidden {
             throw TrackerTokenError.rejected
         }
+        scoreIdentity.rotate()
         await credentialRepository.persist(.personalAccessToken(token))
         isSignedIn = true
         storeUsername(of: profile)
     }
 
     public func logout() async throws {
+        scoreIdentity.rotate()
         let token = try await credentialRepository.logout()
         isSignedIn = false
         clearUsername()
@@ -283,11 +294,22 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
 
     public func updateProgress(mediaId: String, progress: Int?, status: String?) async throws {
         let id = try Self.seriesID(mediaId)
+        try await enqueueWrite(id: id) {
+            try await self.applyProgress(id: id, progress: progress, status: status)
+        }
+    }
+
+    private func enqueueWrite(
+        id: Int, cancellable: Bool = false, operation: @escaping @MainActor () async throws -> Void
+    ) async throws {
+        // Manual ratings and ordinary progress share this chain.
         // One write per entry at a time, so each pre-read sees the previous write.
         let previous = writeChains[id]
         let task = Task { @MainActor in
+            // Cancellation must not let a later write bypass an outstanding predecessor.
             _ = await previous?.result
-            try await self.applyProgress(id: id, progress: progress, status: status)
+            if cancellable { try Task.checkCancellation() }
+            try await operation()
         }
         writeChains[id] = task
         defer {
@@ -295,7 +317,15 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
                 writeChains[id] = nil
             }
         }
-        try await task.value
+        if cancellable {
+            try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
+        } else {
+            try await task.value
+        }
     }
 
     private func applyProgress(id: Int, progress: Int?, status: String?) async throws {
@@ -318,15 +348,96 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
         }
     }
 
+    func getScoreFormat() async throws -> TrackerScoreFormat {
+        return .numeric100
+    }
+
+    private func validate(_ context: TrackerScoreSession?) async throws {
+        guard let context else { return }
+        try Task.checkCancellation()
+        guard context.identity == scoreEditingIdentity else { throw TrackerScoreEditingError.accountChanged }
+        guard context.format == .numeric100 else { throw TrackerScoreEditingError.scoreFormatChanged }
+    }
+
+    func getMediaListEntry(mediaId: String, scoreSession: TrackerScoreSession) async throws -> TrackerMediaEntry? {
+        try await validate(scoreSession)
+        let entry = try await read(Self.seriesID(mediaId), scoreSession: scoreSession)
+        try await validate(scoreSession)
+        guard let library = entry.library,
+              let status = try MangaBakaWritePolicy.trackerStatus(for: entry.snapshot) else { return nil }
+        return TrackerMediaEntry(
+            status: status,
+            progress: Int(entry.snapshot.progress),
+            score: library.rating.flatMap { $0 > 0 ? $0 : nil },
+            startDate: Self.date(from: library.startDate),
+            finishDate: Self.date(from: library.finishDate)
+        )
+    }
+
+    func updateEntry(
+        mediaId: String, progress: Int?, status: String?, score: Double?, scoreSession: TrackerScoreSession?
+    ) async throws {
+        // A score must never escape the account-bound manual editing path.
+        if let score {
+            guard scoreSession != nil else { throw TrackerScoreEditingError.accountChanged }
+            // MangaBaka's native schema permits numbers, not just integer UI steps.
+            guard score.isFinite, (0...100).contains(score) else { throw TrackerScoreEditingError.invalidScore }
+        }
+        let id = try Self.seriesID(mediaId)
+        try await enqueueWrite(id: id, cancellable: scoreSession != nil) {
+            try await self.validate(scoreSession)
+            let entry = try await self.read(id, scoreSession: scoreSession)
+            try await self.validate(scoreSession)
+            // Even rating-only edits must fail closed for an unknown or missing remote state.
+            _ = try MangaBakaWritePolicy.trackerStatus(for: entry.snapshot)
+            var patch: MangaBakaEntryPatch?
+            if let status {
+                patch = try MangaBakaWritePolicy.patch(for: entry.snapshot, progress: progress, status: status)
+            } else if let progress, progress >= 0 {
+                // An omitted status is not authorization to restart a reread.
+                let target = entry.snapshot.total > 0 ? min(progress, entry.snapshot.total) : progress
+                if Double(target) > entry.snapshot.progress {
+                    patch = MangaBakaEntryPatch(progress: target)
+                }
+            }
+            guard entry.library != nil || patch?.state != nil else {
+                throw MangaBakaTrackerError.missingLibraryState
+            }
+            let rating = score.flatMap { $0 == (entry.library?.rating ?? 0) ? nil : $0 }
+            guard patch != nil || rating != nil else { return }
+            let changes = LibraryEntryChanges(
+                state: patch?.state.map(Self.libraryState),
+                progressChapter: patch?.progress.map(Double.init),
+                rating: rating
+            )
+            // SDK contract: any acknowledged 2xx succeeds, including an empty 204 response;
+            // transport failure/cancellation has an unknown outcome and is not replayed.
+            try await self.perform(scoreSession: scoreSession) { client in
+                if entry.library == nil {
+                    try await client.createLibraryEntry(seriesID: id, changes)
+                } else {
+                    try await client.updateLibraryEntry(seriesID: id, changes)
+                }
+            }
+            try await self.validate(scoreSession)
+        }
+    }
+
     private struct RemoteEntry {
         let snapshot: MangaBakaEntrySnapshot
         let library: LibraryEntry?
     }
 
-    private func read(_ id: Int) async throws -> RemoteEntry {
+    private func read(_ id: Int, scoreSession: TrackerScoreSession? = nil) async throws -> RemoteEntry {
+        try await validate(scoreSession)
         async let seriesRead = catalog.series(id: id)
-        let library = try await perform { try await $0.libraryEntry(seriesID: id) }
+        let library = try await perform(scoreSession: scoreSession) { try await $0.libraryEntry(seriesID: id) }
+        try await validate(scoreSession)
         let series = try await seriesRead
+        try await validate(scoreSession)
+        guard series.id == id, library == nil || library?.seriesID == id else {
+            throw MangaBakaTrackerError.invalidRemoteEntry
+        }
         switch series.state {
         case .active:
             break
@@ -337,6 +448,14 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
             throw MangaBakaTrackerError.seriesUnavailable
         }
         let chapters = library?.progressChapter ?? 0
+        if scoreSession != nil {
+            // Validate native baselines before conversion or comparison, without discarding
+            // fractional progress or treating the provider's null values as malformed.
+            guard chapters.isFinite, (0...10_000).contains(chapters),
+                  library?.rating.map({ $0.isFinite && (0...100).contains($0) }) ?? true else {
+                throw MangaBakaTrackerError.invalidRemoteEntry
+            }
+        }
         return RemoteEntry(
             snapshot: MangaBakaEntrySnapshot(
                 state: library.map { Self.snapshotState($0.state) },
@@ -353,16 +472,28 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
     /// refreshed OAuth token, or with a credential saved since the request started; it signs out
     /// when MangaBaka rejects the session, including a token rejected again right after a refresh.
     /// A failure from a session that has since been replaced leaves the new session signed in.
-    private func perform<T>(_ operation: (MangaBakaClient) async throws -> T) async throws -> T {
+    private func perform<T>(
+        scoreSession: TrackerScoreSession? = nil,
+        _ operation: (MangaBakaClient) async throws -> T
+    ) async throws -> T {
+        try await validate(scoreSession)
         do {
             let credential = try await credentialRepository.validCredential()
+            try await validate(scoreSession)
             do {
-                return try await operation(Self.client(credential: credential, session: session))
+                let result = try await operation(Self.client(credential: credential, session: session))
+                try await validate(scoreSession)
+                return result
             } catch MangaBakaError.unauthorized {
+                try await validate(scoreSession)
                 let replacement = try await credentialRepository.credential(replacing: credential)
+                try await validate(scoreSession)
                 do {
-                    return try await operation(Self.client(credential: replacement, session: session))
+                    let result = try await operation(Self.client(credential: replacement, session: session))
+                    try await validate(scoreSession)
+                    return result
                 } catch MangaBakaError.unauthorized {
+                    try await validate(scoreSession)
                     throw await credentialRepository.rejected(replacement)
                 }
             }
@@ -370,6 +501,10 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
             if await !credentialRepository.hasSession {
                 markSignedOut()
             }
+            try await validate(scoreSession)
+            throw error
+        } catch {
+            try await validate(scoreSession)
             throw error
         }
     }

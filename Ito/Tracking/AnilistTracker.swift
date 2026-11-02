@@ -9,12 +9,9 @@ public class AnilistTracker: TrackerProvider {
     public let name = "AniList"
     public let tracksAnime = true
 
-    @Published public private(set) var anilistToken: String? {
-        didSet {
-            if oldValue != anilistToken { scoreEditingIdentity = UUID() }
-        }
-    }
-    private(set) var scoreEditingIdentity = UUID()
+    @Published public private(set) var anilistToken: String?
+    nonisolated let scoreIdentity = TrackerScoreIdentity()
+    var scoreEditingIdentity: UUID { scoreIdentity.current }
     @Published public private(set) var username: String?
 
     public var isAuthenticated: Bool {
@@ -43,7 +40,7 @@ public class AnilistTracker: TrackerProvider {
     @discardableResult
     func bootstrapCredentials() async throws -> AniListCredentialRepository.BootstrapOutcome {
         try await credentialRepository.bootstrap { [weak self] token in
-            self?.anilistToken = token
+            self?.publishToken(token)
         }
     }
 
@@ -84,17 +81,22 @@ public class AnilistTracker: TrackerProvider {
 
     func persistAuthenticatedToken(_ token: String) async throws {
         try await credentialRepository.persistOAuthToken(token) { [weak self] verifiedToken in
-            self?.anilistToken = verifiedToken
+            self?.publishToken(verifiedToken)
         }
     }
 
     public func logout() async throws {
         try await credentialRepository.logout { [weak self] _ in
             guard let self else { return }
-            self.anilistToken = nil
+            self.publishToken(nil)
             self.username = nil
             self.usernameDefaults.removeObject(forKey: self.usernameKey)
         }
+    }
+
+    private func publishToken(_ token: String?) {
+        if anilistToken != token { scoreIdentity.rotate() }
+        anilistToken = token
     }
 
     public func searchMedia(title: String, isAnime: Bool) async throws -> [TrackerMedia] {
@@ -159,7 +161,7 @@ public class AnilistTracker: TrackerProvider {
         }
         guard scoreEditingIdentity == identity else { throw TrackerScoreEditingError.accountChanged }
         guard let rawValue = response.viewer?.mediaListOptions?.scoreFormat,
-              let format = TrackerScoreFormat(rawValue: rawValue) else {
+              let format = TrackerScoreFormat(rawValue: rawValue), format != .numeric100 else {
             throw TrackerScoreEditingError.unsupportedFormat
         }
         guard let name = response.viewer?.name,

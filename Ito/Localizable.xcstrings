@@ -1,24 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Choose a valid score for your scoring format." : {},
-    "Dates come from %@. Change them on %@." : {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "new",
-            "value": "Dates come from %1$@. Change them on %2$@."
-          }
-        }
-      }
-    },
-    "This tracker does not support manual scoring." : {},
-    "Your scoring format changed. Reopen this entry before saving." : {},
-    "Your scoring format could not be loaded. Reopen this entry before saving." : {},
-    "Your tracker account changed. Reopen this entry before saving." : {},
-    "😐 Average" : {},
-    "🙁 Bad" : {},
-    "🙂 Good" : {},
     "" : {
 
     },
@@ -805,6 +787,15 @@
     "Choose List on Save" : {
 
     },
+    "Choose a library status before adding this series to MangaBaka." : {
+
+    },
+    "Choose a list status before adding this entry to MyAnimeList." : {
+
+    },
+    "Choose a valid score for your scoring format." : {
+
+    },
     "Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports." : {
 
     },
@@ -824,6 +815,9 @@
 
     },
     "Clear History" : {
+
+    },
+    "Clear Score" : {
 
     },
     "Clear selection" : {
@@ -990,6 +984,16 @@
     "Dates" : {
 
     },
+    "Dates come from %@. Change them on %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Dates come from %1$@. Change them on %2$@."
+          }
+        }
+      }
+    },
     "Debug Logs" : {
 
     },
@@ -1061,6 +1065,9 @@
     },
     "Enter a new value to replace it" : {
 
+    },
+    "Enter a number from 0 to 100." : {
+      "comment" : "Validation for a personal tracker rating"
     },
     "Enter a whole number between %@ and %@." : {
       "localizations" : {
@@ -1390,10 +1397,10 @@
     "Ito marks this entry %@ when you start episode 1." : {
 
     },
-    "Ito syncs progress for series you are watching or reading on MyAnimeList. Automatic sync only moves progress forward. Ito never deletes entries or changes scores, dates, tags or comments." : {
+    "Ito syncs progress for series you are watching or reading on MyAnimeList. Automatic sync only moves progress forward and leaves ratings unchanged; you can edit your rating in the tracker sheet. Ito never deletes entries or changes dates, tags or comments." : {
 
     },
-    "Ito updates chapter progress for manga and novels you are reading on MangaBaka. Ratings, dates and notes are left as they are. Series data from MangaBaka is licensed CC BY-NC-SA 4.0." : {
+    "Ito updates chapter progress for manga and novels you are reading on MangaBaka. Automatic sync leaves ratings unchanged; you can edit your rating in the tracker sheet. Dates and notes are left as they are. Series data from MangaBaka is licensed CC BY-NC-SA 4.0." : {
 
     },
     "Japan" : {
@@ -1626,6 +1633,9 @@
     "MangaBaka reports the library state %@, which Ito does not support yet." : {
 
     },
+    "MangaBaka returned an incomplete or mismatched library entry. Try again." : {
+
+    },
     "Maximum" : {
 
     },
@@ -1689,7 +1699,13 @@
     "Music" : {
       "comment" : "Anime format: music video"
     },
+    "MyAnimeList did not confirm the saved changes. Reload the entry before trying again." : {
+
+    },
     "MyAnimeList reports the list status %@, which Ito does not support yet." : {
+
+    },
+    "MyAnimeList returned an incomplete list entry. Reopen this entry before saving." : {
 
     },
     "Network" : {
@@ -2981,6 +2997,9 @@
     "This source needs a newer version of Ito. Update Ito to use it." : {
 
     },
+    "This tracker does not support manual scoring." : {
+
+    },
     "To read this content, you must install the '%@' extension." : {
 
     },
@@ -3327,6 +3346,15 @@
     "Your restored data is saved. Refresh must finish before the app can continue." : {
 
     },
+    "Your scoring format changed. Reopen this entry before saving." : {
+
+    },
+    "Your scoring format could not be loaded. Reopen this entry before saving." : {
+
+    },
+    "Your tracker account changed. Reopen this entry before saving." : {
+
+    },
     "Your tracker change couldn't be saved. Please try again." : {
 
     },
@@ -3396,6 +3424,15 @@
 
     },
     "★ %lld%%" : {
+
+    },
+    "😐 Average" : {
+
+    },
+    "🙁 Bad" : {
+
+    },
+    "🙂 Good" : {
 
     }
   },

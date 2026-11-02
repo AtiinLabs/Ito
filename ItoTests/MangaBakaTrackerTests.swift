@@ -4,8 +4,8 @@ import Testing
 @testable import Ito
 
 /// Serves MangaBaka responses from a closure. One handler at a time: the suite is serialized.
-final class MangaBakaStubURLProtocol: URLProtocol, @unchecked Sendable {
-    struct Response {
+final class MangaBakaStubURLProtocol: URLProtocol {
+    struct Response: Sendable {
         let status: Int
         let body: String
     }
@@ -19,20 +19,25 @@ final class MangaBakaStubURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     nonisolated(unsafe) static var handler: (@Sendable (URLRequest) -> Response)?
+    nonisolated(unsafe) static var asyncHandler: (@Sendable (URLRequest) async -> Response)?
     private static let lock = NSLock()
     nonisolated(unsafe) private static var entries: [Entry] = []
+    private let responseDelivery = TrackerTestResponseDelivery()
 
     static var log: [Entry] { lock.withLock { entries } }
 
     static func reset() {
         lock.withLock { entries = [] }
         handler = nil
+        asyncHandler = nil
     }
 
     override static func canInit(with request: URLRequest) -> Bool { true }
     override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
+        let delivery = responseDelivery
+        guard delivery.bind(to: self) else { return }
         let request = request
         let body = request.httpBody ?? request.httpBodyStream.map(Self.read) ?? Data()
         Self.lock.withLock {
@@ -44,21 +49,23 @@ final class MangaBakaStubURLProtocol: URLProtocol, @unchecked Sendable {
                 body: String(bytes: body, encoding: .utf8) ?? ""
             ))
         }
-        DispatchQueue.global().async { [self] in
-            let response = Self.handler?(request) ?? Response(status: 500, body: "{}")
-            let http = HTTPURLResponse(
-                url: request.url!,
-                statusCode: response.status,
-                httpVersion: nil,
-                headerFields: ["Content-Type": "application/json"]
-            )!
-            client?.urlProtocol(self, didReceive: http, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: Data(response.body.utf8))
-            client?.urlProtocolDidFinishLoading(self)
+        let handler = Self.handler
+        let asyncHandler = Self.asyncHandler
+        Task { [delivery, request, handler, asyncHandler] in
+            let response: Response
+            if let asyncHandler {
+                response = await asyncHandler(request)
+            } else {
+                response = handler?(request) ?? Response(status: 500, body: "{}")
+            }
+            delivery.finish(
+                status: response.status, body: Data(response.body.utf8),
+                headers: ["Content-Type": "application/json"]
+            )
         }
     }
 
-    override func stopLoading() {}
+    override func stopLoading() { responseDelivery.cancel() }
 
     static func session() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
@@ -468,6 +475,545 @@ struct MangaBakaTrackerTests {
         await #expect(throws: MangaBakaTrackerError.seriesMerged(into: 1995)) {
             try await subject.tracker.updateProgress(mediaId: "42", progress: 5, status: nil)
         }
+        #expect(writes().isEmpty)
+    }
+
+    // MARK: Explicit native ratings
+
+    private func scoreSession(_ tracker: MangaBakaTracker) async throws -> TrackerScoreSession {
+        let format = try await tracker.getScoreFormat()
+        return TrackerScoreSession(format: format, identity: tracker.scoreEditingIdentity)
+    }
+
+    @Test func accountReplacementInvalidatesSyncGuardsBeforeCredentialStorageCompletes() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let persistenceGate = AsyncTestGate()
+        let store = FakeTrackerCredentialStore(
+            initialToken: try mangaBakaStoredJSON(.personalAccessToken("mb-old")),
+            setGates: [persistenceGate]
+        )
+        let manager = TrackerManager(
+            dbPool: database.dbPool,
+            credentialStore: FakeTrackerCredentialStore(),
+            malCredentialStore: FakeTrackerCredentialStore(),
+            mangaBakaCredentialStore: store,
+            legacyTokenStore: FakeLegacyTokenStore(),
+            usernameDefaults: defaults,
+            mangaBakaSession: MangaBakaStubURLProtocol.session()
+        )
+        await manager.bootstrapCredentials()
+        let tracker = try #require(manager.providers.first { $0.identifier == "mangabaka" } as? MangaBakaTracker)
+        let service = TrackerProviderService(
+            trackerManager: manager, oauthAuthenticator: TrackerOAuthAuthenticatorFake()
+        )
+        let loadedContext = try await service.getScoreFormat(providerID: "mangabaka")
+        let context = try #require(loadedContext)
+        MangaBakaStubURLProtocol.handler = { _ in
+            .init(status: 200, body: #"{"status":200,"data":{"id":"u2","preferred_username":"replacement","role":"user","auth_type":"pat","scopes":[]}}"#)
+        }
+        let signIn = Task { try await tracker.authenticate(token: "mb-new") }
+        await persistenceGate.waitForAdmissions(1)
+        #expect(throws: TrackerScoreEditingError.accountChanged) {
+            try service.validateScoreSession(providerID: "mangabaka", scoreSession: context)
+        }
+        #expect(writes().isEmpty)
+        await persistenceGate.open()
+        try await signIn.value
+    }
+
+    @Test func manualReadUsesNativeRatingWhileOrdinaryReadStaysNormalized() async throws {
+        let subject = try await makeTracker()
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (
+            200, Self.entryJSON(state: "considering", chapter: "12.5")
+                .replacingOccurrences(of: #""rating": 85"#, with: #""rating": 85.5"#)
+        ))
+        let context = try await scoreSession(subject.tracker)
+        #expect(context.format == .numeric100)
+        let manual = try await subject.tracker.getMediaListEntry(mediaId: "42", scoreSession: context)
+        let ordinary = try await subject.tracker.getMediaListEntry(mediaId: "42")
+        #expect(manual?.score == 85.5)
+        #expect(manual?.status == "PLANNING")
+        #expect(manual?.progress == 12)
+        #expect(ordinary?.score == 8.55)
+    }
+
+    @Test(arguments: [92.0, 85.5, 0.0])
+    func manualRatingSendsOnlyTheChangedNativeRating(score: Double) async throws {
+        let subject = try await makeTracker()
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (200, Self.entryJSON(state: "considering", chapter: "12.5")))
+        let context = try await scoreSession(subject.tracker)
+        try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: score, scoreSession: context)
+        let write = try #require(writes().first)
+        #expect(writes().count == 1)
+        #expect(write.method == "PATCH")
+        #expect(try json(write.body) as NSDictionary == ["rating": score] as NSDictionary)
+    }
+
+    @Test func unchangedAndOmittedRatingsNeverSendRating() async throws {
+        let subject = try await makeTracker()
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (
+            200, Self.entryJSON(state: "considering", chapter: "12.5")
+                .replacingOccurrences(of: #""rating": 85"#, with: #""rating": 85.5"#)
+        ))
+        let context = try await scoreSession(subject.tracker)
+        for score in [nil, 85.5] as [Double?] {
+            try await subject.tracker.updateEntry(
+                mediaId: "42", progress: 12, status: "PLANNING", score: score, scoreSession: context
+            )
+        }
+        #expect(writes().isEmpty)
+        try await subject.tracker.updateEntry(mediaId: "42", progress: 13, status: nil, score: nil, scoreSession: context)
+        #expect(try json(try #require(writes().first).body) as NSDictionary == ["progress_chapter": 13] as NSDictionary)
+    }
+
+    @Test func omittedRereadStateCannotAuthorizeAProgressDecrease() async throws {
+        let subject = try await makeTracker()
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (
+            200, Self.entryJSON(state: "rereading", chapter: "14")
+        ))
+        let context = try await scoreSession(subject.tracker)
+        try await subject.tracker.updateEntry(
+            mediaId: "42", progress: 13, status: nil, score: 92, scoreSession: context
+        )
+        #expect(try json(try #require(writes().first).body) as NSDictionary == ["rating": 92] as NSDictionary)
+        try await subject.tracker.updateEntry(
+            mediaId: "42", progress: 2, status: "REPEATING", score: nil, scoreSession: context
+        )
+        #expect(writes().count == 2)
+        #expect(try json(try #require(writes().last).body) as NSDictionary == ["progress_chapter": 2] as NSDictionary)
+    }
+
+    @Test(arguments: [Double.nan, Double.infinity, -Double.infinity, -1, 100.1])
+    func invalidNativeRatingsNeverReachTransport(score: Double) async throws {
+        let subject = try await makeTracker()
+        let context = try await scoreSession(subject.tracker)
+        await #expect(throws: TrackerScoreEditingError.invalidScore) {
+            try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: score, scoreSession: context)
+        }
+        #expect(MangaBakaStubURLProtocol.log.isEmpty)
+    }
+
+    @Test func ratingsRequireAnAccountBoundSessionAndMatchingFormat() async throws {
+        let subject = try await makeTracker()
+        await #expect(throws: TrackerScoreEditingError.accountChanged) {
+            try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: nil)
+        }
+        let context = try await scoreSession(subject.tracker)
+        for format in [TrackerScoreFormat.point10, .point100] {
+            let wrongFormat = TrackerScoreSession(format: format, identity: context.identity)
+            await #expect(throws: TrackerScoreEditingError.scoreFormatChanged) {
+                try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 9, scoreSession: wrongFormat)
+            }
+        }
+        #expect(MangaBakaStubURLProtocol.log.isEmpty)
+    }
+
+    @Test func manualCreateRequiresAnExplicitState() async throws {
+        let subject = try await makeTracker()
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (404, #"{"status":404,"message":"NOT_FOUND"}"#), write: 201)
+        let context = try await scoreSession(subject.tracker)
+        await #expect(throws: MangaBakaTrackerError.missingLibraryState) {
+            try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+        }
+        #expect(writes().isEmpty)
+        try await subject.tracker.updateEntry(mediaId: "42", progress: 3, status: "CURRENT", score: 90, scoreSession: context)
+        let write = try #require(writes().first)
+        #expect(write.method == "POST")
+        #expect(try json(write.body) as NSDictionary == ["state": "reading", "progress_chapter": 3, "rating": 90] as NSDictionary)
+    }
+
+    @Test func manualRatingsFailClosedWhenFreshReadFails() async throws {
+        let subject = try await makeTracker()
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (403, #"{"status":403}"#))
+        let context = try await scoreSession(subject.tracker)
+        await #expect(throws: (any Error).self) {
+            try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+        }
+        #expect(writes().isEmpty)
+    }
+
+    @Test(arguments: ["future_state", "none"])
+    func ratingOnlyEditsRejectUnknownOrMissingRemoteState(state: String) async throws {
+        let subject = try await makeTracker()
+        var entry = Self.entryJSON(state: state, chapter: "3")
+        if state == "none" {
+            entry = entry.replacingOccurrences(of: #""state": "none""#, with: #""state": null"#)
+        }
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (200, entry))
+        let context = try await scoreSession(subject.tracker)
+        await #expect(throws: MangaBakaTrackerError.unsupportedRemoteStatus(state)) {
+            try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+        }
+        #expect(writes().isEmpty)
+    }
+
+    @Test(arguments: [true, false])
+    func manualReadsAndWritesRejectMismatchedRemoteSeries(libraryMismatch: Bool) async throws {
+        let subject = try await makeTracker()
+        let entry = Self.entryJSON(state: "reading", chapter: "3")
+        MangaBakaStubURLProtocol.handler = Self.server(
+            entry: (200, libraryMismatch ? entry.replacingOccurrences(of: #""series_id": 42"#, with: #""series_id": 43"#) : entry),
+            series: Self.seriesJSON(id: libraryMismatch ? 42 : 43)
+        )
+        let context = try await scoreSession(subject.tracker)
+        await #expect(throws: MangaBakaTrackerError.invalidRemoteEntry) {
+            _ = try await subject.tracker.getMediaListEntry(mediaId: "42", scoreSession: context)
+        }
+        await #expect(throws: MangaBakaTrackerError.invalidRemoteEntry) {
+            try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+        }
+        #expect(writes().isEmpty)
+    }
+
+    @Test(arguments: [#"{"status":200}"#, #"{"status":200,"data":null}"#, #"{"status":200,"data":{}}"#])
+    func incompleteLibraryReadsCannotBecomeCreatesOrRatingWrites(body: String) async throws {
+        let subject = try await makeTracker()
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (200, body))
+        let context = try await scoreSession(subject.tracker)
+        await #expect(throws: (any Error).self) {
+            try await subject.tracker.updateEntry(
+                mediaId: "42", progress: nil, status: "CURRENT", score: 90, scoreSession: context
+            )
+        }
+        #expect(writes().isEmpty)
+    }
+
+    @Test(arguments: [200, 201, 204])
+    func manualSaveAcceptsTheSDKAny2xxAcknowledgementContract(status: Int) async throws {
+        let subject = try await makeTracker()
+        let server = Self.server(entry: (200, Self.entryJSON(state: "reading", chapter: "3")))
+        MangaBakaStubURLProtocol.handler = { request in
+            if request.httpMethod == "PATCH" { return .init(status: status, body: "") }
+            return server(request)
+        }
+        let context = try await scoreSession(subject.tracker)
+        try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+        #expect(writes().count == 1)
+    }
+
+    @Test func rejectedManualWriteDoesNotReportSuccessOrReplay() async throws {
+        let subject = try await makeTracker()
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (200, Self.entryJSON(state: "reading", chapter: "3")), write: 403)
+        let context = try await scoreSession(subject.tracker)
+        await #expect(throws: (any Error).self) {
+            try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+        }
+        #expect(writes().count == 1)
+    }
+
+    @Test func oauthRefreshPreservesTheScoreSession() async throws {
+        let refresher = FakeMangaBakaRefresher(results: [.success(mangaBakaToken("new"))])
+        let subject = try await makeTracker(.oauth(mangaBakaToken("old")), refresher: refresher)
+        let context = try await scoreSession(subject.tracker)
+        MangaBakaStubURLProtocol.handler = Self.server(
+            entry: (200, Self.entryJSON(state: "reading", chapter: "3")),
+            accepts: { $0.value(forHTTPHeaderField: "Authorization") == "Bearer access-new" }
+        )
+        try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+        #expect(subject.tracker.scoreEditingIdentity == context.identity)
+        #expect(writes().count == 1)
+        #expect(refresher.refreshedTokens == ["refresh-old"])
+    }
+
+    @Test func accountChangeDuringCredentialRetryNeverWritesTheReplacementAccount() async throws {
+        let gate = AsyncTestGate()
+        let refresher = FakeMangaBakaRefresher(results: [.success(mangaBakaToken("new"))], gate: gate)
+        let subject = try await makeTracker(.oauth(mangaBakaToken("old")), refresher: refresher)
+        let context = try await scoreSession(subject.tracker)
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (200, ""), accepts: { _ in false })
+        let save = Task {
+            try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+        }
+        await gate.waitForAdmissions()
+        await subject.repository.persist(.personalAccessToken("replacement"))
+        await gate.open()
+        await #expect(throws: (any Error).self) { try await save.value }
+        #expect(writes().isEmpty)
+        #expect(libraryReads().count == 1)
+        #expect(libraryReads().allSatisfy { $0.apiKey != "replacement" })
+        let replacement = try await scoreSession(subject.tracker)
+        #expect(replacement.identity != context.identity)
+    }
+
+    @Test func accountChangeDuringAcknowledgementRejectsStaleSaveWithoutReplay() async throws {
+        let subject = try await makeTracker()
+        let context = try await scoreSession(subject.tracker)
+        let gate = AsyncTestGate()
+        let server = Self.server(entry: (200, Self.entryJSON(state: "considering", chapter: "12.5")))
+        MangaBakaStubURLProtocol.asyncHandler = { request in
+            if request.httpMethod == "PATCH" { await gate.enter() }
+            return server(request)
+        }
+        let save = Task {
+            try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+        }
+        await gate.waitForAdmissions()
+        await subject.repository.persist(.personalAccessToken("replacement"))
+        await gate.open()
+        await #expect(throws: TrackerScoreEditingError.accountChanged) { try await save.value }
+        #expect(writes().count == 1)
+        #expect(writes().first?.apiKey == "mb-saved")
+    }
+
+    @Test func accountChangeDuringFreshReadNeverWrites() async throws {
+        let subject = try await makeTracker()
+        let context = try await scoreSession(subject.tracker)
+        let gate = AsyncTestGate()
+        let server = Self.server(entry: (200, Self.entryJSON(state: "reading", chapter: "3")))
+        MangaBakaStubURLProtocol.asyncHandler = { request in
+            if request.url?.path == "/v1/my/library/42" { await gate.enter() }
+            return server(request)
+        }
+        let save = Task {
+            try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+        }
+        await gate.waitForAdmissions()
+        await subject.repository.persist(.personalAccessToken("replacement"))
+        await gate.open()
+        await #expect(throws: TrackerScoreEditingError.accountChanged) { try await save.value }
+        #expect(writes().isEmpty)
+    }
+
+    @Test func accountChangeWhileQueuedBehindAutomaticProgressNeverWritesRating() async throws {
+        let subject = try await makeTracker()
+        let context = try await scoreSession(subject.tracker)
+        let gate = AsyncTestGate()
+        let server = Self.server(entry: (200, Self.entryJSON(state: "reading", chapter: "3")))
+        MangaBakaStubURLProtocol.asyncHandler = { request in
+            if request.httpMethod == "PATCH" { await gate.enter() }
+            return server(request)
+        }
+        let automatic = Task {
+            try await subject.tracker.updateProgress(mediaId: "42", progress: 5, status: nil)
+        }
+        await gate.waitForAdmissions()
+        var queued: Task<Void, any Error>?
+        await withCheckedContinuation { (started: CheckedContinuation<Void, Never>) in
+            queued = Task { @MainActor in
+                // Both this task and the test are MainActor-isolated. updateEntry registers its
+                // write synchronously before suspending on the blocked predecessor.
+                started.resume()
+                try await subject.tracker.updateEntry(
+                    mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context
+                )
+            }
+        }
+        await subject.repository.persist(.personalAccessToken("replacement"))
+        await gate.open()
+        try await automatic.value
+        let save = try #require(queued)
+        await #expect(throws: TrackerScoreEditingError.accountChanged) { try await save.value }
+        #expect(writes().count == 1)
+        #expect(libraryReads().count == 1)
+        #expect(try json(try #require(writes().first).body) as NSDictionary == ["progress_chapter": 5] as NSDictionary)
+    }
+
+    @Test func accountChangeDuringWriteCredentialRetryDoesNotReplayTheRating() async throws {
+        let gate = AsyncTestGate()
+        let refresher = FakeMangaBakaRefresher(results: [.success(mangaBakaToken("new"))], gate: gate)
+        let subject = try await makeTracker(.oauth(mangaBakaToken("old")), refresher: refresher)
+        let context = try await scoreSession(subject.tracker)
+        let server = Self.server(entry: (200, Self.entryJSON(state: "reading", chapter: "3")))
+        MangaBakaStubURLProtocol.handler = { request in
+            if request.httpMethod == "PATCH" { return Self.unauthorized }
+            return server(request)
+        }
+        let save = Task {
+            try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+        }
+        await gate.waitForAdmissions()
+        await subject.repository.persist(.personalAccessToken("replacement"))
+        await gate.open()
+        await #expect(throws: (any Error).self) { try await save.value }
+        #expect(writes().count == 1)
+        #expect(writes().first?.authorization == "Bearer access-old")
+        #expect(writes().first?.apiKey == nil)
+    }
+
+    @Test func cancelledManualWriteQueuedBehindAutomaticProgressNeverDispatches() async throws {
+        let subject = try await makeTracker()
+        let context = try await scoreSession(subject.tracker)
+        let gate = AsyncTestGate()
+        let server = Self.server(entry: (200, Self.entryJSON(state: "reading", chapter: "3")))
+        MangaBakaStubURLProtocol.asyncHandler = { request in
+            if request.httpMethod == "PATCH" { await gate.enter() }
+            return server(request)
+        }
+        let automatic = Task {
+            try await subject.tracker.updateProgress(mediaId: "42", progress: 5, status: nil)
+        }
+        await gate.waitForAdmissions()
+        var queued: Task<Void, any Error>?
+        await withCheckedContinuation { (started: CheckedContinuation<Void, Never>) in
+            queued = Task { @MainActor in
+                // Registration precedes the first suspension, on this same actor.
+                started.resume()
+                try await subject.tracker.updateEntry(
+                    mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context
+                )
+            }
+        }
+        let save = try #require(queued)
+        save.cancel()
+        // Automatic callers retain their existing non-cancellable queue semantics.
+        automatic.cancel()
+        await gate.open()
+        try await automatic.value
+        await #expect(throws: CancellationError.self) { try await save.value }
+        #expect(libraryReads().count == 1)
+        #expect(writes().count == 1)
+        #expect(try json(try #require(writes().first).body) as NSDictionary == ["progress_chapter": 5] as NSDictionary)
+    }
+
+    @Test(arguments: ["initial", "readRetry", "writeRetry"])
+    func cancelledCredentialWaitNeverDispatchesOrReplaysAndRefreshSurvives(stage: String) async throws {
+        let gate = AsyncTestGate()
+        let refresher = FakeMangaBakaRefresher(results: [.success(mangaBakaToken("new"))], gate: gate)
+        let token = mangaBakaToken("old", expiresAt: stage == "initial" ? .distantPast : nil)
+        let subject = try await makeTracker(.oauth(token), refresher: refresher)
+        let context = try await scoreSession(subject.tracker)
+        let server = Self.server(entry: (200, Self.entryJSON(state: "reading", chapter: "3")))
+        MangaBakaStubURLProtocol.handler = { request in
+            let isOld = request.value(forHTTPHeaderField: "Authorization") == "Bearer access-old"
+            let isLibraryRead = request.httpMethod == "GET" && request.url?.path == "/v1/my/library/42"
+            if isOld && ((stage == "readRetry" && isLibraryRead) || (stage == "writeRetry" && request.httpMethod == "PATCH")) {
+                return Self.unauthorized
+            }
+            return server(request)
+        }
+        let save = Task {
+            try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+        }
+        await gate.waitForAdmissions()
+        save.cancel()
+        // Another consumer can still use the shared rotation; cancelling the draft must not
+        // cancel that repository-owned task or lose the newly persisted credential.
+        let sharedCredential = Task {
+            if stage == "initial" {
+                return try await subject.repository.validCredential()
+            }
+            return try await subject.repository.credential(replacing: .oauthAccessToken("access-old"))
+        }
+        await gate.open()
+        await #expect(throws: CancellationError.self) { try await save.value }
+        #expect(try await sharedCredential.value == .oauthAccessToken("access-new"))
+        #expect(try await mangaBakaStoredCredential(in: subject.store) == .oauth(mangaBakaToken("new")))
+        #expect(refresher.refreshedTokens == ["refresh-old"])
+        #expect(subject.tracker.scoreEditingIdentity == context.identity)
+        #expect(libraryReads().count == (stage == "initial" ? 0 : 1))
+        #expect(writes().count == (stage == "writeRetry" ? 1 : 0))
+    }
+
+    @Test(arguments: [false, true])
+    func cancelledActiveManualRequestNeverReportsSuccessOrReplays(duringWrite: Bool) async throws {
+        let subject = try await makeTracker()
+        let context = try await scoreSession(subject.tracker)
+        let gate = AsyncTestGate()
+        let server = Self.server(entry: (200, Self.entryJSON(state: "reading", chapter: "3")))
+        MangaBakaStubURLProtocol.asyncHandler = { request in
+            let isLibraryRead = request.httpMethod == "GET" && request.url?.path == "/v1/my/library/42"
+            if duringWrite ? request.httpMethod == "PATCH" : isLibraryRead { await gate.enter() }
+            return server(request)
+        }
+        let save = Task {
+            try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+        }
+        await gate.waitForAdmissions()
+        save.cancel()
+        await gate.open()
+        await #expect(throws: CancellationError.self) { try await save.value }
+        #expect(libraryReads().count == 1)
+        #expect(writes().count == (duringWrite ? 1 : 0))
+    }
+
+    @Test(arguments: ["-1", "10000.1", "1e300"])
+    func manualNumericBaselinesRejectOutOfRangeChapterProgress(chapter: String) async throws {
+        let subject = try await makeTracker()
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (200, Self.entryJSON(state: "reading", chapter: chapter)))
+        let context = try await scoreSession(subject.tracker)
+        await #expect(throws: MangaBakaTrackerError.invalidRemoteEntry) {
+            _ = try await subject.tracker.getMediaListEntry(mediaId: "42", scoreSession: context)
+        }
+        await #expect(throws: MangaBakaTrackerError.invalidRemoteEntry) {
+            try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+        }
+        #expect(writes().isEmpty)
+    }
+
+    @Test(arguments: ["-1", "100.1", "1e300"])
+    func manualNumericBaselinesRejectOutOfRangeRatings(rating: String) async throws {
+        let subject = try await makeTracker()
+        let entry = Self.entryJSON(state: "reading", chapter: "3")
+            .replacingOccurrences(of: #""rating": 85"#, with: #""rating": \#(rating)"#)
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (200, entry))
+        let context = try await scoreSession(subject.tracker)
+        await #expect(throws: MangaBakaTrackerError.invalidRemoteEntry) {
+            _ = try await subject.tracker.getMediaListEntry(mediaId: "42", scoreSession: context)
+        }
+        await #expect(throws: MangaBakaTrackerError.invalidRemoteEntry) {
+            try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+        }
+        #expect(writes().isEmpty)
+    }
+
+    @Test(arguments: [#""invalid""#, "1e999"])
+    func malformedManualNumericBaselinesThrowWithoutWriting(value: String) async throws {
+        let subject = try await makeTracker()
+        let context = try await scoreSession(subject.tracker)
+        for entry in [
+            Self.entryJSON(state: "reading", chapter: value),
+            Self.entryJSON(state: "reading", chapter: "3")
+                .replacingOccurrences(of: #""rating": 85"#, with: #""rating": \#(value)"#)
+        ] {
+            MangaBakaStubURLProtocol.handler = Self.server(entry: (200, entry))
+            await #expect(throws: (any Error).self) {
+                _ = try await subject.tracker.getMediaListEntry(mediaId: "42", scoreSession: context)
+            }
+            await #expect(throws: (any Error).self) {
+                try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 90, scoreSession: context)
+            }
+        }
+        #expect(writes().isEmpty)
+    }
+
+    @Test(arguments: ["null", "12.5", "10000"])
+    func validManualProgressBaselinesPermitRatingOnlyWrites(chapter: String) async throws {
+        let subject = try await makeTracker()
+        let entry = Self.entryJSON(state: "reading", chapter: chapter)
+            .replacingOccurrences(of: #""rating": 85"#, with: #""rating": null"#)
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (200, entry))
+        let context = try await scoreSession(subject.tracker)
+        let baseline = try await subject.tracker.getMediaListEntry(mediaId: "42", scoreSession: context)
+        #expect(baseline?.progress == (chapter == "null" ? 0 : Int(Double(chapter)!)))
+        #expect(baseline?.score == nil)
+        try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 85.5, scoreSession: context)
+        #expect(writes().count == 1)
+        #expect(try json(try #require(writes().first).body) as NSDictionary == ["rating": 85.5] as NSDictionary)
+    }
+
+    @Test func signingOutInvalidatesNativeRatingDrafts() async throws {
+        let subject = try await makeTracker()
+        let context = try await scoreSession(subject.tracker)
+        try await subject.tracker.logout()
+        #expect(subject.tracker.scoreEditingIdentity != context.identity)
+        await #expect(throws: TrackerScoreEditingError.accountChanged) {
+            _ = try await subject.tracker.getMediaListEntry(mediaId: "42", scoreSession: context)
+        }
+        #expect(MangaBakaStubURLProtocol.log.isEmpty)
+    }
+
+    @Test(arguments: ["0", "null"])
+    func nativeUnsetRatingReadsAsNilAndClearingItDoesNotWrite(rating: String) async throws {
+        let subject = try await makeTracker()
+        MangaBakaStubURLProtocol.handler = Self.server(entry: (
+            200, Self.entryJSON(state: "considering", chapter: "12.5")
+                .replacingOccurrences(of: #""rating": 85"#, with: #""rating": \#(rating)"#)
+        ))
+        let context = try await scoreSession(subject.tracker)
+        let entry = try await subject.tracker.getMediaListEntry(mediaId: "42", scoreSession: context)
+        #expect(entry?.score == nil)
+        try await subject.tracker.updateEntry(mediaId: "42", progress: nil, status: nil, score: 0, scoreSession: context)
         #expect(writes().isEmpty)
     }
 

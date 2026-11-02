@@ -175,16 +175,56 @@ public final class TrackerManager: ObservableObject {
         providerId: String,
         remoteMediaId: String
     ) async throws {
-        try await dbPool.write { db in
-            try TrackerLinkRecord(
-                pluginId: media.pluginId,
-                canonicalMediaId: media.canonicalMediaId,
-                mediaKind: media.mediaKind,
-                providerId: providerId,
-                remoteMediaId: remoteMediaId,
-                updatedAt: Date(),
-                provenance: .runtime
-            ).save(db)
+        try await persistLink(media: media, providerId: providerId, remoteMediaId: remoteMediaId, guardIdentity: nil)
+    }
+
+    func link(
+        media: MediaIdentity,
+        providerId: String,
+        remoteMediaId: String,
+        scoreSession: TrackerScoreSession?
+    ) async throws {
+        let guardIdentity: (TrackerScoreIdentity, UUID)?
+        if let scoreSession {
+            guard let provider = providers.first(where: { $0.identifier == providerId }) as? any TrackerScoreEditing else {
+                throw TrackerScoreEditingError.unsupportedProvider
+            }
+            guardIdentity = (provider.scoreIdentity, scoreSession.identity)
+        } else {
+            guardIdentity = nil
+        }
+        try await persistLink(
+            media: media, providerId: providerId, remoteMediaId: remoteMediaId, guardIdentity: guardIdentity
+        )
+    }
+
+    private func persistLink(
+        media: MediaIdentity,
+        providerId: String,
+        remoteMediaId: String,
+        guardIdentity: (TrackerScoreIdentity, UUID)?
+    ) async throws {
+        let record = TrackerLinkRecord(
+            pluginId: media.pluginId,
+            canonicalMediaId: media.canonicalMediaId,
+            mediaKind: media.mediaKind,
+            providerId: providerId,
+            remoteMediaId: remoteMediaId,
+            updatedAt: Date(),
+            provenance: .runtime
+        )
+        try await dbPool.writeWithoutTransaction { db in
+            let commit = {
+                try db.inTransaction {
+                    try record.save(db)
+                    return .commit
+                }
+            }
+            if let (authority, expected) = guardIdentity {
+                try authority.withCurrentIdentity(expected, operation: commit)
+            } else {
+                try commit()
+            }
         }
         trackerMappings[media, default: [:]][providerId] = remoteMediaId
     }

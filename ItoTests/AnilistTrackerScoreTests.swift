@@ -1,9 +1,10 @@
+import Combine
 import Foundation
 import Testing
 @testable import Ito
 
 /// Records only GraphQL payloads, never credentials or headers.
-private final class AniListScoreURLProtocol: URLProtocol, @unchecked Sendable {
+private final class AniListScoreURLProtocol: URLProtocol {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var payloads: [Data] = []
     nonisolated(unsafe) private static var viewerJSON = "null"
@@ -13,6 +14,7 @@ private final class AniListScoreURLProtocol: URLProtocol, @unchecked Sendable {
         status: 200,
         body: "{\"data\":{\"MediaList\":{\"id\":1,\"mediaId\":42,\"score\":8.5,\"progress\":20,\"status\":\"CURRENT\"}}}"
     )
+    private let responseDelivery = TrackerTestResponseDelivery()
 
     static func configure(viewer: String, mutation: String) {
         lock.withLock {
@@ -41,6 +43,8 @@ private final class AniListScoreURLProtocol: URLProtocol, @unchecked Sendable {
     override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
+        let delivery = responseDelivery
+        guard delivery.bind(to: self) else { return }
         let data = request.httpBody ?? request.httpBodyStream.map(Self.readBody) ?? Data()
         let responseBody = Self.lock.withLock {
             Self.payloads.append(data)
@@ -67,17 +71,18 @@ private final class AniListScoreURLProtocol: URLProtocol, @unchecked Sendable {
             let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             return (payload?["query"] as? String)?.contains("MediaList(") == true ? Self.entryResponse.status : 200
         }
-        Task {
+        Task { [gate, delivery] in
             await gate?.enter()
-            let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil,
-                                           headerFields: ["Content-Type": "application/json"])!
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: Data(responseBody.utf8))
-            client?.urlProtocolDidFinishLoading(self)
+            delivery.finish(
+                status: status, body: Data(responseBody.utf8),
+                headers: ["Content-Type": "application/json"]
+            )
         }
     }
 
-    override func stopLoading() {}
+    override func stopLoading() {
+        responseDelivery.cancel()
+    }
 
     private static func readBody(_ stream: InputStream) -> Data {
         stream.open()
@@ -133,7 +138,7 @@ struct AnilistTrackerScoreTests {
         }
     }
 
-    @Test(arguments: TrackerScoreFormat.allCases)
+    @Test(arguments: TrackerScoreFormat.allCases.filter { $0 != .numeric100 })
     func loadsNativeFormat(format: TrackerScoreFormat) async throws {
         try await withTracker(viewer: Self.viewer(format)) { tracker in
             #expect(try await tracker.getScoreFormat() == format)
@@ -145,7 +150,8 @@ struct AnilistTrackerScoreTests {
     }
 
     @Test(arguments: ["null", "{}", "{\"mediaListOptions\":null}",
-                      "{\"mediaListOptions\":{\"scoreFormat\":\"FUTURE_FORMAT\"}}"])
+                      "{\"mediaListOptions\":{\"scoreFormat\":\"FUTURE_FORMAT\"}}",
+                      "{\"name\":\"fixture-user\",\"mediaListOptions\":{\"scoreFormat\":\"NUMERIC_100\"}}"])
     func unsupportedFormatFailsClosed(viewer: String) async throws {
         try await withTracker(viewer: viewer) { tracker in
             await #expect(throws: TrackerScoreEditingError.unsupportedFormat) {
@@ -191,7 +197,7 @@ struct AnilistTrackerScoreTests {
         }
     }
 
-    @Test(arguments: TrackerScoreFormat.allCases)
+    @Test(arguments: TrackerScoreFormat.allCases.filter { $0 != .numeric100 })
     func validatesNativeRangeAndStep(format: TrackerScoreFormat) {
         #expect(format.isValid(0))
         #expect(format.isValid(format.maxScore))
@@ -495,6 +501,42 @@ extension AnilistTrackerScoreTests {
             let entry = try await tracker.getMediaListEntry(mediaId: "42")
             #expect(entry == nil)
             #expect(AniListScoreURLProtocol.requests.count == 1)
+        }
+    }
+}
+
+extension AnilistTrackerScoreTests {
+    @Test func tokenPublicationInvalidatesGuardBeforePublishingNewCredential() async throws {
+        try await withTracker(viewer: Self.viewer(.point10)) { tracker in
+            let authority = tracker.scoreIdentity
+            let expected = authority.current
+            var publications = 0
+            let subscription = tracker.$anilistToken.dropFirst().sink { token in
+                publications += 1
+                #expect(token == "fixture-account-b")
+                #expect(tracker.anilistToken == "fixture-token")
+                #expect(throws: TrackerScoreEditingError.accountChanged) {
+                    try authority.withCurrentIdentity(expected) {}
+                }
+            }
+            defer { subscription.cancel() }
+            try await tracker.persistAuthenticatedToken("fixture-account-b")
+            #expect(publications == 1)
+            #expect(tracker.scoreIdentity === authority)
+            #expect(tracker.anilistToken == "fixture-account-b")
+        }
+    }
+
+    @Test func publishingSameTokenPreservesGuardButLogoutInvalidatesIt() async throws {
+        try await withTracker(viewer: Self.viewer(.point10)) { tracker in
+            let authority = tracker.scoreIdentity
+            let expected = authority.current
+            try await tracker.persistAuthenticatedToken("fixture-token")
+            #expect(authority.current == expected)
+            try await tracker.logout()
+            #expect(throws: TrackerScoreEditingError.accountChanged) {
+                try authority.withCurrentIdentity(expected) {}
+            }
         }
     }
 }

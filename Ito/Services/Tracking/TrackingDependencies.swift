@@ -112,7 +112,8 @@ protocol TrackerLinkPersisting: AnyObject {
     func link(
         media: MediaIdentity,
         providerID: String,
-        remoteMediaID: String
+        remoteMediaID: String,
+        scoreSession: TrackerScoreSession?
     ) async throws
 
     func unlink(media: MediaIdentity, providerID: String) async throws
@@ -351,12 +352,14 @@ final class TrackerProviderService:
     func link(
         media: MediaIdentity,
         providerID: String,
-        remoteMediaID: String
+        remoteMediaID: String,
+        scoreSession: TrackerScoreSession?
     ) async throws {
         try await trackerManager.link(
             media: media,
             providerId: providerID,
-            remoteMediaId: remoteMediaID
+            remoteMediaId: remoteMediaID,
+            scoreSession: scoreSession
         )
     }
 
@@ -578,11 +581,13 @@ final class UnavailableTrackingService:
     func link(
         media: MediaIdentity,
         providerID: String,
-        remoteMediaID: String
+        remoteMediaID: String,
+        scoreSession: TrackerScoreSession?
     ) async throws {
         _ = media
         _ = providerID
         _ = remoteMediaID
+        _ = scoreSession
         throw TrackingServiceError.unavailable
     }
 

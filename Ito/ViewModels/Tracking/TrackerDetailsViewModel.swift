@@ -70,6 +70,13 @@ final class TrackerDetailsViewModel: ObservableObject {
     }
     @Published private(set) var score: Double?
     @Published private(set) var scoreFormat: TrackerScoreFormat?
+    @Published var scoreInput = "" {
+        didSet {
+            guard !isDurableOperationInFlight, scoreFormat == .numeric100,
+                  let value = TrackerScoreFormat.parseNumericScore(scoreInput) else { return }
+            score = value == 0 ? nil : value
+        }
+    }
     @Published private(set) var startDate: Date?
     @Published private(set) var finishDate: Date?
     /// The tracker status of the entry as last loaded from the remote, or `nil` when there is none.
@@ -163,10 +170,15 @@ final class TrackerDetailsViewModel: ObservableObject {
         return score.map { String(format: "%.1f", $0) } ?? String(localized: "Not set")
     }
 
+    var isScoreInputValid: Bool {
+        scoreFormat != .numeric100 || TrackerScoreFormat.parseNumericScore(scoreInput) != nil
+    }
+
     func setScore(_ value: Double) {
         guard !isDurableOperationInFlight, remoteEntryState == .existing || remoteEntryState == .new,
               let scoreFormat, scoreFormat.isValid(value) else { return }
         score = value == 0 ? nil : value
+        if scoreFormat == .numeric100 { scoreInput = TrackerScoreFormat.numericStyle.format(value) }
     }
 
     var startDateText: String {
@@ -300,7 +312,7 @@ final class TrackerDetailsViewModel: ObservableObject {
     func save() {
         guard saveOperationID == nil,
               unlinkOperationID == nil,
-              remoteEntryState == .existing || remoteEntryState == .new else { return }
+              remoteEntryState == .existing || remoteEntryState == .new, isScoreInputValid else { return }
         if TrackerWriteRules.movesProgressForwardOnly(providerID),
            remoteEntryState == .existing,
            status != "REPEATING",
@@ -319,13 +331,22 @@ final class TrackerDetailsViewModel: ObservableObject {
         let savedStatus = status
         // Only an explicit changed selection writes a score. Zero clears it; nil preserves it.
         let selectedScore = score ?? 0
-        let savedScore = scoreFormat != nil && abs(selectedScore - (loadedScore ?? 0)) > 0.000_001
-            ? selectedScore : nil
+        let scoreChanged = scoreFormat == .numeric100 || selectedScore == 0
+            ? selectedScore != (loadedScore ?? 0)
+            : abs(selectedScore - (loadedScore ?? 0)) > 0.000_001
+        let savedScore = scoreFormat != nil && scoreChanged ? selectedScore : nil
         let savedScoreSession = scoreSession
         // A rating-only save must not overwrite progress advanced while the sheet was open.
         let omitUnchanged = scoreFormat != nil && remoteEntryState == .existing
         let submittedProgress = omitUnchanged && savedProgress == loadedProgress ? nil : savedProgress
-        let submittedStatus = omitUnchanged && savedStatus == loadedStatus ? nil : savedStatus
+        let repeatingDecrease: Bool
+        if TrackerWriteRules.movesProgressForwardOnly(providerID), savedStatus == "REPEATING",
+           let target = savedProgress, let baseline = loadedProgress, target < baseline {
+            repeatingDecrease = true
+        } else {
+            repeatingDecrease = false
+        }
+        let submittedStatus = omitUnchanged && savedStatus == loadedStatus && !repeatingDecrease ? nil : savedStatus
         let needsRemoteUpdate = !omitUnchanged || submittedProgress != nil || submittedStatus != nil || savedScore != nil
         presentationLogger.log(
             .started(
@@ -409,8 +430,12 @@ final class TrackerDetailsViewModel: ObservableObject {
                     try await linkStore.link(
                         media: mediaIdentity,
                         providerID: providerID,
-                        remoteMediaID: media.id
+                        remoteMediaID: media.id,
+                        scoreSession: savedScoreSession
                     )
+                    // A returned link receipt is durable, even if this presentation became stale.
+                    isLocallyLinked = isCurrentSave(operationID)
+                        || linkStore.remoteMediaID(for: mediaIdentity, providerID: providerID) == media.id
                     if let savedScoreSession {
                         try detailsService.validateScoreSession(providerID: providerID, scoreSession: savedScoreSession)
                     }
@@ -439,7 +464,6 @@ final class TrackerDetailsViewModel: ObservableObject {
                     logIgnoredStale(kind: .link, operationID: operationID)
                     return
                 }
-                isLocallyLinked = true
                 presentationLogger.log(
                     .finished(
                         feature: .trackerDetails,
@@ -599,6 +623,7 @@ final class TrackerDetailsViewModel: ObservableObject {
                     loadedProgress = nil
                     score = nil
                     loadedScore = nil
+                    scoreInput = TrackerScoreFormat.numericStyle.format(0)
                 }
                 finishLoad(operationID, outcome: .succeeded)
             } catch is CancellationError {
@@ -629,6 +654,7 @@ final class TrackerDetailsViewModel: ObservableObject {
         status = entry.status ?? "PLANNING"
         score = entry.score.flatMap { $0 > 0 ? $0 : nil }
         loadedScore = score
+        scoreInput = TrackerScoreFormat.numericStyle.format(score ?? 0)
         startDate = entry.startDate
         finishDate = entry.finishDate
         loadedStatus = entry.status
