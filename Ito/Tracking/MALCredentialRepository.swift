@@ -49,7 +49,10 @@ actor MALCredentialRepository {
     private var pendingPersistence: MALToken?
     /// Incremented on sign-in and sign-out so a refresh that finishes afterwards is discarded.
     private var sessionEpoch: UInt64 = 0
+    nonisolated let scoreIdentity = TrackerScoreIdentity()
     private var refreshTask: Task<MALToken, any Error>?
+
+    var hasSession: Bool { token != nil }
 
     init(
         store: any TrackerCredentialStoring,
@@ -90,6 +93,7 @@ actor MALCredentialRepository {
 
     /// Stores a token from a completed sign-in, replacing any earlier session.
     func persist(_ newToken: MALToken) async {
+        scoreIdentity.rotate()
         sessionEpoch += 1
         refreshTask = nil
         token = newToken
@@ -100,6 +104,7 @@ actor MALCredentialRepository {
 
     /// Ends the session locally. MyAnimeList has no token revocation endpoint.
     func logout() async throws {
+        scoreIdentity.rotate()
         sessionEpoch += 1
         refreshTask = nil
         token = nil
@@ -153,6 +158,7 @@ actor MALCredentialRepository {
         } catch let error as MALError where error.statusCode == 400 || error.statusCode == 401 {
             guard epoch == sessionEpoch else { throw CredentialError.notSignedIn }
             AppLogger.auth.error("MyAnimeList rejected the refresh token; signing out.")
+            scoreIdentity.rotate()
             sessionEpoch += 1
             refreshTask = nil
             token = nil

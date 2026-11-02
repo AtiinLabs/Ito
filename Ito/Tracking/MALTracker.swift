@@ -42,6 +42,9 @@ nonisolated enum MALTrackerError: Error, Equatable, Sendable, LocalizedError {
     case invalidMediaID
     case invalidStatus(String)
     case unsupportedRemoteStatus(String)
+    case incompleteRemoteEntry
+    case missingLibraryState
+    case unacknowledgedWrite
 
     var errorDescription: String? {
         switch self {
@@ -51,6 +54,12 @@ nonisolated enum MALTrackerError: Error, Equatable, Sendable, LocalizedError {
             String(localized: "\(status) is not a list status MyAnimeList supports.")
         case .unsupportedRemoteStatus(let status):
             String(localized: "MyAnimeList reports the list status \(status), which Ito does not support yet.")
+        case .incompleteRemoteEntry:
+            String(localized: "MyAnimeList returned an incomplete list entry. Reopen this entry before saving.")
+        case .missingLibraryState:
+            String(localized: "Choose a list status before adding this entry to MyAnimeList.")
+        case .unacknowledgedWrite:
+            String(localized: "MyAnimeList did not confirm the saved changes. Reload the entry before trying again.")
         }
     }
 }
@@ -91,8 +100,8 @@ nonisolated struct MALListPatch: Equatable, Sendable {
 
 /// Decides what Ito may write to a MyAnimeList list entry. The rules exist so that Ito never
 /// damages a list: it never deletes entries, never lowers progress on its own, never touches
-/// scores, dates, tags, comments, priority or rewatch counts, and on automatic sync only moves
-/// an entry the user is actively watching or reading.
+/// dates, tags, comments, priority or rewatch counts, and on automatic sync only moves
+/// an entry the user is actively watching or reading. Scores use a separate explicit manual path.
 nonisolated enum MALWritePolicy {
     /// - Parameters:
     ///   - snapshot: The entry and work as just read from MyAnimeList.
@@ -109,6 +118,9 @@ nonisolated enum MALWritePolicy {
     /// The Ito tracker status for an entry, or `nil` when the work is not on the list.
     static func trackerStatus(for snapshot: MALListSnapshot) throws -> String? {
         guard let listStatus = snapshot.listStatus else { return nil }
+        if case .unknown(let raw) = listStatus {
+            throw MALTrackerError.unsupportedRemoteStatus(raw)
+        }
         if snapshot.isRepeating {
             return "REPEATING"
         }
@@ -184,7 +196,7 @@ nonisolated enum MALWritePolicy {
 
 /// MyAnimeList tracking. See `MALWritePolicy` for what it writes.
 @MainActor
-public final class MALTracker: TrackerProvider {
+public final class MALTracker: TrackerProvider, TrackerScoreEditing {
     /// Ito's MyAnimeList API client ID (an "iOS" app; public clients have no secret).
     static let clientID = "30f79466293f72290f670bd0476ba094"
 
@@ -205,6 +217,8 @@ public final class MALTracker: TrackerProvider {
     private let session: URLSession
     private let usernameDefaults: UserDefaults
     private var writeChains: [MALMediaID: Task<Void, any Error>] = [:]
+    var scoreIdentity: TrackerScoreIdentity { credentialRepository.scoreIdentity }
+    var scoreEditingIdentity: UUID { scoreIdentity.current }
 
     init(
         credentialRepository: MALCredentialRepository,
@@ -233,6 +247,7 @@ public final class MALTracker: TrackerProvider {
         let callbackURL = try await oauthManager.authenticate(url: request.url, callbackScheme: "ito")
         let code = try oauth.authorizationCode(from: callbackURL, matching: request)
         let token = try await oauth.exchangeCode(code, for: request)
+        scoreIdentity.rotate()
         await credentialRepository.persist(token)
         isSignedIn = true
         do {
@@ -245,6 +260,9 @@ public final class MALTracker: TrackerProvider {
     }
 
     public func logout() async throws {
+        scoreIdentity.rotate()
+        isSignedIn = false
+        clearUsername()
         try await credentialRepository.logout()
         isSignedIn = false
         clearUsername()
@@ -302,11 +320,17 @@ public final class MALTracker: TrackerProvider {
 
     public func updateProgress(mediaId: String, progress: Int?, status: String?) async throws {
         guard let id = MALMediaID(rawValue: mediaId) else { throw MALTrackerError.invalidMediaID }
-        // One write per entry at a time, so each pre-read sees the previous write.
+        try await enqueueWrite(id: id) {
+            try await self.applyProgress(id: id, progress: progress, status: status)
+        }
+    }
+
+    private func enqueueWrite(id: MALMediaID, operation: @escaping @MainActor () async throws -> Void) async throws {
         let previous = writeChains[id]
         let task = Task { @MainActor in
             _ = await previous?.result
-            try await self.applyProgress(id: id, progress: progress, status: status)
+            try Task.checkCancellation()
+            try await operation()
         }
         writeChains[id] = task
         defer {
@@ -314,7 +338,11 @@ public final class MALTracker: TrackerProvider {
                 writeChains[id] = nil
             }
         }
-        try await task.value
+        try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     private func applyProgress(id: MALMediaID, progress: Int?, status: String?) async throws {
@@ -348,11 +376,130 @@ public final class MALTracker: TrackerProvider {
         let finishDate: MALDate?
     }
 
-    private func read(_ id: MALMediaID) async throws -> RemoteEntry {
+    func getScoreFormat() async throws -> TrackerScoreFormat {
+        return .point10
+    }
+
+    private func validate(_ context: TrackerScoreSession?) async throws {
+        guard let context else { return }
+        try Task.checkCancellation()
+        guard context.identity == scoreEditingIdentity else { throw TrackerScoreEditingError.accountChanged }
+        guard context.format == .point10 else { throw TrackerScoreEditingError.scoreFormatChanged }
+    }
+
+    func getMediaListEntry(mediaId: String, scoreSession: TrackerScoreSession) async throws -> TrackerMediaEntry? {
+        guard let id = MALMediaID(rawValue: mediaId) else { throw MALTrackerError.invalidMediaID }
+        try await validate(scoreSession)
+        let entry = try await read(id, scoreSession: scoreSession)
+        try await validate(scoreSession)
+        guard let status = try MALWritePolicy.trackerStatus(for: entry.snapshot) else { return nil }
+        return TrackerMediaEntry(
+            status: status, progress: entry.snapshot.progress,
+            score: entry.score.flatMap { $0 > 0 ? Double($0) : nil },
+            startDate: Self.date(from: entry.startDate), finishDate: Self.date(from: entry.finishDate)
+        )
+    }
+
+    func updateEntry(
+        mediaId: String, progress: Int?, status: String?, score: Double?, scoreSession: TrackerScoreSession?
+    ) async throws {
+        guard let id = MALMediaID(rawValue: mediaId) else { throw MALTrackerError.invalidMediaID }
+        if let score {
+            guard score.isFinite, (0...10).contains(score), score.rounded(.towardZero) == score else {
+                throw TrackerScoreEditingError.invalidScore
+            }
+            guard scoreSession != nil else { throw TrackerScoreEditingError.accountChanged }
+        }
+        try await validate(scoreSession)
+        // Even a nil-score manual save needs a bound authoritative read.
+        let context = scoreSession ?? TrackerScoreSession(format: .point10, identity: scoreEditingIdentity)
+        try await enqueueWrite(id: id) {
+            try await self.validate(context)
+            let entry = try await self.read(id, scoreSession: context)
+            try await self.validate(context)
+            if entry.snapshot.listStatus == nil, status == nil {
+                throw MALTrackerError.missingLibraryState
+            }
+            let patch = try Self.manualPatch(for: entry.snapshot, progress: progress, status: status)
+            let nativeScore = score.map(Int.init).flatMap { $0 == entry.score ? nil : $0 }
+            guard patch != MALListPatch() || nativeScore != nil else { return }
+            switch id.kind {
+            case .anime:
+                let response = try await self.perform(UpdateAnimeListStatusRequest(
+                    animeID: id.id, status: patch.status.map(Self.animeStatus),
+                    isRewatching: patch.isRepeating, score: nativeScore, numWatchedEpisodes: patch.progress
+                ), scoreSession: context)
+                try Self.validateAcknowledgement(
+                    patch: patch, score: nativeScore,
+                    expectedStatus: patch.status.map { Self.animeStatus($0).rawValue }, status: response.status?.rawValue,
+                    progress: response.numEpisodesWatched, repeating: response.isRewatching, returnedScore: response.score
+                )
+            case .manga:
+                let response = try await self.perform(UpdateMangaListStatusRequest(
+                    mangaID: id.id, status: patch.status.map(Self.mangaStatus),
+                    isRereading: patch.isRepeating, score: nativeScore, numChaptersRead: patch.progress
+                ), scoreSession: context)
+                try Self.validateAcknowledgement(
+                    patch: patch, score: nativeScore,
+                    expectedStatus: patch.status.map { Self.mangaStatus($0).rawValue }, status: response.status?.rawValue,
+                    progress: response.numChaptersRead, repeating: response.isRereading, returnedScore: response.score
+                )
+            }
+            try await self.validate(context)
+        }
+    }
+
+    private static func manualPatch(
+        for snapshot: MALListSnapshot, progress: Int?, status: String?
+    ) throws -> MALListPatch {
+        if let status {
+            return try MALWritePolicy.patch(for: snapshot, progress: progress, status: status) ?? MALListPatch()
+        }
+        guard let progress, progress >= 0 else { return MALListPatch() }
+        let target = snapshot.total > 0 ? min(progress, snapshot.total) : progress
+        return MALListPatch(progress: target > snapshot.progress ? target : nil)
+    }
+
+    private static func validateRemoteList(
+        present: Bool, status: String?, progress: Int?, repeating: Bool?, score: Int?
+    ) throws {
+        guard present else { return }
+        guard let status, let progress, progress >= 0, repeating != nil,
+              let score, (0...10).contains(score) else {
+            throw MALTrackerError.incompleteRemoteEntry
+        }
+        if case .unknown(let raw) = listStatus(status) {
+            throw MALTrackerError.unsupportedRemoteStatus(raw)
+        }
+    }
+
+    private static func validateAcknowledgement(
+        patch: MALListPatch, score: Int?, expectedStatus: String?,
+        status: String?, progress: Int?, repeating: Bool?, returnedScore: Int?
+    ) throws {
+        guard expectedStatus == nil || status == expectedStatus,
+              patch.progress == nil || progress == patch.progress,
+              patch.isRepeating == nil || repeating == patch.isRepeating,
+              score == nil || returnedScore == score else {
+            throw MALTrackerError.unacknowledgedWrite
+        }
+    }
+
+    private func read(_ id: MALMediaID, scoreSession: TrackerScoreSession? = nil) async throws -> RemoteEntry {
         switch id.kind {
         case .anime:
-            let anime = try await perform(AnimeDetailsRequest(id: id.id, fields: [.status, .numEpisodes, .myListStatusAll]))
+            let anime = try await perform(
+                AnimeDetailsRequest(id: id.id, fields: [.status, .numEpisodes, .myListStatusAll]),
+                scoreSession: scoreSession
+            )
             let list = anime.myListStatus
+            if scoreSession != nil {
+                guard anime.id == id.id else { throw MALTrackerError.incompleteRemoteEntry }
+                try Self.validateRemoteList(
+                    present: list != nil, status: list?.status?.rawValue,
+                    progress: list?.numEpisodesWatched, repeating: list?.isRewatching, score: list?.score
+                )
+            }
             return RemoteEntry(
                 snapshot: MALListSnapshot(
                     listStatus: list?.status.map { Self.listStatus($0.rawValue) },
@@ -367,8 +514,18 @@ public final class MALTracker: TrackerProvider {
                 finishDate: list?.finishDate
             )
         case .manga:
-            let manga = try await perform(MangaDetailsRequest(id: id.id, fields: [.status, .numChapters, .numVolumes, .myListStatusAll]))
+            let manga = try await perform(
+                MangaDetailsRequest(id: id.id, fields: [.status, .numChapters, .numVolumes, .myListStatusAll]),
+                scoreSession: scoreSession
+            )
             let list = manga.myListStatus
+            if scoreSession != nil {
+                guard manga.id == id.id else { throw MALTrackerError.incompleteRemoteEntry }
+                try Self.validateRemoteList(
+                    present: list != nil, status: list?.status?.rawValue,
+                    progress: list?.numChaptersRead, repeating: list?.isRereading, score: list?.score
+                )
+            }
             let chapters = manga.numChapters ?? 0
             return RemoteEntry(
                 snapshot: MALListSnapshot(
@@ -390,18 +547,33 @@ public final class MALTracker: TrackerProvider {
     }
 
     /// Sends a request with a valid token, refreshing once if MyAnimeList answers 401.
-    private func perform<R: MALRequest>(_ request: R) async throws -> R.Response {
+    private func perform<R: MALRequest>(
+        _ request: R, scoreSession: TrackerScoreSession? = nil
+    ) async throws -> R.Response {
         do {
+            try await validate(scoreSession)
             let token = try await credentialRepository.validAccessToken()
+            try await validate(scoreSession)
             do {
-                return try await client(token).execute(request)
+                let response = try await client(token).execute(request)
+                try await validate(scoreSession)
+                return response
             } catch let error as MALError where error.isUnauthorized {
+                try await validate(scoreSession)
                 let replacement = try await credentialRepository.accessToken(replacing: token)
-                return try await client(replacement).execute(request)
+                try await validate(scoreSession)
+                let response = try await client(replacement).execute(request)
+                try await validate(scoreSession)
+                return response
             }
-        } catch let error as MALCredentialRepository.CredentialError {
-            isSignedIn = false
-            clearUsername()
+        } catch {
+            if error is MALCredentialRepository.CredentialError {
+                if await !credentialRepository.hasSession {
+                    isSignedIn = false
+                    clearUsername()
+                }
+            }
+            try await validate(scoreSession)
             throw error
         }
     }

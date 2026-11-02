@@ -275,6 +275,7 @@ final class TrackerDetailsServiceFake: TrackerDetailsServicing {
         let mediaID: String
         let progress: Int?
         let status: String?
+        var score: Double?
     }
 
     private struct PendingLoad {
@@ -289,6 +290,11 @@ final class TrackerDetailsServiceFake: TrackerDetailsServicing {
     var suspendsUpdates = false
     var queuedLoadResults: [Result<TrackerMediaEntry?, any Error>] = []
     var queuedUpdateResults: [Result<Void, any Error>] = []
+    var scoreFormat: TrackerScoreFormat?
+    var scoreFormatError: (any Error)?
+    var scoreIdentity = UUID()
+    var onLoadStarted: (() -> Void)?
+    var onUpdateStarted: (() -> Void)?
     private(set) var loadInvocations: [(providerID: String, mediaID: String)] = []
     private(set) var updateInvocations: [UpdateInvocation] = []
     private var pendingLoads: [PendingLoad] = []
@@ -311,31 +317,58 @@ final class TrackerDetailsServiceFake: TrackerDetailsServicing {
         if suspendsLoads {
             return try await withCheckedThrowingContinuation { continuation in
                 pendingLoads.append(PendingLoad(continuation: continuation))
+                onLoadStarted?()
             }
         }
         guard !queuedLoadResults.isEmpty else { return nil }
         return try queuedLoadResults.removeFirst().get()
     }
 
-    func updateProgress(
+    func getScoreFormat(providerID: String) async throws -> TrackerScoreSession? {
+        _ = providerID
+        if let scoreFormatError { throw scoreFormatError }
+        return scoreFormat.map { TrackerScoreSession(format: $0, identity: scoreIdentity) }
+    }
+
+    func validateScoreSession(providerID: String, scoreSession: TrackerScoreSession) throws {
+        _ = providerID
+        guard scoreSession.identity == scoreIdentity else { throw TrackerScoreEditingError.accountChanged }
+    }
+
+    func getScoredMediaListEntry(
+        providerID: String, mediaID: String, scoreSession: TrackerScoreSession
+    ) async throws -> TrackerMediaEntry? {
+        try validateScoreSession(providerID: providerID, scoreSession: scoreSession)
+        let entry = try await getMediaListEntry(providerID: providerID, mediaID: mediaID)
+        try validateScoreSession(providerID: providerID, scoreSession: scoreSession)
+        return entry
+    }
+
+    func updateEntry(
         providerID: String,
         mediaID: String,
         progress: Int?,
-        status: String?
+        status: String?,
+        score: Double?,
+        scoreSession: TrackerScoreSession?
     ) async throws {
+        if let scoreSession { try validateScoreSession(providerID: providerID, scoreSession: scoreSession) }
         updateInvocations.append(
             UpdateInvocation(
                 providerID: providerID,
                 mediaID: mediaID,
                 progress: progress,
-                status: status
+                status: status,
+                score: score
             )
         )
         journal?.record("update")
         if suspendsUpdates {
             try await withCheckedThrowingContinuation { continuation in
                 pendingUpdates.append(PendingUpdate(continuation: continuation))
+                onUpdateStarted?()
             }
+            if let scoreSession { try validateScoreSession(providerID: providerID, scoreSession: scoreSession) }
             return
         }
         guard !queuedUpdateResults.isEmpty else { return }
@@ -386,6 +419,9 @@ final class TrackerLinkStoreFake: TrackerLinkPersisting {
     var suspendsLinks = false
     var suspendsUnlinks = false
     var linkError: (any Error)?
+    var scoreSessionValidator: ((String, TrackerScoreSession) throws -> Void)?
+    var onLinkStarted: (() -> Void)?
+    var onLinkCommitted: (() -> Void)?
     var unlinkError: (any Error)?
     private(set) var linkInvocations: [LinkInvocation] = []
     private(set) var unlinkInvocations: [UnlinkInvocation] = []
@@ -407,7 +443,8 @@ final class TrackerLinkStoreFake: TrackerLinkPersisting {
     func link(
         media: MediaIdentity,
         providerID: String,
-        remoteMediaID: String
+        remoteMediaID: String,
+        scoreSession: TrackerScoreSession?
     ) async throws {
         let invocation = LinkInvocation(
             media: media,
@@ -419,11 +456,16 @@ final class TrackerLinkStoreFake: TrackerLinkPersisting {
         if suspendsLinks {
             try await withCheckedThrowingContinuation { continuation in
                 pendingLinks.append(PendingLink(invocation: invocation, continuation: continuation))
+                onLinkStarted?()
             }
-            return
+        }
+        if let scoreSession {
+            guard let scoreSessionValidator else { throw TrackerScoreEditingError.unsupportedProvider }
+            try scoreSessionValidator(providerID, scoreSession)
         }
         if let linkError { throw linkError }
         remoteIDs[media, default: [:]][providerID] = remoteMediaID
+        onLinkCommitted?()
     }
 
     func unlink(media: MediaIdentity, providerID: String) async throws {
@@ -447,10 +489,6 @@ final class TrackerLinkStoreFake: TrackerLinkPersisting {
         with result: Result<Void, any Error>
     ) {
         let pending = pendingLinks.remove(at: index)
-        if case .success = result {
-            remoteIDs[pending.invocation.media, default: [:]][pending.invocation.providerID] =
-                pending.invocation.remoteMediaID
-        }
         pending.continuation.resume(with: result)
     }
 

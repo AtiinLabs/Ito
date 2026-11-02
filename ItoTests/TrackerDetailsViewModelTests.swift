@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 @testable import Ito
 
@@ -386,7 +387,10 @@ final class TrackerDetailsViewModelTests: XCTestCase {
         providerID: String = "anilist",
         providerName: String = "AniList"
     ) -> TrackerDetailsViewModel {
-        TrackerDetailsViewModel(
+        links.scoreSessionValidator = { providerID, session in
+            try service.validateScoreSession(providerID: providerID, scoreSession: session)
+        }
+        return TrackerDetailsViewModel(
             destination: trackerTestDestination(
                 media: media,
                 isLocallyLinked: isLinked,
@@ -531,5 +535,319 @@ final class TrackerDetailsViewModelTests: XCTestCase {
             mangaBaka,
             "Automatic progress updates are off while this entry is Paused. Set it to Reading to resume them."
         )
+    }
+}
+
+extension TrackerDetailsViewModelTests {
+    func testManualScoreChangesAndClearingDoNotReplayLoadedProgress() async {
+        let service = scoringService()
+        let model = makeViewModel(service: service, isLinked: true)
+        await loadScoring(model)
+        model.setScore(8.5)
+        await saveScoring(model)
+        XCTAssertEqual(service.updateInvocations, [
+            .init(providerID: "anilist", mediaID: "remote-1", progress: nil, status: nil, score: 8.5)
+        ])
+        model.setScore(0)
+        await saveScoring(model)
+        XCTAssertEqual(service.updateInvocations.last?.score, 0)
+        XCTAssertNil(model.score)
+        let writes = service.updateInvocations.count
+        await saveScoring(model)
+        XCTAssertEqual(service.updateInvocations.count, writes)
+    }
+
+    func testAnUnchangedScoreIsOmittedWhenProgressIsEdited() async {
+        let service = scoringService()
+        let model = makeViewModel(service: service, isLinked: true)
+        await loadScoring(model)
+        model.progress = "13"
+        await saveScoring(model)
+        XCTAssertEqual(service.updateInvocations, [
+            .init(providerID: "anilist", mediaID: "remote-1", progress: 13, status: nil, score: nil)
+        ])
+    }
+
+    func testOtherNativeTrackerRatingsEditAndClearWithoutChangingProgressOrStatus() async {
+        let providers: [(id: String, format: TrackerScoreFormat, loaded: Double, selected: Double)] = [
+            ("myanimelist", .point10, 7, 9),
+            ("mangabaka", .numeric100, 85.5, 90.5)
+        ]
+        for provider in providers {
+            let service = scoringService()
+            service.scoreFormat = provider.format
+            service.queuedLoadResults = [.success(TrackerMediaEntry(
+                status: "CURRENT", progress: 12, score: provider.loaded, startDate: nil, finishDate: nil
+            ))]
+            let model = makeViewModel(service: service, isLinked: true, providerID: provider.id)
+            await loadScoring(model)
+            XCTAssertEqual(model.score, provider.loaded)
+            await saveScoring(model)
+            XCTAssertTrue(service.updateInvocations.isEmpty)
+            model.setScore(provider.selected)
+            await saveScoring(model)
+            XCTAssertEqual(service.updateInvocations, [
+                .init(providerID: provider.id, mediaID: "remote-1", progress: nil, status: nil, score: provider.selected)
+            ])
+            model.setScore(0)
+            await saveScoring(model)
+            XCTAssertEqual(service.updateInvocations.last?.score, 0)
+            XCTAssertNil(service.updateInvocations.last?.progress)
+            XCTAssertNil(service.updateInvocations.last?.status)
+        }
+    }
+
+    func testNumericRatingDraftRejectsInvalidTextWithoutSavingAnOldValue() async {
+        let service = scoringService()
+        service.scoreFormat = .numeric100
+        service.queuedLoadResults = [.success(TrackerMediaEntry(
+            status: "CURRENT", progress: 12, score: 85.5, startDate: nil, finishDate: nil
+        ))]
+        let model = makeViewModel(service: service, isLinked: true, providerID: "mangabaka")
+        await loadScoring(model)
+        for invalid in ["", "101", "-1", "NaN", "85oops", "1.2.3"] {
+            model.scoreInput = invalid
+            XCTAssertFalse(model.isScoreInputValid)
+            model.save()
+            XCTAssertFalse(model.isSaving)
+            XCTAssertTrue(service.updateInvocations.isEmpty)
+        }
+        model.scoreInput = TrackerScoreFormat.numericStyle.format(90.5)
+        XCTAssertTrue(model.isScoreInputValid)
+        await saveScoring(model)
+        XCTAssertEqual(service.updateInvocations.last?.score, 90.5)
+        XCTAssertNil(service.updateInvocations.last?.progress)
+        XCTAssertNil(service.updateInvocations.last?.status)
+    }
+
+    func testClearingATinyNumericRatingIsNotSuppressed() async {
+        let service = scoringService()
+        service.scoreFormat = .numeric100
+        service.queuedLoadResults = [.success(TrackerMediaEntry(
+            status: "CURRENT", progress: 12, score: 0.000_000_5, startDate: nil, finishDate: nil
+        ))]
+        let model = makeViewModel(service: service, isLinked: true, providerID: "mangabaka")
+        await loadScoring(model)
+        model.setScore(0)
+        await saveScoring(model)
+        XCTAssertEqual(service.updateInvocations, [
+            .init(providerID: "mangabaka", mediaID: "remote-1", progress: nil, status: nil, score: 0)
+        ])
+        await saveScoring(model)
+        XCTAssertEqual(service.updateInvocations.count, 1)
+    }
+
+    func testSubEpsilonNumericRatingChangesAreSubmittedExactly() async {
+        let service = scoringService()
+        service.scoreFormat = .numeric100
+        service.queuedLoadResults = [.success(TrackerMediaEntry(
+            status: "CURRENT", progress: 12, score: 85.5, startDate: nil, finishDate: nil
+        ))]
+        let model = makeViewModel(service: service, isLinked: true, providerID: "mangabaka")
+        await loadScoring(model)
+        let selected = 85.500_000_5
+        model.setScore(selected)
+        await saveScoring(model)
+        XCTAssertEqual(service.updateInvocations, [
+            .init(providerID: "mangabaka", mediaID: "remote-1", progress: nil, status: nil, score: selected)
+        ])
+    }
+
+    func testUnknownScoreSettingsFailClosedAndRetryLoadsTheRealFormat() async {
+        let service = scoringService()
+        service.scoreFormatError = TrackingTestError.failure
+        let model = makeViewModel(service: service, isLinked: true)
+        await loadScoring(model, state: .failure)
+        model.setScore(8)
+        model.save()
+        XCTAssertNil(model.scoreFormat)
+        XCTAssertTrue(service.updateInvocations.isEmpty)
+        service.scoreFormatError = nil
+        let loaded = expectation(description: "Score format recovered")
+        let token = model.$remoteEntryState.filter { $0 == .existing }.sink { _ in loaded.fulfill() }
+        model.retryRemoteEntryLoad()
+        await fulfillment(of: [loaded], timeout: 2)
+        token.cancel()
+        XCTAssertEqual(model.scoreFormat, .point10Decimal)
+        XCTAssertEqual(model.score, 7)
+    }
+
+    func testLinkRetryDoesNotRepeatAcknowledgedScoreOrStaleProgress() async {
+        let service = scoringService()
+        let links = TrackerLinkStoreFake()
+        links.linkError = TrackingTestError.failure
+        let model = makeViewModel(service: service, links: links)
+        await loadScoring(model)
+        model.setScore(8)
+        await saveScoring(model)
+        XCTAssertEqual(model.failure, .linkPersistenceAfterRemoteUpdate)
+        XCTAssertNil(model.output)
+        links.linkError = nil
+        await saveScoring(model)
+        XCTAssertEqual(service.updateInvocations.count, 1)
+        XCTAssertEqual(links.linkInvocations.count, 2)
+        XCTAssertEqual(model.output?.kind, .saved(progress: 12, status: "CURRENT"))
+    }
+
+    func testScoreWriteFailureRetainsTheDraftForRetry() async {
+        let service = scoringService()
+        service.queuedUpdateResults = [.failure(TrackingTestError.failure), .success(())]
+        let model = makeViewModel(service: service, isLinked: true)
+        await loadScoring(model)
+        model.setScore(8.5)
+        await saveScoring(model)
+        XCTAssertEqual(model.failure, .remoteUpdate)
+        XCTAssertNil(model.output)
+        XCTAssertEqual(model.score, 8.5)
+        await saveScoring(model)
+        XCTAssertEqual(service.updateInvocations.map(\.score), [8.5, 8.5])
+        XCTAssertNotNil(model.output)
+    }
+
+    func testCreatedRemoteEntryIsExistingBeforeRetryingFailedLocalLink() async {
+        let service = scoringService()
+        service.queuedLoadResults = [.success(nil)]
+        let links = TrackerLinkStoreFake()
+        links.linkError = TrackingTestError.failure
+        let model = makeViewModel(service: service, links: links)
+        await loadScoring(model, state: .new)
+        model.setScore(8)
+        await saveScoring(model)
+        XCTAssertEqual(model.remoteEntryState, .existing)
+        XCTAssertEqual(model.failure, .linkPersistenceAfterRemoteUpdate)
+        links.linkError = nil
+        await saveScoring(model)
+        XCTAssertEqual(service.updateInvocations.count, 1)
+        XCTAssertEqual(links.linkInvocations.count, 2)
+        XCTAssertEqual(model.output?.kind, .saved(progress: 0, status: "PLANNING"))
+    }
+
+    func testAccountSwitchRejectsDraftEvenWithTheSameScoreFormat() async {
+        let service = scoringService()
+        let links = TrackerLinkStoreFake()
+        let model = makeViewModel(service: service, links: links)
+        await loadScoring(model)
+        model.setScore(8)
+        service.scoreIdentity = UUID()
+        await saveScoring(model)
+        XCTAssertTrue(service.updateInvocations.isEmpty)
+        XCTAssertTrue(links.linkInvocations.isEmpty)
+        XCTAssertNil(model.output)
+        XCTAssertEqual(model.failure, .remoteUpdateExplanation(TrackerScoreEditingError.accountChanged.userMessage))
+    }
+
+    func testAccountSwitchDuringEntryLoadShowsRecoverableFailure() async {
+        let service = scoringService()
+        service.suspendsLoads = true
+        let started = expectation(description: "Entry request suspended")
+        service.onLoadStarted = { started.fulfill() }
+        let model = makeViewModel(service: service)
+        let failed = expectation(description: "Stale account response rejected")
+        let token = model.$remoteEntryState.filter { $0 == .failure }.sink { _ in failed.fulfill() }
+        model.start()
+        await fulfillment(of: [started], timeout: 2)
+        service.scoreIdentity = UUID()
+        service.completeLoad(with: .success(TrackerMediaEntry(
+            status: "CURRENT", progress: 99, score: 9, startDate: nil, finishDate: nil
+        )))
+        await fulfillment(of: [failed], timeout: 2)
+        token.cancel()
+        XCTAssertNil(model.scoreFormat)
+        XCTAssertNil(model.score)
+        XCTAssertEqual(model.remoteLoadErrorMessage, TrackerScoreEditingError.accountChanged.userMessage)
+    }
+
+    func testAccountSwitchDuringSaveCannotLinkOrPublishSuccess() async {
+        let service = scoringService()
+        service.suspendsUpdates = true
+        let links = TrackerLinkStoreFake()
+        let model = makeViewModel(service: service, links: links)
+        await loadScoring(model)
+        model.setScore(8)
+        let started = expectation(description: "Score request suspended")
+        service.onUpdateStarted = { started.fulfill() }
+        let settled = expectation(description: "Save rejects stale account acknowledgment")
+        let token = model.$isSaving.dropFirst().filter { !$0 }.sink { _ in settled.fulfill() }
+        model.save()
+        await fulfillment(of: [started], timeout: 2)
+        service.scoreIdentity = UUID()
+        service.completeUpdate(with: .success(()))
+        await fulfillment(of: [settled], timeout: 2)
+        token.cancel()
+        XCTAssertTrue(links.linkInvocations.isEmpty)
+        XCTAssertNil(model.output)
+        XCTAssertEqual(model.failure, .remoteUpdateExplanation(TrackerScoreEditingError.accountChanged.userMessage))
+    }
+
+    func testAccountSwitchWhileLocalLinkWaitsCannotCommitTheOldDraft() async {
+        let service = scoringService()
+        let links = TrackerLinkStoreFake()
+        links.suspendsLinks = true
+        let started = expectation(description: "Local link awaits commit")
+        links.onLinkStarted = { started.fulfill() }
+        let model = makeViewModel(service: service, links: links)
+        await loadScoring(model)
+        let settled = expectation(description: "Stale link rejected")
+        let token = model.$isSaving.dropFirst().filter { !$0 }.sink { _ in settled.fulfill() }
+        model.save()
+        await fulfillment(of: [started], timeout: 2)
+        service.scoreIdentity = UUID()
+        links.completeLink(with: .success(()))
+        await fulfillment(of: [settled], timeout: 2)
+        token.cancel()
+        XCTAssertNil(links.remoteMediaID(for: trackerTestDestination().mediaIdentity, providerID: "anilist"))
+        XCTAssertFalse(model.isLocallyLinked)
+        XCTAssertNil(model.output)
+        XCTAssertEqual(model.failure, .remoteUpdateExplanation(TrackerScoreEditingError.accountChanged.userMessage))
+    }
+
+    func testAccountSwitchAfterLocalCommitRetainsTheDurableLinkWithoutReportingSaveSuccess() async {
+        let service = scoringService()
+        let links = TrackerLinkStoreFake()
+        links.onLinkCommitted = { service.scoreIdentity = UUID() }
+        let model = makeViewModel(service: service, links: links)
+        await loadScoring(model)
+        await saveScoring(model)
+        XCTAssertEqual(links.remoteMediaID(for: trackerTestDestination().mediaIdentity, providerID: "anilist"), "remote-1")
+        XCTAssertTrue(model.isLocallyLinked)
+        XCTAssertNil(model.output)
+        XCTAssertEqual(model.failure, .remoteUpdateExplanation(TrackerScoreEditingError.accountChanged.userMessage))
+    }
+
+    func testCancelledCurrentLoadDoesNotLeaveAnUnrecoverableSpinner() async {
+        let service = scoringService()
+        service.scoreFormatError = CancellationError()
+        let model = makeViewModel(service: service)
+        await loadScoring(model, state: .failure)
+        XCTAssertNotNil(model.remoteLoadErrorMessage)
+        XCTAssertFalse(model.isLoadingEntry)
+    }
+
+    private func scoringService() -> TrackerDetailsServiceFake {
+        let service = TrackerDetailsServiceFake()
+        service.scoreFormat = .point10Decimal
+        service.queuedLoadResults = [.success(TrackerMediaEntry(
+            status: "CURRENT", progress: 12, score: 7, startDate: nil, finishDate: nil
+        ))]
+        return service
+    }
+
+    private func loadScoring(
+        _ model: TrackerDetailsViewModel,
+        state: TrackerRemoteEntryPresentationState = .existing
+    ) async {
+        let loaded = expectation(description: "Remote score and entry loaded")
+        let token = model.$remoteEntryState.filter { $0 == state }.sink { _ in loaded.fulfill() }
+        model.start()
+        await fulfillment(of: [loaded], timeout: 2)
+        token.cancel()
+    }
+
+    private func saveScoring(_ model: TrackerDetailsViewModel) async {
+        let saved = expectation(description: "Manual save settled")
+        let token = model.$isSaving.dropFirst().filter { !$0 }.sink { _ in saved.fulfill() }
+        model.save()
+        await fulfillment(of: [saved], timeout: 2)
+        token.cancel()
     }
 }

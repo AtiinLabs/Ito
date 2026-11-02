@@ -67,3 +67,82 @@ struct MangaBakaCredentialRepositoryTests {
         #expect(try await store.token(for: "mangabaka") == nil)
     }
 }
+
+extension MangaBakaCredentialRepositoryTests {
+    @Test(arguments: [false, true])
+    func repositoryRejectionInvalidatesGuardBeforeRemovalCompletes(oauth: Bool) async throws {
+        let gate = AsyncTestGate()
+        let credential: MangaBakaCredentialRepository.StoredCredential = oauth
+            ? .oauth(mangaBakaToken("old", expiresAt: .distantPast)) : .personalAccessToken("old")
+        let store = FakeTrackerCredentialStore(
+            initialToken: try mangaBakaStoredJSON(credential), removeGates: [gate]
+        )
+        let repository = MangaBakaCredentialRepository(
+            store: store, refresher: FakeMangaBakaRefresher(results: [
+                .failure(MangaBakaOAuthError.tokenRequestFailed(
+                    statusCode: 400, error: "invalid_grant", description: nil
+                ))
+            ])
+        )
+        _ = await repository.bootstrap()
+        let authority = repository.scoreIdentity
+        let expected = authority.current
+        let rejection = Task {
+            if oauth {
+                _ = try await repository.validCredential()
+            } else {
+                throw await repository.rejected(.personalAccessToken("old"))
+            }
+        }
+        await gate.waitForAdmissions()
+        #expect(throws: TrackerScoreEditingError.accountChanged) {
+            try authority.withCurrentIdentity(expected) {}
+        }
+        #expect(await store.currentToken() != nil)
+        await gate.open()
+        await #expect(throws: MangaBakaCredentialRepository.CredentialError.self) { try await rejection.value }
+    }
+
+    @Test(arguments: [false, true])
+    func accountMutationInvalidatesGuardBeforeStorageCompletes(logout: Bool) async throws {
+        let gate = AsyncTestGate()
+        let store = FakeTrackerCredentialStore(
+            initialToken: try mangaBakaStoredJSON(.personalAccessToken("old")),
+            setGates: logout ? [] : [gate],
+            removeGates: logout ? [gate] : []
+        )
+        let repository = MangaBakaCredentialRepository(
+            store: store, refresher: FakeMangaBakaRefresher(results: [])
+        )
+        _ = await repository.bootstrap()
+        let authority = repository.scoreIdentity
+        let expected = authority.current
+        let mutation = Task {
+            if logout {
+                _ = try await repository.logout()
+            } else {
+                await repository.persist(.personalAccessToken("replacement"))
+            }
+        }
+        await gate.waitForAdmissions()
+        #expect(throws: TrackerScoreEditingError.accountChanged) {
+            try authority.withCurrentIdentity(expected) {}
+        }
+        await gate.open()
+        try await mutation.value
+    }
+
+    @Test func ordinaryOAuthRefreshKeepsSameGuardAuthority() async throws {
+        let repository = MangaBakaCredentialRepository(
+            store: FakeTrackerCredentialStore(
+                initialToken: try mangaBakaStoredJSON(.oauth(mangaBakaToken("old", expiresAt: .distantPast)))
+            ),
+            refresher: FakeMangaBakaRefresher(results: [.success(mangaBakaToken("new"))])
+        )
+        _ = await repository.bootstrap()
+        let authority = repository.scoreIdentity
+        let expected = authority.current
+        #expect(try await repository.validCredential() == .oauthAccessToken("access-new"))
+        #expect(authority.current == expected)
+    }
+}

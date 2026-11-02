@@ -10,6 +10,8 @@ public class AnilistTracker: TrackerProvider {
     public let tracksAnime = true
 
     @Published public private(set) var anilistToken: String?
+    nonisolated let scoreIdentity = TrackerScoreIdentity()
+    var scoreEditingIdentity: UUID { scoreIdentity.current }
     @Published public private(set) var username: String?
 
     public var isAuthenticated: Bool {
@@ -22,12 +24,15 @@ public class AnilistTracker: TrackerProvider {
     private let credentialRepository: AniListCredentialRepository
     private let usernameDefaults: UserDefaults
 
+    private let session: URLSession
     init(
         credentialRepository: AniListCredentialRepository,
-        usernameDefaults: UserDefaults
+        usernameDefaults: UserDefaults,
+        session: URLSession = .shared
     ) {
         self.credentialRepository = credentialRepository
         self.usernameDefaults = usernameDefaults
+        self.session = session
         self.anilistToken = nil
         self.username = usernameDefaults.string(forKey: usernameKey)
     }
@@ -35,7 +40,7 @@ public class AnilistTracker: TrackerProvider {
     @discardableResult
     func bootstrapCredentials() async throws -> AniListCredentialRepository.BootstrapOutcome {
         try await credentialRepository.bootstrap { [weak self] token in
-            self?.anilistToken = token
+            self?.publishToken(token)
         }
     }
 
@@ -76,17 +81,22 @@ public class AnilistTracker: TrackerProvider {
 
     func persistAuthenticatedToken(_ token: String) async throws {
         try await credentialRepository.persistOAuthToken(token) { [weak self] verifiedToken in
-            self?.anilistToken = verifiedToken
+            self?.publishToken(verifiedToken)
         }
     }
 
     public func logout() async throws {
         try await credentialRepository.logout { [weak self] _ in
             guard let self else { return }
-            self.anilistToken = nil
+            self.publishToken(nil)
             self.username = nil
             self.usernameDefaults.removeObject(forKey: self.usernameKey)
         }
+    }
+
+    private func publishToken(_ token: String?) {
+        if anilistToken != token { scoreIdentity.rotate() }
+        anilistToken = token
     }
 
     public func searchMedia(title: String, isAnime: Bool) async throws -> [TrackerMedia] {
@@ -140,16 +150,128 @@ public class AnilistTracker: TrackerProvider {
         _ = try await client.execute(SaveMediaListEntryMutation(mediaId: idInt, status: listStatus, progress: progress))
     }
 
+    func getScoreFormat() async throws -> TrackerScoreFormat {
+        let identity = scoreEditingIdentity
+        let response: AniListScoreFormatQuery.Response
+        do {
+            response = try await client().execute(AniListScoreFormatQuery())
+        } catch {
+            guard scoreEditingIdentity == identity else { throw TrackerScoreEditingError.accountChanged }
+            throw error
+        }
+        guard scoreEditingIdentity == identity else { throw TrackerScoreEditingError.accountChanged }
+        guard let rawValue = response.viewer?.mediaListOptions?.scoreFormat,
+              let format = TrackerScoreFormat(rawValue: rawValue), format != .numeric100 else {
+            throw TrackerScoreEditingError.unsupportedFormat
+        }
+        guard let name = response.viewer?.name,
+              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw URLError(.cannotParseResponse)
+        }
+        username = name
+        usernameDefaults.set(name, forKey: usernameKey)
+        return format
+    }
+
+    func updateEntry(
+        mediaId: String, progress: Int?, status: String?, score: Double?, scoreSession: TrackerScoreSession?
+    ) async throws {
+        guard let scoreSession else {
+            guard score == nil else { throw TrackerScoreEditingError.unsupportedFormat }
+            try await updateProgress(mediaId: mediaId, progress: progress, status: status)
+            return
+        }
+        try validateIdentity(scoreSession)
+        do {
+            try await performManualUpdate(
+                mediaId: mediaId, progress: progress, status: status, score: score, scoreSession: scoreSession
+            )
+            try validateIdentity(scoreSession)
+        } catch {
+            try validateIdentity(scoreSession)
+            throw error
+        }
+    }
+
+    private func performManualUpdate(
+        mediaId: String, progress: Int?, status: String?, score: Double?, scoreSession: TrackerScoreSession
+    ) async throws {
+        guard let id = Int(mediaId) else { throw URLError(.badURL) }
+        let listStatus = try status.map { rawValue in
+            guard let value = MediaListStatus(rawValue: rawValue) else {
+                throw URLError(.cannotParseResponse)
+            }
+            return value
+        }
+        if let score {
+            let format = try await getScoreFormat()
+            try validateIdentity(scoreSession)
+            guard format == scoreSession.format else { throw TrackerScoreEditingError.scoreFormatChanged }
+            guard format.isValid(score) else { throw TrackerScoreEditingError.invalidScore }
+        }
+        // Manual edits must not be swallowed by automatic progress deduplication.
+        let response = try await client().execute(
+            SaveMediaListEntryMutation(mediaId: id, status: listStatus, score: score, progress: progress)
+        )
+        guard response.saveMediaListEntry?.mediaId == id else {
+            throw URLError(.cannotParseResponse)
+        }
+    }
+
     public func getMediaListEntry(mediaId: String) async throws -> TrackerMediaEntry? {
+        try await readMediaListEntry(mediaId: mediaId, scoreFormat: nil)
+    }
+
+    func getMediaListEntry(mediaId: String, scoreSession: TrackerScoreSession) async throws -> TrackerMediaEntry? {
+        try validateIdentity(scoreSession)
+        do {
+            let entry = try await readMediaListEntry(
+                mediaId: mediaId, scoreFormat: scoreSession.format, scoreSession: scoreSession
+            )
+            try validateIdentity(scoreSession)
+            return entry
+        } catch {
+            try validateIdentity(scoreSession)
+            throw error
+        }
+    }
+
+    private func validateIdentity(_ session: TrackerScoreSession) throws {
+        guard scoreEditingIdentity == session.identity else { throw TrackerScoreEditingError.accountChanged }
+    }
+
+    private func readMediaListEntry(
+        mediaId: String, scoreFormat: TrackerScoreFormat?, scoreSession: TrackerScoreSession? = nil
+    ) async throws -> TrackerMediaEntry? {
         let client = try client()
-        guard let username = username else { return nil }
+        if username == nil {
+            guard let token = anilistToken else { throw URLError(.userAuthenticationRequired) }
+            try await fetchAnilistViewer(token: token)
+        }
+        if let scoreSession { try validateIdentity(scoreSession) }
+        guard let username else { throw URLError(.cannotParseResponse) }
         guard let idInt = Int(mediaId) else { throw URLError(.badURL) }
 
         let entry: MediaList?
         do {
-            entry = try await client.execute(AniListQueries.MediaListEntryQuery(userName: username, mediaId: idInt)).mediaList
+            if let scoreFormat {
+                entry = try await client.execute(AniListNativeScoreEntryQuery(
+                    variables: .init(userName: username, mediaId: idInt, format: scoreFormat)
+                )).mediaList
+            } else {
+                entry = try await client.execute(
+                    AniListQueries.MediaListEntryQuery(userName: username, mediaId: idInt)
+                ).mediaList
+            }
         } catch let error as AniListError where error.isNotFound {
             return nil
+        }
+        if scoreSession != nil {
+            // Unknown baselines must not turn untouched display defaults into remote edits.
+            guard entry?.mediaId == idInt, entry?.status != nil,
+                  let progress = entry?.progress, progress >= 0 else {
+                throw URLError(.cannotParseResponse)
+            }
         }
         guard let entry else { return nil }
 
@@ -163,7 +285,7 @@ public class AnilistTracker: TrackerProvider {
     }
 
     private func fetchAnilistViewer(token: String) async throws {
-        let viewer = try await AniListClient { token }.execute(AniListQueries.ViewerQuery()).viewer
+        let viewer = try await AniListClient(session: session) { token }.execute(AniListQueries.ViewerQuery()).viewer
         guard let name = viewer?.name else {
             throw URLError(.cannotParseResponse)
         }
@@ -175,7 +297,7 @@ public class AnilistTracker: TrackerProvider {
 
     private func client() throws -> AniListClient {
         guard let token = anilistToken else { throw URLError(.userAuthenticationRequired) }
-        return AniListClient { token }
+        return AniListClient(session: session) { token }
     }
 
     private static func date(from fuzzyDate: FuzzyDate?) -> Date? {
@@ -185,3 +307,5 @@ public class AnilistTracker: TrackerProvider {
         return Calendar.current.date(from: DateComponents(year: year, month: month, day: day))
     }
 }
+
+extension AnilistTracker: TrackerScoreEditing {}

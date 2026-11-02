@@ -386,6 +386,7 @@ struct TrackerDetailsSheet: View {
                     viewModel.remoteEntryState == .loading
                         || viewModel.remoteEntryState == .failure
                         || viewModel.isDurableOperationInFlight
+                        || !viewModel.isScoreInputValid
                 )
             }
         }
@@ -473,17 +474,58 @@ struct TrackerDetailsSheet: View {
                     }
                 }
 
-                HStack {
-                    Text("Score")
-                    Spacer()
-                    Text(viewModel.scoreText)
-                        .foregroundColor(.secondary)
+                if viewModel.scoreFormat == .numeric100 {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Score")
+                            Spacer()
+                            TextField("Score", text: $viewModel.scoreInput)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 100)
+                                .accessibilityIdentifier("tracker-score-input")
+                        }
+                        if !viewModel.isScoreInputValid {
+                            Text("Enter a number from 0 to 100.", comment: "Validation for a personal tracker rating")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                        if viewModel.score != nil {
+                            Button("Clear Score", action: { viewModel.setScore(0) })
+                        }
+                    }
+                    .disabled(viewModel.isDurableOperationInFlight)
+                } else if let format = viewModel.scoreFormat {
+                    Picker("Score", selection: Binding(
+                        get: {
+                            let score = viewModel.score ?? 0
+                            return format.isValid(score) ? (score / format.step).rounded() * format.step : score
+                        },
+                        set: { viewModel.setScore($0) }
+                    )) {
+                        ForEach(0...Int(format.maxScore / format.step), id: \.self) { index in
+                            let value = Double(index) * format.step
+                            Text(format.label(for: value)).tag(value)
+                        }
+                        if let score = viewModel.score, !format.isValid(score) {
+                            Text(format.label(for: score)).tag(score)
+                        }
+                    }
+                } else {
+                    HStack {
+                        Text("Score")
+                        Spacer()
+                        Text(viewModel.scoreText)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
 
             Section(
                 header: Text("Dates"),
-                footer: Text("Score and dates come from \(viewModel.providerName). Change them on \(viewModel.providerName).")
+                footer: Text(viewModel.scoreFormat == nil
+                    ? String(localized: "Score and dates come from \(viewModel.providerName). Change them on \(viewModel.providerName).")
+                    : String(localized: "Dates come from \(viewModel.providerName). Change them on \(viewModel.providerName)."))
             ) {
                 HStack {
                     Text("Started")

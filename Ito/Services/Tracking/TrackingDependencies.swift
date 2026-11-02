@@ -89,11 +89,19 @@ protocol TrackerDetailsServicing: AnyObject {
         mediaID: String
     ) async throws -> TrackerMediaEntry?
 
-    func updateProgress(
+    func getScoreFormat(providerID: String) async throws -> TrackerScoreSession?
+    func validateScoreSession(providerID: String, scoreSession: TrackerScoreSession) throws
+    func getScoredMediaListEntry(
+        providerID: String, mediaID: String, scoreSession: TrackerScoreSession
+    ) async throws -> TrackerMediaEntry?
+
+    func updateEntry(
         providerID: String,
         mediaID: String,
         progress: Int?,
-        status: String?
+        status: String?,
+        score: Double?,
+        scoreSession: TrackerScoreSession?
     ) async throws
 }
 
@@ -104,7 +112,8 @@ protocol TrackerLinkPersisting: AnyObject {
     func link(
         media: MediaIdentity,
         providerID: String,
-        remoteMediaID: String
+        remoteMediaID: String,
+        scoreSession: TrackerScoreSession?
     ) async throws
 
     func unlink(media: MediaIdentity, providerID: String) async throws
@@ -292,28 +301,65 @@ final class TrackerProviderService:
         try await provider(for: providerID).getMediaListEntry(mediaId: mediaID)
     }
 
-    func updateProgress(
+    func getScoreFormat(providerID: String) async throws -> TrackerScoreSession? {
+        let provider = try provider(for: providerID)
+        guard let editing = provider as? any TrackerScoreEditing else { return nil }
+        let identity = editing.scoreEditingIdentity
+        let format = try await editing.getScoreFormat()
+        guard editing.scoreEditingIdentity == identity else { throw TrackerScoreEditingError.accountChanged }
+        return TrackerScoreSession(format: format, identity: identity)
+    }
+
+    func validateScoreSession(providerID: String, scoreSession: TrackerScoreSession) throws {
+        guard let editing = try provider(for: providerID) as? any TrackerScoreEditing else {
+            throw TrackerScoreEditingError.unsupportedProvider
+        }
+        guard editing.scoreEditingIdentity == scoreSession.identity else {
+            throw TrackerScoreEditingError.accountChanged
+        }
+    }
+
+    func getScoredMediaListEntry(
+        providerID: String, mediaID: String, scoreSession: TrackerScoreSession
+    ) async throws -> TrackerMediaEntry? {
+        guard let editing = try provider(for: providerID) as? any TrackerScoreEditing else {
+            throw TrackerScoreEditingError.unsupportedProvider
+        }
+        return try await editing.getMediaListEntry(mediaId: mediaID, scoreSession: scoreSession)
+    }
+
+    func updateEntry(
         providerID: String,
         mediaID: String,
         progress: Int?,
-        status: String?
+        status: String?,
+        score: Double?,
+        scoreSession: TrackerScoreSession?
     ) async throws {
-        try await provider(for: providerID).updateProgress(
-            mediaId: mediaID,
-            progress: progress,
-            status: status
-        )
+        let provider = try provider(for: providerID)
+        if score != nil || scoreSession != nil {
+            guard let editing = provider as? any TrackerScoreEditing else {
+                throw TrackerScoreEditingError.unsupportedProvider
+            }
+            try await editing.updateEntry(
+                mediaId: mediaID, progress: progress, status: status, score: score, scoreSession: scoreSession
+            )
+        } else {
+            try await provider.updateProgress(mediaId: mediaID, progress: progress, status: status)
+        }
     }
 
     func link(
         media: MediaIdentity,
         providerID: String,
-        remoteMediaID: String
+        remoteMediaID: String,
+        scoreSession: TrackerScoreSession?
     ) async throws {
         try await trackerManager.link(
             media: media,
             providerId: providerID,
-            remoteMediaId: remoteMediaID
+            remoteMediaId: remoteMediaID,
+            scoreSession: scoreSession
         )
     }
 
@@ -507,27 +553,41 @@ final class UnavailableTrackingService:
         throw TrackingServiceError.unavailable
     }
 
-    func updateProgress(
+    func getScoreFormat(providerID: String) async throws -> TrackerScoreSession? {
+        throw TrackingServiceError.unavailable
+    }
+
+    func validateScoreSession(providerID: String, scoreSession: TrackerScoreSession) throws {
+        throw TrackingServiceError.unavailable
+    }
+
+    func getScoredMediaListEntry(
+        providerID: String, mediaID: String, scoreSession: TrackerScoreSession
+    ) async throws -> TrackerMediaEntry? {
+        throw TrackingServiceError.unavailable
+    }
+
+    func updateEntry(
         providerID: String,
         mediaID: String,
         progress: Int?,
-        status: String?
+        status: String?,
+        score: Double?,
+        scoreSession: TrackerScoreSession?
     ) async throws {
-        _ = providerID
-        _ = mediaID
-        _ = progress
-        _ = status
         throw TrackingServiceError.unavailable
     }
 
     func link(
         media: MediaIdentity,
         providerID: String,
-        remoteMediaID: String
+        remoteMediaID: String,
+        scoreSession: TrackerScoreSession?
     ) async throws {
         _ = media
         _ = providerID
         _ = remoteMediaID
+        _ = scoreSession
         throw TrackingServiceError.unavailable
     }
 

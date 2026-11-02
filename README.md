@@ -26,22 +26,6 @@
 * AniList discovery and progress tracking with AniList, MyAnimeList or MangaBaka.
 * Extensible `.ito` source plugins with search and source settings.
 
-### Reading history
-
-History groups visits by series and day, with search, media-kind filters, and direct chapter
-navigation. It remembers the source's chapter title, number, volume, and scanlation group
-(episode language for anime), and shows saved pages, playback times, or novel percentages when
-that information is available. Resume prefers the group read last; missing groups fall back to
-another release. Missing or locked chapters show an explanation.
-
-Series of the same media kind linked to the same tracker entry can share a History row across
-sources. Conflicting tracker links keep them separate. Earlier chapters still open on their own
-source. Removing a merged series removes its history from every listed source.
-
-Completed series offer **Read Again** or **Watch Again** on the series screen; History's
-**Continue** does not restart an interrupted reread. History keeps at most 2,000 chapters.
-Older rows may lack chapter details or positions. Incognito reading is not recorded.
-
 ## Install
 
 Unsigned builds are published for sideloading. [atiinlabs.github.io/Ito](https://atiinlabs.github.io/Ito/) has one-tap install links for Stable, and [its builds page](https://atiinlabs.github.io/Ito/install/) for both channels.
