@@ -1,3 +1,4 @@
+import Combine
 import Nuke
 import UIKit
 import XCTest
@@ -124,10 +125,37 @@ final class MangaContinuousRendererTests: XCTestCase {
         }
         let window = try XCTUnwrap(window)
         let seam = try XCTUnwrap(reader.controller.pageFrame("a#1")).minY
-            - reader.controller.collectionView.contentOffset.y
+            - reader.controller.scrollView.contentOffset.y
         let rows = Self.pixelRows(in: window, around: seam)
         XCTAssertEqual(rows.count, 7)
         XCTAssertTrue(rows.allSatisfy { $0 > 0 }, "Brightness by pixel row around the seam: \(rows)")
+    }
+
+    func testFractionalViewportZoomDoesNotExposeABackgroundSeam() async throws {
+        let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 3)
+        reader.subject.viewModel.setViewerOverride(.Webtoon)
+        let session = reader.subject.viewModel.imageSession
+        let descriptors = try ["a#0", "a#1"].map(reader.descriptor)
+        let ready = expectation(description: "Both seam images decoded")
+        ready.expectedFulfillmentCount = descriptors.count
+        var delivered: Set<ReaderPageImageKey> = []
+        let observations = descriptors.map { descriptor in
+            session.observe(descriptor.key) { state in
+                if case .ready = state.phase, delivered.insert(descriptor.key).inserted { ready.fulfill() }
+            }
+        }
+        defer { observations.forEach { $0.cancel() } }
+        session.setPrefetch(descriptors)
+        try await reader.respond("a#0", width: 400, height: 1_024)
+        try await reader.respond("a#1", width: 400, height: 1_024)
+        reader.controller.scrollView.setZoomScale(2.5, animated: false)
+        _ = try reader.scroll(toPage: "a#1", pixelOffset: 400)
+        await fulfillment(of: [ready], timeout: 5)
+        let screenY = try XCTUnwrap(reader.controller.pageFrame("a#1")).minY * 2.5
+            - reader.controller.scrollView.contentOffset.y
+        let rows = Self.pixelRows(in: try XCTUnwrap(window), around: screenY)
+        XCTAssertEqual(rows.count, 7)
+        XCTAssertTrue(rows.allSatisfy { $0 > 0 }, "Brightness around the magnified seam: \(rows)")
     }
 
     /// The brightness of the screen pixels in the middle column from three pixels above `y` to
@@ -162,7 +190,7 @@ final class MangaContinuousRendererTests: XCTestCase {
         await waitUntil { reader.subject.progress.savedPages["a"] == 3 }
 
         let target = try XCTUnwrap(reader.controller.pageFrame("a#3"))
-        XCTAssertEqual(reader.controller.collectionView.contentOffset.y, target.minY)
+        XCTAssertEqual(reader.controller.scrollView.contentOffset.y, target.minY)
         XCTAssertEqual(reader.subject.viewModel.continuousPageIndex, 3)
         XCTAssertFalse(reader.subject.progress.savedPageWrites.contains { $0.page == 0 })
     }
@@ -174,9 +202,9 @@ final class MangaContinuousRendererTests: XCTestCase {
             pageCount: 2
         )
         reader.subject.loader.enqueue(.pages(pages("b", count: 2)), for: "b")
-        let collectionView = reader.controller.collectionView
-        collectionView.contentOffset.y = collectionView.contentSize.height - collectionView.bounds.height
-        collectionView.layoutIfNeeded()
+        let scrollView = reader.controller.scrollView
+        scrollView.contentOffset.y = scrollView.contentSize.height - scrollView.bounds.height
+        scrollView.layoutIfNeeded()
         // The renderer delivers to the view model on the main queue: once a block queued now
         // runs, everything the scroll queued has run before it.
         await withCheckedContinuation { continuation in
@@ -197,8 +225,204 @@ final class MangaContinuousRendererTests: XCTestCase {
         await waitUntil { reader.subject.viewModel.scrollTarget == nil }
 
         let target = try XCTUnwrap(reader.controller.pageFrame("a#1"))
-        XCTAssertEqual(reader.controller.collectionView.contentOffset.y, target.minY)
+        XCTAssertEqual(reader.controller.scrollView.contentOffset.y, target.minY)
         XCTAssertEqual(reader.subject.viewModel.continuousPageIndex, 1)
+    }
+
+    func testQueuedViewportSurvivesLayoutInvalidation() async throws {
+        let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 6)
+        let delivered = expectation(description: "Current viewport is delivered after layout invalidation")
+        let subscription = reader.subject.viewModel.$continuousPageIndex.filter { $0 == 2 }.first().sink { _ in delivered.fulfill() }
+        defer { subscription.cancel() }
+        _ = try reader.scroll(toPage: "a#2", pixelOffset: -100)
+
+        // Queue progress, then synchronously change row geometry before the main-queue delivery.
+        reader.controller.scrollViewDidScroll(reader.controller.scrollView)
+        reader.subject.viewModel.setViewerOverride(.Webtoon)
+
+        await fulfillment(of: [delivered], timeout: 5)
+        XCTAssertEqual(reader.subject.viewModel.continuousPageIndex, 2)
+    }
+
+    func testZoomedImageArrivalPreservesPhysicalAnchorAndViewportProgress() async throws {
+        let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 20)
+        let delivered = expectation(description: "Zoomed anchor page is published")
+        let subscription = reader.subject.viewModel.$continuousPageIndex.filter { $0 == 10 }.first().sink { _ in delivered.fulfill() }
+        defer { subscription.cancel() }
+        reader.controller.scrollView.setZoomScale(2.5, animated: false)
+        reader.subject.viewModel.imageSession.setPrefetch(try ["a#0", "a#10"].map(reader.descriptor))
+        let offset = try reader.scroll(toPage: "a#10", pixelOffset: -120)
+        try await reader.respond("a#0", width: 400, height: 4_000)
+        try reader.assertAnchor("a#10", offset)
+        try await reader.respond("a#10", width: 400, height: 2_000)
+        try reader.assertAnchor("a#10", offset)
+        XCTAssertEqual(reader.controller.visiblePageIDs(), ["a#10"])
+        await fulfillment(of: [delivered], timeout: 5)
+        XCTAssertEqual(reader.subject.viewModel.continuousPageIndex, 10)
+        XCTAssertEqual(reader.controller.scrollView.zoomScale, 2.5)
+    }
+
+    func testZoomedPrependAndRotationPreservePhysicalAnchorAndBaseWidth() async throws {
+        let reader = try await openReader(
+            chapters: [chapter("a", 1), chapter("b", 2)], initial: "b", pageCount: 8
+        )
+        reader.controller.scrollView.setZoomScale(2.5, animated: false)
+        let offset = try reader.scroll(toPage: "b#4", pixelOffset: -90)
+        reader.subject.loader.enqueue(.pages(pages("a", count: 8)), for: "a")
+        reader.subject.viewModel.prependPreviousChapter()
+        await reader.subject.viewModel.waitForTestingOperations()
+        try reader.assertAnchor("b#4", offset)
+        let window = try XCTUnwrap(window)
+        window.frame = CGRect(x: 0, y: 0, width: 600, height: 844)
+        window.layoutIfNeeded()
+        reader.controller.view.layoutIfNeeded()
+        try reader.assertAnchor("b#4", offset)
+        XCTAssertEqual(reader.controller.pageFrame("b#4")?.width, 600)
+        XCTAssertEqual(reader.controller.documentViewport.width, 240, accuracy: 0.001)
+    }
+
+    func testZoomedDeepPositionAndHorizontalPanSurviveChapterWindowEviction() async throws {
+        let chapters = (1...5).map { chapter("c\($0)", Float32($0)) }
+        let reader = try await openReader(chapters: chapters, initial: "c3", pageCount: 2)
+        reader.controller.scrollView.setZoomScale(2.5, animated: false)
+        reader.subject.viewModel.imageSession.setPrefetch([try reader.descriptor("c3#1")])
+        try await reader.respond("c3#1", width: 400, height: 8_000)
+        let offset = try reader.scroll(toPage: "c3#1", pixelOffset: -4_558.5)
+        reader.controller.scrollView.contentOffset.x = 170
+        for key in ["c2", "c1"] {
+            reader.subject.loader.enqueue(.pages(pages(key, count: 2)), for: key)
+            reader.subject.viewModel.prependPreviousChapter()
+            await reader.subject.viewModel.waitForTestingOperations()
+            try reader.assertAnchor("c3#1", offset)
+        }
+        for key in ["c4", "c5"] {
+            reader.subject.loader.enqueue(.pages(pages(key, count: 2)), for: key)
+            reader.subject.viewModel.appendNextChapter()
+            await reader.subject.viewModel.waitForTestingOperations()
+            try reader.assertAnchor("c3#1", offset)
+        }
+        XCTAssertEqual(reader.subject.viewModel.segments.map(\.chapter.key), ["c2", "c3", "c4", "c5"])
+        XCTAssertEqual(reader.controller.scrollView.zoomScale, 2.5)
+        XCTAssertEqual(reader.controller.scrollView.contentOffset.x, 170, accuracy: 0.001)
+    }
+
+    func testZoomedLongDocumentKeepsRendererAndVisibleLeasesWindowed() async throws {
+        let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 200)
+        try await reader.respond("a#0", width: 400, height: 800)
+        let session = reader.subject.viewModel.imageSession
+        let oldKey = try reader.descriptor("a#0").key
+        let released = expectation(description: "The old visible cell releases its decoded image")
+        let observation = session.observe(oldKey) { state in
+            if case .idle = state.phase { released.fulfill() }
+        }
+        defer { observation.cancel() }
+        reader.controller.scrollView.setZoomScale(4, animated: false)
+        _ = try reader.scroll(toPage: "a#100", pixelOffset: -80)
+        await fulfillment(of: [released], timeout: 5)
+        let viewport = reader.controller.documentViewport
+        XCTAssertEqual(reader.controller.collectionView.frame, viewport)
+        XCTAssertEqual(reader.controller.collectionView.bounds, viewport)
+        XCTAssertLessThan(reader.controller.collectionView.visibleCells.count, 5)
+        XCTAssertEqual(reader.controller.visiblePageIDs(), ["a#100"])
+        XCTAssertFalse(reader.controller.collectionView.isScrollEnabled)
+        XCTAssertGreaterThan(reader.controller.scrollView.contentSize.height, 100_000)
+    }
+
+    func testRetainedCellRedisplayReacquiresItsImageAndInvalidationReleasesIt() async throws {
+        let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 1)
+        try await reader.respond("a#0", width: 400, height: 800)
+        let controller = reader.controller
+        let index = IndexPath(item: 0, section: 0)
+        let cell = try XCTUnwrap(controller.collectionView.cellForItem(at: index))
+        let key = try reader.descriptor("a#0").key
+        let released = expectation(description: "End-display releases the visible lease")
+        let redisplayed = expectation(description: "The retained cell loads again without dequeue")
+        let invalidated = expectation(description: "Invalidation releases the redisplayed lease")
+        var idleTransitions = 0
+        let observation = reader.subject.viewModel.imageSession.observe(key) { state in
+            switch state.phase {
+            case .idle:
+                idleTransitions += 1
+                if idleTransitions == 1 { released.fulfill() }
+                if idleTransitions == 2 { invalidated.fulfill() }
+            case .ready:
+                redisplayed.fulfill()
+            default:
+                break
+            }
+        }
+        defer { observation.cancel() }
+        controller.collectionView(controller.collectionView, didEndDisplaying: cell, forItemAt: index)
+        controller.collectionView(controller.collectionView, didEndDisplaying: cell, forItemAt: index)
+        await fulfillment(of: [released], timeout: 5)
+        XCTAssertTrue(controller.children.isEmpty)
+        controller.collectionView(controller.collectionView, willDisplay: cell, forItemAt: index)
+        await fulfillment(of: [redisplayed], timeout: 5)
+        controller.invalidate()
+        await fulfillment(of: [invalidated], timeout: 5)
+        XCTAssertTrue(controller.children.isEmpty)
+        XCTAssertEqual(idleTransitions, 2)
+    }
+
+    func testZoomedNavigationAndWebtoonSeamsUseDocumentCoordinates() async throws {
+        let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 8)
+        reader.subject.viewModel.setViewerOverride(.Webtoon)
+        reader.controller.scrollView.setZoomScale(2.5, animated: false)
+        let delivered = expectation(description: "Zoomed jump acknowledges the requested page")
+        let subscription = reader.subject.viewModel.$continuousPageIndex.filter { $0 == 1 }.first().sink { _ in delivered.fulfill() }
+        defer { subscription.cancel() }
+        reader.subject.viewModel.nextPage()
+        // A synchronous geometry transaction must land an in-flight navigation at its new frame.
+        reader.subject.viewModel.setViewerOverride(.Vertical)
+        await fulfillment(of: [delivered], timeout: 5)
+        let target = try XCTUnwrap(reader.controller.pageFrame("a#1"))
+        XCTAssertEqual(reader.controller.scrollView.contentOffset.y, target.minY * 2.5, accuracy: 0.001)
+        XCTAssertNil(reader.subject.viewModel.scrollTarget)
+        XCTAssertEqual(reader.subject.viewModel.continuousPageIndex, 1)
+        reader.subject.viewModel.setViewerOverride(.Webtoon)
+        let first = try XCTUnwrap(reader.controller.pageFrame("a#0"))
+        let second = try XCTUnwrap(reader.controller.pageFrame("a#1"))
+        XCTAssertEqual(first.maxY * 2.5, second.minY * 2.5)
+    }
+
+    func testBottomClampedLandingKeepsTheRequestedPageAndSavedProgress() async throws {
+        for changesLayout in [false, true] {
+            let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 2)
+            defer { window?.isHidden = true }
+            reader.subject.viewModel.imageSession.setPrefetch(try ["a#0", "a#1"].map(reader.descriptor))
+            try await reader.respond("a#0", width: 400, height: 2_000)
+            try await reader.respond("a#1", width: 400, height: 200)
+            let selected = expectation(description: "The clamped requested page remains selected")
+            let saved = expectation(description: "The clamped requested page is persisted")
+            let subscription = reader.subject.viewModel.$continuousPageIndex.filter { $0 == 1 }.first().sink { _ in selected.fulfill() }
+            defer { subscription.cancel() }
+            reader.subject.progress.onPageSaved = { chapter, page in
+                if chapter == "a", page == 1 { saved.fulfill() }
+            }
+            reader.subject.viewModel.nextPage()
+            if changesLayout { reader.subject.viewModel.setViewerOverride(.Webtoon) }
+            await fulfillment(of: [selected, saved], timeout: 5)
+            XCTAssertNil(reader.subject.viewModel.scrollTarget)
+            XCTAssertEqual(reader.subject.viewModel.continuousPageIndex, 1)
+            XCTAssertEqual(reader.subject.progress.savedPages["a"], 1)
+            XCTAssertEqual(reader.controller.visiblePageIDs(), ["a#0", "a#1"])
+        }
+    }
+
+    func testCompletedFooterNavigationNearTheEndAppendsTheNextChapter() async throws {
+        let reader = try await openReader(
+            chapters: [chapter("a", 1), chapter("b", 2)], initial: "a", pageCount: 2
+        )
+        reader.subject.loader.enqueue(.pages(pages("b", count: 2)), for: "b")
+        let appended = expectation(description: "Footer navigation loads the next chapter")
+        let subscription = reader.subject.viewModel.$segments.filter {
+            $0.contains { $0.chapter.key == "b" }
+        }.first().sink { _ in appended.fulfill() }
+        defer { subscription.cancel() }
+        reader.subject.viewModel.nextPage()
+        await fulfillment(of: [appended], timeout: 5)
+        XCTAssertEqual(reader.subject.loader.callCount(for: "b"), 1)
+        XCTAssertEqual(reader.subject.viewModel.segments.last?.chapter.key, "b")
     }
 
     // MARK: - Fixtures
@@ -225,7 +449,8 @@ final class MangaContinuousRendererTests: XCTestCase {
         subject.progress.savedPages[initial] = savedPage
         subject.loader.enqueue(.pages(pages(initial, count: pageCount)), for: initial)
         subject.viewModel.start()
-        await waitUntil { subject.viewModel.loadPhase == .content }
+        await subject.viewModel.waitForTestingOperations()
+        XCTAssertEqual(subject.viewModel.loadPhase, .content)
 
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
         let window = UIWindow(windowScene: scene)
@@ -276,8 +501,10 @@ private struct RendererFixture {
     /// the scroll view actually used: it rounds to whole screen pixels.
     func scroll(toPage pageID: String, pixelOffset: CGFloat) throws -> CGFloat {
         let frame = try XCTUnwrap(controller.pageFrame(pageID))
-        controller.collectionView.contentOffset = CGPoint(x: 0, y: frame.minY - pixelOffset)
-        controller.collectionView.layoutIfNeeded()
+        controller.scrollView.contentOffset = CGPoint(
+            x: 0, y: frame.minY * controller.scrollView.zoomScale - pixelOffset
+        )
+        controller.scrollView.layoutIfNeeded()
         let anchor = try XCTUnwrap(controller.visibleAnchor())
         XCTAssertEqual(anchor.pageID, pageID)
         XCTAssertEqual(anchor.pixelOffset, pixelOffset, accuracy: 1)
@@ -310,7 +537,7 @@ private struct RendererFixture {
         observation.cancel()
         // The row is the image's height at the reader's width, rounded down to a whole pixel.
         let scale = controller.traitCollection.displayScale
-        let imageHeight = controller.collectionView.bounds.width * CGFloat(height) / CGFloat(width)
+        let imageHeight = controller.scrollView.bounds.width * CGFloat(height) / CGFloat(width)
         XCTAssertEqual(controller.pageFrame(pageID)?.height, (imageHeight * scale).rounded(.down) / scale)
     }
 }
@@ -354,7 +581,7 @@ final class GatedImageLoader: DataLoading, @unchecked Sendable {
         with request: URLRequest,
         didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void,
         completion: @escaping @Sendable (Error?) -> Void
-    ) -> any Cancellable {
+    ) -> any Nuke.Cancellable {
         guard let url = request.url else {
             completion(URLError(.badURL))
             return GatedImageCancellation()
@@ -396,6 +623,6 @@ final class GatedImageLoader: DataLoading, @unchecked Sendable {
     }
 }
 
-private final class GatedImageCancellation: Cancellable, Sendable {
+private final class GatedImageCancellation: Nuke.Cancellable, Sendable {
     func cancel() {}
 }

@@ -204,7 +204,7 @@ struct ReaderView: View {
                 headers: page.headers,
                 session: viewModel.imageSession,
                 pageID: pageID,
-                onImageTap: toggleUI,
+                interaction: .pagedZoom(onTap: toggleUI),
                 imageLabel: String(localized: "Page \(number)", comment: "Accessibility label of a manga page; number is its position in the chapter")
             )
         case .text(let text):
