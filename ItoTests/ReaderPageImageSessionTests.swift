@@ -30,7 +30,8 @@ final class ReaderPageImageSessionTests: XCTestCase {
             urlStr: url.absoluteString,
             headers: nil,
             session: session,
-            pageID: descriptor.pageID
+            pageID: descriptor.pageID,
+            interaction: .passive
         )
         let window = UIWindow(frame: UIScreen.main.bounds)
         let controller = UIHostingController(rootView: image)
@@ -291,12 +292,12 @@ private final class ReaderSessionURLProtocol: URLProtocol {
         lock.withLock { hosts.insert(host) }
     }
 
-    override class func canInit(with request: URLRequest) -> Bool {
+    override static func canInit(with request: URLRequest) -> Bool {
         guard let host = request.url?.host else { return false }
         return lock.withLock { hosts.contains(host) }
     }
 
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
         Self.lock.withLock {
