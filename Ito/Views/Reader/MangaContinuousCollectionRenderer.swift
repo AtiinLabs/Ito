@@ -155,9 +155,16 @@ final class MangaContinuousCollectionViewController: UIViewController,
         )
     }
 
-    /// The renderer remains viewport-sized even when the logical document is very long.
+    /// Magnified overscan stays below two unzoomed viewports, independent of document length.
     private func updateRendererWindow() {
-        let viewport = documentViewport
+        // A native zoom-in sets its destination before its displayed transform arrives.
+        // Cover the outgoing tap-focused viewport without depending on callback timing.
+        let padding = max(0, 1 - 1 / scrollView.zoomScale)
+        let coveredArea = documentViewport.insetBy(
+            dx: -scrollView.bounds.width * padding,
+            dy: -scrollView.bounds.height * padding
+        ).intersection(documentView.bounds)
+        let viewport = coveredArea.isNull ? CGRect.zero : coveredArea
         // Virtualization must not inherit the outer scroll view's zoom animation.
         UIView.performWithoutAnimation {
             collectionView.frame = viewport

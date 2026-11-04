@@ -319,9 +319,6 @@ final class MangaContinuousRendererTests: XCTestCase {
         reader.controller.scrollView.setZoomScale(4, animated: false)
         _ = try reader.scroll(toPage: "a#100", pixelOffset: -80)
         await fulfillment(of: [released], timeout: 5)
-        let viewport = reader.controller.documentViewport
-        XCTAssertEqual(reader.controller.collectionView.frame, viewport)
-        XCTAssertEqual(reader.controller.collectionView.bounds, viewport)
         XCTAssertLessThan(reader.controller.collectionView.visibleCells.count, 5)
         XCTAssertEqual(reader.controller.visiblePageIDs(), ["a#100"])
         XCTAssertFalse(reader.controller.collectionView.isScrollEnabled)
@@ -465,6 +462,62 @@ final class MangaContinuousRendererTests: XCTestCase {
         XCTAssertEqual(reader.subject.viewModel.currentChapter.key, "c1")
     }
 
+    func testAnimatedZoomKeepsThePresentedViewportCoveredInBothDirections() async throws {
+        let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 3)
+        try await reader.respond("a#0", width: 400, height: 4_000)
+        try await assertAnimatedViewportCoverage(reader.controller, targetScale: 2.5)
+        try await assertAnimatedViewportCoverage(reader.controller, targetScale: 1)
+    }
+
+    private func assertAnimatedViewportCoverage(
+        _ controller: MangaContinuousCollectionViewController, targetScale: CGFloat
+    ) async throws {
+        let scrollView = controller.scrollView
+        let document = try XCTUnwrap(controller.viewForZooming(in: scrollView))
+        let startingScale = scrollView.zoomScale
+        let intermediate = expectation(description: "The native animation presents a covered intermediate frame")
+        let completed = expectation(description: "The native zoom reaches its final presented scale")
+        let observer = ContinuousZoomFrameObserver()
+        var sampled = false
+        observer.onFrame = { [weak observer] in
+            guard let documentLayer = document.layer.presentation(),
+                  let viewportLayer = scrollView.layer.presentation(),
+                  let collectionLayer = controller.collectionView.layer.presentation() else { return }
+            let scale = documentLayer.frame.width / document.bounds.width
+            if scale > min(startingScale, targetScale) + 0.05,
+               scale < max(startingScale, targetScale) - 0.05 {
+                let visible = documentLayer.convert(viewportLayer.bounds, from: viewportLayer)
+                let rendered = documentLayer.convert(collectionLayer.bounds, from: collectionLayer)
+                XCTAssertTrue(
+                    rendered.insetBy(dx: -0.5, dy: -0.5).contains(visible),
+                    "Native zoom must not expose unrendered black borders: visible \(visible), rendered \(rendered)"
+                )
+                if !sampled {
+                    sampled = true
+                    intermediate.fulfill()
+                }
+            }
+            if sampled, abs(scale - targetScale) < 0.001 {
+                observer?.stop()
+                completed.fulfill()
+            }
+        }
+        observer.start()
+        defer { observer.stop() }
+        let point = CGPoint(x: 100, y: 160)
+        let contentPoint = document.convert(
+            CGPoint(x: scrollView.bounds.minX + point.x, y: scrollView.bounds.minY + point.y), from: scrollView
+        )
+        scrollView.zoom(to: ReaderZoomGeometry.targetRect(
+            contentPoint: contentPoint, viewportPoint: point,
+            viewportSize: scrollView.bounds.size, scale: targetScale
+        ), animated: true)
+        await fulfillment(of: [intermediate, completed], timeout: 5)
+        XCTAssertEqual(scrollView.zoomScale, targetScale, accuracy: 0.001)
+        XCTAssertLessThanOrEqual(controller.collectionView.bounds.width, scrollView.bounds.width * 2)
+        XCTAssertLessThanOrEqual(controller.collectionView.bounds.height, scrollView.bounds.height * 2)
+    }
+
     // MARK: - Fixtures
 
     private func openReader(
@@ -580,6 +633,25 @@ private struct RendererFixture {
         let imageHeight = controller.scrollView.bounds.width * CGFloat(height) / CGFloat(width)
         XCTAssertEqual(controller.pageFrame(pageID)?.height, (imageHeight * scale).rounded(.down) / scale)
     }
+}
+
+@MainActor
+private final class ContinuousZoomFrameObserver: NSObject {
+    var onFrame: (() -> Void)?
+    private var displayLink: CADisplayLink?
+
+    func start() {
+        let link = CADisplayLink(target: self, selector: #selector(frame))
+        displayLink = link
+        link.add(to: .main, forMode: .common)
+    }
+
+    func stop() {
+        displayLink?.invalidate()
+        displayLink = nil
+    }
+
+    @objc private func frame() { onFrame?() }
 }
 
 /// Holds image requests until the test answers them with a PNG of a chosen size. Once a URL is
