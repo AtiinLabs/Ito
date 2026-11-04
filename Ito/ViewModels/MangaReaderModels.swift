@@ -32,6 +32,42 @@ struct FlatPage: Identifiable {
     }
 }
 
+/// The renderer's latest physical viewport, independent of persisted reading progress.
+@MainActor
+final class MangaContinuousViewportRetention {
+    private(set) var pageIDs: [String]?
+    private(set) var isValid = true
+
+    func update(_ pageIDs: [String]) {
+        guard isValid, self.pageIDs != pageIDs else { return }
+        self.pageIDs = pageIDs
+    }
+
+    func invalidate() {
+        isValid = false
+        pageIDs = nil
+    }
+}
+
+/// Only the newest attached renderer can protect the chapter window.
+@MainActor
+struct MangaContinuousViewportRetentionRegistry {
+    private weak var latest: MangaContinuousViewportRetention?
+
+    mutating func makeLease() -> MangaContinuousViewportRetention {
+        let lease = MangaContinuousViewportRetention()
+        latest = lease
+        return lease
+    }
+
+    func protectionIDs(fallback: Set<String>, validPages: [String: Int]) -> Set<String>? {
+        guard let latest, latest.isValid else { return fallback }
+        guard let pageIDs = latest.pageIDs else { return nil }
+        let mapped = Set(pageIDs.filter { validPages[$0] != nil })
+        return mapped.isEmpty ? nil : mapped
+    }
+}
+
 /// A request for the continuous reader to scroll to a page, by `FlatPage.id`.
 struct MangaScrollRequest: Equatable {
     /// Distinguishes requests with the same payload, so a lifecycle check never mistakes a new

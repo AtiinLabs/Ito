@@ -74,6 +74,7 @@ final class MangaReaderViewModel: ObservableObject {
     private var flatPageIndexByID: [String: Int] = [:]
     /// Continuous pages on screen; the topmost is the current page.
     private var visiblePageIDs: Set<String> = []
+    private var continuousViewportRetention = MangaContinuousViewportRetentionRegistry()
     private var visiblePageOrder: [String] = []
     private var continuousMutationDepth = 0
     private var continuousSnapshotRevision: UInt64 = 0
@@ -343,6 +344,8 @@ final class MangaReaderViewModel: ObservableObject {
         guard scrollTarget == target else { return }
         scrollTarget = nil
     }
+
+    func makeContinuousViewportRetention() -> MangaContinuousViewportRetention { continuousViewportRetention.makeLease() }
 
     /// Receives page IDs ordered by their actual image-frame position in the continuous viewport.
     func continuousViewportChanged(_ pageIDs: [String], preferredPageID: String? = nil) {
@@ -855,17 +858,17 @@ final class MangaReaderViewModel: ObservableObject {
               flatPages.indices.contains(continuousPageIndex) else { return }
         let current = flatPages[continuousPageIndex]
         let excess = segments.count - Self.maximumLoadedSegments
+        guard let protectedIDs = continuousViewportRetention.protectionIDs(
+            fallback: visiblePageIDs, validPages: flatPageIndexByID) else { return }
 
         switch grownEnd {
         case .bottom:
-            let firstVisible = visiblePageIDs.compactMap { flatPageIndexByID[$0] }
-                .map { flatPages[$0].segmentIndex }.min()
+            let firstVisible = protectedIDs.compactMap { flatPageIndexByID[$0] }.map { flatPages[$0].segmentIndex }.min()
             let removable = min(current.segmentIndex - 1, firstVisible ?? Int.max)
             guard prependOperationID == nil, removable > 0 else { return }
             segments.removeFirst(min(excess, removable))
         case .top:
-            let lastVisible = visiblePageIDs.compactMap { flatPageIndexByID[$0] }
-                .map { flatPages[$0].segmentIndex }.max()
+            let lastVisible = protectedIDs.compactMap { flatPageIndexByID[$0] }.map { flatPages[$0].segmentIndex }.max()
             let removable = min(
                 segments.count - 1 - (current.segmentIndex + 1),
                 lastVisible.map { segments.count - 1 - $0 } ?? Int.max

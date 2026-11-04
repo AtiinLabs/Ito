@@ -425,6 +425,46 @@ final class MangaContinuousRendererTests: XCTestCase {
         XCTAssertEqual(reader.subject.viewModel.segments.last?.chapter.key, "b")
     }
 
+    func testDeferredProgressCannotMakeThePhysicalChapterEvictable() async throws {
+        let chapters = (1...7).map { chapter("c\($0)", Float32($0)) }
+        let reader = try await openReader(chapters: chapters, initial: "c1", pageCount: 2)
+        for key in ["c2", "c3", "c4"] {
+            reader.subject.loader.enqueue(.pages(pages(key, count: 2)), for: key)
+            reader.subject.viewModel.appendNextChapter()
+            await reader.subject.viewModel.waitForTestingOperations()
+        }
+        let current = expectation(description: "The delivered viewport is in chapter four")
+        let selected = reader.subject.viewModel.$currentChapter.filter { $0.key == "c4" }.first().sink { _ in current.fulfill() }
+        defer { selected.cancel() }
+        _ = try reader.scroll(toPage: "c4#0", pixelOffset: -100)
+        await fulfillment(of: [current], timeout: 5)
+
+        let controller = reader.controller
+        controller.scrollViewWillBeginZooming(
+            controller.scrollView, with: controller.viewForZooming(in: controller.scrollView)
+        )
+        let offset = try reader.scroll(toPage: "c1#0", pixelOffset: -100)
+        XCTAssertEqual(reader.subject.viewModel.currentChapter.key, "c4")
+        for key in ["c5", "c6"] {
+            reader.subject.loader.enqueue(.pages(pages(key, count: 2)), for: key)
+            reader.subject.viewModel.appendNextChapter()
+            await reader.subject.viewModel.waitForTestingOperations()
+            let anchor = try XCTUnwrap(controller.visibleAnchor())
+            XCTAssertEqual(anchor.pageID, "c1#0", "A load of \(key) must not evict the physical viewport")
+            XCTAssertEqual(anchor.pixelOffset, offset, accuracy: 0.001)
+            XCTAssertNotNil(controller.pageFrame("c1#0"))
+            XCTAssertNil(reader.subject.viewModel.scrollTarget)
+        }
+        let resumed = expectation(description: "Progress catches up to the physical chapter")
+        let subscription = reader.subject.viewModel.$currentChapter.filter { $0.key == "c1" }.first().sink { _ in resumed.fulfill() }
+        defer { subscription.cancel() }
+        controller.scrollViewDidEndZooming(
+            controller.scrollView, with: controller.viewForZooming(in: controller.scrollView), atScale: 1
+        )
+        await fulfillment(of: [resumed], timeout: 5)
+        XCTAssertEqual(reader.subject.viewModel.currentChapter.key, "c1")
+    }
+
     // MARK: - Fixtures
 
     private func openReader(

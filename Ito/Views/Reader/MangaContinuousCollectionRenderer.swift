@@ -43,6 +43,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
     static let appendDistanceInViewports: CGFloat = 1
 
     let viewModel: MangaReaderViewModel
+    private let viewportRetention: MangaContinuousViewportRetention
     var onToggleUI: () -> Void
     let collectionView: UICollectionView
     let scrollView = UIScrollView()
@@ -82,6 +83,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
 
     init(viewModel: MangaReaderViewModel, onToggleUI: @escaping () -> Void) {
         self.viewModel = viewModel
+        viewportRetention = viewModel.makeContinuousViewportRetention()
         self.onToggleUI = onToggleUI
         collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         super.init(nibName: nil, bundle: nil)
@@ -156,9 +158,12 @@ final class MangaContinuousCollectionViewController: UIViewController,
     /// The renderer remains viewport-sized even when the logical document is very long.
     private func updateRendererWindow() {
         let viewport = documentViewport
-        collectionView.frame = viewport
-        collectionView.bounds = viewport
-        collectionView.layoutIfNeeded()
+        // Virtualization must not inherit the outer scroll view's zoom animation.
+        UIView.performWithoutAnimation {
+            collectionView.frame = viewport
+            collectionView.bounds = viewport
+            collectionView.layoutIfNeeded()
+        }
     }
 
     /// Ready images and background content use the native tap pair. Placeholders, retry
@@ -215,6 +220,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
     /// Stops every callback into the view model; the controller is being removed.
     func invalidate() {
         isInvalidated = true
+        viewportRetention.invalidate()
         subscriptions.removeAll()
         cancelImageObservations { _ in true }
         pendingNavigation = nil
@@ -296,6 +302,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
         updateRendererWindow()
         isLandingNavigation = false
         isCommittingLayout = false
+        _ = refreshViewportRetention()
         if let interrupted { acknowledge(interrupted, landed: true, appendingIfNearEnd: false) }
 #if DEBUG
         onLayoutCommitted?()
@@ -489,6 +496,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
             scrollView.setContentOffset(target, animated: false)
             updateRendererWindow()
             isLandingNavigation = false
+            _ = refreshViewportRetention()
             acknowledge(request, landed: true, appendingIfNearEnd: false)
         }
     }
@@ -517,14 +525,22 @@ final class MangaContinuousCollectionViewController: UIViewController,
         }
     }
 
+    /// Eviction protection is synchronous and never advances reading progress.
+    private func refreshViewportRetention() -> [String] {
+        guard !isInvalidated, !isCommittingLayout, !isLandingNavigation else { return [] }
+        let pageIDs = visiblePageIDs()
+        viewportRetention.update(pageIDs)
+        return pageIDs
+    }
+
     /// Reports the pages on screen when they change. A restore or jump not yet started owns the
     /// position, so nothing is reported until it is applied; an animated jump's passing pages are
     /// reported, and its landing makes its page current.
     private func reportViewport() {
+        let pageIDs = refreshViewportRetention()
         recordViewportChange()
         guard !isInvalidated, pendingNavigation == nil, !isLandingNavigation,
               !isCommittingLayout, !isChangingZoom, !scrollView.isZooming, !scrollView.isZoomBouncing else { return }
-        let pageIDs = visiblePageIDs()
         guard !pageIDs.isEmpty, pageIDs != lastReportedPageIDs else { return }
         let epoch = viewportEpoch
         DispatchQueue.main.async { [weak self] in
@@ -598,6 +614,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
     func scrollViewDidZoom(_ scrollView: UIScrollView) {
         recordViewportChange()
         updateRendererWindow()
+        _ = refreshViewportRetention()
     }
 
     func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
