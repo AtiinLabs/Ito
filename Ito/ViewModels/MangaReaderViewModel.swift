@@ -1052,8 +1052,10 @@ final class MangaReaderViewModel: ObservableObject {
 
     // MARK: - Image prefetch
 
+    /// Starts at the page being shown: turning to a page still downloading must not drop its
+    /// prefetch, which would cancel the download just before the page's view asks for it.
     private func prefetchPagedImages(around index: Int) {
-        preload(Self.pagesToPreload(after: index, count: preloadImageCount, in: pagedPages) { $0 })
+        preload(Self.pagesToPreload(after: index - 1, count: preloadImageCount > 0 ? preloadImageCount + 1 : 0, in: pagedPages) { $0 })
     }
 
     private func prefetchContinuousImages(around index: Int, allPages: [FlatPage]) {

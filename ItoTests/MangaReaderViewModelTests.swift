@@ -858,7 +858,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(activity.largeImageText, "Reading from Official at Unknown Plugin")
     }
 
-    func testPagedImagePrefetchUsesExactAheadWindowAndURLFiltering() async {
+    func testPagedImagePrefetchCoversTheCurrentPageAndAheadWindowWithURLFiltering() async {
         let subject = makeSubject(
             chapters: [makeChapter("a", number: 1)],
             preload: 3
@@ -882,9 +882,9 @@ final class MangaReaderViewModelTests: XCTestCase {
         await waitForReader { subject.viewModel.loadPhase == .content }
 
         XCTAssertEqual(subject.imagePrefetcher.batches.count, 1)
-        XCTAssertEqual(subject.imagePrefetcher.batches[0].map(\.index), [2])
+        XCTAssertEqual(subject.imagePrefetcher.batches[0].map(\.index), [0, 2])
         XCTAssertEqual(
-            subject.imagePrefetcher.batches[0][0].headers,
+            subject.imagePrefetcher.batches[0][1].headers,
             ["Authorization": "fixture"]
         )
     }

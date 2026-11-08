@@ -164,8 +164,9 @@ struct ReaderView: View {
                 ? .rightToLeft
                 : .leftToRight
         )
-        // Pages handle their own taps (so a double tap can zoom); this covers the space around them.
-        .onTapGesture(perform: toggleUI)
+        // No tap gesture around the pager: a SwiftUI tap around a page's UIKit zoom view would
+        // also fire for the taps the page already handles, toggling the controls twice. Each
+        // page view owns its tap instead.
     }
 
     // MARK: - Continuous Reader (Vertical/Webtoon)
@@ -191,6 +192,8 @@ struct ReaderView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 400, maxHeight: .infinity, alignment: .center)
         .padding(40)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: toggleUI)
     }
 
     /// `number` is the page's place in its chapter, read out for image pages; text pages read
@@ -211,7 +214,9 @@ struct ReaderView: View {
             Text(text)
                 .foregroundColor(.white)
                 .padding()
-                .frame(maxWidth: .infinity, alignment: .center)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: toggleUI)
         }
     }
 
