@@ -17,18 +17,43 @@ struct MangaPagedReaderView<Page: View>: UIViewControllerRepresentable {
     let content: (Int) -> Page
     let onIndexChange: (Int) -> Void
 
-    func makeUIViewController(context: Context) -> MangaPagedReaderController<Page> {
-        let controller = MangaPagedReaderController<Page>()
+    func makeUIViewController(context: Context) -> MangaPagedReaderController {
+        let controller = MangaPagedReaderController()
         controller.update(with: self)
         return controller
     }
 
-    func updateUIViewController(_ controller: MangaPagedReaderController<Page>, context: Context) {
+    func updateUIViewController(_ controller: MangaPagedReaderController, context: Context) {
         controller.update(with: self)
     }
 }
 
-final class MangaPagedReaderController<Page: View>: UIViewController,
+/// The pager's view of a `MangaPagedReaderView`, with page content type-erased: optimized
+/// Xcode 26.6 builds crash inlining the deinit of a generic UIKit subclass, so the controller
+/// and its page hosts are not generic.
+struct MangaPagedConfiguration {
+    let chapterKey: String
+    let pageCount: Int
+    let hasPrevious: Bool
+    let hasNext: Bool
+    let index: Int
+    let isRightToLeft: Bool
+    let content: (Int) -> AnyView
+    let onIndexChange: (Int) -> Void
+
+    init<Page: View>(_ view: MangaPagedReaderView<Page>) {
+        chapterKey = view.chapterKey
+        pageCount = view.pageCount
+        hasPrevious = view.hasPrevious
+        hasNext = view.hasNext
+        index = view.index
+        isRightToLeft = view.isRightToLeft
+        content = { AnyView(view.content($0)) }
+        onIndexChange = view.onIndexChange
+    }
+}
+
+final class MangaPagedReaderController: UIViewController,
     UIPageViewControllerDataSource,
     UIPageViewControllerDelegate {
     private let pager = UIPageViewController(
@@ -36,10 +61,10 @@ final class MangaPagedReaderController<Page: View>: UIViewController,
         navigationOrientation: .horizontal,
         options: [.interPageSpacing: 0]
     )
-    private var configuration: MangaPagedReaderView<Page>?
+    private var configuration: MangaPagedConfiguration?
     /// Hosts near the current position, so neighbours keep their state (zoom, loaded image)
     /// while the pager can show them. Farther ones are released with their images.
-    private var hosts: [Int: MangaPagedPageHost<Page>] = [:]
+    private var hosts: [Int: MangaPagedPageHost] = [:]
     private var shownChapterKey: String?
     private var shownIndex: Int?
     private var shownRightToLeft: Bool?
@@ -70,13 +95,14 @@ final class MangaPagedReaderController<Page: View>: UIViewController,
         if let configuration { show(configuration) }
     }
 
-    func update(with configuration: MangaPagedReaderView<Page>) {
+    func update<Page: View>(with view: MangaPagedReaderView<Page>) {
+        let configuration = MangaPagedConfiguration(view)
         self.configuration = configuration
         guard isViewLoaded else { return }
         show(configuration)
     }
 
-    private func show(_ configuration: MangaPagedReaderView<Page>) {
+    private func show(_ configuration: MangaPagedConfiguration) {
         guard !isTransitioning else { return }
         if shownChapterKey != configuration.chapterKey {
             shownChapterKey = configuration.chapterKey
@@ -122,13 +148,13 @@ final class MangaPagedReaderController<Page: View>: UIViewController,
         }
     }
 
-    private func contains(_ position: Int, in configuration: MangaPagedReaderView<Page>) -> Bool {
+    private func contains(_ position: Int, in configuration: MangaPagedConfiguration) -> Bool {
         let first = configuration.hasPrevious ? -1 : 0
         let last = configuration.hasNext ? configuration.pageCount : configuration.pageCount - 1
         return position >= first && position <= last
     }
 
-    private func clamped(_ index: Int, in configuration: MangaPagedReaderView<Page>) -> Int {
+    private func clamped(_ index: Int, in configuration: MangaPagedConfiguration) -> Int {
         let first = configuration.hasPrevious ? -1 : 0
         let last = configuration.hasNext ? configuration.pageCount : max(configuration.pageCount - 1, 0)
         return min(max(index, first), last)
@@ -139,7 +165,7 @@ final class MangaPagedReaderController<Page: View>: UIViewController,
         hosts = hosts.filter { abs($0.key - shownIndex) <= 2 }
     }
 
-    private func host(for position: Int, in configuration: MangaPagedReaderView<Page>) -> MangaPagedPageHost<Page> {
+    private func host(for position: Int, in configuration: MangaPagedConfiguration) -> MangaPagedPageHost {
         if let host = hosts[position] { return host }
         let host = MangaPagedPageHost(position: position, rootView: configuration.content(position))
         hosts[position] = host
@@ -150,7 +176,7 @@ final class MangaPagedReaderController<Page: View>: UIViewController,
 
     /// The page `step` positions from `viewController` in reading order, or `nil` past either end.
     private func neighbour(of viewController: UIViewController, step: Int) -> UIViewController? {
-        guard let configuration, let host = viewController as? MangaPagedPageHost<Page> else { return nil }
+        guard let configuration, let host = viewController as? MangaPagedPageHost else { return nil }
         let position = host.position + step
         guard contains(position, in: configuration) else { return nil }
         return self.host(for: position, in: configuration)
@@ -188,7 +214,7 @@ final class MangaPagedReaderController<Page: View>: UIViewController,
         let readerMoved = configuration.map { clamped($0.index, in: $0) != shownIndex || $0.chapterKey != shownChapterKey }
         // A swipe's page counts only when no slide owns the pager.
         let landed = completed && !isSliding
-            ? (pageViewController.viewControllers?.first as? MangaPagedPageHost<Page>)?.position
+            ? (pageViewController.viewControllers?.first as? MangaPagedPageHost)?.position
             : nil
         // A swipe that lands on another page moves the reader, unless the reader moved meanwhile
         // (a page button during the swipe): then its page wins and is shown next.
@@ -204,10 +230,10 @@ final class MangaPagedReaderController<Page: View>: UIViewController,
 }
 
 /// One page of the pager: its position in the chapter and its SwiftUI content.
-final class MangaPagedPageHost<Page: View>: UIHostingController<Page> {
+final class MangaPagedPageHost: UIHostingController<AnyView> {
     let position: Int
 
-    init(position: Int, rootView: Page) {
+    init(position: Int, rootView: AnyView) {
         self.position = position
         super.init(rootView: rootView)
         view.backgroundColor = .clear
