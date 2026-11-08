@@ -462,6 +462,134 @@ final class MangaContinuousRendererTests: XCTestCase {
         XCTAssertEqual(reader.subject.viewModel.currentChapter.key, "c1")
     }
 
+    func testImageSizeBelowViewportDoesNotStopNativeScrolling() async throws {
+        let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 20)
+        let descriptor = try reader.descriptor("a#10")
+        let session = reader.subject.viewModel.imageSession
+        let lease = session.acquire(descriptor, consumer: .visible)
+        defer { session.release(lease) }
+        defer { reader.controller.onLayoutCommitted = nil }
+        let committed = expectation(description: "The below-viewport image changes layout during native movement")
+        let arrived = expectation(description: "Native scrolling continues to its destination")
+        let target: CGFloat = 2_000
+        let observer = ContinuousZoomFrameObserver()
+        var response: Task<Void, Error>?
+        var changedDuringMotion = false
+        reader.controller.onLayoutCommitted = {
+            guard !changedDuringMotion else { return }
+            let offset = reader.controller.scrollView.contentOffset.y
+            changedDuringMotion = offset > 0 && offset < target
+            if changedDuringMotion { committed.fulfill() }
+        }
+        observer.onFrame = { [weak observer] in
+            let offset = reader.controller.scrollView.contentOffset.y
+            if offset > 0, offset < target, response == nil {
+                response = Task { try await reader.respond("a#10", width: 400, height: 4_000) }
+            }
+            if changedDuringMotion, abs(offset - target) < 0.5 {
+                observer?.stop()
+                arrived.fulfill()
+            }
+        }
+        observer.start()
+        defer { observer.stop() }
+        reader.controller.scrollView.setContentOffset(CGPoint(x: 0, y: target), animated: true)
+        await fulfillment(of: [committed, arrived], timeout: 5)
+        try await response?.value
+        XCTAssertEqual(reader.controller.scrollView.contentOffset.y, target, accuracy: 0.5)
+    }
+
+    func testColdImageDimensionsDoNotDisturbNativeZoomFocus() async throws {
+        let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 20)
+        try await reader.respond("a#0", width: 400, height: 4_000)
+        let session = reader.subject.viewModel.imageSession
+        let lease = session.acquire(try reader.descriptor("a#10"), consumer: .visible)
+        defer {
+            session.release(lease)
+            reader.controller.onLayoutCommitted = nil
+        }
+        let scrollView = reader.controller.scrollView
+        let document = try XCTUnwrap(reader.controller.viewForZooming(in: scrollView))
+        let checked = expectation(description: "Intermediate zoom frames retain their focus after cold dimensions arrive")
+        let finished = expectation(description: "Native zoom finishes after the metadata arrives")
+        let observer = ContinuousZoomFrameObserver()
+        var response: Task<Void, Error>?
+        var decoded = false
+        var checkedFocus = false
+        let expectedHeight: CGFloat = {
+            let scale = reader.controller.traitCollection.displayScale
+            return (scrollView.bounds.width * 40 / 400 * scale).rounded(.down) / scale
+        }()
+        let laidOut = expectation(description: "The mid-zoom size is laid out once the zoom has ended")
+        var reportedLayout = false
+        reader.controller.onLayoutCommitted = {
+            guard !reportedLayout, reader.controller.pageFrame("a#10")?.height == expectedHeight else { return }
+            reportedLayout = true
+            XCTAssertTrue(checkedFocus, "The size must not be laid out before the zoom finishes")
+            XCTAssertEqual(scrollView.zoomScale, 2.5, accuracy: 0.001)
+            laidOut.fulfill()
+        }
+        let observation = session.observe(try reader.descriptor("a#10").key) { state in
+            if state.pixelSize != nil { decoded = true }
+        }
+        defer { observation.cancel() }
+        observer.onFrame = { [weak observer] in
+            guard let documentLayer = document.layer.presentation(),
+                  let viewportLayer = scrollView.layer.presentation() else { return }
+            let scale = documentLayer.frame.width / document.bounds.width
+            if scale > 1.05, scale < 2.45 {
+                if response == nil {
+                    response = Task { try await reader.respond("a#10", width: 400, height: 40, verifiesLayout: false) }
+                }
+                if decoded {
+                    let point = viewportLayer.convert(CGPoint(x: 100, y: 160), from: documentLayer)
+                    XCTAssertEqual(point.x - viewportLayer.bounds.minX, 100, accuracy: 1)
+                    XCTAssertEqual(point.y - viewportLayer.bounds.minY, 160, accuracy: 1)
+                    if !checkedFocus { checkedFocus = true; checked.fulfill() }
+                }
+            }
+            if checkedFocus, abs(scale - 2.5) < 0.001 {
+                observer?.stop()
+                finished.fulfill()
+            }
+        }
+        observer.start()
+        defer { observer.stop() }
+        scrollView.zoom(to: ReaderZoomGeometry.targetRect(
+            contentPoint: CGPoint(x: 100, y: 160), viewportPoint: CGPoint(x: 100, y: 160),
+            viewportSize: scrollView.bounds.size, scale: 2.5
+        ), animated: true)
+        await fulfillment(of: [checked, finished, laidOut], timeout: 5)
+        try await response?.value
+    }
+
+    func testImageResizeAboveTheAnchorWaitsForMomentumToEnd() async throws {
+        let scrollView = MomentumScrollView()
+        let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 20, scrollView: scrollView)
+        let session = reader.subject.viewModel.imageSession
+        let leases = try ["a#2", "a#15"].map { session.acquire(try reader.descriptor($0), consumer: .visible) }
+        defer { leases.forEach(session.release) }
+        let offset = try reader.scroll(toPage: "a#10", pixelOffset: -100)
+        let placeholderHeight = try XCTUnwrap(reader.controller.pageFrame("a#2")?.height)
+        let contentOffset = scrollView.contentOffset
+        scrollView.simulatesDeceleration = true
+
+        // Above the anchor: correcting the offset now would stop the fling, so it waits.
+        try await reader.respond("a#2", width: 400, height: 4_000, verifiesLayout: false)
+        XCTAssertEqual(reader.controller.pageFrame("a#2")?.height, placeholderHeight)
+        XCTAssertEqual(scrollView.contentOffset, contentOffset)
+        // Below the anchor: no correction is needed, so it applies at once.
+        try await reader.respond("a#15", width: 400, height: 4_000)
+        XCTAssertEqual(scrollView.contentOffset, contentOffset)
+
+        scrollView.simulatesDeceleration = false
+        reader.controller.scrollViewDidEndDecelerating(scrollView)
+        let width = scrollView.bounds.width
+        let scale = reader.controller.traitCollection.displayScale
+        XCTAssertEqual(reader.controller.pageFrame("a#2")?.height, (width * 10 * scale).rounded(.down) / scale)
+        try reader.assertAnchor("a#10", offset)
+    }
+
     func testAnimatedZoomKeepsThePresentedViewportCoveredInBothDirections() async throws {
         let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 3)
         try await reader.respond("a#0", width: 400, height: 4_000)
@@ -525,7 +653,8 @@ final class MangaContinuousRendererTests: XCTestCase {
         initial: String,
         pageCount: Int,
         savedPage: Int? = nil,
-        windowSize: CGSize = CGSize(width: 390, height: 844)
+        windowSize: CGSize = CGSize(width: 390, height: 844),
+        scrollView: UIScrollView = UIScrollView()
     ) async throws -> RendererFixture {
         let images = GatedImageLoader()
         let pipeline = ImagePipeline {
@@ -548,7 +677,9 @@ final class MangaContinuousRendererTests: XCTestCase {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(origin: .zero, size: windowSize)
-        let controller = MangaContinuousCollectionViewController(viewModel: subject.viewModel, onToggleUI: {})
+        let controller = MangaContinuousCollectionViewController(
+            viewModel: subject.viewModel, onToggleUI: {}, scrollView: scrollView
+        )
         window.rootViewController = controller
         window.makeKeyAndVisible()
         controller.view.layoutIfNeeded()
@@ -615,9 +746,9 @@ private struct RendererFixture {
         XCTAssertEqual(anchor.pixelOffset, pixelOffset, accuracy: 0.001, file: file, line: line)
     }
 
-    /// Answers the page's image request once the session has made it, and checks the renderer
-    /// applied the size: the session notifies the renderer in the same pass as this test.
-    func respond(_ pageID: String, width: Int, height: Int) async throws {
+    /// Answers the page's image request once the session has made it, and by default checks the
+    /// renderer applied the size: the session notifies the renderer in the same pass as this test.
+    func respond(_ pageID: String, width: Int, height: Int, verifiesLayout: Bool = true) async throws {
         let descriptor = try descriptor(pageID)
         let url = try XCTUnwrap(descriptor.request.url)
         let decoded = test.expectation(description: "\(pageID) decoded")
@@ -628,11 +759,18 @@ private struct RendererFixture {
         images.respond(url, width: width, height: height)
         await test.fulfillment(of: [decoded], timeout: 5)
         observation.cancel()
+        guard verifiesLayout else { return }
         // The row is the image's height at the reader's width, rounded down to a whole pixel.
         let scale = controller.traitCollection.displayScale
         let imageHeight = controller.scrollView.bounds.width * CGFloat(height) / CGFloat(width)
         XCTAssertEqual(controller.pageFrame(pageID)?.height, (imageHeight * scale).rounded(.down) / scale)
     }
+}
+
+/// UIKit sets deceleration only from a real touch; tests mark the native momentum phase here.
+private final class MomentumScrollView: UIScrollView {
+    var simulatesDeceleration = false
+    override var isDecelerating: Bool { simulatesDeceleration || super.isDecelerating }
 }
 
 @MainActor

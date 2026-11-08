@@ -46,7 +46,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
     private let viewportRetention: MangaContinuousViewportRetention
     var onToggleUI: () -> Void
     let collectionView: UICollectionView
-    let scrollView = UIScrollView()
+    let scrollView: UIScrollView
     private let documentView = UIView()
     private var isCommittingLayout = false
     private var isChangingZoom = false
@@ -67,6 +67,8 @@ final class MangaContinuousCollectionViewController: UIViewController,
     private var imageObservations: [ReaderPageImageKey: ReaderImageObservation] = [:]
     /// Requests that failed; their rows make room for Try Again.
     private var failedKeys: Set<ReaderPageImageKey> = []
+    /// Image metadata received while native zoom or scrolling owns the document geometry.
+    private var pendingImageLayouts: [ReaderPageImageKey: (size: CGSize?, failed: Bool)] = [:]
     private var measuredHeights: [String: CGFloat] = [:]
 
     private var subscriptions: Set<AnyCancellable> = []
@@ -81,17 +83,21 @@ final class MangaContinuousCollectionViewController: UIViewController,
     var onLayoutCommitted: (() -> Void)?
 #endif
 
-    init(viewModel: MangaReaderViewModel, onToggleUI: @escaping () -> Void) {
+    init(viewModel: MangaReaderViewModel, onToggleUI: @escaping () -> Void, scrollView: UIScrollView = UIScrollView()) {
         self.viewModel = viewModel
         viewportRetention = viewModel.makeContinuousViewportRetention()
+        self.scrollView = scrollView
         self.onToggleUI = onToggleUI
         collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         super.init(nibName: nil, bundle: nil)
         collectionView.backgroundColor = .black
         collectionView.showsVerticalScrollIndicator = false
+        collectionView.showsHorizontalScrollIndicator = false
         collectionView.contentInsetAdjustmentBehavior = .never
         collectionView.isScrollEnabled = false
         scrollView.backgroundColor = .black
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.showsHorizontalScrollIndicator = false
         scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.minimumZoomScale = 1
         scrollView.maximumZoomScale = ReaderZoomGeometry.maximumScale
@@ -230,6 +236,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
         viewportRetention.invalidate()
         subscriptions.removeAll()
         cancelImageObservations { _ in true }
+        pendingImageLayouts = [:]
         pendingNavigation = nil
         animatingNavigation = nil
         for child in children {
@@ -276,6 +283,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
         guard !isCommittingLayout else { change(); return }
         isCommittingLayout = true
         let anchor = visibleAnchor()
+        let oldAnchorY = anchor.flatMap { pageFrame($0.pageID)?.minY }
         let zoomScale = scrollView.zoomScale
         let oldOffset = scrollView.contentOffset
         let previousRows = rows
@@ -289,25 +297,31 @@ final class MangaContinuousCollectionViewController: UIViewController,
         }
         layout.setFrames(nextFrames)
         let size = layout.collectionViewContentSize
-        documentView.bounds = CGRect(origin: .zero, size: size)
-        documentView.center = CGPoint(x: size.width * zoomScale / 2, y: size.height * zoomScale / 2)
-        scrollView.contentSize = CGSize(width: size.width * zoomScale, height: size.height * zoomScale)
+        let bounds = CGRect(origin: .zero, size: size)
+        let center = CGPoint(x: size.width * zoomScale / 2, y: size.height * zoomScale / 2)
+        let contentSize = CGSize(width: size.width * zoomScale, height: size.height * zoomScale)
+        if documentView.bounds != bounds { documentView.bounds = bounds }
+        if documentView.center != center { documentView.center = center }
+        if scrollView.contentSize != contentSize { scrollView.contentSize = contentSize }
         var offset = oldOffset
         let interrupted = animatingNavigation
         animatingNavigation = nil
         if let interrupted, let frame = pageFrame(interrupted.pageID) {
             offset.y = frame.minY * zoomScale
-        } else if let anchor, let frame = pageFrame(anchor.pageID) {
-            offset.y = frame.minY * zoomScale - anchor.pixelOffset
+        } else if let anchor, let oldAnchorY, let frame = pageFrame(anchor.pageID) {
+            offset.y += (frame.minY - oldAnchorY) * zoomScale
         }
         if !scrollView.isTracking && !scrollView.isDecelerating {
             offset.y = min(max(offset.y, 0), max(scrollView.contentSize.height - scrollView.bounds.height, 0))
             offset.x = min(max(offset.x, 0), max(scrollView.contentSize.width - scrollView.bounds.width, 0))
         }
-        isLandingNavigation = interrupted != nil
-        scrollView.setContentOffset(offset, animated: false)
+        // A flush nested in a landing's scroll callback must not end that landing.
+        let wasLanding = isLandingNavigation
+        isLandingNavigation = wasLanding || interrupted != nil
+        // Passive layout must not interrupt native zoom or momentum with a no-op scroll command.
+        if offset != scrollView.contentOffset { scrollView.setContentOffset(offset, animated: false) }
         updateRendererWindow()
-        isLandingNavigation = false
+        isLandingNavigation = wasLanding
         isCommittingLayout = false
         _ = refreshViewportRetention()
         if let interrupted { acknowledge(interrupted, landed: true, appendingIfNearEnd: false) }
@@ -439,6 +453,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
         cancelImageObservations { !liveKeys.contains($0) }
         pixelSizes = pixelSizes.filter { liveKeys.contains($0.key) }
         failedKeys.formIntersection(liveKeys)
+        pendingImageLayouts = pendingImageLayouts.filter { liveKeys.contains($0.key) }
         let session = viewModel.imageSession
         for descriptor in descriptors.values where imageObservations[descriptor.key] == nil {
             let key = descriptor.key
@@ -461,15 +476,45 @@ final class MangaContinuousCollectionViewController: UIViewController,
 
     private func imageStateChanged(_ state: ReaderPageImageState, key: ReaderPageImageKey) {
         guard !isInvalidated, imageObservations[key] != nil else { return }
-        let size = Self.validSize(state.pixelSize) ?? pixelSizes[key]
+        let current = pendingImageLayouts[key] ?? (pixelSizes[key], failedKeys.contains(key))
+        let size = Self.validSize(state.pixelSize) ?? current.size
         let failed: Bool
         if case .failed = state.phase { failed = true } else { failed = false }
-        guard size != pixelSizes[key] || failed != failedKeys.contains(key) else { return }
+        guard size != current.size || failed != current.failed else { return }
+        if deferImageLayout(of: key) {
+            pendingImageLayouts[key] = (size, failed)
+            return
+        }
         commitAnchored {
             pixelSizes[key] = size
+            pendingImageLayouts[key] = nil
             if failed { failedKeys.insert(key) } else { failedKeys.remove(key) }
         }
         reportViewport()
+    }
+
+    /// Native zoom and scrolling own the document while they run. A resize mid-zoom moves the
+    /// focus, and correcting the offset for a resize above the anchor stops momentum; those wait
+    /// until the motion ends. Resizes at or below the anchor need no correction and apply at once.
+    private func deferImageLayout(of key: ReaderPageImageKey) -> Bool {
+        if isChangingZoom || scrollView.isZooming { return true }
+        guard scrollView.isDragging || scrollView.isDecelerating,
+              let anchor = visibleAnchor(), let anchorRow = rowIndexByPageID[anchor.pageID] else { return false }
+        return imageKeyByPageID.contains { pageID, pageKey in
+            pageKey == key && (rowIndexByPageID[pageID] ?? Int.max) < anchorRow
+        }
+    }
+
+    private func commitPendingImageLayouts() {
+        guard !pendingImageLayouts.isEmpty, !isInvalidated else { return }
+        let pending = pendingImageLayouts
+        pendingImageLayouts = [:]
+        commitAnchored {
+            for (key, layout) in pending where imageObservations[key] != nil {
+                pixelSizes[key] = layout.size
+                if layout.failed { failedKeys.insert(key) } else { failedKeys.remove(key) }
+            }
+        }
     }
 
     private static func validSize(_ size: CGSize?) -> CGSize? {
@@ -582,16 +627,30 @@ final class MangaContinuousCollectionViewController: UIViewController,
         guard scrollView === self.scrollView else { return }
         recordViewportChange()
         updateRendererWindow()
+        // A programmatic jump can end momentum without a deceleration callback.
+        commitPendingImageLayoutsIfSettled()
         reportViewport()
         let isUserScroll = scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating
         if isUserScroll && !isChangingZoom && !scrollView.isZooming { appendIfNearEnd() }
     }
 
+    /// Applies deferred image layout once neither zoom, a touch, momentum nor an animated jump
+    /// owns the position. Animated scrolls start only from navigation, tracked as `animatingNavigation`.
+    private func commitPendingImageLayoutsIfSettled() {
+        guard !isCommittingLayout, !isChangingZoom, animatingNavigation == nil, !scrollView.isZooming,
+              !scrollView.isDragging, !scrollView.isDecelerating else { return }
+        commitPendingImageLayouts()
+    }
+
     func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
         guard scrollView === self.scrollView else { return }
-        guard let request = animatingNavigation else { return }
+        guard let request = animatingNavigation else {
+            commitPendingImageLayoutsIfSettled()
+            return
+        }
         animatingNavigation = nil
         acknowledge(request, landed: true, appendingIfNearEnd: true)
+        commitPendingImageLayoutsIfSettled()
         reportViewport()
     }
 
@@ -602,6 +661,18 @@ final class MangaContinuousCollectionViewController: UIViewController,
         guard let request = animatingNavigation else { return }
         animatingNavigation = nil
         acknowledge(request, landed: false, appendingIfNearEnd: false)
+    }
+
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        guard scrollView === self.scrollView, !decelerate, !isChangingZoom else { return }
+        commitPendingImageLayouts()
+        reportViewport()
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        guard scrollView === self.scrollView, !isChangingZoom else { return }
+        commitPendingImageLayouts()
+        reportViewport()
     }
 
     func viewForZooming(in scrollView: UIScrollView) -> UIView? {
@@ -622,10 +693,12 @@ final class MangaContinuousCollectionViewController: UIViewController,
         recordViewportChange()
         updateRendererWindow()
         _ = refreshViewportRetention()
+        commitPendingImageLayoutsIfSettled()
     }
 
     func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
         isChangingZoom = false
+        commitPendingImageLayouts()
         updateRendererWindow()
         reportViewport()
     }
@@ -746,6 +819,7 @@ final class MangaContinuousCollectionViewLayout: UICollectionViewLayout {
     private var contentSize: CGSize = .zero
 
     func setFrames(_ frames: [CGRect]) {
+        guard self.frames != frames else { return }
         self.frames = frames
         attributes = frames.enumerated().map { index, frame in
             let attribute = UICollectionViewLayoutAttributes(forCellWith: IndexPath(item: index, section: 0))
