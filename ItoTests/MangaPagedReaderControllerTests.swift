@@ -139,7 +139,7 @@ final class MangaPagedReaderControllerTests: XCTestCase {
     // MARK: - Fixtures
 
     /// Waits until `position` is shown and no slide is still moving.
-    private func waitUntilShown(_ position: Int, _ controller: MangaPagedReaderController<Text>) {
+    private func waitUntilShown(_ position: Int, _ controller: MangaPagedReaderController) {
         let shown = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             self.shownPosition(controller) == position && !controller.isTransitioning
         }, object: nil)
@@ -165,11 +165,11 @@ final class MangaPagedReaderControllerTests: XCTestCase {
         )
     }
 
-    private func mount(_ configuration: MangaPagedReaderView<Text>) throws -> MangaPagedReaderController<Text> {
+    private func mount(_ configuration: MangaPagedReaderView<Text>) throws -> MangaPagedReaderController {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
-        let controller = MangaPagedReaderController<Text>()
+        let controller = MangaPagedReaderController()
         controller.update(with: configuration)
         window.rootViewController = controller
         window.makeKeyAndVisible()
@@ -178,15 +178,15 @@ final class MangaPagedReaderControllerTests: XCTestCase {
         return controller
     }
 
-    private func pager(_ controller: MangaPagedReaderController<Text>) throws -> UIPageViewController {
+    private func pager(_ controller: MangaPagedReaderController) throws -> UIPageViewController {
         try XCTUnwrap(controller.children.first as? UIPageViewController)
     }
 
-    private func shownPosition(_ controller: MangaPagedReaderController<Text>) -> Int? {
+    private func shownPosition(_ controller: MangaPagedReaderController) -> Int? {
         position(controller.children.first.flatMap { ($0 as? UIPageViewController)?.viewControllers?.first })
     }
 
     private func position(_ viewController: UIViewController?) -> Int? {
-        (viewController as? MangaPagedPageHost<Text>)?.position
+        (viewController as? MangaPagedPageHost)?.position
     }
 }
