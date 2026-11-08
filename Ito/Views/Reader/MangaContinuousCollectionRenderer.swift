@@ -3,9 +3,8 @@ import SwiftUI
 import UIKit
 import ito_runner
 
-/// The continuous (Vertical/Webtoon) reader. A collection view with a deterministic layout owns
-/// every frame and the scroll offset: each row's height is known before it is laid out, and any
-/// change of rows or heights keeps the topmost visible page at the same pixel on screen.
+/// The continuous reader: one native scroll view owns the viewport and zoom, while a
+/// viewport-sized collection view renders rows in logical document coordinates.
 struct MangaContinuousReaderView: UIViewControllerRepresentable {
     let viewModel: MangaReaderViewModel
     let onToggleUI: () -> Void
@@ -44,8 +43,17 @@ final class MangaContinuousCollectionViewController: UIViewController,
     static let appendDistanceInViewports: CGFloat = 1
 
     let viewModel: MangaReaderViewModel
+    private let viewportRetention: MangaContinuousViewportRetention
     var onToggleUI: () -> Void
     let collectionView: UICollectionView
+    let scrollView: UIScrollView
+    private let documentView = UIView()
+    private var isCommittingLayout = false
+    private var isChangingZoom = false
+    private var viewportEpoch: UInt64 = 0
+    private var observedViewportBounds: CGRect = .null
+    private var observedZoomScale: CGFloat = 1
+    private let doubleTap = UITapGestureRecognizer()
     private let layout = MangaContinuousCollectionViewLayout()
 
     private var snapshot: MangaContinuousReaderSnapshot?
@@ -59,6 +67,8 @@ final class MangaContinuousCollectionViewController: UIViewController,
     private var imageObservations: [ReaderPageImageKey: ReaderImageObservation] = [:]
     /// Requests that failed; their rows make room for Try Again.
     private var failedKeys: Set<ReaderPageImageKey> = []
+    /// Image metadata received while native zoom or scrolling owns the document geometry.
+    private var pendingImageLayouts: [ReaderPageImageKey: (size: CGSize?, failed: Bool)] = [:]
     private var measuredHeights: [String: CGFloat] = [:]
 
     private var subscriptions: Set<AnyCancellable> = []
@@ -73,24 +83,41 @@ final class MangaContinuousCollectionViewController: UIViewController,
     var onLayoutCommitted: (() -> Void)?
 #endif
 
-    init(viewModel: MangaReaderViewModel, onToggleUI: @escaping () -> Void) {
+    init(viewModel: MangaReaderViewModel, onToggleUI: @escaping () -> Void, scrollView: UIScrollView = UIScrollView()) {
         self.viewModel = viewModel
+        viewportRetention = viewModel.makeContinuousViewportRetention()
+        self.scrollView = scrollView
         self.onToggleUI = onToggleUI
         collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         super.init(nibName: nil, bundle: nil)
         collectionView.backgroundColor = .black
         collectionView.showsVerticalScrollIndicator = false
+        collectionView.showsHorizontalScrollIndicator = false
         collectionView.contentInsetAdjustmentBehavior = .never
+        collectionView.isScrollEnabled = false
+        scrollView.backgroundColor = .black
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.contentInsetAdjustmentBehavior = .never
+        scrollView.minimumZoomScale = 1
+        scrollView.maximumZoomScale = ReaderZoomGeometry.maximumScale
+        scrollView.delegate = self
+        scrollView.addSubview(documentView)
+        documentView.addSubview(collectionView)
         collectionView.register(
             MangaContinuousHostingCell.self,
             forCellWithReuseIdentifier: MangaContinuousHostingCell.reuseID
         )
         collectionView.dataSource = self
         collectionView.delegate = self
-        // Image pages and the chapter prompts handle their own taps; this covers the rest.
         let tap = UITapGestureRecognizer(target: self, action: #selector(backgroundTapped))
         tap.delegate = self
-        collectionView.addGestureRecognizer(tap)
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.addTarget(self, action: #selector(doubleTapped(_:)))
+        doubleTap.delegate = self
+        tap.require(toFail: doubleTap)
+        scrollView.addGestureRecognizer(tap)
+        scrollView.addGestureRecognizer(doubleTap)
         // `@Published` delivers the current value on subscription, then each new one before the
         // property changes; only the delivered value is read.
         viewModel.$continuousSnapshot
@@ -107,25 +134,68 @@ final class MangaContinuousCollectionViewController: UIViewController,
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    override func loadView() { view = collectionView }
+    override func loadView() { view = scrollView }
 
     @objc private func backgroundTapped() { onToggleUI() }
 
-    /// The controls toggle on taps nothing else handles: dividers, text pages and gaps. Image
-    /// pages handle their own taps in every state, and a prompt does unless it is loading.
+    @objc private func doubleTapped(_ recognizer: UITapGestureRecognizer) {
+        let physicalPoint = recognizer.location(in: scrollView)
+        let viewportPoint = CGPoint(
+            x: physicalPoint.x - scrollView.bounds.minX,
+            y: physicalPoint.y - scrollView.bounds.minY
+        )
+        let scale: CGFloat = scrollView.zoomScale > 1 ? 1 : ReaderZoomGeometry.doubleTapScale
+        scrollView.zoom(to: ReaderZoomGeometry.targetRect(
+            contentPoint: recognizer.location(in: documentView),
+            viewportPoint: viewportPoint,
+            viewportSize: scrollView.bounds.size,
+            scale: scale
+        ), animated: true)
+    }
+
+    var documentViewport: CGRect {
+        ReaderZoomGeometry.documentViewport(
+            contentOffset: scrollView.contentOffset,
+            viewportSize: scrollView.bounds.size,
+            scale: scrollView.zoomScale
+        )
+    }
+
+    /// Magnified overscan stays below two unzoomed viewports, independent of document length.
+    private func updateRendererWindow() {
+        // A native zoom-in sets its destination before its displayed transform arrives.
+        // Cover the outgoing tap-focused viewport without depending on callback timing.
+        let padding = max(0, 1 - 1 / scrollView.zoomScale)
+        let coveredArea = documentViewport.insetBy(
+            dx: -scrollView.bounds.width * padding,
+            dy: -scrollView.bounds.height * padding
+        ).intersection(documentView.bounds)
+        let viewport = coveredArea.isNull ? CGRect.zero : coveredArea
+        // Virtualization must not inherit the outer scroll view's zoom animation.
+        UIView.performWithoutAnimation {
+            collectionView.frame = viewport
+            collectionView.bounds = viewport
+            collectionView.layoutIfNeeded()
+        }
+    }
+
+    /// Ready images and background content use the native tap pair. Placeholders, retry
+    /// buttons and chapter prompts retain their own actions.
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         let point = touch.location(in: collectionView)
         guard let index = layout.rowIndices(in: CGRect(x: point.x, y: point.y, width: 1, height: 1)).first,
               layout.frames[index].contains(point) else { return true }
         switch rows[index] {
         case .previousChapter:
-            return snapshot?.loadingPrevious == true
+            return gestureRecognizer !== doubleTap && snapshot?.loadingPrevious == true
         case .nextChapter:
-            return snapshot?.loadingNext == true
+            return gestureRecognizer !== doubleTap && snapshot?.loadingNext == true
         case .divider:
             return true
         case .page(let id):
             guard let page = pagesByID[id], case .url = page.page.content else { return true }
+            guard let key = imageKeyByPageID[id] else { return false }
+            if case .ready = viewModel.imageSession.state(for: key).phase { return true }
             return false
         }
     }
@@ -140,9 +210,10 @@ final class MangaContinuousCollectionViewController: UIViewController,
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        if collectionView.bounds.width != layoutWidth {
+        if scrollView.bounds.width != layoutWidth {
             commitAnchored {}
         }
+        updateRendererWindow()
         performPendingNavigation()
         reportViewport()
     }
@@ -162,10 +233,15 @@ final class MangaContinuousCollectionViewController: UIViewController,
     /// Stops every callback into the view model; the controller is being removed.
     func invalidate() {
         isInvalidated = true
+        viewportRetention.invalidate()
         subscriptions.removeAll()
         cancelImageObservations { _ in true }
+        pendingImageLayouts = [:]
         pendingNavigation = nil
         animatingNavigation = nil
+        for child in children {
+            if let host = child as? UIHostingController<AnyView> { MangaContinuousHostingCell.detach(host) }
+        }
     }
 
     // MARK: - Snapshot
@@ -204,33 +280,51 @@ final class MangaContinuousCollectionViewController: UIViewController,
     /// moved, so that page stays at the same pixel. Runs synchronously: no later pass corrects
     /// the position. A jump still animating lands at once on its page's new position.
     private func commitAnchored(_ change: () -> Void) {
+        guard !isCommittingLayout else { change(); return }
+        isCommittingLayout = true
         let anchor = visibleAnchor()
+        let oldAnchorY = anchor.flatMap { pageFrame($0.pageID)?.minY }
+        let zoomScale = scrollView.zoomScale
+        let oldOffset = scrollView.contentOffset
+        let previousRows = rows
+        let previousFrames = layout.frames
+        let previousWidth = layoutWidth
         change()
-        layoutWidth = collectionView.bounds.width
-        layout.setFrames(frames(width: layoutWidth))
-        var offset = collectionView.contentOffset
+        layoutWidth = scrollView.bounds.width
+        let nextFrames = frames(width: layoutWidth)
+        if rows != previousRows || nextFrames != previousFrames || layoutWidth != previousWidth {
+            viewportEpoch &+= 1
+        }
+        layout.setFrames(nextFrames)
+        let size = layout.collectionViewContentSize
+        let bounds = CGRect(origin: .zero, size: size)
+        let center = CGPoint(x: size.width * zoomScale / 2, y: size.height * zoomScale / 2)
+        let contentSize = CGSize(width: size.width * zoomScale, height: size.height * zoomScale)
+        if documentView.bounds != bounds { documentView.bounds = bounds }
+        if documentView.center != center { documentView.center = center }
+        if scrollView.contentSize != contentSize { scrollView.contentSize = contentSize }
+        var offset = oldOffset
         let interrupted = animatingNavigation
         animatingNavigation = nil
         if let interrupted, let frame = pageFrame(interrupted.pageID) {
-            offset.y = frame.minY
-        } else if let anchor, let frame = pageFrame(anchor.pageID) {
-            offset.y = frame.minY - anchor.pixelOffset
+            offset.y = frame.minY * zoomScale
+        } else if let anchor, let oldAnchorY, let frame = pageFrame(anchor.pageID) {
+            offset.y += (frame.minY - oldAnchorY) * zoomScale
         }
-        if !collectionView.isTracking && !collectionView.isDecelerating {
-            let maximum = max(layout.collectionViewContentSize.height - collectionView.bounds.height, 0)
-            offset.y = min(max(offset.y, 0), maximum)
+        if !scrollView.isTracking && !scrollView.isDecelerating {
+            offset.y = min(max(offset.y, 0), max(scrollView.contentSize.height - scrollView.bounds.height, 0))
+            offset.x = min(max(offset.x, 0), max(scrollView.contentSize.width - scrollView.bounds.width, 0))
         }
-        // The scroll this causes reports nothing of its own while a jump lands.
-        isLandingNavigation = interrupted != nil
-        if interrupted != nil {
-            // Unlike assigning `contentOffset`, this also stops the running animation.
-            collectionView.setContentOffset(offset, animated: false)
-        } else if offset != collectionView.contentOffset {
-            collectionView.contentOffset = offset
-        }
-        collectionView.layoutIfNeeded()
-        isLandingNavigation = false
-        if let interrupted { acknowledge(interrupted, landed: true) }
+        // A flush nested in a landing's scroll callback must not end that landing.
+        let wasLanding = isLandingNavigation
+        isLandingNavigation = wasLanding || interrupted != nil
+        // Passive layout must not interrupt native zoom or momentum with a no-op scroll command.
+        if offset != scrollView.contentOffset { scrollView.setContentOffset(offset, animated: false) }
+        updateRendererWindow()
+        isLandingNavigation = wasLanding
+        isCommittingLayout = false
+        _ = refreshViewportRetention()
+        if let interrupted { acknowledge(interrupted, landed: true, appendingIfNearEnd: false) }
 #if DEBUG
         onLayoutCommitted?()
 #endif
@@ -322,18 +416,18 @@ final class MangaContinuousCollectionViewController: UIViewController,
     /// below, but one used as the anchor would push it away. Only without a page below, the
     /// nearest one above.
     func visibleAnchor() -> (pageID: String, pixelOffset: CGFloat)? {
-        let viewport = collectionView.bounds
+        let viewport = documentViewport
         let midline = viewport.midY
         let candidates = visiblePageIDs().compactMap { id in pageFrame(id).map { (id: id, frame: $0) } }
         let anchor = candidates.first { $0.frame.minY <= midline && midline < $0.frame.maxY }
             ?? candidates.first { $0.frame.minY > midline }
             ?? candidates.last
         guard let anchor else { return nil }
-        return (anchor.id, anchor.frame.minY - viewport.minY)
+        return (anchor.id, (anchor.frame.minY - viewport.minY) * scrollView.zoomScale)
     }
 
     func visiblePageIDs() -> [String] {
-        let viewport = collectionView.bounds
+        let viewport = documentViewport
         guard viewport.height > 0 else { return [] }
         return layout.rowIndices(in: viewport).compactMap { index in
             guard case .page(let id) = rows[index] else { return nil }
@@ -359,6 +453,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
         cancelImageObservations { !liveKeys.contains($0) }
         pixelSizes = pixelSizes.filter { liveKeys.contains($0.key) }
         failedKeys.formIntersection(liveKeys)
+        pendingImageLayouts = pendingImageLayouts.filter { liveKeys.contains($0.key) }
         let session = viewModel.imageSession
         for descriptor in descriptors.values where imageObservations[descriptor.key] == nil {
             let key = descriptor.key
@@ -381,15 +476,45 @@ final class MangaContinuousCollectionViewController: UIViewController,
 
     private func imageStateChanged(_ state: ReaderPageImageState, key: ReaderPageImageKey) {
         guard !isInvalidated, imageObservations[key] != nil else { return }
-        let size = Self.validSize(state.pixelSize) ?? pixelSizes[key]
+        let current = pendingImageLayouts[key] ?? (pixelSizes[key], failedKeys.contains(key))
+        let size = Self.validSize(state.pixelSize) ?? current.size
         let failed: Bool
         if case .failed = state.phase { failed = true } else { failed = false }
-        guard size != pixelSizes[key] || failed != failedKeys.contains(key) else { return }
+        guard size != current.size || failed != current.failed else { return }
+        if deferImageLayout(of: key) {
+            pendingImageLayouts[key] = (size, failed)
+            return
+        }
         commitAnchored {
             pixelSizes[key] = size
+            pendingImageLayouts[key] = nil
             if failed { failedKeys.insert(key) } else { failedKeys.remove(key) }
         }
         reportViewport()
+    }
+
+    /// Native zoom and scrolling own the document while they run. A resize mid-zoom moves the
+    /// focus, and correcting the offset for a resize above the anchor stops momentum; those wait
+    /// until the motion ends. Resizes at or below the anchor need no correction and apply at once.
+    private func deferImageLayout(of key: ReaderPageImageKey) -> Bool {
+        if isChangingZoom || scrollView.isZooming { return true }
+        guard scrollView.isDragging || scrollView.isDecelerating,
+              let anchor = visibleAnchor(), let anchorRow = rowIndexByPageID[anchor.pageID] else { return false }
+        return imageKeyByPageID.contains { pageID, pageKey in
+            pageKey == key && (rowIndexByPageID[pageID] ?? Int.max) < anchorRow
+        }
+    }
+
+    private func commitPendingImageLayouts() {
+        guard !pendingImageLayouts.isEmpty, !isInvalidated else { return }
+        let pending = pendingImageLayouts
+        pendingImageLayouts = [:]
+        commitAnchored {
+            for (key, layout) in pending where imageObservations[key] != nil {
+                pixelSizes[key] = layout.size
+                if layout.failed { failedKeys.insert(key) } else { failedKeys.remove(key) }
+            }
+        }
     }
 
     private static func validSize(_ size: CGSize?) -> CGSize? {
@@ -408,72 +533,197 @@ final class MangaContinuousCollectionViewController: UIViewController,
     }
 
     private func performPendingNavigation() {
-        guard let request = pendingNavigation, collectionView.bounds.height > 0,
+        guard let request = pendingNavigation, scrollView.bounds.height > 0,
               let frame = pageFrame(request.pageID) else { return }
-        let maximum = max(layout.collectionViewContentSize.height - collectionView.bounds.height, 0)
-        let target = CGPoint(x: 0, y: min(max(frame.minY, 0), maximum))
+        viewportEpoch &+= 1
+        let maximum = max(scrollView.contentSize.height - scrollView.bounds.height, 0)
+        let target = CGPoint(x: scrollView.contentOffset.x, y: min(max(frame.minY * scrollView.zoomScale, 0), maximum))
         pendingNavigation = nil
-        if request.animated && target != collectionView.contentOffset {
+        if request.animated && target != scrollView.contentOffset {
             animatingNavigation = request
-            collectionView.setContentOffset(target, animated: true)
+            scrollView.setContentOffset(target, animated: true)
         } else {
-            // The scroll this causes reports nothing of its own; the acknowledgement does.
             animatingNavigation = nil
             isLandingNavigation = true
-            collectionView.setContentOffset(target, animated: false)
-            collectionView.layoutIfNeeded()
+            scrollView.setContentOffset(target, animated: false)
+            updateRendererWindow()
             isLandingNavigation = false
-            acknowledge(request, landed: true)
+            _ = refreshViewportRetention()
+            acknowledge(request, landed: true, appendingIfNearEnd: false)
+            settleIfAtRest()
         }
     }
 
     /// Ends a jump. One that landed makes its page current even if a sliver of the page above
     /// shows; one a drag took over leaves the choice to what is on screen.
-    private func acknowledge(_ request: MangaScrollRequest, landed: Bool) {
-        let pageIDs = visiblePageIDs()
-        lastReportedPageIDs = pageIDs
-        // Delivered after this UIKit pass, never while SwiftUI or the view model is mid-update.
+    private func acknowledge(_ request: MangaScrollRequest, landed: Bool, appendingIfNearEnd: Bool) {
+        recordViewportChange()
+        let epoch = viewportEpoch
+        // Consume only the request still owned by the view model. If geometry changes before
+        // delivery, acknowledge the current viewport rather than publishing a stale landing.
         DispatchQueue.main.async { [weak self] in
-            guard let self, !self.isInvalidated else { return }
+            guard let self, !self.isInvalidated, self.viewModel.scrollTarget == request else { return }
+            let isCurrentLanding = landed && self.viewportEpoch == epoch
+            let pageIDs = self.visiblePageIDs()
             self.viewModel.consumeScrollTarget(request)
-            self.viewModel.continuousViewportChanged(pageIDs, preferredPageID: landed ? request.pageID : nil)
+            guard self.pendingNavigation == nil, !self.isChangingZoom,
+                  !self.scrollView.isZooming, !self.scrollView.isZoomBouncing else { return }
+            guard !pageIDs.isEmpty else { return }
+            self.lastReportedPageIDs = pageIDs
+            self.viewModel.continuousViewportChanged(
+                pageIDs,
+                preferredPageID: isCurrentLanding ? request.pageID : nil
+            )
+            if appendingIfNearEnd { self.appendIfNearEnd() }
         }
+    }
+
+    /// Eviction protection is synchronous and never advances reading progress.
+    private func refreshViewportRetention() -> [String] {
+        guard !isInvalidated, !isCommittingLayout, !isLandingNavigation else { return [] }
+        let pageIDs = visiblePageIDs()
+        viewportRetention.update(pageIDs)
+        return pageIDs
     }
 
     /// Reports the pages on screen when they change. A restore or jump not yet started owns the
     /// position, so nothing is reported until it is applied; an animated jump's passing pages are
     /// reported, and its landing makes its page current.
     private func reportViewport() {
-        guard !isInvalidated, pendingNavigation == nil, !isLandingNavigation else { return }
-        let pageIDs = visiblePageIDs()
+        let pageIDs = refreshViewportRetention()
+        recordViewportChange()
+        guard !isInvalidated, pendingNavigation == nil, !isLandingNavigation,
+              !isCommittingLayout, !isChangingZoom, !scrollView.isZooming, !scrollView.isZoomBouncing else { return }
         guard !pageIDs.isEmpty, pageIDs != lastReportedPageIDs else { return }
-        lastReportedPageIDs = pageIDs
+        let epoch = viewportEpoch
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.isInvalidated else { return }
-            self.viewModel.continuousViewportChanged(pageIDs)
+            let deliveredPageIDs: [String]
+            if self.viewportEpoch == epoch {
+                deliveredPageIDs = pageIDs
+            } else {
+                guard self.pendingNavigation == nil, !self.isLandingNavigation,
+                      !self.isCommittingLayout, !self.isChangingZoom,
+                      !self.scrollView.isZooming, !self.scrollView.isZoomBouncing else { return }
+                deliveredPageIDs = self.visiblePageIDs()
+            }
+            guard !deliveredPageIDs.isEmpty, deliveredPageIDs != self.lastReportedPageIDs else { return }
+            self.lastReportedPageIDs = deliveredPageIDs
+            self.viewModel.continuousViewportChanged(deliveredPageIDs)
         }
     }
 
+    /// Scheduling a report is not a viewport change. Native movement and geometry invalidate
+    /// captured landings; duplicate delegate callbacks for the same bounds do not.
+    private func recordViewportChange() {
+        let bounds = scrollView.bounds
+        let scale = scrollView.zoomScale
+        guard bounds != observedViewportBounds || scale != observedZoomScale else { return }
+        observedViewportBounds = bounds
+        observedZoomScale = scale
+        viewportEpoch &+= 1
+    }
+
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard scrollView === self.scrollView else { return }
+        recordViewportChange()
+        updateRendererWindow()
+        // A programmatic jump can end momentum without a deceleration callback.
+        commitPendingImageLayoutsIfSettled()
         reportViewport()
         let isUserScroll = scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating
-        if isUserScroll { appendIfNearEnd() }
+        if isUserScroll && !isChangingZoom && !scrollView.isZooming { appendIfNearEnd() }
+    }
+
+    /// Applies deferred image layout once neither zoom, a touch, momentum nor an animated jump
+    /// owns the position. Animated scrolls start only from navigation, tracked as `animatingNavigation`.
+    private func commitPendingImageLayoutsIfSettled() {
+        guard !isCommittingLayout, !isChangingZoom, animatingNavigation == nil, !scrollView.isZooming,
+              !scrollView.isDragging, !scrollView.isDecelerating else { return }
+        commitPendingImageLayouts()
     }
 
     func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
-        guard let request = animatingNavigation else { return }
+        guard scrollView === self.scrollView else { return }
+        guard let request = animatingNavigation else {
+            commitPendingImageLayoutsIfSettled()
+            settleIfAtRest()
+            return
+        }
         animatingNavigation = nil
-        acknowledge(request, landed: true)
-        // A footer jump to the last page counts as reaching the end.
-        appendIfNearEnd()
+        acknowledge(request, landed: true, appendingIfNearEnd: true)
+        commitPendingImageLayoutsIfSettled()
+        settleIfAtRest()
+        reportViewport()
+    }
+
+    /// A page or chapter jump can end a fling without a deceleration callback; once nothing
+    /// moves the viewport, chapters held loaded meanwhile can be dropped.
+    private func settleIfAtRest() {
+        guard !isCommittingLayout, !isChangingZoom, animatingNavigation == nil, !scrollView.isZooming,
+              !scrollView.isDragging, !scrollView.isDecelerating else { return }
+        viewportSettled()
     }
 
     /// A drag takes over from a jump still animating: the jump is over, and the page on screen
     /// is whatever the drag shows.
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        guard scrollView === self.scrollView else { return }
+        viewportRetention.setMoving(true)
         guard let request = animatingNavigation else { return }
         animatingNavigation = nil
-        acknowledge(request, landed: false)
+        acknowledge(request, landed: false, appendingIfNearEnd: false)
+    }
+
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        guard scrollView === self.scrollView, !decelerate, !isChangingZoom else { return }
+        commitPendingImageLayouts()
+        viewportSettled()
+        reportViewport()
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        guard scrollView === self.scrollView, !isChangingZoom else { return }
+        commitPendingImageLayouts()
+        viewportSettled()
+        reportViewport()
+    }
+
+    /// The user stopped moving the viewport: chapters held loaded meanwhile can be dropped now,
+    /// with their position correction applied at rest instead of during the gesture.
+    private func viewportSettled() {
+        viewportRetention.setMoving(false)
+        viewModel.continuousViewportSettled()
+    }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+        scrollView === self.scrollView ? documentView : nil
+    }
+
+    func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {
+        isChangingZoom = true
+        viewportRetention.setMoving(true)
+        viewportEpoch &+= 1
+        lastReportedPageIDs = []
+        if let request = animatingNavigation {
+            animatingNavigation = nil
+            acknowledge(request, landed: false, appendingIfNearEnd: false)
+        }
+    }
+
+    func scrollViewDidZoom(_ scrollView: UIScrollView) {
+        recordViewportChange()
+        updateRendererWindow()
+        _ = refreshViewportRetention()
+        commitPendingImageLayoutsIfSettled()
+    }
+
+    func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
+        isChangingZoom = false
+        commitPendingImageLayouts()
+        updateRendererWindow()
+        if !scrollView.isDragging, !scrollView.isDecelerating { viewportSettled() }
+        reportViewport()
     }
 
     /// Asks for the next chapter when the user scrolls near the bottom of the last page. Only
@@ -483,7 +733,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
               view.window != nil, let lastPage = snapshot.pages.last, let frame = pageFrame(lastPage.id) else {
             return
         }
-        let viewport = collectionView.bounds
+        let viewport = documentViewport
         guard frame.maxY - viewport.maxY <= viewport.height * Self.appendDistanceInViewports else { return }
         let revision = snapshot.revision
         DispatchQueue.main.async { [weak self] in
@@ -508,9 +758,20 @@ final class MangaContinuousCollectionViewController: UIViewController,
             withReuseIdentifier: MangaContinuousHostingCell.reuseID,
             for: indexPath
         )
-        let row = rows[indexPath.item]
-        (cell as? MangaContinuousHostingCell)?.host(content(for: row), row: row, parent: self)
+        (cell as? MangaContinuousHostingCell)?.configure(row: rows[indexPath.item])
         return cell
+    }
+
+    func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
+        guard !isInvalidated, rows.indices.contains(indexPath.item),
+              let cell = cell as? MangaContinuousHostingCell else { return }
+        let row = rows[indexPath.item]
+        cell.host(content(for: row), row: row, parent: self)
+    }
+
+    func collectionView(_ collectionView: UICollectionView, didEndDisplaying cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
+        // The callback's old index path may no longer describe the current snapshot.
+        (cell as? MangaContinuousHostingCell)?.stopDisplaying()
     }
 
     private func content(for row: MangaContinuousRow) -> AnyView {
@@ -537,7 +798,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
                 session: viewModel.imageSession,
                 pageID: page.id,
                 fillsRowWidth: true,
-                onImageTap: { [weak self] in self?.onToggleUI() },
+                interaction: .continuous(onTap: { [weak self] in self?.onToggleUI() }),
                 imageLabel: String(localized: "Page \(page.chapterPosition + 1)", comment: "Accessibility label of a manga page; number is its position in the chapter")
             ))
         case .text(let text):
@@ -581,6 +842,7 @@ final class MangaContinuousCollectionViewLayout: UICollectionViewLayout {
     private var contentSize: CGSize = .zero
 
     func setFrames(_ frames: [CGRect]) {
+        guard self.frames != frames else { return }
         self.frames = frames
         attributes = frames.enumerated().map { index, frame in
             let attribute = UICollectionViewLayoutAttributes(forCellWith: IndexPath(item: index, section: 0))
@@ -621,6 +883,7 @@ final class MangaContinuousCollectionViewLayout: UICollectionViewLayout {
 private final class MangaContinuousHostingCell: UICollectionViewCell {
     static let reuseID = "MangaContinuousHostingCell"
     private var hostingController: UIHostingController<AnyView>?
+    private var row: MangaContinuousRow?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -631,32 +894,53 @@ private final class MangaContinuousHostingCell: UICollectionViewCell {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    /// Shows `content`. Keyed by `row`, so a reused cell never carries one page's state (a zoom,
-    /// an image lease) over to another.
+    func configure(row: MangaContinuousRow) {
+        if self.row != row { stopDisplaying() }
+        self.row = row
+    }
+
+    /// Only displayed cells own a live hosted subtree and its visible image lease.
     func host(_ content: AnyView, row: MangaContinuousRow, parent: UIViewController) {
+        configure(row: row)
         let rootView = AnyView(
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .ignoresSafeArea()
                 .id(row)
         )
-        if let hostingController {
-            hostingController.rootView = rootView
-            return
+        let controller: UIHostingController<AnyView>
+        if let existing = hostingController {
+            controller = existing
+            controller.rootView = rootView
+        } else {
+            controller = UIHostingController(rootView: rootView)
+            controller.view.backgroundColor = .clear
+            hostingController = controller
         }
-        let controller = UIHostingController(rootView: rootView)
-        controller.view.backgroundColor = .clear
-        parent.addChild(controller)
+        let attaching = controller.parent !== parent
+        if attaching { parent.addChild(controller) }
         controller.view.frame = contentView.bounds
         controller.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        contentView.addSubview(controller.view)
-        controller.didMove(toParent: parent)
-        hostingController = controller
+        if controller.view.superview !== contentView { contentView.addSubview(controller.view) }
+        if attaching { controller.didMove(toParent: parent) }
+    }
+
+    func stopDisplaying() {
+        if let hostingController { Self.detach(hostingController) }
+    }
+
+    static func detach(_ controller: UIHostingController<AnyView>) {
+        controller.rootView = AnyView(EmptyView())
+        guard controller.parent != nil || controller.view.superview != nil else { return }
+        controller.willMove(toParent: nil)
+        controller.view.removeFromSuperview()
+        controller.removeFromParent()
     }
 
     override func prepareForReuse() {
         super.prepareForReuse()
-        hostingController?.rootView = AnyView(EmptyView())
+        stopDisplaying()
+        row = nil
     }
 }
 

@@ -254,10 +254,10 @@ final class ReaderPageImageSession {
         entry.isPrefetchQueued = false
         prefetchOrder.removeAll { $0 == key }
         let imageRequest = ImageRequest(urlRequest: request)
-        // A page shown again whose image is still in memory appears at once, without a spinner.
-        if entry.leases.values.contains(.visible),
-           let image = pipeline.cache.cachedImage(for: imageRequest, caches: [.memory])?.image {
-            entry.phase = .ready(image)
+        // An image still in memory needs no request: a page shown again appears at once, and a
+        // prefetch that precedes the page's view does not turn that into a spinner.
+        if let image = pipeline.cache.cachedImage(for: imageRequest, caches: [.memory])?.image {
+            entry.phase = entry.leases.values.contains(.visible) ? .ready(image) : .idle
             entry.pixelSize = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
             entries[key] = entry
             publish(key)

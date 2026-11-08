@@ -339,7 +339,8 @@ struct NovelReaderView: View {
                 headers: page.headers,
                 session: viewModel.imageSession,
                 pageID: pageID,
-                foreground: viewModel.theme.textColor
+                foreground: viewModel.theme.textColor,
+                interaction: .passive
             )
                 .padding(.horizontal)
         }

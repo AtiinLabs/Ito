@@ -75,7 +75,25 @@ extension MangaReaderViewModelTests {
 
         subject.viewModel.goToNextChapter()
 
-        XCTAssertEqual(subject.imagePrefetcher.batches.last?.map(\.index), [1, 2])
+        XCTAssertEqual(subject.imagePrefetcher.batches.last?.map(\.index), [0, 1, 2])
+    }
+
+    func testTurningToAPageKeepsItsDownloadInThePrefetchWindow() async {
+        let subject = makeSubject(chapters: [makeChapter("a", number: 1)], preload: 2)
+        subject.loader.enqueue(
+            .pages((0..<5).map { page(Int32($0), url: "https://example.com/\($0)") }),
+            for: "a"
+        )
+        subject.viewModel.start()
+        await waitForReader { subject.viewModel.loadPhase == .content }
+
+        // Dropping page 1 from the window here would cancel its download just before its view
+        // asks for it, so it would start over.
+        subject.viewModel.nextPage()
+        XCTAssertEqual(subject.imagePrefetcher.batches.last?.map(\.index), [1, 2, 3])
+        // The last page keeps itself, without reaching past the chapter.
+        subject.viewModel.setPagedIndex(4)
+        XCTAssertEqual(subject.imagePrefetcher.batches.last?.map(\.index), [4])
     }
 
     func testReadingModeChoiceIsRestoredAndSaved() async {

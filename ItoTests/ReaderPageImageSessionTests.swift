@@ -30,7 +30,8 @@ final class ReaderPageImageSessionTests: XCTestCase {
             urlStr: url.absoluteString,
             headers: nil,
             session: session,
-            pageID: descriptor.pageID
+            pageID: descriptor.pageID,
+            interaction: .passive
         )
         let window = UIWindow(frame: UIScreen.main.bounds)
         let controller = UIHostingController(rootView: image)
@@ -269,6 +270,38 @@ final class ReaderPageImageSessionTests: XCTestCase {
         session.release(second)
         session.deactivate()
     }
+
+    func testAPrefetchBeforeThePageViewKeepsAMemoryImageInstant() async throws {
+        let images = GatedImageLoader()
+        let pipeline = ImagePipeline {
+            $0.dataLoader = images
+            $0.imageCache = ImageCache()
+            $0.dataCache = nil
+        }
+        let session = ReaderPageImageSession(pipeline: pipeline)
+        let url = try XCTUnwrap(URL(string: "https://memory-session.test/turned.png"))
+        let descriptor = ReaderPageImageDescriptor(pageID: "page", request: URLRequest(url: url))
+        let ready = expectation(description: "the page loads")
+        let observation = session.observe(descriptor.key) { state in
+            if case .ready = state.phase { ready.fulfill() }
+        }
+        let first = session.acquire(descriptor, consumer: .visible)
+        await images.waitForRequest(url)
+        images.respond(url, width: 300, height: 900)
+        await fulfillment(of: [ready], timeout: 5)
+        observation.cancel()
+        session.release(first)
+
+        // A page button turns back: the window's prefetch reaches the page before its view does.
+        session.setPrefetch([descriptor])
+        let second = session.acquire(descriptor, consumer: .visible)
+        if case .ready = session.state(for: descriptor.key).phase {} else {
+            XCTFail("A prefetch must not hide an image already in memory behind a spinner.")
+        }
+        XCTAssertEqual(images.requestCount, 1)
+        session.release(second)
+        session.deactivate()
+    }
 }
 
 private final class ReaderSessionURLProtocol: URLProtocol {
@@ -291,12 +324,12 @@ private final class ReaderSessionURLProtocol: URLProtocol {
         lock.withLock { hosts.insert(host) }
     }
 
-    override class func canInit(with request: URLRequest) -> Bool {
+    override static func canInit(with request: URLRequest) -> Bool {
         guard let host = request.url?.host else { return false }
         return lock.withLock { hosts.contains(host) }
     }
 
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
         Self.lock.withLock {

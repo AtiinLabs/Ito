@@ -32,6 +32,57 @@ struct FlatPage: Identifiable {
     }
 }
 
+/// The end of the continuous chapter window that last grew.
+enum ContinuousLoadedEnd {
+    case top
+    case bottom
+}
+
+/// The renderer's latest physical viewport, independent of persisted reading progress.
+@MainActor
+final class MangaContinuousViewportRetention {
+    private(set) var pageIDs: [String]?
+    private(set) var isValid = true
+    /// A finger or momentum is moving the viewport. Dropping chapters above it then needs a
+    /// scroll-position correction in the middle of native motion, which interferes with it.
+    private(set) var isMoving = false
+
+    func update(_ pageIDs: [String]) {
+        guard isValid, self.pageIDs != pageIDs else { return }
+        self.pageIDs = pageIDs
+    }
+
+    func setMoving(_ moving: Bool) {
+        guard isValid else { return }
+        isMoving = moving
+    }
+
+    func invalidate() {
+        isValid = false
+        isMoving = false
+        pageIDs = nil
+    }
+}
+
+/// Only the newest attached renderer can protect the chapter window.
+@MainActor
+struct MangaContinuousViewportRetentionRegistry {
+    private weak var latest: MangaContinuousViewportRetention?
+
+    mutating func makeLease() -> MangaContinuousViewportRetention {
+        let lease = MangaContinuousViewportRetention()
+        latest = lease
+        return lease
+    }
+
+    func protectionIDs(fallback: Set<String>, validPages: [String: Int]) -> Set<String>? {
+        guard let latest, latest.isValid else { return fallback }
+        guard let pageIDs = latest.pageIDs, !latest.isMoving else { return nil }
+        let mapped = Set(pageIDs.filter { validPages[$0] != nil })
+        return mapped.isEmpty ? nil : mapped
+    }
+}
+
 /// A request for the continuous reader to scroll to a page, by `FlatPage.id`.
 struct MangaScrollRequest: Equatable {
     /// Distinguishes requests with the same payload, so a lifecycle check never mistakes a new

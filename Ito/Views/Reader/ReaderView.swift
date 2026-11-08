@@ -130,42 +130,50 @@ struct ReaderView: View {
 
     // MARK: - Paged Reader (RTL/LTR)
 
+    /// Each page view owns its tap: a SwiftUI tap around a page's UIKit zoom view would also
+    /// fire for the taps the page already handles, toggling the controls twice.
     private var pagedReader: some View {
-        TabView(
-            selection: Binding(
-                get: { viewModel.pagedIndex },
-                set: { viewModel.setPagedIndex($0) }
-            )
-        ) {
-            if let previous = viewModel.chapterBefore(viewModel.currentChapter) {
-                loadingChapterView(chapter: previous, isNext: false)
-                    .tag(-1)
-            }
-
-            ForEach(Array(viewModel.pagedPages.enumerated()), id: \.offset) { position, page in
-                pageImage(
-                    for: page,
-                    number: position + 1,
-                    pageID: FlatPage.id(chapterKey: viewModel.currentChapter.key, position: position)
-                )
-                    .tag(position)
-            }
-
-            if let next = viewModel.chapterAfter(viewModel.currentChapter) {
-                loadingChapterView(chapter: next, isNext: true)
-                    .tag(viewModel.pagedPages.count)
-            }
-        }
-        .tabViewStyle(.page(indexDisplayMode: .never))
-        .id(viewModel.currentChapter.key)
-        .environment(
-            \.layoutDirection,
-            (viewModel.activeViewer == .Rtl || viewModel.activeViewer == .Default)
-                ? .rightToLeft
-                : .leftToRight
+        let chapter = viewModel.currentChapter
+        let pages = viewModel.pagedPages
+        let previous = viewModel.chapterBefore(chapter)
+        let next = viewModel.chapterAfter(chapter)
+        let isRightToLeft = viewModel.activeViewer == .Rtl || viewModel.activeViewer == .Default
+        return MangaPagedReaderView(
+            chapterKey: chapter.key,
+            pageCount: pages.count,
+            hasPrevious: previous != nil,
+            hasNext: next != nil,
+            index: viewModel.pagedIndex,
+            isRightToLeft: isRightToLeft,
+            content: { position in
+                // Pages keep a left-to-right layout: the reading direction only orders them, and
+                // a right-to-left environment would mirror the page's UIKit zoom view.
+                pagedPosition(position, chapter: chapter, pages: pages, previous: previous, next: next)
+            },
+            onIndexChange: { viewModel.setPagedIndex($0) }
         )
-        // Pages handle their own taps (so a double tap can zoom); this covers the space around them.
-        .onTapGesture(perform: toggleUI)
+    }
+
+    /// A pager position: the previous chapter's loading page (-1), a page, or the next chapter's.
+    @ViewBuilder
+    private func pagedPosition(
+        _ position: Int,
+        chapter: Manga.Chapter,
+        pages: [Page],
+        previous: Manga.Chapter?,
+        next: Manga.Chapter?
+    ) -> some View {
+        if position < 0, let previous {
+            loadingChapterView(chapter: previous, isNext: false)
+        } else if pages.indices.contains(position) {
+            pageImage(
+                for: pages[position],
+                number: position + 1,
+                pageID: FlatPage.id(chapterKey: chapter.key, position: position)
+            )
+        } else if let next {
+            loadingChapterView(chapter: next, isNext: true)
+        }
     }
 
     // MARK: - Continuous Reader (Vertical/Webtoon)
@@ -191,6 +199,8 @@ struct ReaderView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 400, maxHeight: .infinity, alignment: .center)
         .padding(40)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: toggleUI)
     }
 
     /// `number` is the page's place in its chapter, read out for image pages; text pages read
@@ -204,14 +214,16 @@ struct ReaderView: View {
                 headers: page.headers,
                 session: viewModel.imageSession,
                 pageID: pageID,
-                onImageTap: toggleUI,
+                interaction: .pagedZoom(onTap: toggleUI),
                 imageLabel: String(localized: "Page \(number)", comment: "Accessibility label of a manga page; number is its position in the chapter")
             )
         case .text(let text):
             Text(text)
                 .foregroundColor(.white)
                 .padding()
-                .frame(maxWidth: .infinity, alignment: .center)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: toggleUI)
         }
     }
 

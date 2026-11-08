@@ -431,7 +431,8 @@ class PageContentViewController: UIViewController {
                 headers: image.headers,
                 session: imageSession,
                 pageID: "novel-paged-\(page?.chapterID.uuidString ?? "")-\(index)",
-                foreground: foreground
+                foreground: foreground,
+                interaction: .passive
             )
         )
         host.view.backgroundColor = .clear

@@ -1,6 +1,20 @@
 import SwiftUI
 import UIKit
 
+/// The reader mode chooses zoom ownership independently of image loading and tap callbacks.
+enum MangaImageInteraction {
+    case passive
+    case continuous(onTap: () -> Void)
+    case pagedZoom(onTap: () -> Void)
+
+    var tapAction: (() -> Void)? {
+        switch self {
+        case .passive: nil
+        case .continuous(let action), .pagedZoom(let action): action
+        }
+    }
+}
+
 struct MangaImage: View {
     let urlStr: String
     let headers: [String: String]?
@@ -12,7 +26,7 @@ struct MangaImage: View {
     /// sizes each row to the image rounded down to a whole pixel and clips the rest, so pages
     /// meet without a gap.
     var fillsRowWidth = false
-    var onImageTap: (() -> Void)?
+    let interaction: MangaImageInteraction
     var imageLabel = String(localized: "Illustration", comment: "Accessibility label of a manga page image")
 
     @State private var imageState = ReaderPageImageState(phase: .idle, pixelSize: nil, revision: 0)
@@ -23,13 +37,13 @@ struct MangaImage: View {
         Group {
             if let image = readyImage {
                 loadedImage(image)
-            } else if let onImageTap {
+            } else if let tapAction = interaction.tapAction {
                 // Cover the whole row, including empty space below a short placeholder.
                 // Try Again keeps its own button action.
                 placeholder
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .contentShape(Rectangle())
-                    .onTapGesture(perform: onImageTap)
+                    .onTapGesture(perform: tapAction)
             } else {
                 placeholder
             }
@@ -92,11 +106,18 @@ struct MangaImage: View {
 
     @ViewBuilder
     private func loadedImage(_ image: UIImage) -> some View {
-        if let onImageTap {
-            ZoomablePage(onTap: onImageTap) { page(image) }
-                .accessibilityLabel(imageLabel)
-        } else {
+        switch interaction {
+        case .passive:
             page(image).accessibilityLabel(imageLabel)
+        case .continuous(let onTap):
+            // The continuous viewport owns loaded-page taps and zoom; placeholders keep
+            // their own fallback tap so the retry button can retain its button action.
+            page(image)
+                .accessibilityLabel(imageLabel)
+                .accessibilityAction { onTap() }
+        case .pagedZoom(let onTap):
+            NativeReaderImageZoom(image: image, onTap: onTap, imageLabel: imageLabel)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
