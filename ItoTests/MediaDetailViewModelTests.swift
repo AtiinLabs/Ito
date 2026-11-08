@@ -841,54 +841,6 @@ final class MediaDetailViewModelTests: XCTestCase {
         XCTAssertEqual(selectedChapter.key, "n1")
     }
 
-    func testBaselineRunsOnlyForSavedLoadedMediaAndDeduplicatesRecomputation() async {
-        let unsaved = makeMangaSubject(media: manga(chapters: [chapter("c1", 1)]))
-        unsaved.viewModel.start()
-        await waitUntil { unsaved.viewModel.detailLoadState == .content }
-        XCTAssertTrue(unsaved.baseline.requests.isEmpty)
-
-        let saved = makeMangaSubject(media: manga(chapters: [chapter("c1", 1), chapter("c2", 2)]), saved: true)
-        saved.viewModel.start()
-        saved.viewModel.start()
-        await waitUntil { saved.baseline.requests.count == 1 }
-        XCTAssertEqual(saved.baseline.requests.first?.media, saved.viewModel.mediaIdentity)
-        XCTAssertEqual(saved.baseline.requests.first?.knownChapterCount, 2)
-        saved.viewModel.appear()
-        saved.viewModel.appear()
-        await Task.yield()
-        XCTAssertEqual(saved.baseline.requests.count, 1)
-    }
-
-    func testBaselineFailureDoesNotCorruptDetailState() async {
-        let subject = makeMangaSubject(saved: true)
-        subject.baseline.error = MediaDetailTestFailure.expected
-        subject.viewModel.start()
-        await waitUntil { subject.baseline.requests.count == 1 }
-        await Task.yield()
-        XCTAssertEqual(subject.viewModel.detailLoadState, .content)
-        XCTAssertTrue(subject.messages.messages.isEmpty)
-    }
-
-    func testPostRelinkBaselineUsesCurrentIdentityAndCount() async {
-        let selected = manga(key: "m2", title: "Selected", chapters: [chapter("c1", 1), chapter("c2", 2)])
-        let subject = makeMangaSubject(saved: true)
-        subject.route.searchResponses = [.value([selected])]
-        subject.route.loadResponses = [.value(selected)]
-        subject.library.stateOnRefresh = MediaDetailLibraryState(
-            records: [MediaDetailLibraryRecord(itemID: "m2", pluginID: Self.pluginID, mediaKind: .manga)],
-            hasCustomCategories: false
-        )
-        subject.viewModel.openRelink()
-        await waitUntil { subject.viewModel.relinkSearchState == .results }
-        await subject.viewModel.performRelink(with: selected)
-        let relinked = MediaIdentity(pluginId: Self.pluginID, itemId: "m2", mediaKind: .manga)
-        await waitUntil { subject.baseline.requests.contains { $0.media == relinked } }
-
-        let current = subject.baseline.requests.last
-        XCTAssertEqual(current?.media, relinked)
-        XCTAssertEqual(current?.knownChapterCount, 2)
-    }
-
     func testDiscordLifecycleIsIdempotentAndDeterministic() {
         let subject = makeMangaSubject(media: manga(title: "Discord", cover: "cover"))
         let identity = subject.viewModel.mediaIdentity
@@ -1012,9 +964,9 @@ final class MediaDetailViewModelTests: XCTestCase {
 
     // MARK: - Subjects
 
-    private static let pluginID = "plugin.test"
+    static let pluginID = "plugin.test"
 
-    private struct MangaSubject {
+    struct MangaSubject {
         let viewModel: MediaDetailViewModel<Manga>
         let route: MediaRouteHarness<Manga>
         let library: MediaDetailLibraryFake
@@ -1043,7 +995,7 @@ final class MediaDetailViewModelTests: XCTestCase {
         let runner: ItoRunner
     }
 
-    private func makeMangaSubject(
+    func makeMangaSubject(
         media providedMedia: Manga? = nil,
         libraryState explicitState: MediaDetailLibraryState? = nil,
         saved: Bool = false,
@@ -1210,7 +1162,7 @@ final class MediaDetailViewModelTests: XCTestCase {
         )
     }
 
-    private func manga(
+    func manga(
         key: String = "m1",
         title: String = "Manga",
         cover: String? = nil,
@@ -1236,7 +1188,7 @@ final class MediaDetailViewModelTests: XCTestCase {
         Novel(key: key, title: title, chapters: chapters)
     }
 
-    private func chapter(_ key: String, _ number: Float?, date: Double? = nil) -> Manga.Chapter {
+    func chapter(_ key: String, _ number: Float?, date: Double? = nil) -> Manga.Chapter {
         Manga.Chapter(key: key, title: key, chapter: number, dateUpdated: date)
     }
 

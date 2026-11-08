@@ -413,14 +413,20 @@ public class UpdateManager: ObservableObject {
                 }
 
                 let oldCount = dbItem.knownChapterCount
+                // A source that refuses or fails a request can still answer with an empty list.
+                // That is not evidence its chapters are gone, and taking it as the new baseline
+                // would report every chapter as new on the next real answer.
+                let refusedEmpty = update.freshCount == 0 && (oldCount ?? 0) > 0
                 let delta = oldCount.map { max(0, update.freshCount - $0) } ?? 0
-                dbItem.knownChapterCount = update.freshCount
+                if !refusedEmpty {
+                    dbItem.knownChapterCount = update.freshCount
+                    if let status = update.status {
+                        dbItem.status = status
+                    }
+                }
                 dbItem.lastCheckedAt = checkedAt
                 if delta > 0 {
                     dbItem.lastUpdatedAt = checkedAt
-                }
-                if let status = update.status {
-                    dbItem.status = status
                 }
                 try dbItem.update(db)
                 var unread = try badge.fetchOne(db)?.count ?? 0

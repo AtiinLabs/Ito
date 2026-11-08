@@ -680,11 +680,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             } catch is CancellationError {
                 self?.publishDetailCancellation(operationID: operationID)
             } catch {
-                self?.publishDetailFailure(
-                    operationID: operationID,
-                    mediaKey: requestedKey,
-                    advanceBaselineWhenFinished: advanceBaselineWhenFinished
-                )
+                self?.publishDetailFailure(operationID: operationID, mediaKey: requestedKey)
             }
         }
         detailTask = task
@@ -755,6 +751,9 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         guard isSaved else { return }
         let identity = mediaIdentity
         let count = media.chapterList?.distinctChapterCount ?? 0
+        // An empty list is not evidence that the chapters are gone (a source can return one when
+        // a request is refused), so it does not overwrite the known count or clear the badge.
+        guard count > 0 else { return }
         let signature = "\(identity.pluginId)|\(identity.mediaKind.rawValue)|\(identity.canonicalMediaId)|\(count)"
         guard !completedBaselineSignatures.contains(signature) else { return }
         baselineTask?.cancel()
@@ -884,11 +883,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         logFinished(kind: .detailLoad, operationID: operationID, outcome: .cancelled)
     }
 
-    private func publishDetailFailure(
-        operationID: UUID,
-        mediaKey: String,
-        advanceBaselineWhenFinished: Bool
-    ) {
+    private func publishDetailFailure(operationID: UUID, mediaKey: String) {
         guard isCurrentDetailOperation(operationID, mediaKey: mediaKey) else { return }
         detailOperationID = nil
         detailTask = nil
@@ -901,9 +896,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             operationID: operationID,
             outcome: .failed(.pluginExecution)
         )
-        if advanceBaselineWhenFinished {
-            beginBaselineAdvanceIfNeeded()
-        }
+        // The new chapters were not shown, so the badge and the known chapter count stay as
+        // they are: the saved chapter list is older than the one the last update check counted.
     }
 
     /// Opens what History asked for, or says why it cannot.
