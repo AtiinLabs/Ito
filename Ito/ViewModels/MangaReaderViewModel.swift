@@ -64,6 +64,8 @@ final class MangaReaderViewModel: ObservableObject {
     private var appendOperationID: UUID?
     private var prependTask: Task<Void, Never>?
     private var prependOperationID: UUID?
+    /// A chapter-window trim that waited for the viewport to stop moving.
+    private var pendingTrim: ContinuousLoadedEnd?
     private var effectTasks: [UUID: Task<Void, Never>] = [:]
     /// Page writes run one after another so an older write cannot land after a newer one.
     private var pageWriteTask: Task<Void, Never>?
@@ -853,34 +855,35 @@ final class MangaReaderViewModel: ObservableObject {
     /// Drops loaded chapters beyond `maximumLoadedSegments` from the end away from the one
     /// that just grew, keeping one chapter past the current one. Skips an end that is still
     /// loading, whose result is matched against that end.
-    private func trimLoadedSegments(awayFrom grownEnd: LoadedEnd) {
+    private func trimLoadedSegments(awayFrom grownEnd: ContinuousLoadedEnd) {
         guard segments.count > Self.maximumLoadedSegments,
               flatPages.indices.contains(continuousPageIndex) else { return }
         let current = flatPages[continuousPageIndex]
-        let excess = segments.count - Self.maximumLoadedSegments
+        // Unknown or moving live geometry waits: dropping chapters above the reader then needs
+        // a large position correction in the middle of a gesture or a fling.
         guard let protectedIDs = continuousViewportRetention.protectionIDs(
-            fallback: visiblePageIDs, validPages: flatPageIndexByID) else { return }
-
+            fallback: visiblePageIDs, validPages: flatPageIndexByID) else { pendingTrim = grownEnd; return }
+        pendingTrim = nil
+        let excess = segments.count - Self.maximumLoadedSegments
+        let visibleSegments = protectedIDs.compactMap { flatPageIndexByID[$0] }.map { flatPages[$0].segmentIndex }
         switch grownEnd {
         case .bottom:
-            let firstVisible = protectedIDs.compactMap { flatPageIndexByID[$0] }.map { flatPages[$0].segmentIndex }.min()
-            let removable = min(current.segmentIndex - 1, firstVisible ?? Int.max)
+            let removable = min(current.segmentIndex - 1, visibleSegments.min() ?? Int.max)
             guard prependOperationID == nil, removable > 0 else { return }
             segments.removeFirst(min(excess, removable))
         case .top:
-            let lastVisible = protectedIDs.compactMap { flatPageIndexByID[$0] }.map { flatPages[$0].segmentIndex }.max()
-            let removable = min(
-                segments.count - 1 - (current.segmentIndex + 1),
-                lastVisible.map { segments.count - 1 - $0 } ?? Int.max
-            )
+            let removable = min(segments.count - 2 - current.segmentIndex, segments.count - 1 - (visibleSegments.max() ?? 0))
             guard appendOperationID == nil, removable > 0 else { return }
             segments.removeLast(min(excess, removable))
         }
     }
 
-    private enum LoadedEnd {
-        case top
-        case bottom
+    /// The renderer's viewport stopped moving: a trim it held back can drop chapters now.
+    func continuousViewportSettled() {
+        guard isActive, !isPaged, let end = pendingTrim else { return }
+        beginContinuousMutation()
+        defer { endContinuousMutation() }
+        trimLoadedSegments(awayFrom: end)
     }
 
     private func finishPrependFailure(

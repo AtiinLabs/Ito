@@ -550,6 +550,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
             isLandingNavigation = false
             _ = refreshViewportRetention()
             acknowledge(request, landed: true, appendingIfNearEnd: false)
+            settleIfAtRest()
         }
     }
 
@@ -646,18 +647,29 @@ final class MangaContinuousCollectionViewController: UIViewController,
         guard scrollView === self.scrollView else { return }
         guard let request = animatingNavigation else {
             commitPendingImageLayoutsIfSettled()
+            settleIfAtRest()
             return
         }
         animatingNavigation = nil
         acknowledge(request, landed: true, appendingIfNearEnd: true)
         commitPendingImageLayoutsIfSettled()
+        settleIfAtRest()
         reportViewport()
+    }
+
+    /// A page or chapter jump can end a fling without a deceleration callback; once nothing
+    /// moves the viewport, chapters held loaded meanwhile can be dropped.
+    private func settleIfAtRest() {
+        guard !isCommittingLayout, !isChangingZoom, animatingNavigation == nil, !scrollView.isZooming,
+              !scrollView.isDragging, !scrollView.isDecelerating else { return }
+        viewportSettled()
     }
 
     /// A drag takes over from a jump still animating: the jump is over, and the page on screen
     /// is whatever the drag shows.
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         guard scrollView === self.scrollView else { return }
+        viewportRetention.setMoving(true)
         guard let request = animatingNavigation else { return }
         animatingNavigation = nil
         acknowledge(request, landed: false, appendingIfNearEnd: false)
@@ -666,13 +678,22 @@ final class MangaContinuousCollectionViewController: UIViewController,
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
         guard scrollView === self.scrollView, !decelerate, !isChangingZoom else { return }
         commitPendingImageLayouts()
+        viewportSettled()
         reportViewport()
     }
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         guard scrollView === self.scrollView, !isChangingZoom else { return }
         commitPendingImageLayouts()
+        viewportSettled()
         reportViewport()
+    }
+
+    /// The user stopped moving the viewport: chapters held loaded meanwhile can be dropped now,
+    /// with their position correction applied at rest instead of during the gesture.
+    private func viewportSettled() {
+        viewportRetention.setMoving(false)
+        viewModel.continuousViewportSettled()
     }
 
     func viewForZooming(in scrollView: UIScrollView) -> UIView? {
@@ -681,6 +702,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
 
     func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {
         isChangingZoom = true
+        viewportRetention.setMoving(true)
         viewportEpoch &+= 1
         lastReportedPageIDs = []
         if let request = animatingNavigation {
@@ -700,6 +722,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
         isChangingZoom = false
         commitPendingImageLayouts()
         updateRendererWindow()
+        if !scrollView.isDragging, !scrollView.isDecelerating { viewportSettled() }
         reportViewport()
     }
 

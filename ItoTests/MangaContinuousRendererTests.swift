@@ -462,6 +462,59 @@ final class MangaContinuousRendererTests: XCTestCase {
         XCTAssertEqual(reader.subject.viewModel.currentChapter.key, "c1")
     }
 
+    func testChaptersAboveAreDroppedOnlyOnceTheUserStopsScrolling() async throws {
+        let chapters = (1...6).map { chapter("c\($0)", Float32($0)) }
+        let reader = try await openReader(chapters: chapters, initial: "c1", pageCount: 2)
+        for key in ["c2", "c3", "c4"] {
+            reader.subject.loader.enqueue(.pages(pages(key, count: 2)), for: key)
+            reader.subject.viewModel.appendNextChapter()
+            await reader.subject.viewModel.waitForTestingOperations()
+        }
+        let offset = try reader.scroll(toPage: "c4#1", pixelOffset: -100)
+        await waitUntil { reader.subject.viewModel.currentChapter.key == "c4" }
+        let controller = reader.controller
+        let contentOffset = controller.scrollView.contentOffset
+
+        // The fifth chapter arrives while the finger moves the page: dropping the first one now
+        // would move the content by a whole chapter in the middle of the gesture.
+        controller.scrollViewWillBeginDragging(controller.scrollView)
+        reader.subject.loader.enqueue(.pages(pages("c5", count: 2)), for: "c5")
+        reader.subject.viewModel.appendNextChapter()
+        await reader.subject.viewModel.waitForTestingOperations()
+        XCTAssertEqual(reader.subject.viewModel.segments.map(\.chapter.key), ["c1", "c2", "c3", "c4", "c5"])
+        XCTAssertEqual(controller.scrollView.contentOffset, contentOffset)
+        try reader.assertAnchor("c4#1", offset)
+
+        // Released without momentum: the window shrinks at rest and the page stays put.
+        controller.scrollViewDidEndDragging(controller.scrollView, willDecelerate: false)
+        await waitUntil { reader.subject.viewModel.segments.count == 4 }
+        XCTAssertEqual(reader.subject.viewModel.segments.map(\.chapter.key), ["c2", "c3", "c4", "c5"])
+        try reader.assertAnchor("c4#1", offset)
+    }
+
+    func testAChapterJumpThatEndsAFlingAlsoDropsHeldChapters() async throws {
+        let chapters = (1...6).map { chapter("c\($0)", Float32($0)) }
+        let reader = try await openReader(chapters: chapters, initial: "c1", pageCount: 2)
+        for key in ["c2", "c3", "c4"] {
+            reader.subject.loader.enqueue(.pages(pages(key, count: 2)), for: key)
+            reader.subject.viewModel.appendNextChapter()
+            await reader.subject.viewModel.waitForTestingOperations()
+        }
+        _ = try reader.scroll(toPage: "c4#1", pixelOffset: -100)
+        await waitUntil { reader.subject.viewModel.currentChapter.key == "c4" }
+        reader.controller.scrollViewWillBeginDragging(reader.controller.scrollView)
+        reader.subject.loader.enqueue(.pages(pages("c5", count: 2)), for: "c5")
+        reader.subject.viewModel.appendNextChapter()
+        await reader.subject.viewModel.waitForTestingOperations()
+        XCTAssertEqual(reader.subject.viewModel.segments.count, 5)
+
+        // The chapter button lands on the loaded next chapter without a deceleration callback.
+        reader.subject.viewModel.goToNextChapter()
+        await waitUntil { reader.subject.viewModel.segments.count == 4 }
+        XCTAssertEqual(reader.subject.viewModel.segments.map(\.chapter.key), ["c2", "c3", "c4", "c5"])
+        XCTAssertEqual(reader.controller.visibleAnchor()?.pageID, "c5#0")
+    }
+
     func testImageSizeBelowViewportDoesNotStopNativeScrolling() async throws {
         let reader = try await openReader(chapters: [chapter("a", 1)], initial: "a", pageCount: 20)
         let descriptor = try reader.descriptor("a#10")
