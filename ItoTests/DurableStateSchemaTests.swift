@@ -100,6 +100,29 @@ struct DurableStateSchemaTests {
                 ],
                 primaryKey: ["id"],
                 nullable: ["originatingEpoch", "pauseReason", "lastAttemptAt", "lastErrorCategory"]
+            ),
+            "downloadedChapter": .init(
+                columns: [
+                    "pluginId", "mediaKind", "canonicalMediaId", "chapterKey", "authorityScope", "versionId",
+                    "state", "damageReason", "contentKind", "pageCount", "byteCount", "manifestFormatVersion",
+                    "manifestSHA256", "chapterSnapshot", "seriesTitle", "sourceEpoch", "verifiedAt"
+                ],
+                primaryKey: ["pluginId", "mediaKind", "canonicalMediaId", "chapterKey", "authorityScope"],
+                nullable: ["damageReason", "sourceEpoch"]
+            ),
+            "downloadJob": .init(
+                columns: [
+                    "id", "pluginId", "mediaKind", "canonicalMediaId", "chapterKey", "authorityScope",
+                    "entrySnapshot", "chapterSnapshot", "seriesTitle", "sourceEpoch", "state", "waitingReason",
+                    "failureReason", "stagingVersionId", "attemptCount", "createdAt", "updatedAt"
+                ],
+                primaryKey: ["id"],
+                nullable: ["sourceEpoch", "waitingReason", "failureReason", "stagingVersionId"]
+            ),
+            "downloadStore": .init(
+                columns: ["id", "storeId", "createdAt"],
+                primaryKey: ["id"],
+                nullable: []
             )
         ]
         let preexistingTables: Set<String> = [
@@ -129,7 +152,8 @@ struct DurableStateSchemaTests {
                 ("readProgressNumber", "idx_readProgressNumber_media", ["pluginId", "mediaKind", "canonicalMediaId"]),
                 ("trackerLink", "idx_trackerLink_provider", ["providerId", "remoteMediaId"]),
                 ("pluginIdentityAlias", "idx_pluginIdentityAlias_suiteDomain", ["suiteDomain"]),
-                ("legacyDefaultsOutcome", "idx_legacyDefaultsOutcome_inbox", ["sourceDomain", "sourceKey", "fingerprint"])
+                ("legacyDefaultsOutcome", "idx_legacyDefaultsOutcome_inbox", ["sourceDomain", "sourceKey", "fingerprint"]),
+                ("downloadedChapter", "idx_downloadedChapter_media", ["pluginId", "mediaKind", "canonicalMediaId"])
             ]
             for (table, name, columns) in requiredIndexes {
                 let index = try #require(db.indexes(on: table).first { $0.name == name })

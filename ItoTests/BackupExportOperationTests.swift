@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import Testing
+import ito_runner
 @testable import Ito
 
 struct BackupExportOperationTests {
@@ -490,6 +491,79 @@ struct BackupExportOperationTests {
                 """,
             arguments: [domain, key, contentClass.rawValue, payload, fingerprint]
         )
+    }
+
+    @Test func offlineChapterTablesAreNeverExported() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let date = Date(timeIntervalSince1970: 1_234)
+        try await database.dbPool.write { db in
+            try insertCompletePreferenceCatalog(in: db)
+            try DownloadStoreRecord(storeId: UUID().uuidString, createdAt: date).insert(db)
+            try DownloadedChapterRecord(
+                pluginId: "plugin.test",
+                mediaKind: .manga,
+                canonicalMediaId: "series-1",
+                chapterKey: "chapter-1",
+                authorityScope: .publicUnscoped,
+                versionId: UUID().uuidString,
+                state: .verified,
+                damageReason: nil,
+                contentKind: .images,
+                pageCount: 1,
+                byteCount: 4,
+                manifestFormatVersion: 1,
+                manifestSHA256: String(repeating: "a", count: 64),
+                chapterSnapshot: Data("{}".utf8),
+                seriesTitle: "Series",
+                sourceEpoch: "epoch",
+                verifiedAt: date
+            ).insert(db)
+            try DownloadJobRecord(
+                id: UUID().uuidString,
+                pluginId: "plugin.test",
+                mediaKind: .manga,
+                canonicalMediaId: "series-1",
+                chapterKey: "chapter-2",
+                authorityScope: .publicUnscoped,
+                entrySnapshot: Data("{}".utf8),
+                chapterSnapshot: Data("{}".utf8),
+                seriesTitle: "Series",
+                sourceEpoch: "epoch",
+                state: .queued,
+                waitingReason: nil,
+                failureReason: nil,
+                stagingVersionId: nil,
+                attemptCount: 0,
+                createdAt: date,
+                updatedAt: date
+            ).insert(db)
+        }
+        let destination = try ExportDestination()
+        defer { destination.cleanup() }
+        let operation = BackupExportOperation(
+            dbPool: database.dbPool,
+            sourceDatabaseURL: database.databaseURL,
+            standardApplicationDomain: appDomain,
+            readinessGate: {}
+        )
+
+        try await operation.export(to: destination.url)
+
+        let exported = try DatabaseQueue(path: destination.url.path)
+        defer { try? exported.close() }
+        let exportedCounts = try await exported.read { db in
+            try ["downloadedChapter", "downloadJob", "downloadStore"].map { try rowCount($0, in: db) }
+        }
+        #expect(exportedCounts == [0, 0, 0])
+        let sourceCounts = try await database.dbPool.read { db in
+            [
+                try rowCount("downloadedChapter", in: db),
+                try rowCount("downloadJob", in: db),
+                try rowCount("downloadStore", in: db)
+            ]
+        }
+        #expect(sourceCounts == [1, 1, 1])
     }
 
     private func rowCount(_ table: String, in db: Database) throws -> Int {
