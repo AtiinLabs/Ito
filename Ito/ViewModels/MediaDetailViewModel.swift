@@ -7,126 +7,13 @@ private enum MediaDetailViewModelError: Error {
     case unsupportedMediaType
 }
 
-enum ChapterSortOrder: String, CaseIterable {
-    case descending = "High to Low"
-    case ascending = "Low to High"
-    case dateDescending = "Newest First"
-    case dateAscending = "Oldest First"
-
-    var icon: String {
-        switch self {
-        case .descending: return "arrow.down.to.line"
-        case .ascending: return "arrow.up.to.line"
-        case .dateDescending: return "calendar.badge.clock"
-        case .dateAscending: return "calendar"
-        }
-    }
-
-    var localizedTitle: String {
-        switch self {
-        case .descending: return String(localized: "High to Low")
-        case .ascending: return String(localized: "Low to High")
-        case .dateDescending: return String(localized: "Newest First")
-        case .dateAscending: return String(localized: "Oldest First")
-        }
-    }
-}
-
-enum ChapterFilterOption: String, CaseIterable {
-    case all = "All"
-    case unread = "Unread/Unwatched"
-    case read = "Read/Watched"
-
-    var icon: String {
-        switch self {
-        case .all: return "list.bullet"
-        case .unread: return "circle"
-        case .read: return "checkmark.circle.fill"
-        }
-    }
-
-    var localizedTitle: String {
-        switch self {
-        case .all: return String(localized: "All")
-        case .unread: return String(localized: "Unread/Unwatched")
-        case .read: return String(localized: "Read/Watched")
-        }
-    }
-}
-
-enum MediaDetailReaderDestination: Identifiable {
-    case pages(
-        id: UUID,
-        runner: ItoRunner,
-        pluginID: String,
-        entry: MediaEntry,
-        chapter: Chapter
-    )
-    case anime(
-        id: UUID,
-        runner: ItoRunner,
-        pluginID: String,
-        media: Anime,
-        episode: Anime.Episode
-    )
-    /// A text chapter, retaining the catalog entry's kind for history and completion.
-    case text(
-        id: UUID,
-        runner: ItoRunner,
-        pluginID: String,
-        entry: MediaEntry,
-        chapter: Chapter
-    )
-
-    var id: UUID {
-        switch self {
-        case .pages(let id, _, _, _, _),
-             .anime(let id, _, _, _, _),
-             .text(let id, _, _, _, _):
-            return id
-        }
-    }
-}
-
-extension MediaDetailReaderDestination {
-    /// The chapter's format selects the reader; its catalog identity is unchanged.
-    static func reading(_ chapter: Chapter, of entry: MediaEntry, runner: ItoRunner, pluginID: String) -> Self {
-        if entry.contentKind(of: chapter) == .text {
-            return .text(id: UUID(), runner: runner, pluginID: pluginID, entry: entry, chapter: chapter)
-        }
-        return .pages(id: UUID(), runner: runner, pluginID: pluginID, entry: entry, chapter: chapter)
-    }
-}
-
-struct MediaDetailRouteContext<M: MediaDisplayable> {
-    let loadDetails: (M) async throws -> M
-    let searchForRelink: (String) async throws -> [M]
-    let makeReaderDestination: (M, M.Chapter) -> MediaDetailReaderDestination
-}
-
-struct MediaDetailTrackerSheetIntent: Identifiable, Equatable {
-    let id: UUID
-    let mediaIdentity: MediaIdentity
-    let title: String
-    let isAnime: Bool
-}
-
-struct MediaDetailCategoryAssignmentIntent: Identifiable, Equatable {
-    let itemID: String
-    var id: String { itemID }
-}
-
-struct MediaDetailRelinkPresentation: Identifiable, Equatable {
-    let id: UUID
-    let mediaKey: String
-}
-
 @MainActor
 final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     enum DetailLoadState: Equatable {
         case idle
         case loading
         case content
+        case savedOnly
         case failure(String)
     }
 
@@ -188,6 +75,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     private var relinkSearchTask: Task<Void, Never>?
     private var baselineTask: Task<Void, Never>?
     private var trackerProgressTask: Task<Void, Never>?
+    private var savedChapterTask: Task<Void, Never>?
+    private var savedChapterOperationID: UUID?
     private var detailOperationID: UUID?
     private var themeOperationID: UUID?
     private var relinkSearchOperationID: UUID?
@@ -259,6 +148,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         relinkSearchTask?.cancel()
         baselineTask?.cancel()
         trackerProgressTask?.cancel()
+        savedChapterTask?.cancel()
     }
 
     var mediaIdentity: MediaIdentity {
@@ -268,6 +158,9 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     var isDetailLoading: Bool {
         detailLoadState == .loading
     }
+
+    /// Relinking needs an installed source to search.
+    var canRelink: Bool { routeContext.searchForRelink != nil }
 
     var isLibraryMutationInFlight: Bool {
         libraryMutationState == .saving || libraryMutationState == .unsaving
@@ -516,7 +409,34 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         // A row or Resume action can retain a chapter value from before a metadata refresh.
         let current = media.chapterList?.first { $0.key == chapter.key } ?? chapter
         guard !current.isPaywalled else { return }
-        readerDestination = routeContext.makeReaderDestination(media, current)
+        guard detailLoadState == .savedOnly else {
+            readerDestination = routeContext.makeReaderDestination(media, current)
+            return
+        }
+        openSavedChapter(current)
+    }
+
+    /// A saved-only series reads its downloaded chapters only. The copy is checked at the tap, so a
+    /// download that finished after the route opened still reads. A tap while a check is running does
+    /// nothing.
+    private func openSavedChapter(_ chapter: M.Chapter) {
+        guard savedChapterTask == nil else { return }
+        let mediaKey = media.key
+        let isAvailable = routeContext.isChapterAvailableOffline
+        let operationID = UUID()
+        savedChapterOperationID = operationID
+        savedChapterTask = Task { [weak self] in
+            let available = (await isAvailable?(chapter)) ?? false
+            guard let self, self.savedChapterOperationID == operationID, !Task.isCancelled else { return }
+            self.savedChapterOperationID = nil
+            self.savedChapterTask = nil
+            guard self.media.key == mediaKey, self.detailLoadState == .savedOnly else { return }
+            if available {
+                self.readerDestination = self.routeContext.makeReaderDestination(self.media, chapter)
+            } else if self.mayPresentUserOutput {
+                self.messagePresenter.present(.chapterNotDownloaded)
+            }
+        }
     }
 
     func dismissReader() {
@@ -524,7 +444,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     func openRelink() {
-        guard !isRelinkMutationInFlight else { return }
+        guard !isRelinkMutationInFlight, routeContext.searchForRelink != nil else { return }
         relinkPresentation = MediaDetailRelinkPresentation(
             id: UUID(),
             mediaKey: media.key
@@ -549,7 +469,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     func performRelink(with selectedMedia: M) async {
-        guard let presentation = relinkPresentation,
+        guard let loadDetails = routeContext.loadDetails,
+              let presentation = relinkPresentation,
               !isRelinkMutationInFlight else { return }
         let operationID = UUID()
         let oldMedia = media
@@ -560,7 +481,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         logStarted(kind: .relink, operationID: operationID)
 
         do {
-            let hydrated = try await routeContext.loadDetails(selectedMedia)
+            let hydrated = try await loadDetails(selectedMedia)
             let payload = try JSONEncoder().encode(hydrated)
             try await dependencies.relink.relink(
                 pluginID: pluginID,
@@ -647,7 +568,9 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         let operationID = UUID()
         let requestedMedia = media
         let requestedKey = requestedMedia.key
-        let loader = routeContext.loadDetails
+        guard let loader = routeContext.loadDetails else {
+            return beginSavedOnly()
+        }
         detailOperationID = operationID
         detailLoadState = .loading
         logStarted(kind: .detailLoad, operationID: operationID)
@@ -687,6 +610,17 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         return task
     }
 
+    /// A saved-only route has no installed source to refresh from, so the saved series is shown as it is.
+    /// Nothing new was checked: the baseline does not advance and badges are left alone.
+    private func beginSavedOnly() -> Task<Void, Never> {
+        detailTask?.cancel()
+        detailTask = nil
+        detailOperationID = nil
+        detailLoadState = .savedOnly
+        performPendingOpenIntent()
+        return Task {}
+    }
+
     private func loadCachedTheme() {
         themeTask?.cancel()
         let operationID = UUID()
@@ -705,7 +639,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         let presentationID = relinkPresentation?.id
         let mediaKey = media.key
         let query = media.title
-        let search = routeContext.searchForRelink
+        guard let search = routeContext.searchForRelink else { return }
         relinkSearchOperationID = operationID
         relinkSearchResults = []
         relinkSearchState = .loading
@@ -996,16 +930,19 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         libraryMutationOperationID = nil
         baselineOperationID = nil
         trackerProgressOperationID = nil
+        savedChapterOperationID = nil
         detailTask?.cancel()
         themeTask?.cancel()
         relinkSearchTask?.cancel()
         baselineTask?.cancel()
         trackerProgressTask?.cancel()
+        savedChapterTask?.cancel()
         detailTask = nil
         themeTask = nil
         relinkSearchTask = nil
         baselineTask = nil
         trackerProgressTask = nil
+        savedChapterTask = nil
     }
 
     private var mayPresentUserOutput: Bool {
@@ -1018,16 +955,19 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         relinkSearchOperationID = nil
         baselineOperationID = nil
         trackerProgressOperationID = nil
+        savedChapterOperationID = nil
         detailTask?.cancel()
         themeTask?.cancel()
         relinkSearchTask?.cancel()
         baselineTask?.cancel()
         trackerProgressTask?.cancel()
+        savedChapterTask?.cancel()
         detailTask = nil
         themeTask = nil
         relinkSearchTask = nil
         baselineTask = nil
         trackerProgressTask = nil
+        savedChapterTask = nil
         if detailLoadState == .loading { detailLoadState = .idle }
         if relinkSearchState == .loading { relinkSearchState = .idle }
     }

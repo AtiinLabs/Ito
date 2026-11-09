@@ -803,7 +803,7 @@ final class MediaDetailViewModelTests: XCTestCase {
         guard case .pages(_, let runner, let pluginID, let media, let chapter) = subject.viewModel.readerDestination else {
             return XCTFail("Expected Manga reader destination")
         }
-        XCTAssertTrue(runner === subject.runner)
+        XCTAssertTrue(runner.remote === subject.runner)
         XCTAssertEqual(pluginID, Self.pluginID)
         XCTAssertEqual(media.key, "m1")
         XCTAssertEqual(chapter.key, "c1")
@@ -834,7 +834,7 @@ final class MediaDetailViewModelTests: XCTestCase {
         guard case .text(_, let novelRunner, let novelPlugin, let entry, let selectedChapter) = novelSubject.viewModel.readerDestination else {
             return XCTFail("Expected text reader destination")
         }
-        XCTAssertTrue(novelRunner === novelSubject.runner)
+        XCTAssertTrue(novelRunner.remote === novelSubject.runner)
         XCTAssertEqual(novelPlugin, Self.pluginID)
         XCTAssertEqual(entry.kind, .novel)
         XCTAssertEqual(entry.key, "n1")
@@ -1031,7 +1031,7 @@ final class MediaDetailViewModelTests: XCTestCase {
             makeReaderDestination: { parent, selected in
                 .pages(
                     id: UUID(),
-                    runner: runner,
+                    content: ReaderContentSource(remote: runner),
                     pluginID: Self.pluginID,
                     entry: .manga(parent),
                     chapter: selected
@@ -1134,7 +1134,7 @@ final class MediaDetailViewModelTests: XCTestCase {
                 makeReaderDestination: { parent, selected in
                     .text(
                         id: UUID(),
-                        runner: runner,
+                        content: ReaderContentSource(remote: runner),
                         pluginID: Self.pluginID,
                         entry: .novel(parent),
                         chapter: selected

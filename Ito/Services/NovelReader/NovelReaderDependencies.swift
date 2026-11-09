@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import ito_runner
+import Nuke
 
 @MainActor
 protocol NovelChapterLoading: AnyObject {
@@ -223,6 +224,8 @@ struct PreparedNovelReaderDependencies {
     let presence: any NovelReaderPresencePresenting
     let pluginMetadata: any NovelReaderPluginMetadataProviding
     let presentationLogger: any PresentationEventLogging
+    /// The reader's page-image session. Production passes one that can show offline pages.
+    let makeImageSession: () -> ReaderPageImageSession
 
     static func production(
         readProgressManager: ReadProgressManager,
@@ -231,7 +234,8 @@ struct PreparedNovelReaderDependencies {
         settingsStore: AppSettingsStore,
         discordRPCManager: DiscordRPCManager,
         pluginManager: PluginManager,
-        presentationLogger: any PresentationEventLogging
+        presentationLogger: any PresentationEventLogging,
+        offlinePipeline: ImagePipeline? = nil
     ) -> Self {
         Self(
             progress: readProgressManager,
@@ -240,7 +244,8 @@ struct PreparedNovelReaderDependencies {
             settings: settingsStore,
             presence: discordRPCManager,
             pluginMetadata: pluginManager,
-            presentationLogger: presentationLogger
+            presentationLogger: presentationLogger,
+            makeImageSession: { ReaderPageImageSession(offlinePipeline: offlinePipeline) }
         )
     }
 
@@ -253,7 +258,8 @@ struct PreparedNovelReaderDependencies {
             settings: unavailable,
             presence: unavailable,
             pluginMetadata: unavailable,
-            presentationLogger: OSLogPresentationEventLogger()
+            presentationLogger: OSLogPresentationEventLogger(),
+            makeImageSession: { ReaderPageImageSession() }
         )
     }
 }

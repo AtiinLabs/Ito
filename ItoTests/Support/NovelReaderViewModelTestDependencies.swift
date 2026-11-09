@@ -612,7 +612,8 @@ func makeNovelReaderSubject(
         settings: settings,
         presence: presence,
         pluginMetadata: metadata,
-        presentationLogger: logger
+        presentationLogger: logger,
+        makeImageSession: { ReaderPageImageSession() }
     )
     let viewModel = NovelReaderViewModel(
         chapterLoader: loader,

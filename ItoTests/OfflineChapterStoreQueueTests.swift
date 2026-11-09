@@ -180,7 +180,7 @@ struct OfflineChapterStoreQueueTests {
         try await fixture.assertInvariants(store)
     }
 
-    @Test func inMemoryGuardRefusalAlsoWaitsForRetry() async throws {
+    @Test func inMemoryGuardRefusalRequeuesTheChapter() async throws {
         let fixture = try OfflineStoreFixture()
         let store = fixture.makeStore()
         let jobID = try await fixture.enqueue(store)
@@ -191,8 +191,12 @@ struct OfflineChapterStoreQueueTests {
 
         let outcome = try await store.publish(attempt, commitGuard: { _ in false })
 
-        #expect(outcome == .refused(.configurationChanged))
-        #expect(try await store.job(id: jobID)?.waitingReason == .sourceConfigurationChanged)
+        #expect(outcome == .refused(.staleRuntime))
+        let job = try #require(try await store.job(id: jobID))
+        #expect(job.state == .queued)
+        #expect(job.waitingReason == nil)
+        #expect(job.stagingVersionId == nil)
+        #expect(try await store.verifiedEdition(for: OfflineStoreFixture.mangaEdition) == nil)
         try await fixture.assertInvariants(store)
     }
 
@@ -229,9 +233,9 @@ struct OfflineChapterStoreQueueTests {
 
         let outcome = try await store.publish(attempt, commitGuard: { _ in false })
 
-        #expect(outcome == .refused(.configurationChanged))
+        #expect(outcome == .refused(.staleRuntime))
         #expect(fixture.fileSystem.exists(fixture.versionURL(attempt.versionId)))
-        #expect(try await store.job(id: jobID)?.waitingReason == .sourceConfigurationChanged)
+        #expect(try await store.job(id: jobID)?.state == .queued)
     }
 
     @Test func abandonAfterASuccessfulPublishLeavesTheVerifiedCopyIntact() async throws {
@@ -249,6 +253,24 @@ struct OfflineChapterStoreQueueTests {
 
         #expect(try await store.verifiedEdition(for: OfflineStoreFixture.mangaEdition) != nil)
         #expect(fixture.fileSystem.exists(fixture.versionURL(attempt.versionId)))
+        #expect(try await store.job(id: jobID) == nil)
+        try await fixture.assertInvariants(store)
+    }
+
+    @Test func abandonAfterTheJobVanishedReleasesTheStagingDirectory() async throws {
+        let fixture = try OfflineStoreFixture()
+        let store = fixture.makeStore()
+        let jobID = try await fixture.enqueue(store)
+        let attempt = try await store.beginAttempt(jobID: jobID)
+        // The row goes without the store's cleanup, as when a Cancel lands before the staging
+        // directory exists and so cannot see it.
+        _ = try await fixture.database.dbPool.write { db in
+            try DownloadJobRecord.deleteOne(db, key: jobID)
+        }
+
+        try await store.abandonAttempt(jobID: jobID, versionId: attempt.versionId, outcome: .queued)
+
+        #expect(!fixture.fileSystem.exists(attempt.directory))
         #expect(try await store.job(id: jobID) == nil)
         try await fixture.assertInvariants(store)
     }

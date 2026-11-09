@@ -18,6 +18,35 @@ extension PluginInfo {
     }
 }
 
+/// Host modules a runner is built with. Foreground runners get the app's modules; a download attempt
+/// gets its own, so its traffic and prompts stay out of the foreground.
+nonisolated struct PluginRunnerHostModules: Sendable {
+    let net: any NetModule
+    let webview: any WebviewModule
+}
+
+typealias DownloadRunnerLoader = @MainActor (
+    _ pluginID: String,
+    _ pluginURL: URL,
+    _ settingsStore: PluginSettingsStore,
+    _ modules: PluginRunnerHostModules
+) async throws -> ItoRunner
+
+/// Thread-safe copy of the installed plugins' publication revision. Synchronous checks inside a
+/// database transaction read it here, because the main actor is not available there.
+nonisolated final class PluginPublicationRevisionMirror: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: UInt64 = 0
+
+    var current: UInt64 {
+        lock.withLock { value }
+    }
+
+    func store(_ revision: UInt64) {
+        lock.withLock { value = revision }
+    }
+}
+
 /// Manages the state of installed plugins to provide fast, synchronous O(1) lookups
 /// for the UI (like RepositoriesView) without blocking the main thread parsing ZIP files.
 public class PluginManager: ObservableObject {
@@ -58,6 +87,8 @@ public class PluginManager: ObservableObject {
     ) async throws -> ItoRunner
     public let pluginSettingsStore: PluginSettingsStore
     private weak var completionCoordinator: PluginCompletionCoordinator?
+    private let downloadRunnerLoader: DownloadRunnerLoader
+    private let publicationMirror = PluginPublicationRevisionMirror()
 
     var configuredInstalledPluginsDirectory: URL? {
         pluginsDirectory
@@ -67,6 +98,7 @@ public class PluginManager: ObservableObject {
         self.pluginSettingsStore = pluginSettingsStore
         self.pluginsDirectory = pluginsDirectory
         runnerLoader = Self.loadRunner
+        downloadRunnerLoader = Self.loadDownloadRunner
     }
 
     init(
@@ -76,11 +108,13 @@ public class PluginManager: ObservableObject {
             _ pluginID: String,
             _ pluginURL: URL,
             _ settingsStore: PluginSettingsStore
-        ) async throws -> ItoRunner
+        ) async throws -> ItoRunner,
+        downloadRunnerLoader: DownloadRunnerLoader? = nil
     ) {
         self.pluginSettingsStore = pluginSettingsStore
         self.pluginsDirectory = pluginsDirectory
         self.runnerLoader = runnerLoader
+        self.downloadRunnerLoader = downloadRunnerLoader ?? Self.loadDownloadRunner
     }
 
     @MainActor
@@ -219,6 +253,44 @@ public class PluginManager: ObservableObject {
         return runner
     }
 
+    /// Builds the runtime for one download attempt. The runner is loaded with the attempt's modules and
+    /// belongs to that attempt: it is never stored in `runnerCache` or `imageRunnerCache`, and the
+    /// foreground `getRunner`/`getImageRunner` never see it.
+    @MainActor
+    func makeDownloadRuntime(for pluginId: String, modules: PluginRunnerHostModules) async throws -> DownloadPluginRuntime {
+        guard let plugin = installedPlugins[pluginId] else {
+            throw URLError(.fileDoesNotExist)
+        }
+        if let refusal = plugin.info.compatibilityRefusal {
+            throw refusal
+        }
+        let authority = runnerAuthority(for: plugin)
+        try pluginSettingsStore.prepare(pluginId: pluginId)
+
+        let loader = downloadRunnerLoader
+        let settingsStore = pluginSettingsStore
+        let pluginURL = plugin.url
+        // Taken with the authority, before the load: a trust change during the load must not become
+        // the baseline the commit checks against.
+        let trust = settingsStore.trust
+        let trustGeneration = trust.transportGeneration(for: pluginId)
+        let main = try await loader(pluginId, pluginURL, settingsStore, modules)
+        guard installedPlugins[pluginId].map(runnerAuthority) == authority else {
+            throw PluginRunnerAuthorityError.changedDuringLoad
+        }
+
+        let mirror = publicationMirror
+        let revision = authority.publicationRevision
+        return DownloadPluginRuntime(
+            pages: main,
+            makeImageRunner: {
+                try await loader(pluginId, pluginURL, settingsStore, modules)
+            },
+            isPluginCurrent: { mirror.current == revision },
+            isTrustCurrent: { trust.transportGeneration(for: pluginId) == trustGeneration }
+        )
+    }
+
     /// Loads the plugin and gives it its settings defaults. A plugin that crashes while describing
     /// its settings is loaded again without them: that runner may be broken, but the plugin can
     /// still read, search and update.
@@ -228,7 +300,39 @@ public class PluginManager: ObservableObject {
         pluginURL: URL,
         settingsStore: PluginSettingsStore
     ) async throws -> ItoRunner {
-        let (runner, defaults) = try await makeRunner(pluginID: pluginID, pluginURL: pluginURL, settingsStore: settingsStore)
+        try await load(pluginID: pluginID, pluginURL: pluginURL, settingsStore: settingsStore) {
+            PluginRunnerHostModules(
+                net: AppNetModule(pluginID: pluginID, cookieJar: settingsStore.cookies, trust: settingsStore.trust),
+                webview: AppWebviewModule()
+            )
+        }
+    }
+
+    /// Loads a runner for one download attempt with that attempt's modules. Loading and defaults match
+    /// `loadRunner`; the caller owns the runner, so it is never cached here.
+    @MainActor
+    private static func loadDownloadRunner(
+        pluginID: String,
+        pluginURL: URL,
+        settingsStore: PluginSettingsStore,
+        modules: PluginRunnerHostModules
+    ) async throws -> ItoRunner {
+        try await load(pluginID: pluginID, pluginURL: pluginURL, settingsStore: settingsStore) { modules }
+    }
+
+    @MainActor
+    private static func load(
+        pluginID: String,
+        pluginURL: URL,
+        settingsStore: PluginSettingsStore,
+        makeModules: () -> PluginRunnerHostModules
+    ) async throws -> ItoRunner {
+        let (runner, defaults) = try await makeRunner(
+            pluginID: pluginID,
+            pluginURL: pluginURL,
+            settingsStore: settingsStore,
+            modules: makeModules()
+        )
         let usable = try await applySchemaDefaults(
             from: { try await runner.getSettingsSurface() },
             to: defaults,
@@ -236,22 +340,28 @@ public class PluginManager: ObservableObject {
         )
         if usable { return runner }
         AppLogger.plugin.error("PluginManager: \(pluginID) crashed describing its settings; loading it again without defaults")
-        return try await makeRunner(pluginID: pluginID, pluginURL: pluginURL, settingsStore: settingsStore).runner
+        return try await makeRunner(
+            pluginID: pluginID,
+            pluginURL: pluginURL,
+            settingsStore: settingsStore,
+            modules: makeModules()
+        ).runner
     }
 
     @MainActor
     private static func makeRunner(
         pluginID: String,
         pluginURL: URL,
-        settingsStore: PluginSettingsStore
+        settingsStore: PluginSettingsStore,
+        modules: PluginRunnerHostModules
     ) async throws -> (runner: ItoRunner, defaults: AppDefaultsModule) {
         let runner = ItoRunner()
         let defaults = AppDefaultsModule(pluginId: pluginID, store: settingsStore)
-        await runner.setNetModule(AppNetModule(pluginID: pluginID, cookieJar: settingsStore.cookies, trust: settingsStore.trust))
+        await runner.setNetModule(modules.net)
         await runner.setStdModule(DefaultStdModule())
         await runner.setDefaultsModule(defaults)
         await runner.setHtmlModule(DefaultHtmlModule())
-        await runner.setWebviewModule(AppWebviewModule())
+        await runner.setWebviewModule(modules.webview)
 
         AppLogger.plugin.debug("\("🔌 [PluginManager] Loading bundle for \(pluginID)")...")
         do {
@@ -455,6 +565,7 @@ public class PluginManager: ObservableObject {
             pluginSettingsStore.trust.activateInstalledPlugin(pluginID)
         }
         installedPluginsPublicationRevision &+= 1
+        publicationMirror.store(installedPluginsPublicationRevision)
         AppLogger.plugin.debug(
             "🔌 [PluginManager] Cleared runner cache (\(newCache.count) plugins loaded)"
         )

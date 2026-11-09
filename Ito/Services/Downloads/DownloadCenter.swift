@@ -1,0 +1,204 @@
+import Combine
+import Foundation
+import GRDB
+import OSLog
+import ito_runner
+
+/// What a chapter shows for downloads. It is derived from the inventory and the queue, never from files,
+/// so a screen cannot disagree with the store.
+nonisolated enum ChapterDownloadState: Equatable, Sendable {
+    case queued
+    case downloading(completed: Int, total: Int?)
+    case waiting(DownloadWaitingReason)
+    case failed(DownloadFailureReason)
+    case downloaded
+    case damaged
+}
+
+/// In-memory progress of attempts in flight, keyed by job. Nothing here is persisted.
+@MainActor
+final class DownloadProgressBoard: ObservableObject {
+    @Published private(set) var progress: [String: DownloadProgress] = [:]
+
+    func update(_ report: DownloadProgress) {
+        progress[report.jobID] = report
+    }
+
+    func clear(_ jobID: String) {
+        progress[jobID] = nil
+    }
+}
+
+/// The rows one observation reads: every inventory copy and every queued job, in queue order.
+nonisolated struct DownloadTableSnapshot: Sendable {
+    var copies: [DownloadedChapterRecord] = []
+    var jobs: [DownloadJobRecord] = []
+}
+
+/// The app's download surface: the state of every chapter that has a copy or a job, and the commands a
+/// screen sends. It observes the tables with GRDB and merges in the progress board, so detail screens,
+/// badges, and the reader all read one source.
+@MainActor
+final class DownloadCenter: ObservableObject {
+    /// The state of each chapter, by media and chapter key. A chapter absent here has no copy and no job.
+    @Published private(set) var states: [MediaIdentity: [String: ChapterDownloadState]] = [:]
+
+    private let dbPool: DatabasePool
+    private let store: OfflineChapterStore
+    private let coordinator: DownloadQueueCoordinator
+    private let progress: DownloadProgressBoard
+    private let captureEpoch: @Sendable (String) throws -> String
+    private var snapshot = DownloadTableSnapshot()
+    private var observation: DatabaseCancellable?
+    private var progressSubscription: AnyCancellable?
+
+    /// - Parameter captureEpoch: the source's current completion epoch; see `PluginCompletionStore.captureScopeEpoch`.
+    init(
+        dbPool: DatabasePool,
+        store: OfflineChapterStore,
+        coordinator: DownloadQueueCoordinator,
+        progress: DownloadProgressBoard,
+        captureEpoch: @escaping @Sendable (String) throws -> String
+    ) {
+        self.dbPool = dbPool
+        self.store = store
+        self.coordinator = coordinator
+        self.progress = progress
+        self.captureEpoch = captureEpoch
+        progressSubscription = progress.$progress.sink { @MainActor [weak self] value in
+            self?.republish(progress: value)
+        }
+    }
+
+    /// Starts observing the inventory and the queue. The caller picks the scheduler, as the library does.
+    func startObserving<Scheduler: ValueObservationMainActorScheduler>(scheduling scheduler: Scheduler) {
+        let observation = ValueObservation.tracking { db -> DownloadTableSnapshot in
+            DownloadTableSnapshot(
+                copies: try DownloadedChapterRecord.fetchAll(db),
+                jobs: try DownloadJobRecord.order(Column("createdAt"), Column("id")).fetchAll(db)
+            )
+        }
+        self.observation = observation.start(
+            in: dbPool,
+            scheduling: scheduler,
+            onError: { _ in
+                AppLogger.database.error("Download state observation failed")
+            },
+            onChange: { [weak self] current in
+                self?.apply(current)
+            }
+        )
+    }
+
+    /// Queues one chapter. The source's epoch is read now and frozen with the job, so a later settings or
+    /// credential change pauses the queued chapter instead of letting it finish under the new configuration.
+    func enqueue(
+        pluginID: String,
+        mediaKind: MediaKind,
+        canonicalMediaId: String,
+        entry: MediaEntry,
+        chapter: Chapter,
+        seriesTitle: String
+    ) async -> DownloadEnqueueOutcome {
+        guard let epoch = try? captureEpoch(pluginID) else {
+            return .refused(.unavailable)
+        }
+        let request = DownloadEnqueueRequest(
+            pluginId: pluginID,
+            mediaKind: mediaKind,
+            canonicalMediaId: canonicalMediaId,
+            entry: entry,
+            chapter: chapter,
+            seriesTitle: seriesTitle,
+            sourceEpoch: epoch
+        )
+        do {
+            let outcome = try await store.enqueue(request)
+            if outcome == .queued {
+                coordinator.wake()
+            }
+            return outcome
+        } catch {
+            return .refused(.unavailable)
+        }
+    }
+
+    /// Removes a chapter's queue entry and stops its attempt. A verified copy is kept. Throws when the
+    /// queue could not be read or changed, so the caller can say the chapter is still queued.
+    func cancel(_ edition: OfflineChapterEdition) async throws {
+        guard let job = try await queuedJob(for: edition) else { return }
+        try await store.cancel(jobID: job.id)
+        coordinator.cancelAttempt(jobID: job.id)
+    }
+
+    /// Queues a failed or waiting chapter again, re-freezing the source's current epoch. Throws when the
+    /// source's scope or the queue could not be read or changed.
+    func retry(_ edition: OfflineChapterEdition) async throws {
+        guard let job = try await queuedJob(for: edition) else { return }
+        let epoch = try captureEpoch(job.pluginId)
+        try await store.retry(jobID: job.id, currentEpoch: epoch)
+        coordinator.wake()
+    }
+
+    /// Removes a chapter's copy and queue entry, and stops its attempt. Bytes a reader still holds stay
+    /// until that reader lets go. Throws when the copy could not be removed.
+    func delete(_ edition: OfflineChapterEdition) async throws {
+        try await store.delete(edition)
+        coordinator.cancelAttempt(for: edition)
+    }
+
+    private func queuedJob(for edition: OfflineChapterEdition) async throws -> DownloadJobRecord? {
+        try await store.jobs().first { $0.edition == edition }
+    }
+
+    private func apply(_ current: DownloadTableSnapshot) {
+        snapshot = current
+        republish(progress: progress.progress)
+    }
+
+    private func republish(progress current: [String: DownloadProgress]) {
+        states = Self.states(copies: snapshot.copies, jobs: snapshot.jobs, progress: current)
+    }
+
+    /// The per-media state map. A verified copy wins over a queued job for the same chapter.
+    nonisolated static func states(
+        copies: [DownloadedChapterRecord],
+        jobs: [DownloadJobRecord],
+        progress: [String: DownloadProgress]
+    ) -> [MediaIdentity: [String: ChapterDownloadState]] {
+        var result: [MediaIdentity: [String: ChapterDownloadState]] = [:]
+        for copy in copies {
+            let identity = MediaIdentity(
+                pluginId: copy.pluginId,
+                canonicalMediaId: copy.canonicalMediaId,
+                mediaKind: copy.mediaKind
+            )
+            result[identity, default: [:]][copy.chapterKey] = copy.state == .verified ? .downloaded : .damaged
+        }
+        for job in jobs {
+            let identity = MediaIdentity(
+                pluginId: job.pluginId,
+                canonicalMediaId: job.canonicalMediaId,
+                mediaKind: job.mediaKind
+            )
+            if result[identity]?[job.chapterKey] != nil {
+                continue
+            }
+            result[identity, default: [:]][job.chapterKey] = state(of: job, progress: progress[job.id])
+        }
+        return result
+    }
+
+    nonisolated static func state(of job: DownloadJobRecord, progress: DownloadProgress?) -> ChapterDownloadState {
+        switch job.state {
+        case .queued:
+            return .queued
+        case .downloading:
+            return .downloading(completed: progress?.completedPages ?? 0, total: progress?.totalPages)
+        case .waiting:
+            return .waiting(job.waitingReason ?? .networkUnknown)
+        case .failed:
+            return .failed(job.failureReason ?? .sourceError)
+        }
+    }
+}

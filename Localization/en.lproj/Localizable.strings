@@ -937,6 +937,9 @@ Manga format: light novel */
 
 "Open" = "Open";
 
+/* Button on a library series whose source is unavailable: shows the details saved in the library. */
+"Open Saved Details" = "Open Saved Details";
+
 "Open Series" = "Open Series";
 
 "Open Settings" = "Open Settings";
@@ -1329,6 +1332,9 @@ History: the page a chapter was left on */
 
 "Show the list picker when saving a new series." = "Show the list picker when saving a new series.";
 
+/* Notice above a saved series shown from this device's saved copy because its source is not installed, is incompatible, or failed to load. The details refresh once the source works again. */
+"Showing saved details. They refresh when the source is available again." = "Showing saved details. They refresh when the source is available again.";
+
 "Shows what you're reading or watching on your Discord profile. Needs a Rich Presence bridge running at the server address." = "Shows what you're reading or watching on your Discord profile. Needs a Rich Presence bridge running at the server address.";
 
 "Sign In" = "Sign In";
@@ -1630,6 +1636,9 @@ Reading font: the system font */
 
 "This chapter is locked on the source." = "This chapter is locked on the source.";
 
+/* Shown when a chapter has no offline copy and no installed source can load it. Used as the reader's load-failure text and as a notice on the series details screen. */
+"This chapter isn't downloaded." = "This chapter isn't downloaded.";
+
 "This control type (%u) is not supported." = "This control type (%u) is not supported.";
 
 "This control type is not supported." = "This control type is not supported.";
@@ -1772,6 +1781,9 @@ Reading font: the system font */
 "Unknown Plugin" = "Unknown Plugin";
 
 "Unknown Repository" = "Unknown Repository";
+
+/* Reader failure: the offline copy is stored under data protection and the device is locked. */
+"Unlock your device to read this chapter." = "Unlock your device to read this chapter.";
 
 "Unmatched Sources" = "Unmatched Sources";
 

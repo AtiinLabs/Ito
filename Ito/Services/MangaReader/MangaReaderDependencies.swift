@@ -1,5 +1,6 @@
 import Foundation
 import ito_runner
+import Nuke
 
 @MainActor
 protocol MangaPageLoading: AnyObject {
@@ -211,7 +212,8 @@ struct PreparedMangaReaderDependencies {
         settingsStore: AppSettingsStore,
         discordRPCManager: DiscordRPCManager,
         pluginManager: PluginManager,
-        presentationLogger: any PresentationEventLogging
+        presentationLogger: any PresentationEventLogging,
+        offlinePipeline: ImagePipeline? = nil
     ) -> Self {
         Self(
             progress: readProgressManager,
@@ -220,7 +222,9 @@ struct PreparedMangaReaderDependencies {
             settings: settingsStore,
             presence: discordRPCManager,
             pluginMetadata: pluginManager,
-            makeImagePrefetcher: { NukeMangaReaderImagePrefetcher() },
+            makeImagePrefetcher: {
+                NukeMangaReaderImagePrefetcher(session: ReaderPageImageSession(offlinePipeline: offlinePipeline))
+            },
             presentationLogger: presentationLogger
         )
     }

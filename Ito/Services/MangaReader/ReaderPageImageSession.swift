@@ -98,9 +98,8 @@ final class ReaderPageImageSession {
     }
 
     private let pipelineOverride: ImagePipeline?
-    /// The app's image pipeline is replaced when plugin image settings change; a session without
-    /// an injected pipeline always uses the current one.
-    private var pipeline: ImagePipeline { pipelineOverride ?? .shared }
+    /// Serves `ito-offline://` pages. Without one, those requests fail and never reach the shared pipeline.
+    private let offlinePipeline: ImagePipeline?
     private var entries: [ReaderPageImageKey: Entry] = [:]
     private var prefetchOrder: [ReaderPageImageKey] = []
     private var runningPrefetches = 0
@@ -109,8 +108,19 @@ final class ReaderPageImageSession {
     /// of a cancelled task never matches a request that was forgotten and added again.
     private var lastTaskGeneration: UInt64 = 0
 
-    init(pipeline: ImagePipeline? = nil) {
+    init(pipeline: ImagePipeline? = nil, offlinePipeline: ImagePipeline? = nil) {
         pipelineOverride = pipeline
+        self.offlinePipeline = offlinePipeline
+    }
+
+    /// The pipeline for `request`. Offline copies use only the offline pipeline and never reach the
+    /// network. Other requests use the injected pipeline, or the app's current one: that is replaced when
+    /// plugin image settings change, so a session without an injected pipeline always reads it fresh.
+    private func imagePipeline(for request: URLRequest) -> ImagePipeline? {
+        if request.url?.scheme == OfflineAssetLocator.scheme {
+            return offlinePipeline
+        }
+        return pipelineOverride ?? .shared
     }
 
     func state(for key: ReaderPageImageKey) -> ReaderPageImageState {
@@ -124,6 +134,7 @@ final class ReaderPageImageSession {
     /// without starting a request.
     func knownPixelSize(for descriptor: ReaderPageImageDescriptor) -> CGSize? {
         if let size = entries[descriptor.key]?.pixelSize { return size }
+        guard let pipeline = imagePipeline(for: descriptor.request) else { return nil }
         let request = ImageRequest(urlRequest: descriptor.request)
         guard let image = pipeline.cache.cachedImage(for: request, caches: [.memory])?.image else { return nil }
         return CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
@@ -253,6 +264,13 @@ final class ReaderPageImageSession {
         if case .failed = entry.phase { return }
         entry.isPrefetchQueued = false
         prefetchOrder.removeAll { $0 == key }
+        guard let pipeline = imagePipeline(for: request) else {
+            // An offline page without an offline pipeline cannot load; it fails like any other load.
+            entry.phase = .failed
+            entries[key] = entry
+            publish(key)
+            return
+        }
         let imageRequest = ImageRequest(urlRequest: request)
         // An image still in memory needs no request: a page shown again appears at once, and a
         // prefetch that precedes the page's view does not turn that into a spinner.

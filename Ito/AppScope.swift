@@ -30,6 +30,8 @@ struct PreparedApplicationDependencies {
     let settingsDiagnostics: (any PluginSettingsDiagnosing)?
     let pluginCookies: PluginCookieJar?
     let pluginTrust: PluginTrustStore?
+    /// Verified offline copies, for reading without a source and for saved-only details.
+    let offlineReading: any OfflineChapterReading
 
     init(
         settings: PreparedSettingsDependencies,
@@ -59,7 +61,8 @@ struct PreparedApplicationDependencies {
         completionRecovery: (any PluginCompletionRecovering)? = nil,
         settingsDiagnostics: (any PluginSettingsDiagnosing)? = nil,
         pluginCookies: PluginCookieJar? = nil,
-        pluginTrust: PluginTrustStore? = nil
+        pluginTrust: PluginTrustStore? = nil,
+        offlineReading: any OfflineChapterReading = UnavailableOfflineChapterReading()
     ) {
         self.settings = settings
         self.tracking = tracking ?? .unavailable()
@@ -89,6 +92,7 @@ struct PreparedApplicationDependencies {
         self.settingsDiagnostics = settingsDiagnostics
         self.pluginCookies = pluginCookies
         self.pluginTrust = pluginTrust
+        self.offlineReading = offlineReading
     }
 
     static func production(
@@ -112,7 +116,8 @@ struct PreparedApplicationDependencies {
         discoverDetailThemeService: any DiscoverDetailThemeServing,
         recentSearchDefaults: UserDefaults = .standard,
         browsePluginsDirectory: URL? = nil,
-        completionRecovery: (any PluginCompletionRecovering)? = nil
+        completionRecovery: (any PluginCompletionRecovering)? = nil,
+        offlineChapterStore: OfflineChapterStore? = nil
     ) -> Self {
         let fileOperations = LocalBrowsePluginFileOperations(
             pluginsDirectory: browsePluginsDirectory
@@ -123,6 +128,8 @@ struct PreparedApplicationDependencies {
             readProgressManager: readProgressManager
         )
         let presentationLogger = OSLogPresentationEventLogger()
+        // One pipeline for every reader, so both read the store's leases through the same cache.
+        let offlinePipeline = offlineChapterStore.map { OfflineImagePipeline.make(reader: $0) }
         return Self(
             settings: PreparedSettingsDependencies(
                 settingsStore: settingsStore,
@@ -156,7 +163,8 @@ struct PreparedApplicationDependencies {
                 settingsStore: settingsStore,
                 discordRPCManager: discordRPCManager,
                 pluginManager: pluginManager,
-                presentationLogger: presentationLogger
+                presentationLogger: presentationLogger,
+                offlinePipeline: offlinePipeline
             ),
             novelReader: .production(
                 readProgressManager: readProgressManager,
@@ -165,7 +173,8 @@ struct PreparedApplicationDependencies {
                 settingsStore: settingsStore,
                 discordRPCManager: discordRPCManager,
                 pluginManager: pluginManager,
-                presentationLogger: presentationLogger
+                presentationLogger: presentationLogger,
+                offlinePipeline: offlinePipeline
             ),
             videoPlayer: .production(
                 readProgressManager: readProgressManager,
@@ -236,7 +245,8 @@ struct PreparedApplicationDependencies {
                 }
             ),
             pluginCookies: pluginManager.pluginSettingsStore.cookies,
-            pluginTrust: pluginManager.pluginSettingsStore.trust
+            pluginTrust: pluginManager.pluginSettingsStore.trust,
+            offlineReading: offlineChapterStore ?? UnavailableOfflineChapterReading()
         )
     }
 }
@@ -529,6 +539,7 @@ final class AppScope {
             mangaReaderDependencies: preparedDependencies.mangaReader,
             novelReaderDependencies: preparedDependencies.novelReader,
             videoPlayerDependencies: preparedDependencies.videoPlayer,
+            offlineReading: preparedDependencies.offlineReading,
             backupSettingsDependencies: preparedDependencies.backupSettings,
             migrationReportDependencies: preparedDependencies.migrationReport,
             mediaDetailMessagePresenter: mediaDetailMessagePresenter,
@@ -564,7 +575,8 @@ final class AppScope {
         discoverDetailThemeService: any DiscoverDetailThemeServing,
         recentSearchDefaults: UserDefaults = .standard,
         browsePluginsDirectory: URL? = nil,
-        completionRecovery: (any PluginCompletionRecovering)? = nil
+        completionRecovery: (any PluginCompletionRecovering)? = nil,
+        offlineChapterStore: OfflineChapterStore? = nil
     ) -> AppScope {
         AppScope(
             preparedDependencies: .production(
@@ -588,7 +600,8 @@ final class AppScope {
                 discoverDetailThemeService: discoverDetailThemeService,
                 recentSearchDefaults: recentSearchDefaults,
                 browsePluginsDirectory: browsePluginsDirectory,
-                completionRecovery: completionRecovery
+                completionRecovery: completionRecovery,
+                offlineChapterStore: offlineChapterStore
             )
         )
     }

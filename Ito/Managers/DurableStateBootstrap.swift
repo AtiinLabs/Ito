@@ -87,12 +87,16 @@ public final class DurableStateBootstrap: ObservableObject {
     private let pluginCookies: PluginCookieJar
     private let pluginTokens: PluginSecretStore
     private let pluginTrust: PluginTrustStore
+    private let offlineChapterStore: OfflineChapterStore?
     private var preparationTask: Task<Bool, Never>?
     private var sourcesPrepared = false
     private var runtime: Runtime?
     private var completionBarrierObservation: AnyCancellable?
     private var completionRestoreBlocked = false
     private var completionForeground = UIApplication.shared.applicationState != .background
+    private var downloadCoordinator: DownloadQueueCoordinator?
+    /// What a cleared runtime's download worker is still finishing.
+    private var retiredDownloadWork: Task<Void, Never>?
 
     private struct Runtime {
         let settingsStore: AppSettingsStore
@@ -114,6 +118,7 @@ public final class DurableStateBootstrap: ObservableObject {
         let restoreRefresher: BackupRestoreRefresher
         let recentSearchDefaults: UserDefaults
         let completionCoordinator: PluginCompletionCoordinator
+        let downloads: DownloadStack?
     }
 
     public init(
@@ -132,7 +137,8 @@ public final class DurableStateBootstrap: ObservableObject {
         pluginTokens: PluginSecretStore = PluginSecretStore(
             keychain: SystemPluginSecretKeychain(service: PluginSecretStore.tokenService)
         ),
-        pluginTrust: PluginTrustStore = PluginTrustStore()
+        pluginTrust: PluginTrustStore = PluginTrustStore(),
+        offlineChaptersRoot: URL? = nil
     ) {
         self.dbPool = dbPool
         self.migration = migration
@@ -148,6 +154,16 @@ public final class DurableStateBootstrap: ObservableObject {
         self.pluginCookies = pluginCookies
         self.pluginTokens = pluginTokens
         self.pluginTrust = pluginTrust
+        // One store per installation directory for the whole process: a rebuilt runtime reuses it, so
+        // its leases, live attempts and once-only reconciliation are never split across two actors.
+        offlineChapterStore = offlineChaptersRoot.map { root in
+            OfflineChapterStore(
+                root: root,
+                database: dbPool,
+                fileSystem: LocalOfflineFileSystem(),
+                protectedData: UIApplicationProtectedDataAvailability()
+            )
+        }
         pluginSecrets.configureBeforeMutation { [dbPool] pluginID in
             try dbPool.write { db in
                 try PluginImageCacheEpoch.rotate(in: db)
@@ -421,6 +437,17 @@ public final class DurableStateBootstrap: ObservableObject {
                 self?.refreshCompletionActivity()
             }
 
+        let predecessor = retiredDownloadWork
+        retiredDownloadWork = nil
+        let downloads = offlineChapterStore.map { store in
+            DownloadStack(
+                store: store,
+                dbPool: dbPool,
+                pluginManager: plugins,
+                pluginSettings: pluginSettings,
+                predecessor: predecessor
+            )
+        }
         return Runtime(
             settingsStore: settings,
             pluginSettingsStore: pluginSettings,
@@ -440,7 +467,8 @@ public final class DurableStateBootstrap: ObservableObject {
             librarySourceRemapper: remapper,
             restoreRefresher: refresher,
             recentSearchDefaults: usernameDefaults,
-            completionCoordinator: completionCoordinator
+            completionCoordinator: completionCoordinator,
+            downloads: downloads
         )
     }
 
@@ -458,6 +486,9 @@ public final class DurableStateBootstrap: ObservableObject {
         try runtime.storageManager.reload()
         runtime.appearanceManager.reload()
         install(runtime)
+        if let coordinator = runtime.downloads?.coordinator {
+            Task { await coordinator.reconcile() }
+        }
         for constructor in consumerConstructors {
             constructor.construct()
         }
@@ -500,6 +531,7 @@ public final class DurableStateBootstrap: ObservableObject {
         backupManager = runtime.backupManager
         librarySourceRemapper = runtime.librarySourceRemapper
         completionCoordinator = runtime.completionCoordinator
+        downloadCoordinator = runtime.downloads?.coordinator
         appScope = AppScope.prepared(
             pluginManager: runtime.pluginManager,
             repoManager: runtime.repoManager,
@@ -521,7 +553,8 @@ public final class DurableStateBootstrap: ObservableObject {
             discoverDetailThemeService: ThemeManager.shared,
             recentSearchDefaults: runtime.recentSearchDefaults,
             browsePluginsDirectory: installedPluginsDirectory,
-            completionRecovery: runtime.completionCoordinator
+            completionRecovery: runtime.completionCoordinator,
+            offlineChapterStore: runtime.downloads?.store
         )
     }
 
@@ -529,6 +562,12 @@ public final class DurableStateBootstrap: ObservableObject {
         completionCoordinator?.suspend()
         completionBarrierObservation = nil
         completionCoordinator = nil
+        // The worker may still be finishing an attempt's bookkeeping; the next runtime's worker waits
+        // for it, so two workers never run attempts at once on the shared store. A runtime cleared
+        // before install still holds the chain: its unstarted worker hands back its own predecessor.
+        let worker = downloadCoordinator ?? runtime?.downloads?.coordinator
+        retiredDownloadWork = worker?.retire() ?? retiredDownloadWork
+        downloadCoordinator = nil
         runtime = nil
         settingsStore = nil
         pluginSettingsStore = nil
@@ -577,8 +616,10 @@ public final class DurableStateBootstrap: ObservableObject {
         guard let completionCoordinator else { return }
         if state == .ready, completionForeground, !completionRestoreBlocked {
             completionCoordinator.start()
+            downloadCoordinator?.start()
         } else {
             completionCoordinator.suspend()
+            downloadCoordinator?.suspend()
         }
     }
 
@@ -679,6 +720,13 @@ public final class DurableStateBootstrap: ObservableObject {
         ]
         #endif
         let dbPool = AppDatabase.shared.dbPool
+        // Offline chapters stay debug-only until their acceptance pass: without a root, release builds
+        // compose no store, worker, offline reader or saved-only route.
+        #if DEBUG
+        let offlineRoot = try? OfflineChaptersLocation.rootURL()
+        #else
+        let offlineRoot: URL? = nil
+        #endif
         let domain = UserDefaultsLegacyDomain(defaults: defaults, domainName: domainName)
         let migrator = LegacyDefaultsMigrator(dbPool: dbPool, domain: domain)
         return DurableStateBootstrap(
@@ -695,7 +743,8 @@ public final class DurableStateBootstrap: ObservableObject {
             pluginSecrets: pluginSecrets,
             pluginCookies: pluginCookies,
             pluginTokens: pluginTokens,
-            pluginTrust: pluginTrust
+            pluginTrust: pluginTrust,
+            offlineChaptersRoot: offlineRoot
         )
     }
 }

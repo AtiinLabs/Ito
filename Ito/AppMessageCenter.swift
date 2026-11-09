@@ -34,6 +34,7 @@ enum AppMessageKind: Equatable {
     case mediaDetailTrackerProgressFailed
     case mediaDetailChapterUnavailable(isEpisode: Bool)
     case mediaDetailChapterLocked(isEpisode: Bool)
+    case mediaDetailChapterNotDownloaded
     case libraryLayoutPersistenceFailed
     case libraryItemRemovalFailed
     case libraryUpdateFailed
@@ -282,6 +283,15 @@ extension AppMessageKind {
                 detail: isEpisode
                     ? String(localized: "This episode is locked on the source.")
                     : String(localized: "This chapter is locked on the source.")
+            )
+        case .mediaDetailChapterNotDownloaded:
+            return .init(
+                style: .info,
+                title: String(
+                    localized: "This chapter isn't downloaded.",
+                    comment: "Shown when a chapter has no offline copy and no installed source can load it. Used as the reader's load-failure text and as a notice on the series details screen."
+                ),
+                detail: nil
             )
         case .libraryLayoutPersistenceFailed:
             return .init(

@@ -59,7 +59,8 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
             settings: subject.settings,
             presence: subject.presence,
             pluginMetadata: subject.metadata,
-            presentationLogger: subject.logger
+            presentationLogger: subject.logger,
+            makeImageSession: { ReaderPageImageSession() }
         )
         let factory = MediaDetailReaderViewFactory(
             mangaReaderDependencies: .unavailable(),
@@ -68,13 +69,13 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
         let runner = ItoRunner()
 
         let first = factory.makeNovelViewModel(
-            runner: runner,
+            content: ReaderContentSource(remote: runner),
             pluginID: "plugin",
             entry: .novel(novel),
             chapter: chapter
         )
         let second = factory.makeNovelViewModel(
-            runner: runner,
+            content: ReaderContentSource(remote: runner),
             pluginID: "plugin",
             entry: .novel(novel),
             chapter: chapter
@@ -84,15 +85,13 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
         XCTAssertEqual(first.pluginID, "plugin")
         XCTAssertEqual(first.entry.key, "novel")
         XCTAssertEqual(first.currentChapter.key, "chapter")
-        XCTAssertTrue((first.chapterLoader as? ItoRunnerNovelChapterLoader)?.runner === runner)
-        XCTAssertTrue((second.chapterLoader as? ItoRunnerNovelChapterLoader)?.runner === runner)
+        XCTAssertTrue(((first.chapterLoader as? ResolvingNovelChapterLoader)?.remote as? ItoRunnerNovelChapterLoader)?.runner === runner)
+        XCTAssertTrue(((second.chapterLoader as? ResolvingNovelChapterLoader)?.remote as? ItoRunnerNovelChapterLoader)?.runner === runner)
     }
 
     func testReaderFactoryHasNoSecondLookupAndLeavesMangaAndAnimeOwnershipStable() throws {
         let factory = try source("Ito/Views/Browse/MediaDetailViewFactory.swift")
 
-        XCTAssertTrue(factory.contains("ItoRunnerNovelChapterLoader(runner: runner)"))
-        XCTAssertTrue(factory.contains("ItoRunnerMangaPageLoader(runner: runner)"))
         XCTAssertFalse(factory.contains("getRunner"))
         XCTAssertFalse(factory.contains("PluginManager"))
         XCTAssertTrue(factory.contains("ReaderView("))

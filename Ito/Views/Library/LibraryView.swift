@@ -665,7 +665,7 @@ struct DeferredPluginView: View {
     @ViewBuilder
     private var content: some View {
         switch viewModel.phase {
-        case .idle, .decoding, .loadingRunner, .cancelled:
+        case .idle, .decoding, .loadingRunner, .loadingSavedDetails, .cancelled:
             loadingView(label: "Loading…")
         case .checkingPackage:
             loadingView(label: "Searching repositories…")
@@ -740,6 +740,15 @@ struct DeferredPluginView: View {
                     .clipShape(Capsule())
             }
             .padding(.top, 10)
+            if viewModel.canOpenSavedDetails {
+                Button(action: viewModel.openSavedDetails) {
+                    Text(
+                        "Open Saved Details",
+                        comment: "Button on a library series whose source is unavailable: shows the details saved in the library."
+                    )
+                }
+                .buttonStyle(.bordered)
+            }
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -805,6 +814,15 @@ struct DeferredPluginView: View {
             if let retryTitle, let retry {
                 Button(retryTitle, action: retry)
                     .itoProminentButtonStyle()
+            }
+            if viewModel.canOpenSavedDetails {
+                Button(action: viewModel.openSavedDetails) {
+                    Text(
+                        "Open Saved Details",
+                        comment: "Button on a library series whose source is unavailable: shows the details saved in the library."
+                    )
+                }
+                .buttonStyle(.bordered)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

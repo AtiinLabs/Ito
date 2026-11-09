@@ -579,6 +579,62 @@ final class DeferredPluginViewModelTests: XCTestCase {
         XCTAssertTrue(pending.viewModel.route?.destination.runner === currentRunner)
     }
 
+    func testSavedMangaOpensWithoutAnInstalledSourceAndAddsOnlyDownloadedChaptersTheSavedPayloadLacks() async throws {
+        let payload = Manga(key: "manga", title: "Manga", chapters: [
+            Chapter(key: "c1", chapter: 1),
+            Chapter(key: "c2", chapter: 2)
+        ])
+        let inventory = InventoryOfflineChapterReading(rows: [
+            try DownloadedChapterRecord.verifiedFixture(chapterKey: "c2"),
+            try DownloadedChapterRecord.verifiedFixture(chapterKey: "c3")
+        ])
+        let subject = makeSubject(
+            item: try encodedItem(.manga(payload), pluginType: .manga),
+            offlineReading: inventory
+        )
+        subject.viewModel.appear()
+        await waitUntil { subject.viewModel.canOpenSavedDetails }
+
+        subject.viewModel.openSavedDetails()
+        await waitUntil { subject.viewModel.route != nil }
+
+        guard case .manga(let pluginID, let runner, let media)? = subject.viewModel.route?.destination else {
+            return XCTFail("The saved series opens as a manga route")
+        }
+        XCTAssertEqual(pluginID, "plugin.exact")
+        XCTAssertNil(runner)
+        // c2 is listed by the payload and is not repeated; only the downloaded c3 is added, after c1 and c2.
+        XCTAssertEqual(media.chapters?.map(\.key), ["c1", "c2", "c3"])
+    }
+
+    func testSavedAnimeHasNoSavedOnlyRoute() async throws {
+        let anime = Anime(key: "anime", title: "Anime")
+        let subject = makeSubject(
+            item: try encodedItem(.anime(anime), pluginType: .anime),
+            offlineReading: InventoryOfflineChapterReading(rows: [])
+        )
+        subject.viewModel.appear()
+        await waitUntil { subject.viewModel.isPluginMissing }
+
+        XCTAssertFalse(subject.viewModel.canOpenSavedDetails)
+        subject.viewModel.openSavedDetails()
+        XCTAssertNil(subject.viewModel.route)
+    }
+
+    func testSavedDetailsAreHiddenWhenOfflineCopiesAreUnavailable() async throws {
+        let payload = Manga(key: "manga", title: "Manga", chapters: [Chapter(key: "c1", chapter: 1)])
+        let subject = makeSubject(
+            item: try encodedItem(.manga(payload), pluginType: .manga),
+            offlineReading: InventoryOfflineChapterReading(rows: [], isAvailable: false)
+        )
+        subject.viewModel.appear()
+        await waitUntil { subject.viewModel.isPluginMissing }
+
+        XCTAssertFalse(subject.viewModel.canOpenSavedDetails)
+        subject.viewModel.openSavedDetails()
+        XCTAssertNil(subject.viewModel.route)
+    }
+
     private func makeSubject(
         item: Ito.LibraryItem,
         installedPluginIDs: Set<String> = [],
@@ -587,7 +643,8 @@ final class DeferredPluginViewModelTests: XCTestCase {
         lookupResponses: [DeferredInstallerFake.LookupResponse] = [],
         installResponses: [DeferredInstallerFake.InstallResponse] = [],
         decoder: (any DeferredPluginPayloadDecoding)? = nil,
-        openIntent: MediaDetailOpenIntent? = nil
+        openIntent: MediaDetailOpenIntent? = nil,
+        offlineReading: any OfflineChapterReading = UnavailableOfflineChapterReading()
     ) -> DeferredSubject {
         let plugins = DeferredPluginFake(
             installedPluginIDs: installedPluginIDs,
@@ -605,6 +662,7 @@ final class DeferredPluginViewModelTests: XCTestCase {
             plugins: plugins,
             installer: installer,
             payloadDecoder: decoder ?? JSONDeferredPluginPayloadDecoder(),
+            offlineReading: offlineReading,
             presentationLogger: logger
         )
         return DeferredSubject(
