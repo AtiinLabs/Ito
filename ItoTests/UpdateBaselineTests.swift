@@ -83,6 +83,23 @@ struct UpdateBaselineTests {
         #expect(try await persistedItem(database, id: item.id).knownChapterCount == 11)
     }
 
+    @Test func emptyAnswerKeepsTheKnownCountSoTheNextAnswerIsNotAllNew() async throws {
+        let checkedAt = Date(timeIntervalSince1970: 1_700_000_001)
+        let (database, manager, item) = try await makeSubject(knownCount: 12, status: "ongoing")
+        defer { database.cleanup() }
+
+        let emptyDelta = await successfulUpdate(manager, item: item, freshCount: 0, status: "completed", checkedAt: checkedAt)
+        #expect(emptyDelta == 0)
+        let afterEmpty = try await persistedItem(database, id: item.id)
+        #expect(afterEmpty.knownChapterCount == 12)
+        #expect(afterEmpty.status == "ongoing")
+        #expect(afterEmpty.lastCheckedAt == checkedAt)
+
+        let delta = await successfulUpdate(manager, item: item, freshCount: 13)
+        #expect(delta == 1)
+        #expect(manager.badgeCount(for: identity(for: item)) == 1)
+    }
+
     @Test func failedFetchRecordsOnlyTheAttemptTime() async throws {
         let checkedAt = Date(timeIntervalSince1970: 1_700_000_001)
         let updatedAt = Date(timeIntervalSince1970: 1_700_000_002)
