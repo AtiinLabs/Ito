@@ -44,7 +44,10 @@ nonisolated public struct BackupExportOperation: Sendable {
         FirstRunSetupRecord.databaseTableName,
         PluginImageCacheEpoch.tableName,
         PluginCompletionScope.outboxTableName,
-        PluginCompletionScope.tableName
+        PluginCompletionScope.tableName,
+        DownloadedChapterRecord.databaseTableName,
+        DownloadJobRecord.databaseTableName,
+        DownloadStoreRecord.databaseTableName
     ]
 
     static let excludedTableReasons: [String: String] = [
@@ -71,7 +74,13 @@ nonisolated public struct BackupExportOperation: Sendable {
         PluginCompletionScope.outboxTableName:
             "Installation-local remote completion authorization; never replayed from a backup.",
         PluginCompletionScope.tableName:
-            "Installation-local source/account authorization scopes; never exported in backups."
+            "Installation-local source/account authorization scopes; never exported in backups.",
+        DownloadedChapterRecord.databaseTableName:
+            "Installation-local pointers to offline media files that backups never contain.",
+        DownloadJobRecord.databaseTableName:
+            "Installation-local download queue; restored rules start paused and never replay from a backup.",
+        DownloadStoreRecord.databaseTableName:
+            "Installation-local binding between the database and its offline media directory."
     ]
 
     static let durableTablesByComponent: [BackupComponent: [String]] = [

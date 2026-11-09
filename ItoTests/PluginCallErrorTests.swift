@@ -104,20 +104,20 @@ struct PluginCallErrorTests {
     }
 }
 
-struct PluginImageTypeTests {
+struct ImageSignatureTests {
     @Test(arguments: [
-        ([0xFF, 0xD8, 0xFF, 0xE0], "image/jpeg"),
-        ([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], "image/png"),
-        (Array("GIF89a".utf8), "image/gif"),
-        (Array("RIFF".utf8) + [0, 0, 0, 0] + Array("WEBP".utf8), "image/webp"),
-        ([0, 0, 0, 0x1C] + Array("ftypavif".utf8), "image/avif"),
-        ([0, 0, 0, 0x18] + Array("ftypheic".utf8), "image/heic")
-    ] as [([UInt8], String)])
-    func pluginImageBytesGetTheirRealType(bytes: [UInt8], type: String) {
-        #expect(PluginDataLoader.imageMIMEType(of: Data(bytes)) == type)
+        ([0xFF, 0xD8, 0xFF, 0xE0], "image/jpeg", "jpg"),
+        ([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], "image/png", "png"),
+        (Array("GIF89a".utf8), "image/gif", "gif"),
+        (Array("RIFF".utf8) + [0, 0, 0, 0] + Array("WEBP".utf8), "image/webp", "webp"),
+        ([0, 0, 0, 0x1C] + Array("ftypavif".utf8), "image/avif", "avif"),
+        ([0, 0, 0, 0x18] + Array("ftypheic".utf8), "image/heic", "heic")
+    ] as [([UInt8], String, String)])
+    func imageBytesGetTheirRealTypeAndExtension(bytes: [UInt8], type: String, fileExtension: String) {
+        #expect(ImageSignature.detect(Data(bytes)) == ImageSignature.Detection(fileExtension: fileExtension, mediaType: type))
     }
 
-    @Test func unknownBytesGetNoType() {
-        #expect(PluginDataLoader.imageMIMEType(of: Data("<html>".utf8)) == nil)
+    @Test func anErrorPageIsNotAnImage() {
+        #expect(ImageSignature.detect(Data("<html>error page</html>".utf8)) == nil)
     }
 }
