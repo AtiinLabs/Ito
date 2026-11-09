@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import ito_runner
 import Testing
 @testable import Ito
 
@@ -10,7 +11,18 @@ struct OfflineChapterBackupTests {
         let fixture = try OfflineStoreFixture()
         let store = fixture.makeStore()
         let versionId = try await fixture.publishedEdition(store)
-        _ = try await fixture.enqueue(store, chapterKey: "chapter-2")
+        _ = try await fixture.enqueueBatch(store, chapterKeys: ["chapter-2", "chapter-3"])
+        _ = try await fixture.enqueue(store, chapterKey: "chapter-4")
+        try await fixture.database.dbPool.write { db in
+            try DownloadSuppressionRecord(
+                pluginId: "plugin.test",
+                mediaKind: .manga,
+                canonicalMediaId: "series-1",
+                chapterKey: "chapter-9",
+                authorityScope: .publicUnscoped,
+                suppressedAt: OfflineStoreFixture.fixedDate
+            ).insert(db)
+        }
         try await fixture.database.dbPool.write { db in
             for entry in AppPreferenceCatalogEntry.allCases {
                 try AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON).insert(db)
@@ -41,7 +53,9 @@ struct OfflineChapterBackupTests {
         try await dbPool.read { db in
             try String.fetchAll(db, sql: """
                 SELECT 'row:' || chapterKey || ':' || versionId || ':' || state FROM downloadedChapter
-                UNION ALL SELECT 'job:' || chapterKey || ':' || id || ':' || state FROM downloadJob
+                UNION ALL SELECT 'job:' || chapterKey || ':' || id || ':' || state || ':' || batchId || ':' || sequence FROM downloadJob
+                UNION ALL SELECT 'batch:' || id || ':' || preset || ':' || length(selection) || ':' || length(entrySnapshot) FROM downloadBatch
+                UNION ALL SELECT 'suppression:' || chapterKey FROM downloadSuppression
                 UNION ALL SELECT 'store:' || storeId FROM downloadStore
                 ORDER BY 1
                 """)

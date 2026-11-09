@@ -32,7 +32,8 @@ actor DownloadAttempt {
     static let maximumPages = 2_000
     static let maximumTextBytes = 8 * 1_024 * 1_024
 
-    private let job: DownloadJobRecord
+    private let work: DownloadJobWork
+    private var job: DownloadJobRecord { work.job }
     private let staging: OfflineStagingAttempt
     private let store: OfflineChapterStore
     private let runtime: DownloadPluginRuntime
@@ -43,7 +44,7 @@ actor DownloadAttempt {
     private var imageRunner: (any PluginImageRunner)?
 
     init(
-        job: DownloadJobRecord,
+        work: DownloadJobWork,
         staging: OfflineStagingAttempt,
         store: OfflineChapterStore,
         runtime: DownloadPluginRuntime,
@@ -52,7 +53,7 @@ actor DownloadAttempt {
         admission: any DownloadAdmissionGate,
         progress: @escaping DownloadProgressSink
     ) {
-        self.job = job
+        self.work = work
         self.staging = staging
         self.store = store
         self.runtime = runtime
@@ -85,8 +86,8 @@ actor DownloadAttempt {
 
     private func execute() async throws -> DownloadAttemptCompletion {
         let decoder = JSONDecoder()
-        let entry = try decoder.decode(MediaEntry.self, from: job.entrySnapshot)
-        let chapter = try decoder.decode(Chapter.self, from: job.chapterSnapshot)
+        let entry = try decoder.decode(MediaEntry.self, from: work.entrySnapshot)
+        let chapter = try decoder.decode(Chapter.self, from: work.job.chapterSnapshot)
 
         try await admit()
         let pages = runtime.pages

@@ -46,7 +46,10 @@ nonisolated public struct BackupExportOperation: Sendable {
         PluginCompletionScope.outboxTableName,
         PluginCompletionScope.tableName,
         DownloadedChapterRecord.databaseTableName,
+        // Jobs reference their batch, so they are cleared first.
         DownloadJobRecord.databaseTableName,
+        DownloadBatchRecord.databaseTableName,
+        DownloadSuppressionRecord.databaseTableName,
         DownloadStoreRecord.databaseTableName
     ]
 
@@ -79,6 +82,10 @@ nonisolated public struct BackupExportOperation: Sendable {
             "Installation-local pointers to offline media files that backups never contain.",
         DownloadJobRecord.databaseTableName:
             "Installation-local download queue; restored rules start paused and never replay from a backup.",
+        DownloadBatchRecord.databaseTableName:
+            "Installation-local download batches; frozen selections never replay from a backup.",
+        DownloadSuppressionRecord.databaseTableName:
+            "Installation-local record of deliberately deleted downloads.",
         DownloadStoreRecord.databaseTableName:
             "Installation-local binding between the database and its offline media directory."
     ]

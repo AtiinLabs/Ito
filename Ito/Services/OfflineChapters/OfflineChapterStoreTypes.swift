@@ -107,9 +107,17 @@ nonisolated enum OfflineStepLimit: Equatable, Sendable {
     case delete(OfflineDeleteStep)
 }
 
+/// What a delete removes: an explicit list of chapters, or every copy and job of one series.
+nonisolated enum OfflineDeleteScope: Sendable {
+    case editions([OfflineChapterEdition])
+    case media(MediaIdentity)
+}
+
 nonisolated enum OfflineStoreOperation: Sendable {
     case publish(jobID: String, pages: [OfflinePageInput], commitGuard: OfflineCommitGuard)
     case delete(OfflineChapterEdition)
+    /// A bulk delete. With `suppress`, each removed copy also records that the user deleted it.
+    case deleteScope(OfflineDeleteScope, suppress: Bool)
 }
 
 /// What a reconciliation run did. `discardedVersions` counts roll-forwards that could not complete.
@@ -123,6 +131,7 @@ nonisolated struct OfflineReconcileDetails: Equatable, Sendable {
     var removedStagingDirectories = 0
     var removedTrashItems = 0
     var reclaimedVersions = 0
+    var removedOrphanBatches = 0
 }
 
 /// What a garbage-collection pass removed.

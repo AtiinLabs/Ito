@@ -262,10 +262,13 @@ struct OfflineChapterStoreQueueTests {
         let store = fixture.makeStore()
         let jobID = try await fixture.enqueue(store)
         let attempt = try await store.beginAttempt(jobID: jobID)
-        // The row goes without the store's cleanup, as when a Cancel lands before the staging
-        // directory exists and so cannot see it.
+        // The rows go without the store's staging cleanup, as when a Cancel lands before the staging
+        // directory exists and so cannot see it. Like every job-removing transaction, the Cancel also
+        // removes the batch it empties.
         _ = try await fixture.database.dbPool.write { db in
+            let batchId = try DownloadJobRecord.fetchOne(db, key: jobID)?.batchId
             try DownloadJobRecord.deleteOne(db, key: jobID)
+            try db.execute(sql: "DELETE FROM downloadBatch WHERE id = ?", arguments: [batchId])
         }
 
         try await store.abandonAttempt(jobID: jobID, versionId: attempt.versionId, outcome: .queued)

@@ -6,8 +6,29 @@ import Testing
 
 /// The schema itself refuses states the store must never produce, whatever code writes them.
 struct OfflineChapterSchemaConstraintTests {
+    private static let batchId = "batch-fixture-\(String(repeating: "0", count: 22))"
+
+    /// Inserts the job, after the batch it references: a job without a batch is rejected by the foreign
+    /// key, which would hide the constraint each test is about.
+    private static func insert(_ job: DownloadJobRecord, in db: Database) throws {
+        try DownloadBatchRecord(
+            id: job.batchId,
+            pluginId: "plugin.test",
+            mediaKind: .manga,
+            canonicalMediaId: "series-1",
+            preset: .single,
+            selection: DownloadBatchRecord.sourceListSelection,
+            catalogDigest: nil,
+            entrySnapshot: Data("{}".utf8),
+            createdAt: Date(timeIntervalSince1970: 1)
+        ).insert(db, onConflict: .ignore)
+        try job.insert(db)
+    }
+
     private static func job(
         id: String = UUID().uuidString,
+        batchId: String = Self.batchId,
+        sequence: Int = 0,
         chapterKey: String = "chapter-1",
         mediaKind: MediaKind = .manga,
         state: DownloadJobState,
@@ -17,12 +38,13 @@ struct OfflineChapterSchemaConstraintTests {
     ) -> DownloadJobRecord {
         DownloadJobRecord(
             id: id,
+            batchId: batchId,
+            sequence: sequence,
             pluginId: "plugin.test",
             mediaKind: mediaKind,
             canonicalMediaId: "series-1",
             chapterKey: chapterKey,
             authorityScope: .publicUnscoped,
-            entrySnapshot: Data("{}".utf8),
             chapterSnapshot: Data("{}".utf8),
             seriesTitle: "Series",
             sourceEpoch: "epoch",
@@ -70,7 +92,7 @@ struct OfflineChapterSchemaConstraintTests {
 
         #expect(throws: DatabaseError.self) {
             try database.dbPool.write { db in
-                try Self.job(state: .downloading).insert(db)
+                try Self.insert(Self.job(state: .downloading), in: db)
             }
         }
     }
@@ -81,12 +103,12 @@ struct OfflineChapterSchemaConstraintTests {
 
         #expect(throws: DatabaseError.self) {
             try database.dbPool.write { db in
-                try Self.job(state: .waiting).insert(db)
+                try Self.insert(Self.job(state: .waiting), in: db)
             }
         }
         #expect(throws: DatabaseError.self) {
             try database.dbPool.write { db in
-                try Self.job(state: .queued, waitingReason: .noConnection).insert(db)
+                try Self.insert(Self.job(state: .queued, waitingReason: .noConnection), in: db)
             }
         }
     }
@@ -97,13 +119,15 @@ struct OfflineChapterSchemaConstraintTests {
 
         #expect(throws: DatabaseError.self) {
             try database.dbPool.write { db in
-                try Self.job(state: .failed).insert(db)
+                try Self.insert(Self.job(state: .failed), in: db)
             }
         }
         #expect(throws: DatabaseError.self) {
             try database.dbPool.write { db in
-                try Self.job(state: .downloading, failureReason: .network, stagingVersionId: UUID().uuidString)
-                    .insert(db)
+                try Self.insert(
+                    Self.job(state: .downloading, failureReason: .network, stagingVersionId: UUID().uuidString),
+                    in: db
+                )
             }
         }
     }
@@ -119,7 +143,7 @@ struct OfflineChapterSchemaConstraintTests {
         }
         #expect(throws: DatabaseError.self) {
             try database.dbPool.write { db in
-                try Self.job(mediaKind: .anime, state: .queued).insert(db)
+                try Self.insert(Self.job(mediaKind: .anime, state: .queued), in: db)
             }
         }
     }
@@ -142,12 +166,12 @@ struct OfflineChapterSchemaConstraintTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         try database.dbPool.write { db in
-            try Self.job(state: .queued).insert(db)
+            try Self.insert(Self.job(state: .queued), in: db)
         }
 
         #expect(throws: DatabaseError.self) {
             try database.dbPool.write { db in
-                try Self.job(state: .queued).insert(db)
+                try Self.insert(Self.job(state: .queued), in: db)
             }
         }
     }

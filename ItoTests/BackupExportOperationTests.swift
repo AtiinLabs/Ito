@@ -519,14 +519,27 @@ struct BackupExportOperationTests {
                 sourceEpoch: "epoch",
                 verifiedAt: date
             ).insert(db)
+            let batchId = UUID().uuidString
+            try DownloadBatchRecord(
+                id: batchId,
+                pluginId: "plugin.test",
+                mediaKind: .manga,
+                canonicalMediaId: "series-1",
+                preset: .single,
+                selection: DownloadBatchRecord.sourceListSelection,
+                catalogDigest: nil,
+                entrySnapshot: Data("{}".utf8),
+                createdAt: date
+            ).insert(db)
             try DownloadJobRecord(
                 id: UUID().uuidString,
+                batchId: batchId,
+                sequence: 0,
                 pluginId: "plugin.test",
                 mediaKind: .manga,
                 canonicalMediaId: "series-1",
                 chapterKey: "chapter-2",
                 authorityScope: .publicUnscoped,
-                entrySnapshot: Data("{}".utf8),
                 chapterSnapshot: Data("{}".utf8),
                 seriesTitle: "Series",
                 sourceEpoch: "epoch",
@@ -537,6 +550,14 @@ struct BackupExportOperationTests {
                 attemptCount: 0,
                 createdAt: date,
                 updatedAt: date
+            ).insert(db)
+            try DownloadSuppressionRecord(
+                pluginId: "plugin.test",
+                mediaKind: .manga,
+                canonicalMediaId: "series-1",
+                chapterKey: "chapter-3",
+                authorityScope: .publicUnscoped,
+                suppressedAt: date
             ).insert(db)
         }
         let destination = try ExportDestination()
@@ -552,18 +573,15 @@ struct BackupExportOperationTests {
 
         let exported = try DatabaseQueue(path: destination.url.path)
         defer { try? exported.close() }
+        let tables = ["downloadedChapter", "downloadJob", "downloadBatch", "downloadSuppression", "downloadStore"]
         let exportedCounts = try await exported.read { db in
-            try ["downloadedChapter", "downloadJob", "downloadStore"].map { try rowCount($0, in: db) }
+            try tables.map { try rowCount($0, in: db) }
         }
-        #expect(exportedCounts == [0, 0, 0])
+        #expect(exportedCounts == [0, 0, 0, 0, 0])
         let sourceCounts = try await database.dbPool.read { db in
-            [
-                try rowCount("downloadedChapter", in: db),
-                try rowCount("downloadJob", in: db),
-                try rowCount("downloadStore", in: db)
-            ]
+            try tables.map { try rowCount($0, in: db) }
         }
-        #expect(sourceCounts == [1, 1, 1])
+        #expect(sourceCounts == [1, 1, 1, 1, 1])
     }
 
     private func rowCount(_ table: String, in db: Database) throws -> Int {
