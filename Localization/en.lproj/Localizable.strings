@@ -181,6 +181,9 @@ History: kind of media */
 
 "Cancel Action" = "Cancel Action";
 
+/* Chapter menu: remove this chapter from the download queue */
+"Cancel Download" = "Cancel Download";
+
 /* Series status */
 "Cancelled" = "Cancelled";
 
@@ -315,6 +318,9 @@ History: kind of media */
 
 "Couldn't load trending titles: %@" = "Couldn't load trending titles: %@";
 
+/* Series details: a Download, Cancel, Retry or Delete Download action did not take effect. */
+"Couldn't update the download" = "Couldn't update the download";
+
 "Couldn’t prepare your library" = "Couldn’t prepare your library";
 
 "Couldn’t start the app" = "Couldn’t start the app";
@@ -357,6 +363,9 @@ History: kind of media */
 
 "Delete %@?" = "Delete %@?";
 
+/* Chapter menu: remove the saved copy of this chapter */
+"Delete Download" = "Delete Download";
+
 "Delete List" = "Delete List";
 
 "Dependency repaired" = "Dependency repaired";
@@ -385,6 +394,21 @@ History: kind of media */
 "DiscoverView requires a prepared runtime" = "DiscoverView requires a prepared runtime";
 
 "Done" = "Done";
+
+/* Chapter menu: save this chapter for offline reading */
+"Download" = "Download";
+
+/* Chapter download status: the saved copy no longer matches what was downloaded */
+"Download damaged" = "Download damaged";
+
+/* Chapter download status */
+"Download failed" = "Download failed";
+
+/* Chapter download status */
+"Downloaded" = "Downloaded";
+
+/* Chapter download status */
+"Downloading" = "Downloading";
 
 "Drop a .ito plugin file here, or browse repositories to find and install plugins." = "Drop a .ito plugin file here, or browse repositories to find and install plugins.";
 
@@ -980,6 +1004,12 @@ History: the page a chapter was left on */
 
 "Paused" = "Paused";
 
+/* Chapter download status: the queue came from a restored backup. Retry to download again. */
+"Paused after a restore" = "Paused after a restore";
+
+/* Chapter download status: downloads run only while the app is open */
+"Paused in the background" = "Paused in the background";
+
 "Paused read progress for this source is deleted without being sent. Your local reading history is unchanged." = "Paused read progress for this source is deleted without being sent. Your local reading history is unchanged.";
 
 "Paused read progress was recorded before this source's server or account settings changed. It is sent to the server and account configured now. Nothing is sent until you confirm." = "Paused read progress was recorded before this source's server or account settings changed. It is sent to the server and account configured now. Nothing is sent until you confirm.";
@@ -1033,6 +1063,9 @@ History: the page a chapter was left on */
 "Privacy" = "Privacy";
 
 "Progress" = "Progress";
+
+/* Chapter download status: waiting for its turn */
+"Queued" = "Queued";
 
 "Re-link failed. Please try again." = "Re-link failed. Please try again.";
 
@@ -1168,6 +1201,9 @@ History: the page a chapter was left on */
 "Resume" = "Resume";
 
 "Retry" = "Retry";
+
+/* Chapter menu */
+"Retry Download" = "Retry Download";
 
 "Retry Install" = "Retry Install";
 
@@ -1398,6 +1434,12 @@ History: the page a chapter was left on */
 
 "Source settings" = "Source settings";
 
+/* Chapter download status: the source's settings or account changed after the chapter was queued. Retry to download again. */
+"Source settings changed" = "Source settings changed";
+
+/* Chapter download status: the source is not installed or could not load. Retry to download again. */
+"Source unavailable" = "Source unavailable";
+
 "Sources" = "Sources";
 
 /* Country of origin */
@@ -1497,6 +1539,9 @@ Reading font: the system font */
 "The certificate couldn't be saved. Try again." = "The certificate couldn't be saved. Try again.";
 
 "The configured repositories could not be refreshed. Please try again." = "The configured repositories could not be refreshed. Please try again.";
+
+/* Series details: detail for a download action that did not take effect. */
+"The download could not be changed. Please try again." = "The download could not be changed. Please try again.";
 
 "The extension \"%@\" was not found in any of your repositories." = "The extension \"%@\" was not found in any of your repositories.";
 
@@ -1633,6 +1678,9 @@ Reading font: the system font */
 "These settings can't be shown." = "These settings can't be shown.";
 
 "This action is unsupported by the source." = "This action is unsupported by the source.";
+
+/* Series details: the chapter is locked, or its source can't be saved for offline reading. */
+"This chapter can't be downloaded." = "This chapter can't be downloaded.";
 
 "This chapter is locked on the source." = "This chapter is locked on the source.";
 
@@ -1840,6 +1888,21 @@ Reading font: the system font */
 
 /* History: volume and chapter title */
 "Vol. %@ · %@" = "Vol. %1$@ · %2$@";
+
+/* Chapter download status: downloads do not use cellular or other metered networks */
+"Waiting for Wi-Fi" = "Waiting for Wi-Fi";
+
+/* Chapter download status */
+"Waiting for a connection" = "Waiting for a connection";
+
+/* Chapter download status */
+"Waiting for free storage" = "Waiting for free storage";
+
+/* Chapter download status */
+"Waiting for the device to unlock" = "Waiting for the device to unlock";
+
+/* Chapter download status */
+"Waiting: Low Data Mode is on" = "Waiting: Low Data Mode is on";
 
 "Warnings" = "Warnings";
 

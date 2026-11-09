@@ -57,6 +57,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     @Published private(set) var trackerSheetIntent: MediaDetailTrackerSheetIntent?
     @Published private(set) var categoryAssignmentIntent: MediaDetailCategoryAssignmentIntent?
     @Published private(set) var relinkPresentation: MediaDetailRelinkPresentation?
+    /// This series' chapter download states, keyed by chapter key.
+    @Published private(set) var chapterDownloadStates: [String: ChapterDownloadState] = [:]
 
     let pluginID: String
 
@@ -68,6 +70,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     private let routeContext: MediaDetailRouteContext<M>
     private let dependencies: PreparedMediaDetailDependencies
     private let messagePresenter: any MediaDetailMessagePresenting
+    /// Downloads for this series' chapters. Unavailable where offline chapters are not composed.
+    let downloads: any MediaDetailDownloadServing
     private let presentationLogger: any PresentationEventLogging
 
     private var detailTask: Task<Void, Never>?
@@ -113,6 +117,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         self.routeContext = routeContext
         self.dependencies = dependencies
         self.messagePresenter = messagePresenter
+        downloads = dependencies.downloads
         self.presentationLogger = presentationLogger
         pendingOpenIntent = openIntent
 
@@ -140,6 +145,17 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
+        // Follows the series identity, so a relink observes the new series' chapters.
+        let downloads = dependencies.downloads
+        $media
+            .map { [pluginID] in MediaIdentity(pluginId: pluginID, canonicalMediaId: $0.key, mediaKind: $0.mediaKind) }
+            .removeDuplicates()
+            .map { downloads.chapterStates(for: $0) }
+            .switchToLatest()
+            .sink { [weak self] states in
+                self?.chapterDownloadStates = states
+            }
+            .store(in: &cancellables)
     }
 
     deinit {
@@ -153,6 +169,12 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
 
     var mediaIdentity: MediaIdentity {
         MediaIdentity(pluginId: pluginID, canonicalMediaId: media.key, mediaKind: media.mediaKind)
+    }
+
+    /// Presents a download message only while this screen may still show output.
+    func presentDownloadMessage(_ message: MediaDetailMessage) {
+        guard mayPresentUserOutput else { return }
+        messagePresenter.present(message)
     }
 
     var isDetailLoading: Bool {

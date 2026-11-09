@@ -31,6 +31,17 @@ nonisolated struct OfflineChapterEdition: Codable, Hashable, Sendable {
         self.authorityScope = authorityScope
     }
 
+    /// The edition of one chapter of a series. The one place screens turn a series and a chapter key into
+    /// an edition, so the authority scope is chosen in one place when it widens.
+    init(media: MediaIdentity, chapterKey: String) {
+        self.init(
+            pluginId: media.pluginId,
+            mediaKind: media.mediaKind,
+            canonicalMediaId: media.canonicalMediaId,
+            chapterKey: chapterKey
+        )
+    }
+
     /// Matches one row of `downloadedChapter` or `downloadJob` by the edition's identity columns.
     var predicate: SQLExpression {
         Column("pluginId") == pluginId

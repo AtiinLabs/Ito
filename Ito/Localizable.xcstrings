@@ -718,6 +718,9 @@
     "Cancel Action" : {
 
     },
+    "Cancel Download" : {
+      "comment" : "Chapter menu: remove this chapter from the download queue"
+    },
     "Cancelled" : {
       "comment" : "Series status"
     },
@@ -939,6 +942,9 @@
     "Couldn't load trending titles: %@" : {
 
     },
+    "Couldn't update the download" : {
+      "comment" : "Series details: a Download, Cancel, Retry or Delete Download action did not take effect."
+    },
     "Couldn’t prepare your library" : {
 
     },
@@ -1006,6 +1012,9 @@
     "Delete %@?" : {
 
     },
+    "Delete Download" : {
+      "comment" : "Chapter menu: remove the saved copy of this chapter"
+    },
     "Delete List" : {
 
     },
@@ -1047,6 +1056,21 @@
     },
     "Done" : {
 
+    },
+    "Download" : {
+      "comment" : "Chapter menu: save this chapter for offline reading"
+    },
+    "Download damaged" : {
+      "comment" : "Chapter download status: the saved copy no longer matches what was downloaded"
+    },
+    "Download failed" : {
+      "comment" : "Chapter download status"
+    },
+    "Downloaded" : {
+      "comment" : "Chapter download status"
+    },
+    "Downloading" : {
+      "comment" : "Chapter download status"
     },
     "Drop a .ito plugin file here, or browse repositories to find and install plugins." : {
 
@@ -1943,6 +1967,12 @@
     "Paused" : {
 
     },
+    "Paused after a restore" : {
+      "comment" : "Chapter download status: the queue came from a restored backup. Retry to download again."
+    },
+    "Paused in the background" : {
+      "comment" : "Chapter download status: downloads run only while the app is open"
+    },
     "Paused read progress for this source is deleted without being sent. Your local reading history is unchanged." : {
 
     },
@@ -2023,6 +2053,9 @@
     },
     "Progress" : {
 
+    },
+    "Queued" : {
+      "comment" : "Chapter download status: waiting for its turn"
     },
     "Re-link failed. Please try again." : {
 
@@ -2229,6 +2262,9 @@
     },
     "Retry" : {
 
+    },
+    "Retry Download" : {
+      "comment" : "Chapter menu"
     },
     "Retry Install" : {
 
@@ -2592,6 +2628,12 @@
     "Source settings" : {
 
     },
+    "Source settings changed" : {
+      "comment" : "Chapter download status: the source's settings or account changed after the chapter was queued. Retry to download again."
+    },
+    "Source unavailable" : {
+      "comment" : "Chapter download status: the source is not installed or could not load. Retry to download again."
+    },
     "Sources" : {
 
     },
@@ -2723,6 +2765,9 @@
     },
     "The configured repositories could not be refreshed. Please try again." : {
 
+    },
+    "The download could not be changed. Please try again." : {
+      "comment" : "Series details: detail for a download action that did not take effect."
     },
     "The extension \"%@\" was not found in any of your repositories." : {
 
@@ -2927,6 +2972,9 @@
     },
     "This action is unsupported by the source." : {
 
+    },
+    "This chapter can't be downloaded." : {
+      "comment" : "Series details: the chapter is locked, or its source can't be saved for offline reading."
     },
     "This chapter is locked on the source." : {
 
@@ -3243,6 +3291,21 @@
           }
         }
       }
+    },
+    "Waiting for Wi-Fi" : {
+      "comment" : "Chapter download status: downloads do not use cellular or other metered networks"
+    },
+    "Waiting for a connection" : {
+      "comment" : "Chapter download status"
+    },
+    "Waiting for free storage" : {
+      "comment" : "Chapter download status"
+    },
+    "Waiting for the device to unlock" : {
+      "comment" : "Chapter download status"
+    },
+    "Waiting: Low Data Mode is on" : {
+      "comment" : "Chapter download status"
     },
     "Warnings" : {
 

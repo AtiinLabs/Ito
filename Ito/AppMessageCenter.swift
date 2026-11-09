@@ -35,6 +35,8 @@ enum AppMessageKind: Equatable {
     case mediaDetailChapterUnavailable(isEpisode: Bool)
     case mediaDetailChapterLocked(isEpisode: Bool)
     case mediaDetailChapterNotDownloaded
+    case mediaDetailDownloadRefused
+    case mediaDetailDownloadActionFailed
     case libraryLayoutPersistenceFailed
     case libraryItemRemovalFailed
     case libraryUpdateFailed
@@ -292,6 +294,27 @@ extension AppMessageKind {
                     comment: "Shown when a chapter has no offline copy and no installed source can load it. Used as the reader's load-failure text and as a notice on the series details screen."
                 ),
                 detail: nil
+            )
+        case .mediaDetailDownloadRefused:
+            return .init(
+                style: .info,
+                title: String(
+                    localized: "This chapter can't be downloaded.",
+                    comment: "Series details: the chapter is locked, or its source can't be saved for offline reading."
+                ),
+                detail: nil
+            )
+        case .mediaDetailDownloadActionFailed:
+            return .init(
+                style: .error,
+                title: String(
+                    localized: "Couldn't update the download",
+                    comment: "Series details: a Download, Cancel, Retry or Delete Download action did not take effect."
+                ),
+                detail: String(
+                    localized: "The download could not be changed. Please try again.",
+                    comment: "Series details: detail for a download action that did not take effect."
+                )
             )
         case .libraryLayoutPersistenceFailed:
             return .init(
