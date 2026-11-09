@@ -3,146 +3,6 @@ import GRDB
 import OSLog
 import ito_runner
 
-/// Checks that only live in memory: trust generation and plugin publication revision. It is called
-/// inside the commit transaction, so it must be synchronous and must not touch the database. The
-/// source epoch is not checked here; the store reads it from `pluginCompletionScope` in the same
-/// transaction.
-typealias OfflineCommitGuard = @Sendable (DownloadJobRecord) -> Bool
-
-nonisolated enum OfflineStoreError: Error, Equatable, Sendable {
-    /// Queueing and attempts need a completed reconciliation first. A new process reconciles once
-    /// at launch, so jobs without a store binding can only come from a restore.
-    case reconciliationPending
-    /// The attempt cannot start now. The job is left waiting with this reason.
-    case blocked(DownloadWaitingReason)
-    /// The job is missing, or not in a state that allows the operation.
-    case jobUnavailable
-    case notVerified
-    case damaged(DamageReason)
-    /// The verified row points at a version directory that is not on disk.
-    case versionUnavailable
-    case protectedDataUnavailable
-}
-
-nonisolated enum OfflineStagingError: Error, Equatable, Sendable {
-    case sealed
-    case unsupportedImageFormat
-}
-
-nonisolated enum OfflinePublishError: Error, Equatable, Sendable {
-    /// A staged page no longer matches what was written.
-    case integrityMismatch
-}
-
-/// One page to store. `text` is UTF-8 data; `image` is complete image bytes; `imageFile` is a temp
-/// file the store moves into the staging directory.
-nonisolated struct OfflinePageInput: Sendable {
-    nonisolated enum Content: Sendable {
-        case text(Data)
-        case image(Data)
-        case imageFile(URL)
-    }
-
-    let content: Content
-    let sourceIndex: Int32
-    let description: String?
-
-    init(content: Content, sourceIndex: Int32, description: String? = nil) {
-        self.content = content
-        self.sourceIndex = sourceIndex
-        self.description = description
-    }
-}
-
-nonisolated struct OfflineStagedVersion: Sendable {
-    let manifest: OfflineChapterManifest
-    /// The manifest file bytes. Their digest is stored in the inventory row.
-    let manifestData: Data
-}
-
-nonisolated enum OfflinePublishRefusal: Equatable, Sendable {
-    /// The job was cancelled or deleted before the commit.
-    case jobGone
-    /// The source epoch or an in-memory check changed since the job was queued.
-    case configurationChanged
-    /// The edition already has a verified copy. M0 never replaces one.
-    case alreadyVerified
-}
-
-nonisolated enum OfflinePublishOutcome: Equatable, Sendable {
-    case published(versionId: String)
-    /// Nothing was committed. The version was discarded unless a row still references it.
-    case refused(OfflinePublishRefusal)
-    /// The attempt failed before commit, so its artifacts were removed and the job moved to `outcome`.
-    case discarded(DownloadAttemptOutcome)
-}
-
-/// The publish protocol's steps P1 to P5. Crash tests stop after one of them.
-nonisolated enum OfflinePublishStep: CaseIterable, Sendable {
-    /// P1: the job references the staging version id.
-    case stagingIntent
-    /// P2: every page is written into the staging directory.
-    case stream
-    /// P3: pages are re-read and hashed, and the manifest is written.
-    case verify
-    /// P4: the staging directory is renamed into `versions/`.
-    case rename
-    /// P5: the inventory row is inserted and the job deleted, in one transaction.
-    case commit
-}
-
-/// The delete protocol's steps D1 to D3.
-nonisolated enum OfflineDeleteStep: CaseIterable, Sendable {
-    /// D1: the inventory row and any job for the edition are deleted.
-    case commitRow
-    /// D2: an unleased version is renamed into `trash/`.
-    case detach
-    /// D3: the trash item is removed.
-    case removeTrash
-}
-
-/// Where a crash-injected operation stops. Production always runs `.all`.
-nonisolated enum OfflineStepLimit: Equatable, Sendable {
-    case all
-    case publish(OfflinePublishStep)
-    case delete(OfflineDeleteStep)
-}
-
-nonisolated enum OfflineStoreOperation: Sendable {
-    case publish(jobID: String, pages: [OfflinePageInput], commitGuard: OfflineCommitGuard)
-    case delete(OfflineChapterEdition)
-}
-
-/// What a reconciliation run did. `discardedVersions` counts roll-forwards that could not complete.
-nonisolated struct OfflineReconcileDetails: Equatable, Sendable {
-    var restoredJobs = 0
-    var rolledForward = 0
-    var requeuedJobs = 0
-    var discardedVersions = 0
-    var removedRows = 0
-    var damagedRows = 0
-    var removedStagingDirectories = 0
-    var removedTrashItems = 0
-    var reclaimedVersions = 0
-}
-
-/// What a garbage-collection pass removed.
-nonisolated struct OfflineCollectionReport: Equatable, Sendable {
-    var removedStagingDirectories = 0
-    var removedTrashItems = 0
-    var reclaimedVersions = 0
-}
-
-/// `.deferred` is returned before any change when protected data is unavailable at entry. A
-/// filesystem denial later in the run stops the run; the changes already made in that run each
-/// had their precondition confirmed (an interrupted attempt requeued, a row whose directory is
-/// confirmed absent removed, a manifest confirmed mismatched marked damaged). No version that could
-/// be read is deleted or marked.
-nonisolated enum OfflineReconcileReport: Equatable, Sendable {
-    case deferred
-    case completed(OfflineReconcileDetails)
-}
-
 /// One download attempt's staging directory. Pages are written in order, and each one's size and
 /// digest are recorded as it is written. The store publishes the attempt with `publish`.
 actor OfflineStagingAttempt {
@@ -264,7 +124,7 @@ actor OfflineChapterStore {
     nonisolated let leases = OfflineLeaseDirectory()
 
     private let database: DatabasePool
-    private let fileSystem: any OfflineFileSystem
+    nonisolated private let fileSystem: any OfflineFileSystem
     private let protectedData: any ProtectedDataAvailability
     private let clock: @Sendable () -> Date
     /// Set once a run completes. Crash recovery runs at most once per instance after that.
@@ -312,7 +172,8 @@ actor OfflineChapterStore {
     ///
     /// - Parameter rollForwardGuard: in-memory checks for a fully staged version that is about to
     ///   commit. The source epoch is checked from the database in the same transaction. The default
-    ///   refuses, so a crash between P4 and P5 discards the version instead.
+    ///   refuses: the trust and publication baselines of the crashed attempt do not survive a
+    ///   relaunch, so a crash between P4 and P5 requeues the chapter and it is fetched again.
     func reconcile(rollForwardGuard: @escaping OfflineCommitGuard = { _ in false }) async -> OfflineReconcileReport {
         if let completedReconciliation {
             return completedReconciliation
@@ -455,8 +316,13 @@ actor OfflineChapterStore {
                         staged: staged,
                         commitGuard: commitGuard
                     )
-                    if case .published = outcome {
+                    switch outcome {
+                    case .published:
                         details.rolledForward += 1
+                    case .refused(.staleRuntime):
+                        details.requeuedJobs += 1
+                    default:
+                        break
                     }
                     continue
                 }
@@ -708,6 +574,14 @@ actor OfflineChapterStore {
         }
     }
 
+    /// The source's current completion epoch, or nil when it has no scope yet. A read: the pre-attempt
+    /// check compares it with the job's frozen epoch, and the commit checks it again in its transaction.
+    func currentSourceEpoch(pluginId: String) async throws -> String? {
+        try await database.read { db in
+            try PluginCompletionScope.current(pluginID: pluginId, in: db)
+        }
+    }
+
     /// Removes the edition's inventory row and job, then the version's bytes unless a lease holds
     /// them. Leased bytes are reclaimed when the last lease is released.
     func delete(_ edition: OfflineChapterEdition) async throws {
@@ -791,21 +665,29 @@ actor OfflineChapterStore {
     }
 
     /// Ends an attempt that will not publish. Ownership is checked before any file is touched: the
-    /// attempt must be live here and the job must still reference its version. An attempt whose
-    /// version was already published, cancelled or deleted changes nothing.
+    /// attempt must be live here. If the job still references its version, the version is discarded
+    /// and the job moves to `outcome`. If the job was cancelled or deleted meanwhile, an unreferenced
+    /// version is discarded; a published one is never touched.
     func abandonAttempt(jobID: String, versionId: String, outcome: DownloadAttemptOutcome) async throws {
-        guard try await ownsAttempt(jobID: jobID, versionId: versionId) else { return }
-        liveAttemptVersions.remove(versionId)
-        discardArtifacts(versionId: versionId)
-        try await setOutcome(jobID: jobID, versionId: versionId, outcome: outcome)
-    }
-
-    private func ownsAttempt(jobID: String, versionId: String) async throws -> Bool {
-        guard liveAttemptVersions.contains(versionId) else { return false }
+        guard liveAttemptVersions.contains(versionId) else { return }
         let job = try await database.read { db in
             try DownloadJobRecord.fetchOne(db, key: jobID)
         }
-        return job?.stagingVersionId == versionId
+        guard job?.stagingVersionId == versionId else {
+            // Cancel or Delete ran while `beginAttempt` was still creating the staging directory, so its
+            // cleanup could not see it. Nothing references the version now; release it here.
+            let referenced = try await database.read { db in
+                try Self.isReferenced(versionId: versionId, in: db)
+            }
+            if !referenced {
+                liveAttemptVersions.remove(versionId)
+                discardArtifacts(versionId: versionId)
+            }
+            return
+        }
+        liveAttemptVersions.remove(versionId)
+        discardArtifacts(versionId: versionId)
+        try await setOutcome(jobID: jobID, versionId: versionId, outcome: outcome)
     }
 
     private func admissionBlocker() async -> DownloadWaitingReason? {
@@ -854,9 +736,21 @@ actor OfflineChapterStore {
         do {
             return try await commitPublish(job: job, versionId: versionId, staged: staged, commitGuard: commitGuard)
         } catch let error as DatabaseError {
-            // The write did not happen; the job keeps its staging intent and the next launch's
-            // reconciliation settles it, as for any interrupted commit.
-            throw error
+            // The commit rolled back, so no row references the version. The job is settled first and
+            // the version discarded only after that write lands: if it fails too, the job keeps its
+            // staging intent, and the next launch's reconciliation discards the version and requeues it,
+            // as for a crash at this step. A full disk waits for space: downloads are what fill it.
+            let outcome: DownloadAttemptOutcome = error.resultCode == .SQLITE_FULL
+                ? .waiting(.insufficientStorage)
+                : Self.outcome(for: error)
+            try await setOutcome(jobID: job.id, versionId: versionId, outcome: outcome)
+            let referenced = try await database.read { db in
+                try Self.isReferenced(versionId: versionId, in: db)
+            }
+            if !referenced {
+                discardArtifacts(versionId: versionId)
+            }
+            return .discarded(outcome)
         } catch {
             // Anything else failed inside the rolled-back commit (an undecodable snapshot, an
             // unreadable source scope), so no row references the version: discard it and record
@@ -914,14 +808,24 @@ actor OfflineChapterStore {
             return try refusal(.alreadyVerified, versionId: versionId, in: db)
         }
         let currentEpoch = try PluginCompletionScope.current(pluginID: job.pluginId, in: db)
-        let epochMatches = job.sourceEpoch != nil && currentEpoch == job.sourceEpoch
-        guard epochMatches, commitGuard(job) else {
+        guard job.sourceEpoch != nil, currentEpoch == job.sourceEpoch else {
+            // The source's settings or credentials changed: the user decides whether to fetch again.
             job.state = .waiting
             job.waitingReason = .sourceConfigurationChanged
             job.stagingVersionId = nil
             job.updatedAt = now
             try job.update(db)
             return try refusal(.configurationChanged, versionId: versionId, in: db)
+        }
+        guard commitGuard(job) else {
+            // The plugin or its trust changed under the attempt. Nothing the user chose changed, so
+            // the chapter is fetched again by a fresh runtime under the current trust.
+            job.state = .queued
+            job.waitingReason = nil
+            job.stagingVersionId = nil
+            job.updatedAt = now
+            try job.update(db)
+            return try refusal(.staleRuntime, versionId: versionId, in: db)
         }
         let snapshot = try inventorySnapshot(of: job.chapterSnapshot)
         try DownloadedChapterRecord(
@@ -976,27 +880,6 @@ actor OfflineChapterStore {
         discardArtifacts(versionId: versionId)
         try await setOutcome(jobID: job.id, versionId: versionId, outcome: outcome)
         return .discarded(outcome)
-    }
-
-    /// Where a failed attempt or publish goes. Full storage and a locked device wait for those
-    /// conditions to clear. A corrupt or missing staged file, a bad manifest and any other
-    /// filesystem failure fail the job, so it is not retried without an explicit Retry. Re-queueing
-    /// is reserved for crash recovery.
-    nonisolated private static func outcome(for error: Error) -> DownloadAttemptOutcome {
-        if let fileError = error as? OfflineFileSystemError {
-            switch fileError {
-            case .noSpace:
-                return .waiting(.insufficientStorage)
-            case .permissionDenied:
-                return .waiting(.protectedDataUnavailable)
-            case .notFound, .other:
-                return .failed(.fileSystem)
-            }
-        }
-        if error is OfflineManifestError || error is OfflinePublishError || error is DecodingError {
-            return .failed(.integrityMismatch)
-        }
-        return .failed(.fileSystem)
     }
 
     /// Moves the job to `outcome` only while it still references `versionId`.
@@ -1116,6 +999,75 @@ actor OfflineChapterStore {
             try DownloadedChapterRecord
                 .filter(edition.predicate && Column("state") == DownloadedChapterState.verified.rawValue)
                 .fetchOne(db)
+        }
+    }
+
+    /// The verified copies of one media item, ordered by chapter key. Damaged copies are left out.
+    func verifiedChapters(
+        pluginId: String,
+        mediaKind: MediaKind,
+        canonicalMediaId: String
+    ) async throws -> [DownloadedChapterRecord] {
+        try await database.read { db in
+            try DownloadedChapterRecord
+                .filter(
+                    Column("pluginId") == pluginId
+                        && Column("mediaKind") == mediaKind.rawValue
+                        && Column("canonicalMediaId") == canonicalMediaId
+                        && Column("state") == DownloadedChapterState.verified.rawValue
+                )
+                .order(Column("chapterKey"))
+                .fetchAll(db)
+        }
+    }
+
+    /// Checks that the next asset can be written above the reserve. Called before every asset, so
+    /// an attempt stops before more bytes are written once the volume fills or protected data locks.
+    func ensureCapacityForNextAsset() async throws {
+        guard await protectedData.isProtectedDataAvailable() else {
+            throw OfflineStoreError.blocked(.protectedDataUnavailable)
+        }
+        do {
+            let capacity = try fileSystem.availableCapacity(at: root)
+            guard capacity >= Self.reserveBytes else {
+                throw OfflineStoreError.blocked(.insufficientStorage)
+            }
+        } catch OfflineFileSystemError.permissionDenied {
+            throw OfflineStoreError.blocked(.protectedDataUnavailable)
+        } catch let error as OfflineStoreError {
+            throw error
+        } catch {
+            throw OfflineStoreError.blocked(.insufficientStorage)
+        }
+    }
+
+    /// Reads one page of a leased version and checks it against the manifest before returning any
+    /// byte. A permission error means a locked device, so the copy is left alone. A missing or
+    /// altered page marks the copy damaged; the mark is scheduled, because readers call this on
+    /// their own threads.
+    nonisolated func readVerifiedPage(_ page: OfflineLeasedPage) throws -> Data {
+        let data: Data
+        do {
+            data = try fileSystem.readData(at: page.fileURL)
+        } catch OfflineFileSystemError.permissionDenied {
+            throw OfflineStoreError.protectedDataUnavailable
+        } catch OfflineFileSystemError.notFound {
+            scheduleDamageMark(versionId: page.versionId, reason: .pageMismatch)
+            throw OfflineStoreError.damaged(.pageMismatch)
+        } catch {
+            throw OfflineStoreError.versionUnavailable
+        }
+        guard Int64(data.count) == page.page.byteCount,
+              OfflineDigest.sha256Hex(data) == page.page.sha256 else {
+            scheduleDamageMark(versionId: page.versionId, reason: .pageMismatch)
+            throw OfflineStoreError.damaged(.pageMismatch)
+        }
+        return data
+    }
+
+    nonisolated private func scheduleDamageMark(versionId: String, reason: DamageReason) {
+        Task { [self] in
+            try? await self.markDamaged(versionId: versionId, reason: reason)
         }
     }
 

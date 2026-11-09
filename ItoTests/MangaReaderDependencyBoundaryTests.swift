@@ -65,13 +65,13 @@ final class MangaReaderDependencyBoundaryTests: XCTestCase {
         let runner = ItoRunner()
 
         let first = factory.makeMangaViewModel(
-            runner: runner,
+            content: ReaderContentSource(remote: runner),
             pluginID: "plugin",
             entry: .manga(manga),
             chapter: chapter
         )
         let second = factory.makeMangaViewModel(
-            runner: runner,
+            content: ReaderContentSource(remote: runner),
             pluginID: "plugin",
             entry: .manga(manga),
             chapter: chapter
@@ -81,14 +81,13 @@ final class MangaReaderDependencyBoundaryTests: XCTestCase {
         XCTAssertEqual(first.pluginID, "plugin")
         XCTAssertEqual(first.entry.key, "manga")
         XCTAssertEqual(first.currentChapter.key, "chapter")
-        XCTAssertTrue((first.pageLoader as? ItoRunnerMangaPageLoader)?.runner === runner)
-        XCTAssertTrue((second.pageLoader as? ItoRunnerMangaPageLoader)?.runner === runner)
+        XCTAssertTrue(((first.pageLoader as? ResolvingMangaPageLoader)?.remote as? ItoRunnerMangaPageLoader)?.runner === runner)
+        XCTAssertTrue(((second.pageLoader as? ResolvingMangaPageLoader)?.remote as? ItoRunnerMangaPageLoader)?.runner === runner)
     }
 
     func testReaderFactoryContainsNoSecondRunnerLookupAndLeavesOtherRoutesTyped() throws {
         let factory = try source("Ito/Views/Browse/MediaDetailViewFactory.swift")
 
-        XCTAssertTrue(factory.contains("ItoRunnerMangaPageLoader(runner: runner)"))
         XCTAssertFalse(factory.contains("getRunner"))
         XCTAssertFalse(factory.contains("PluginManager"))
         XCTAssertTrue(factory.contains("VideoPlayerView("))

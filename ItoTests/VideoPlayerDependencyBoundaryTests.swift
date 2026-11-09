@@ -97,8 +97,6 @@ final class VideoPlayerDependencyBoundaryTests: XCTestCase {
         let factory = try source("Ito/Views/Browse/MediaDetailViewFactory.swift")
 
         XCTAssertTrue(factory.contains("ItoRunnerVideoStreamLoader(runner: runner)"))
-        XCTAssertTrue(factory.contains("ItoRunnerMangaPageLoader(runner: runner)"))
-        XCTAssertTrue(factory.contains("ItoRunnerNovelChapterLoader(runner: runner)"))
         XCTAssertFalse(factory.contains("getRunner"))
         XCTAssertFalse(factory.contains("PluginManager"))
         XCTAssertTrue(factory.contains("ReaderView("))

@@ -44,7 +44,7 @@ final class NovelReaderViewModel: ObservableObject {
     let pluginID: String
     /// The series being read: a novel, or a manga whose chapter is text.
     let entry: MediaEntry
-    let imageSession = ReaderPageImageSession()
+    let imageSession: ReaderPageImageSession
     let chapterLoader: any NovelChapterLoading
 
     @Published private(set) var currentChapter: Novel.Chapter
@@ -116,6 +116,7 @@ final class NovelReaderViewModel: ObservableObject {
         dependencies: PreparedNovelReaderDependencies
     ) {
         self.chapterLoader = chapterLoader
+        imageSession = dependencies.makeImageSession()
         self.pluginID = pluginID
         self.entry = entry
         currentChapter = entry.chapters?.first { $0.key == initialChapter.key } ?? initialChapter

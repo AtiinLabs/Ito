@@ -192,7 +192,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             ProgressView("Loading...")
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 32)
-        case .content, .failure:
+        case .content, .failure, .savedOnly:
             loadedChapterSection
         }
     }
@@ -203,20 +203,36 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             detailFailureBanner(message: message)
         }
 
+        if viewModel.detailLoadState == .savedOnly {
+            savedOnlyNotice
+        }
+
         if let chapters = viewModel.media.chapterList, !chapters.isEmpty {
             let displayed = viewModel.displayedChapters
             chapterListHeader(allChapters: chapters, displayedChapters: displayed)
             let textKeys = chapters.textChapterKeysInMixedSeries(defaultKind: viewModel.media is Novel ? .text : .images)
             chapterList(chapters: displayed, textKeys: textKeys)
-        } else if viewModel.isSaved {
+        } else if viewModel.isSaved, viewModel.canRelink {
             relinkBanner
-        } else if viewModel.detailLoadState == .content {
+        } else if viewModel.detailLoadState == .content || viewModel.detailLoadState == .savedOnly {
             Text("No content found.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 32)
         }
+    }
+
+    /// Shown above a saved series that opens without a source that can refresh it.
+    private var savedOnlyNotice: some View {
+        Text(String(
+            localized: "Showing saved details. They refresh when the source is available again.",
+            comment: "Notice above a saved series shown from this device's saved copy because its source is not installed, is incompatible, or failed to load. The details refresh once the source works again."
+        ))
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
     }
 
     private func detailFailureBanner(message: String) -> some View {

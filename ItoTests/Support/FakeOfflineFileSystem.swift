@@ -28,6 +28,7 @@ final class FakeOfflineFileSystem: OfflineFileSystem, @unchecked Sendable {
     private let lock = NSLock()
     private var nodes: [String: Node] = [:]
     private var faults: [Fault] = []
+    private var holds: [(operation: Operation, pathFragment: String, hold: FakeFileSystemHold)] = []
     private var capacity: Int64
     private var isLocked = false
 
@@ -124,6 +125,7 @@ final class FakeOfflineFileSystem: OfflineFileSystem, @unchecked Sendable {
     }
 
     func moveItem(at source: URL, to destination: URL) throws {
+        waitIfHeld(.moveItem, Self.key(destination))
         try withLock {
             try checkAccess()
             let from = Self.key(source)
@@ -185,6 +187,14 @@ final class FakeOfflineFileSystem: OfflineFileSystem, @unchecked Sendable {
         withLock { capacity = bytes }
     }
 
+    /// Parks the next matching call until `release()`, so a test can act while the store is inside a
+    /// synchronous step such as the publish rename.
+    func holdNext(_ operation: Operation, pathContaining fragment: String) -> FakeFileSystemHold {
+        let hold = FakeFileSystemHold()
+        withLock { holds.append((operation: operation, pathFragment: fragment, hold: hold)) }
+        return hold
+    }
+
     func exists(_ url: URL) -> Bool {
         withLock { nodes[Self.key(url)] != nil }
     }
@@ -229,6 +239,18 @@ final class FakeOfflineFileSystem: OfflineFileSystem, @unchecked Sendable {
         if isLocked { throw OfflineFileSystemError.permissionDenied }
     }
 
+    /// Blocks the calling thread at a held operation until the test releases it. It runs before the
+    /// lock is taken, so the test can read the file system while the store is parked here.
+    private func waitIfHeld(_ operation: Operation, _ path: String) {
+        let hold = withLock { () -> FakeFileSystemHold? in
+            guard let index = holds.firstIndex(where: {
+                $0.operation == operation && path.contains($0.pathFragment)
+            }) else { return nil }
+            return holds.remove(at: index).hold
+        }
+        hold?.park()
+    }
+
     private func inject(_ operation: Operation, _ path: String) throws {
         guard let index = faults.firstIndex(where: {
             $0.operation == operation && path.contains($0.pathFragment)
@@ -239,6 +261,10 @@ final class FakeOfflineFileSystem: OfflineFileSystem, @unchecked Sendable {
         }
         let error = faults[index].error
         faults.remove(at: index)
+        // A write that runs out of space leaves the volume full, as a real disk does.
+        if case .noSpace = error {
+            capacity = 0
+        }
         throw error
     }
 
@@ -251,19 +277,61 @@ final class FakeOfflineFileSystem: OfflineFileSystem, @unchecked Sendable {
     }
 }
 
-/// Protected-data availability that a test switches explicitly.
-actor FakeProtectedDataAvailability: ProtectedDataAvailability {
+/// One parked file-system call. The store's thread waits on a semaphore inside a synchronous step, and
+/// the test awaits its arrival, acts, then releases it. Nothing sleeps or polls.
+nonisolated final class FakeFileSystemHold: @unchecked Sendable {
+    private let lock = NSLock()
+    private let gate = DispatchSemaphore(value: 0)
+    private var arrived = false
+    private var arrivalWaiters: [CheckedContinuation<Void, Never>] = []
+
+    /// Called on the store's thread. Returns once the test calls `release()`.
+    func park() {
+        let waiters = lock.withLock { () -> [CheckedContinuation<Void, Never>] in
+            arrived = true
+            defer { arrivalWaiters = [] }
+            return arrivalWaiters
+        }
+        for waiter in waiters {
+            waiter.resume()
+        }
+        gate.wait()
+    }
+
+    /// Returns once the held call has been reached.
+    func awaitArrival() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let reachedAlready = lock.withLock { () -> Bool in
+                if arrived { return true }
+                arrivalWaiters.append(continuation)
+                return false
+            }
+            if reachedAlready {
+                continuation.resume()
+            }
+        }
+    }
+
+    func release() {
+        gate.signal()
+    }
+}
+
+/// Protected-data availability that a test switches explicitly. A locked class rather than an actor:
+/// the protocol is nonisolated, and its async requirement is all callers need.
+nonisolated final class FakeProtectedDataAvailability: ProtectedDataAvailability, @unchecked Sendable {
+    private let lock = NSLock()
     private var isAvailable: Bool
 
     init(isAvailable: Bool = true) {
         self.isAvailable = isAvailable
     }
 
-    func setAvailable(_ available: Bool) {
-        isAvailable = available
+    func setAvailable(_ available: Bool) async {
+        lock.withLock { isAvailable = available }
     }
 
     func isProtectedDataAvailable() async -> Bool {
-        isAvailable
+        lock.withLock { isAvailable }
     }
 }

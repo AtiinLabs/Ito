@@ -48,7 +48,7 @@ struct OfflineChapterStoreCrashTests {
         try await fixture.assertInvariants(restarted)
     }
 
-    @Test func rollForwardWithoutTheCommitGuardRefusesAndWaitsForRetry() async throws {
+    @Test func rollForwardWithoutTheCommitGuardRequeuesTheChapter() async throws {
         let fixture = try OfflineStoreFixture()
         let crashed = fixture.makeStore()
         let jobID = try await fixture.enqueue(crashed)
@@ -58,12 +58,19 @@ struct OfflineChapterStoreCrashTests {
         )
 
         let restarted = fixture.makeStore()
-        _ = await restarted.reconcile()
+        let report = await restarted.reconcile()
 
+        guard case .completed(let details) = report else {
+            Issue.record("Reconciliation did not complete: \(report)")
+            return
+        }
+        #expect(details.requeuedJobs == 1)
+        #expect(details.rolledForward == 0)
         #expect(try await restarted.verifiedEdition(for: OfflineStoreFixture.mangaEdition) == nil)
         let job = try #require(try await restarted.job(id: jobID))
-        #expect(job.state == .waiting)
-        #expect(job.waitingReason == .sourceConfigurationChanged)
+        #expect(job.state == .queued)
+        #expect(job.stagingVersionId == nil)
+        #expect(fixture.fileSystem.childNames(of: fixture.versionsURL).isEmpty)
         try await fixture.assertInvariants(restarted)
     }
 

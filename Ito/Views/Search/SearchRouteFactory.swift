@@ -15,6 +15,7 @@ struct AppViewFactory {
     private let backupSettingsDependencies: PreparedBackupSettingsDependencies
     private let migrationReportDependencies: PreparedMigrationReportDependencies
     private let libraryDependencies: PreparedLibraryDependencies
+    private let offlineReading: any OfflineChapterReading
     private let presentationLogger: any PresentationEventLogging
     private let completionRecovery: (any PluginCompletionRecovering)?
     private let settingsDiagnostics: (any PluginSettingsDiagnosing)?
@@ -39,6 +40,7 @@ struct AppViewFactory {
         mangaReaderDependencies: PreparedMangaReaderDependencies,
         novelReaderDependencies: PreparedNovelReaderDependencies = .unavailable(),
         videoPlayerDependencies: PreparedVideoPlayerDependencies = .unavailable(),
+        offlineReading: any OfflineChapterReading = UnavailableOfflineChapterReading(),
         backupSettingsDependencies: PreparedBackupSettingsDependencies,
         migrationReportDependencies: PreparedMigrationReportDependencies,
         mediaDetailMessagePresenter: any MediaDetailMessagePresenting,
@@ -63,6 +65,7 @@ struct AppViewFactory {
         self.backupSettingsDependencies = backupSettingsDependencies
         self.migrationReportDependencies = migrationReportDependencies
         self.libraryDependencies = libraryDependencies
+        self.offlineReading = offlineReading
         self.presentationLogger = presentationLogger
         self.completionRecovery = completionRecovery
         self.settingsDiagnostics = settingsDiagnostics
@@ -86,6 +89,7 @@ struct AppViewFactory {
                 mangaReaderDependencies: mangaReaderDependencies,
                 novelReaderDependencies: novelReaderDependencies,
                 videoPlayerDependencies: videoPlayerDependencies,
+                offlineReading: offlineReading,
                 messagePresenter: mediaDetailMessagePresenter,
                 presentationLogger: presentationLogger,
                 trackingViewFactory: trackingViewFactory,
@@ -136,6 +140,7 @@ struct AppViewFactory {
             plugins: libraryDependencies.plugins,
             installer: libraryDependencies.installer,
             payloadDecoder: libraryDependencies.payloadDecoder,
+            offlineReading: offlineReading,
             presentationLogger: presentationLogger
         )
     }
@@ -159,10 +164,9 @@ struct AppViewFactory {
                 runner: runner,
                 media: media,
                 pluginID: pluginID,
-                openIntent: openIntent
-            ) { manga in
-                try await pluginCall { try await runner.getMediaUpdate(.manga(manga)).expecting(\.manga) }
-            }
+                openIntent: openIntent,
+                loader: runner.map(Self.mangaUpdateLoader)
+            )
         case .anime(let pluginID, let runner, let media):
             makeAnimeDetailView(
                 runner: runner,
@@ -177,10 +181,23 @@ struct AppViewFactory {
                 runner: runner,
                 media: media,
                 pluginID: pluginID,
-                openIntent: openIntent
-            ) { novel in
-                try await pluginCall { try await runner.getMediaUpdate(.novel(novel)).expecting(\.novel) }
-            }
+                openIntent: openIntent,
+                loader: runner.map(Self.novelUpdateLoader)
+            )
+        }
+    }
+
+    /// Refreshes a series through its installed source. A saved-only destination has no runner, so it
+    /// passes no loader and nothing is refreshed.
+    private static func mangaUpdateLoader(_ runner: ItoRunner) -> (Manga) async throws -> Manga {
+        { manga in
+            try await pluginCall { try await runner.getMediaUpdate(.manga(manga)).expecting(\.manga) }
+        }
+    }
+
+    private static func novelUpdateLoader(_ runner: ItoRunner) -> (Novel) async throws -> Novel {
+        { novel in
+            try await pluginCall { try await runner.getMediaUpdate(.novel(novel)).expecting(\.novel) }
         }
     }
 
@@ -353,11 +370,11 @@ struct AppViewFactory {
 
     @ViewBuilder
     func makeMangaDetailView(
-        runner: ItoRunner,
+        runner: ItoRunner?,
         media: Manga,
         pluginID: String,
         openIntent: MediaDetailOpenIntent? = nil,
-        loader: @escaping (Manga) async throws -> Manga
+        loader: ((Manga) async throws -> Manga)?
     ) -> some View {
         if let mediaDetailViewFactory {
             mediaDetailViewFactory.makeMangaView(
@@ -395,11 +412,11 @@ struct AppViewFactory {
 
     @ViewBuilder
     func makeNovelDetailView(
-        runner: ItoRunner,
+        runner: ItoRunner?,
         media: Novel,
         pluginID: String,
         openIntent: MediaDetailOpenIntent? = nil,
-        loader: @escaping (Novel) async throws -> Novel
+        loader: ((Novel) async throws -> Novel)?
     ) -> some View {
         if let mediaDetailViewFactory {
             mediaDetailViewFactory.makeNovelView(

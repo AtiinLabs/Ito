@@ -1882,6 +1882,9 @@
     "Open" : {
 
     },
+    "Open Saved Details" : {
+      "comment" : "Button on a library series whose source is unavailable: shows the details saved in the library."
+    },
     "Open Series" : {
 
     },
@@ -2493,6 +2496,9 @@
     "Show the list picker when saving a new series." : {
 
     },
+    "Showing saved details. They refresh when the source is available again." : {
+      "comment" : "Notice above a saved series shown from this device's saved copy because its source is not installed, is incompatible, or failed to load. The details refresh once the source works again."
+    },
     "Shows what you're reading or watching on your Discord profile. Needs a Rich Presence bridge running at the server address." : {
 
     },
@@ -2925,6 +2931,9 @@
     "This chapter is locked on the source." : {
 
     },
+    "This chapter isn't downloaded." : {
+      "comment" : "Shown when a chapter has no offline copy and no installed source can load it. Used as the reader's load-failure text and as a notice on the series details screen."
+    },
     "This control type (%u) is not supported." : {
 
     },
@@ -3140,6 +3149,9 @@
     },
     "Unknown Repository" : {
 
+    },
+    "Unlock your device to read this chapter." : {
+      "comment" : "Reader failure: the offline copy is stored under data protection and the device is locked."
     },
     "Unmatched Sources" : {
 

@@ -276,6 +276,8 @@ enum MediaDetailMessage: Equatable {
     case chapterUnavailable(isEpisode: Bool)
     /// History asked for a chapter that is now locked.
     case chapterLocked(isEpisode: Bool)
+    /// A saved-only series was opened for a chapter that has no offline copy.
+    case chapterNotDownloaded
 }
 
 @MainActor
@@ -306,6 +308,8 @@ final class AppMessageMediaDetailPresenter: MediaDetailMessagePresenting {
             messageCenter.publish(.mediaDetailChapterUnavailable(isEpisode: isEpisode))
         case .chapterLocked(let isEpisode):
             messageCenter.publish(.mediaDetailChapterLocked(isEpisode: isEpisode))
+        case .chapterNotDownloaded:
+            messageCenter.publish(.mediaDetailChapterNotDownloaded)
         }
     }
 

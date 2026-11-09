@@ -46,7 +46,7 @@ final class TrackerLocalSyncIntegrationTests: XCTestCase {
                 .reading(
                     selected,
                     of: .manga(parent),
-                    runner: runner,
+                    content: ReaderContentSource(remote: runner),
                     pluginID: Self.pluginID
                 )
             }

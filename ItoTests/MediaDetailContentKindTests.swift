@@ -7,7 +7,7 @@ final class MediaDetailContentKindTests: XCTestCase {
     private static let pluginID = "plugin.test"
 
     func testAMangaChapterMarkedAsTextOpensInTheTextReader() {
-        let runner = ItoRunner()
+        let content = ReaderContentSource(remote: ItoRunner())
         let chapters = [
             Chapter(key: "v1", chapter: 1, kind: .images),
             Chapter(key: "v2", chapter: 2, kind: .text),
@@ -16,12 +16,12 @@ final class MediaDetailContentKindTests: XCTestCase {
         let series = Manga(key: "m1", title: "Manga", chapters: chapters)
 
         guard case .pages(_, _, _, _, let pages) = MediaDetailReaderDestination.reading(
-            chapters[0], of: .manga(series), runner: runner, pluginID: Self.pluginID
+            chapters[0], of: .manga(series), content: content, pluginID: Self.pluginID
         ) else { return XCTFail("A page chapter opens the page reader") }
         XCTAssertEqual(pages.key, "v1")
 
         guard case .text(_, _, _, let entry, let text) = MediaDetailReaderDestination.reading(
-            chapters[1], of: .manga(series), runner: runner, pluginID: Self.pluginID
+            chapters[1], of: .manga(series), content: content, pluginID: Self.pluginID
         ) else { return XCTFail("A text chapter opens the text reader") }
         XCTAssertEqual(entry.kind, .manga)
         XCTAssertEqual(entry.key, "m1")
@@ -29,26 +29,27 @@ final class MediaDetailContentKindTests: XCTestCase {
 
         // A chapter from a plugin that predates per-chapter kinds reads as its series does.
         guard case .pages = MediaDetailReaderDestination.reading(
-            chapters[2], of: .manga(series), runner: runner, pluginID: Self.pluginID
+            chapters[2], of: .manga(series), content: content, pluginID: Self.pluginID
         ) else { return XCTFail("An unmarked manga chapter opens the page reader") }
     }
 
     func testANovelsImageChapterOpensThePageReaderWithNovelIdentity() {
         let runner = ItoRunner()
+        let content = ReaderContentSource(remote: runner)
         let text = Chapter(key: "text")
         let images = Chapter(key: "images", kind: .images)
         let novel = Novel(key: "novel", title: "Novel", chapters: [images, text])
-        guard case .pages(_, let pageRunner, let pluginID, let entry, let selected) = MediaDetailReaderDestination.reading(
-            images, of: .novel(novel), runner: runner, pluginID: Self.pluginID
+        guard case .pages(_, let pageContent, let pluginID, let entry, let selected) = MediaDetailReaderDestination.reading(
+            images, of: .novel(novel), content: content, pluginID: Self.pluginID
         ) else { return XCTFail("An image chapter opens the page reader") }
-        XCTAssertTrue(pageRunner === runner)
+        XCTAssertTrue(pageContent.remote === runner)
         XCTAssertEqual(pluginID, Self.pluginID)
         XCTAssertEqual(entry.kind, .novel)
         XCTAssertEqual(entry.key, "novel")
         XCTAssertEqual(selected.key, "images")
 
         guard case .text(_, _, _, let textEntry, let selectedText) = MediaDetailReaderDestination.reading(
-            text, of: .novel(novel), runner: runner, pluginID: Self.pluginID
+            text, of: .novel(novel), content: content, pluginID: Self.pluginID
         ) else { return XCTFail("An unmarked novel chapter opens the text reader") }
         XCTAssertEqual(textEntry.kind, .novel)
         XCTAssertEqual(selectedText.key, "text")

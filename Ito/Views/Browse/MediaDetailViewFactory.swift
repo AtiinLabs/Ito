@@ -6,24 +6,27 @@ struct MediaDetailReaderViewFactory {
     private let mangaReaderDependencies: PreparedMangaReaderDependencies
     private let novelReaderDependencies: PreparedNovelReaderDependencies
     private let videoPlayerDependencies: PreparedVideoPlayerDependencies
+    private let offlineReading: any OfflineChapterReading
 
     init(
         mangaReaderDependencies: PreparedMangaReaderDependencies,
         novelReaderDependencies: PreparedNovelReaderDependencies = .unavailable(),
-        videoPlayerDependencies: PreparedVideoPlayerDependencies = .unavailable()
+        videoPlayerDependencies: PreparedVideoPlayerDependencies = .unavailable(),
+        offlineReading: any OfflineChapterReading = UnavailableOfflineChapterReading()
     ) {
         self.mangaReaderDependencies = mangaReaderDependencies
         self.novelReaderDependencies = novelReaderDependencies
         self.videoPlayerDependencies = videoPlayerDependencies
+        self.offlineReading = offlineReading
     }
 
     @ViewBuilder
     func destination(for destination: MediaDetailReaderDestination) -> some View {
         switch destination {
-        case .pages(_, let runner, let pluginID, let entry, let chapter):
+        case .pages(_, let content, let pluginID, let entry, let chapter):
             ReaderView(
                 viewModel: makeMangaViewModel(
-                    runner: runner,
+                    content: content,
                     pluginID: pluginID,
                     entry: entry,
                     chapter: chapter
@@ -38,10 +41,10 @@ struct MediaDetailReaderViewFactory {
                     episode: episode
                 )
             )
-        case .text(_, let runner, let pluginID, let entry, let chapter):
+        case .text(_, let content, let pluginID, let entry, let chapter):
             NovelReaderView(
                 viewModel: makeNovelViewModel(
-                    runner: runner,
+                    content: content,
                     pluginID: pluginID,
                     entry: entry,
                     chapter: chapter
@@ -51,13 +54,17 @@ struct MediaDetailReaderViewFactory {
     }
 
     func makeMangaViewModel(
-        runner: ItoRunner,
+        content: ReaderContentSource,
         pluginID: String,
         entry: MediaEntry,
         chapter: Chapter
     ) -> MangaReaderViewModel {
         MangaReaderViewModel(
-            pageLoader: ItoRunnerMangaPageLoader(runner: runner),
+            pageLoader: ResolvingMangaPageLoader(
+                pluginID: pluginID,
+                local: offlineReading,
+                remote: content.remote.map { ItoRunnerMangaPageLoader(runner: $0) as any MangaPageLoading }
+            ),
             pluginID: pluginID,
             entry: entry,
             initialChapter: chapter,
@@ -66,13 +73,17 @@ struct MediaDetailReaderViewFactory {
     }
 
     func makeNovelViewModel(
-        runner: ItoRunner,
+        content: ReaderContentSource,
         pluginID: String,
         entry: MediaEntry,
         chapter: Chapter
     ) -> NovelReaderViewModel {
         NovelReaderViewModel(
-            chapterLoader: ItoRunnerNovelChapterLoader(runner: runner),
+            chapterLoader: ResolvingNovelChapterLoader(
+                pluginID: pluginID,
+                local: offlineReading,
+                remote: content.remote.map { ItoRunnerNovelChapterLoader(runner: $0) as any NovelChapterLoading }
+            ),
             pluginID: pluginID,
             entry: entry,
             initialChapter: chapter,
@@ -102,6 +113,7 @@ struct MediaDetailViewFactory {
     private let messagePresenter: any MediaDetailMessagePresenting
     private let presentationLogger: any PresentationEventLogging
     private let categoryHistoryViewFactory: CategoryHistoryViewFactory
+    private let offlineReading: any OfflineChapterReading
     let trackingViewFactory: TrackingViewFactory
     let readerViewFactory: MediaDetailReaderViewFactory
 
@@ -110,6 +122,7 @@ struct MediaDetailViewFactory {
         mangaReaderDependencies: PreparedMangaReaderDependencies,
         novelReaderDependencies: PreparedNovelReaderDependencies = .unavailable(),
         videoPlayerDependencies: PreparedVideoPlayerDependencies = .unavailable(),
+        offlineReading: any OfflineChapterReading = UnavailableOfflineChapterReading(),
         messagePresenter: any MediaDetailMessagePresenting,
         presentationLogger: any PresentationEventLogging,
         trackingViewFactory: TrackingViewFactory,
@@ -120,30 +133,39 @@ struct MediaDetailViewFactory {
         self.presentationLogger = presentationLogger
         self.trackingViewFactory = trackingViewFactory
         self.categoryHistoryViewFactory = categoryHistoryViewFactory
+        self.offlineReading = offlineReading
         readerViewFactory = MediaDetailReaderViewFactory(
             mangaReaderDependencies: mangaReaderDependencies,
             novelReaderDependencies: novelReaderDependencies,
-            videoPlayerDependencies: videoPlayerDependencies
+            videoPlayerDependencies: videoPlayerDependencies,
+            offlineReading: offlineReading
         )
     }
 
+    /// A nil runner and loader make a saved-only route: the saved series, with downloaded chapters only.
     func makeMangaView(
-        runner: ItoRunner,
+        runner: ItoRunner?,
         media: Manga,
         pluginID: String,
-        loader: @escaping (Manga) async throws -> Manga,
+        loader: ((Manga) async throws -> Manga)?,
         openIntent: MediaDetailOpenIntent? = nil
     ) -> MediaDetailView<Manga> {
         let context = MediaDetailRouteContext<Manga>(
             loadDetails: loader,
-            searchForRelink: { query in
-                try await pluginCall {
-                    try await runner.search(query: query, page: 1, kind: .manga).entries.compactMap(\.manga)
-                }
-            },
+            searchForRelink: runner.map(Self.mangaRelinkSearch),
             makeReaderDestination: { media, chapter in
-                .reading(chapter, of: .manga(media), runner: runner, pluginID: pluginID)
-            }
+                .reading(
+                    chapter,
+                    of: .manga(media),
+                    content: ReaderContentSource(remote: runner),
+                    pluginID: pluginID
+                )
+            },
+            isChapterAvailableOffline: offlineChapterAvailability(
+                pluginID: pluginID,
+                mediaKind: .manga,
+                canonicalMediaId: media.key
+            )
         )
         return makeView(media: media, pluginID: pluginID, context: context, openIntent: openIntent)
     }
@@ -175,25 +197,68 @@ struct MediaDetailViewFactory {
         return makeView(media: media, pluginID: pluginID, context: context, openIntent: openIntent)
     }
 
+    /// A nil runner and loader make a saved-only route: the saved series, with downloaded chapters only.
     func makeNovelView(
-        runner: ItoRunner,
+        runner: ItoRunner?,
         media: Novel,
         pluginID: String,
-        loader: @escaping (Novel) async throws -> Novel,
+        loader: ((Novel) async throws -> Novel)?,
         openIntent: MediaDetailOpenIntent? = nil
     ) -> MediaDetailView<Novel> {
         let context = MediaDetailRouteContext<Novel>(
             loadDetails: loader,
-            searchForRelink: { query in
-                try await pluginCall {
-                    try await runner.search(query: query, page: 1, kind: .novel).entries.compactMap(\.novel)
-                }
-            },
+            searchForRelink: runner.map(Self.novelRelinkSearch),
             makeReaderDestination: { media, chapter in
-                .reading(chapter, of: .novel(media), runner: runner, pluginID: pluginID)
-            }
+                .reading(
+                    chapter,
+                    of: .novel(media),
+                    content: ReaderContentSource(remote: runner),
+                    pluginID: pluginID
+                )
+            },
+            isChapterAvailableOffline: offlineChapterAvailability(
+                pluginID: pluginID,
+                mediaKind: .novel,
+                canonicalMediaId: media.key
+            )
         )
         return makeView(media: media, pluginID: pluginID, context: context, openIntent: openIntent)
+    }
+
+    private static func mangaRelinkSearch(_ runner: ItoRunner) -> (String) async throws -> [Manga] {
+        { query in
+            try await pluginCall {
+                try await runner.search(query: query, page: 1, kind: .manga).entries.compactMap(\.manga)
+            }
+        }
+    }
+
+    private static func novelRelinkSearch(_ runner: ItoRunner) -> (String) async throws -> [Novel] {
+        { query in
+            try await pluginCall {
+                try await runner.search(query: query, page: 1, kind: .novel).entries.compactMap(\.novel)
+            }
+        }
+    }
+
+    /// Whether a chapter has a verified copy for this series. Checked when the chapter is opened, by exact
+    /// chapter key only.
+    private func offlineChapterAvailability(
+        pluginID: String,
+        mediaKind: MediaKind,
+        canonicalMediaId: String
+    ) -> (Chapter) async -> Bool {
+        let reader = offlineReading
+        return { chapter in
+            await reader.verifiedEdition(
+                OfflineChapterEdition(
+                    pluginId: pluginID,
+                    mediaKind: mediaKind,
+                    canonicalMediaId: canonicalMediaId,
+                    chapterKey: chapter.key
+                )
+            )
+        }
     }
 
     private func makeView<M: MediaDisplayable>(

@@ -11,9 +11,10 @@ enum DeferredPluginFailure: Equatable {
 }
 
 enum DeferredPluginDestination {
-    case manga(pluginID: String, runner: ItoRunner, media: Manga)
+    /// `runner` is nil for a saved-only series, whose installed source is missing or cannot be loaded.
+    case manga(pluginID: String, runner: ItoRunner?, media: Manga)
     case anime(pluginID: String, runner: ItoRunner, media: Anime)
-    case novel(pluginID: String, runner: ItoRunner, media: Novel)
+    case novel(pluginID: String, runner: ItoRunner?, media: Novel)
 
     var pluginID: String {
         switch self {
@@ -24,11 +25,12 @@ enum DeferredPluginDestination {
         }
     }
 
-    var runner: ItoRunner {
+    var runner: ItoRunner? {
         switch self {
         case .manga(_, let runner, _),
-             .anime(_, let runner, _),
              .novel(_, let runner, _):
+            return runner
+        case .anime(_, let runner, _):
             return runner
         }
     }
@@ -40,6 +42,14 @@ private extension DeferredPluginMedia {
         case .manga: return .manga
         case .anime: return .anime
         case .novel: return .novel
+        }
+    }
+
+    var mediaKey: String {
+        switch self {
+        case .manga(let manga): return manga.key
+        case .anime(let anime): return anime.key
+        case .novel(let novel): return novel.key
         }
     }
 }
@@ -56,6 +66,7 @@ enum DeferredPluginPhase {
     case idle
     case decoding
     case loadingRunner
+    case loadingSavedDetails
     case pluginMissing
     case checkingPackage
     case packageUnavailable
@@ -75,6 +86,7 @@ final class DeferredPluginViewModel: ObservableObject {
     private let plugins: any LibraryPluginServing
     private let installer: any DeferredPluginInstalling
     private let payloadDecoder: any DeferredPluginPayloadDecoding
+    private let offlineReading: any OfflineChapterReading
     private let presentationLogger: any PresentationEventLogging
 
     private var pluginSnapshot: LibraryPluginSnapshot
@@ -86,6 +98,7 @@ final class DeferredPluginViewModel: ObservableObject {
     private var packageLookupTask: Task<Void, Never>?
     private var installTask: Task<Void, Never>?
     private var runnerTask: Task<Void, Never>?
+    private var savedDetailsTask: Task<Void, Never>?
     private var pendingOpenIntent: MediaDetailOpenIntent?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -95,6 +108,7 @@ final class DeferredPluginViewModel: ObservableObject {
         plugins: any LibraryPluginServing,
         installer: any DeferredPluginInstalling,
         payloadDecoder: any DeferredPluginPayloadDecoding,
+        offlineReading: any OfflineChapterReading = UnavailableOfflineChapterReading(),
         presentationLogger: any PresentationEventLogging
     ) {
         self.item = item
@@ -102,6 +116,7 @@ final class DeferredPluginViewModel: ObservableObject {
         self.plugins = plugins
         self.installer = installer
         self.payloadDecoder = payloadDecoder
+        self.offlineReading = offlineReading
         self.presentationLogger = presentationLogger
         pluginSnapshot = plugins.libraryPluginSnapshot
 
@@ -117,6 +132,7 @@ final class DeferredPluginViewModel: ObservableObject {
         packageLookupTask?.cancel()
         installTask?.cancel()
         runnerTask?.cancel()
+        savedDetailsTask?.cancel()
     }
 
     var route: DeferredPluginRoute? {
@@ -126,7 +142,7 @@ final class DeferredPluginViewModel: ObservableObject {
 
     var isBusy: Bool {
         switch phase {
-        case .decoding, .loadingRunner, .checkingPackage, .installing:
+        case .decoding, .loadingRunner, .checkingPackage, .installing, .loadingSavedDetails:
             return true
         case .idle, .pluginMissing, .packageUnavailable, .incompatible,
              .ready, .failure, .cancelled:
@@ -141,7 +157,7 @@ final class DeferredPluginViewModel: ObservableObject {
         case .idle, .cancelled:
             beginDecode()
         case .decoding, .loadingRunner, .pluginMissing, .checkingPackage,
-             .packageUnavailable, .incompatible, .installing, .ready, .failure:
+             .packageUnavailable, .incompatible, .installing, .ready, .failure, .loadingSavedDetails:
             break
         }
     }
@@ -170,7 +186,7 @@ final class DeferredPluginViewModel: ObservableObject {
         case .idle:
             beginDecode()
         case .decoding, .loadingRunner, .pluginMissing, .checkingPackage,
-             .incompatible, .installing, .ready:
+             .incompatible, .installing, .ready, .loadingSavedDetails:
             break
         }
     }
@@ -183,7 +199,7 @@ final class DeferredPluginViewModel: ObservableObject {
             break
         case .idle, .decoding, .loadingRunner, .checkingPackage, .incompatible,
              .installing, .ready, .failure(.runnerLoad), .failure(.payloadDecode),
-             .cancelled:
+             .cancelled, .loadingSavedDetails:
             return
         }
 
@@ -481,7 +497,7 @@ final class DeferredPluginViewModel: ObservableObject {
                 break
             case .idle, .pluginMissing, .packageUnavailable, .incompatible,
                  .failure(.packageLookup), .failure(.pluginTypeMismatch),
-                 .failure(.install), .failure(.payloadDecode), .cancelled:
+                 .failure(.install), .failure(.payloadDecode), .cancelled, .loadingSavedDetails:
                 break
             case .checkingPackage, .installing, .loadingRunner, .ready,
                  .failure(.runnerLoad):
@@ -508,7 +524,7 @@ final class DeferredPluginViewModel: ObservableObject {
                     operationGeneration: generation
                 )
             }
-        case .idle, .decoding, .failure(.payloadDecode), .cancelled:
+        case .idle, .decoding, .failure(.payloadDecode), .cancelled, .loadingSavedDetails:
             break
         case .pluginMissing, .checkingPackage, .packageUnavailable, .incompatible,
              .loadingRunner, .ready, .failure(.packageLookup),
@@ -521,6 +537,85 @@ final class DeferredPluginViewModel: ObservableObject {
                 operationGeneration: generation
             )
         }
+    }
+
+    /// Whether the saved series can open without an installed source: a manga or novel, from a phase where
+    /// the source is missing, unavailable, or failed to load, on a build that composes offline copies.
+    /// Anime has no saved-only route.
+    var canOpenSavedDetails: Bool {
+        guard offlineReading.isAvailable,
+              let decodedMedia, decodedMedia.pluginType != .anime else { return false }
+        switch phase {
+        case .pluginMissing, .packageUnavailable, .incompatible,
+             .failure(.packageLookup), .failure(.install), .failure(.runnerLoad):
+            return true
+        case .idle, .decoding, .loadingRunner, .checkingPackage, .installing,
+             .loadingSavedDetails, .ready, .failure(.pluginTypeMismatch),
+             .failure(.payloadDecode), .cancelled:
+            return false
+        }
+    }
+
+    /// Opens the saved series without an installed source: the saved payload's chapters, plus the
+    /// downloaded chapters that the payload does not list.
+    func openSavedDetails() {
+        guard isPresentationActive, canOpenSavedDetails, let media = decodedMedia else { return }
+        beginNewGeneration()
+        let operationGeneration = generation
+        phase = .loadingSavedDetails
+        let reader = offlineReading
+        let pluginID = item.pluginId
+        savedDetailsTask = Task { @MainActor [weak self, reader] in
+            let inventory = await reader.inventoryChapters(
+                pluginId: pluginID,
+                mediaKind: media.pluginType,
+                canonicalMediaId: media.mediaKey
+            )
+            guard let self, self.isCurrent(operationGeneration) else { return }
+            self.savedDetailsTask = nil
+            guard let destination = Self.savedDestination(
+                pluginID: pluginID,
+                media: media,
+                inventory: inventory
+            ) else {
+                self.phase = .failure(.payloadDecode)
+                return
+            }
+            self.phase = .ready(
+                DeferredPluginRoute(id: UUID(), destination: destination, openIntent: self.takeOpenIntent())
+            )
+        }
+    }
+
+    private static func savedDestination(
+        pluginID: String,
+        media: DeferredPluginMedia,
+        inventory: [DownloadedChapterRecord]
+    ) -> DeferredPluginDestination? {
+        switch media {
+        case .manga(var manga):
+            manga.chapters = mergedChapters(manga.chapters, inventory: inventory)
+            return .manga(pluginID: pluginID, runner: nil, media: manga)
+        case .novel(var novel):
+            novel.chapters = mergedChapters(novel.chapters, inventory: inventory)
+            return .novel(pluginID: pluginID, runner: nil, media: novel)
+        case .anime:
+            return nil
+        }
+    }
+
+    /// The payload's chapters, then the downloaded chapters whose key the payload does not list. Chapters
+    /// are matched by key only, never by number or scanlator.
+    private static func mergedChapters(_ payload: [Chapter]?, inventory: [DownloadedChapterRecord]) -> [Chapter]? {
+        let listedKeys = Set((payload ?? []).map(\.key))
+        let inventoryOnly = inventory.compactMap { row -> Chapter? in
+            guard !listedKeys.contains(row.chapterKey),
+                  let chapter = try? JSONDecoder().decode(Chapter.self, from: row.chapterSnapshot),
+                  chapter.key == row.chapterKey else { return nil }
+            return chapter
+        }
+        guard !inventoryOnly.isEmpty else { return payload }
+        return (payload ?? []) + inventoryOnly
     }
 
     private func beginNewGeneration() {
@@ -538,6 +633,8 @@ final class DeferredPluginViewModel: ObservableObject {
         installTask = nil
         runnerTask?.cancel()
         runnerTask = nil
+        savedDetailsTask?.cancel()
+        savedDetailsTask = nil
     }
 
     private func isCurrent(_ operationGeneration: UInt) -> Bool {
