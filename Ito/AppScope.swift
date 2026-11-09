@@ -117,7 +117,8 @@ struct PreparedApplicationDependencies {
         recentSearchDefaults: UserDefaults = .standard,
         browsePluginsDirectory: URL? = nil,
         completionRecovery: (any PluginCompletionRecovering)? = nil,
-        offlineChapterStore: OfflineChapterStore? = nil
+        /// The offline store, worker and download center, composed together or not at all.
+        downloads: DownloadStack? = nil
     ) -> Self {
         let fileOperations = LocalBrowsePluginFileOperations(
             pluginsDirectory: browsePluginsDirectory
@@ -129,7 +130,7 @@ struct PreparedApplicationDependencies {
         )
         let presentationLogger = OSLogPresentationEventLogger()
         // One pipeline for every reader, so both read the store's leases through the same cache.
-        let offlinePipeline = offlineChapterStore.map { OfflineImagePipeline.make(reader: $0) }
+        let offlinePipeline = downloads.map { OfflineImagePipeline.make(reader: $0.store) }
         return Self(
             settings: PreparedSettingsDependencies(
                 settingsStore: settingsStore,
@@ -154,7 +155,8 @@ struct PreparedApplicationDependencies {
                 updateManager: updateManager,
                 settingsStore: settingsStore,
                 pluginManager: pluginManager,
-                discordRPCManager: discordRPCManager
+                discordRPCManager: discordRPCManager,
+                downloads: downloads?.center
             ),
             mangaReader: .production(
                 readProgressManager: readProgressManager,
@@ -246,7 +248,7 @@ struct PreparedApplicationDependencies {
             ),
             pluginCookies: pluginManager.pluginSettingsStore.cookies,
             pluginTrust: pluginManager.pluginSettingsStore.trust,
-            offlineReading: offlineChapterStore ?? UnavailableOfflineChapterReading()
+            offlineReading: downloads?.store ?? UnavailableOfflineChapterReading()
         )
     }
 }
@@ -576,7 +578,7 @@ final class AppScope {
         recentSearchDefaults: UserDefaults = .standard,
         browsePluginsDirectory: URL? = nil,
         completionRecovery: (any PluginCompletionRecovering)? = nil,
-        offlineChapterStore: OfflineChapterStore? = nil
+        downloads: DownloadStack? = nil
     ) -> AppScope {
         AppScope(
             preparedDependencies: .production(
@@ -601,7 +603,7 @@ final class AppScope {
                 recentSearchDefaults: recentSearchDefaults,
                 browsePluginsDirectory: browsePluginsDirectory,
                 completionRecovery: completionRecovery,
-                offlineChapterStore: offlineChapterStore
+                downloads: downloads
             )
         )
     }

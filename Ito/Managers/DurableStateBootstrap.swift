@@ -554,7 +554,7 @@ public final class DurableStateBootstrap: ObservableObject {
             recentSearchDefaults: runtime.recentSearchDefaults,
             browsePluginsDirectory: installedPluginsDirectory,
             completionRecovery: runtime.completionCoordinator,
-            offlineChapterStore: runtime.downloads?.store
+            downloads: runtime.downloads
         )
     }
 

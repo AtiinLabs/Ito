@@ -423,11 +423,35 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 ChapterRowView(
                     chapter: chapter,
                     isRead: viewModel.isRead(chapter),
-                    marksText: textKeys.contains(chapter.key)
+                    marksText: textKeys.contains(chapter.key),
+                    downloadState: viewModel.downloadState(for: chapter)
                 ) {
                     viewModel.selectChapter(chapter)
                 }
+                .modifier(downloadContextMenu(for: chapter))
                 Divider().padding(.leading, 16)
+            }
+        }
+    }
+
+    private func downloadContextMenu(for chapter: M.Chapter) -> DownloadContextMenu<some View> {
+        let actions = viewModel.downloadActions(for: chapter)
+        return DownloadContextMenu(isEnabled: !actions.isEmpty) {
+            downloadMenu(for: chapter, actions: actions)
+        }
+    }
+
+    /// The chapter's download actions, headed by its state where the state explains what to do next.
+    @ViewBuilder
+    private func downloadMenu(for chapter: M.Chapter, actions: [ChapterDownloadAction]) -> some View {
+        if let state = viewModel.downloadState(for: chapter), state.explainsMenu {
+            state.label
+        }
+        ForEach(actions) { action in
+            Button(role: action == .delete ? .destructive : nil) {
+                viewModel.performDownloadAction(action, for: chapter)
+            } label: {
+                Label { action.title } icon: { Image(systemName: action.systemImage) }
             }
         }
     }
@@ -558,6 +582,21 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             .disabled(viewModel.isRelinkMutationInFlight)
         }
         .listStyle(.insetGrouped)
+    }
+}
+
+/// Attaches a context menu only when there is something in it, so rows without download actions, and every
+/// row where downloads are not composed, keep exactly the interaction they had before.
+private struct DownloadContextMenu<MenuItems: View>: ViewModifier {
+    let isEnabled: Bool
+    @ViewBuilder let menuItems: () -> MenuItems
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.contextMenu { menuItems() }
+        } else {
+            content
+        }
     }
 }
 

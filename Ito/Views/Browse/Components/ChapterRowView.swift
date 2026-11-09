@@ -7,13 +7,26 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
     let onTap: () -> Void
     /// Marks a text chapter in a series that also has page chapters: it opens in the text reader.
     let marksText: Bool
+    /// The chapter's download state. Nil shows nothing, as for a chapter that was never downloaded.
+    let downloadState: ChapterDownloadState?
 
     @State private var isPressed = false
 
     public init(chapter: C, isRead: Bool, marksText: Bool = false, onTap: @escaping () -> Void) {
+        self.init(chapter: chapter, isRead: isRead, marksText: marksText, downloadState: nil, onTap: onTap)
+    }
+
+    init(
+        chapter: C,
+        isRead: Bool,
+        marksText: Bool = false,
+        downloadState: ChapterDownloadState?,
+        onTap: @escaping () -> Void
+    ) {
         self.chapter = chapter
         self.isRead = isRead
         self.marksText = marksText
+        self.downloadState = downloadState
         self.onTap = onTap
     }
 
@@ -26,6 +39,9 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
                 }
                 Spacer()
                 trailingIcon
+                if let downloadState {
+                    ChapterDownloadIndicator(state: downloadState)
+                }
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
             .background(isPressed ? Color(.systemFill) : Color.clear)
@@ -33,6 +49,7 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
         }
         .buttonStyle(PressRecordingButtonStyle(isPressed: $isPressed))
         .disabled(chapter.isPaywalled)
+        .accessibilityValue(downloadState?.progressValue ?? Text(verbatim: ""))
     }
 
     /// The foreground color for the chapter title, respecting paywalled, read, and default states.

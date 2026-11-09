@@ -278,6 +278,10 @@ enum MediaDetailMessage: Equatable {
     case chapterLocked(isEpisode: Bool)
     /// A saved-only series was opened for a chapter that has no offline copy.
     case chapterNotDownloaded
+    /// The chapter cannot be downloaded: it is locked, or its kind or source cannot be stored.
+    case downloadRefused
+    /// A Download, Cancel, Retry or Delete did not reach the store.
+    case downloadActionFailed
 }
 
 @MainActor
@@ -310,6 +314,10 @@ final class AppMessageMediaDetailPresenter: MediaDetailMessagePresenting {
             messageCenter.publish(.mediaDetailChapterLocked(isEpisode: isEpisode))
         case .chapterNotDownloaded:
             messageCenter.publish(.mediaDetailChapterNotDownloaded)
+        case .downloadRefused:
+            messageCenter.publish(.mediaDetailDownloadRefused)
+        case .downloadActionFailed:
+            messageCenter.publish(.mediaDetailDownloadActionFailed)
         }
     }
 
@@ -329,6 +337,8 @@ struct PreparedMediaDetailDependencies {
     let settings: any MediaDetailSettingsReading
     let pluginMetadata: any MediaDetailPluginMetadataProviding
     let discord: any MediaDetailDiscordPresenting
+    /// Unavailable unless the composition root passes the live download center.
+    var downloads: any MediaDetailDownloadServing = UnavailableMediaDetailDownloads()
 
     static func production(
         libraryManager: LibraryManager,
@@ -339,7 +349,8 @@ struct PreparedMediaDetailDependencies {
         updateManager: UpdateManager,
         settingsStore: AppSettingsStore,
         pluginManager: PluginManager,
-        discordRPCManager: DiscordRPCManager
+        discordRPCManager: DiscordRPCManager,
+        downloads: (any MediaDetailDownloadServing)?
     ) -> Self {
         Self(
             library: libraryManager,
@@ -352,7 +363,8 @@ struct PreparedMediaDetailDependencies {
             baseline: updateManager,
             settings: settingsStore,
             pluginMetadata: pluginManager,
-            discord: discordRPCManager
+            discord: discordRPCManager,
+            downloads: downloads ?? UnavailableMediaDetailDownloads()
         )
     }
 }

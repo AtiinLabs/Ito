@@ -249,15 +249,9 @@ struct MediaDetailViewFactory {
         canonicalMediaId: String
     ) -> (Chapter) async -> Bool {
         let reader = offlineReading
+        let media = MediaIdentity(pluginId: pluginID, canonicalMediaId: canonicalMediaId, mediaKind: mediaKind)
         return { chapter in
-            await reader.verifiedEdition(
-                OfflineChapterEdition(
-                    pluginId: pluginID,
-                    mediaKind: mediaKind,
-                    canonicalMediaId: canonicalMediaId,
-                    chapterKey: chapter.key
-                )
-            )
+            await reader.verifiedEdition(OfflineChapterEdition(media: media, chapterKey: chapter.key))
         }
     }
 
