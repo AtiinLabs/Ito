@@ -78,7 +78,33 @@
       }
     },
     "%@ is also removed from your lists. Reading history and progress are kept." : {
-
+      "comment" : "Confirm removing a series from the Library. The placeholder is the series title."
+    },
+    "%@ is also removed from your lists. Reading history and progress are kept. Remove from Library keeps its %lld downloaded chapters." : {
+      "comment" : "Confirm removing a series that has saved chapters. The dialog also has a Remove Library and Downloads button that deletes them, so the keeping is tied to the Remove from Library button. The first placeholder is the series title, the second the number of saved chapters.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ is also removed from your lists. Reading history and progress are kept. Remove from Library keeps its %2$lld downloaded chapter."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$@ is also removed from your lists. Reading history and progress are kept. Remove from Library keeps its %2$lld downloaded chapters."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%@ is also removed from your lists. Reading history and progress are kept. Remove from Library keeps its downloads." : {
+      "comment" : "Confirm removing a series whose downloads are damaged or still queued. The dialog also has a Remove Library and Downloads button that deletes them, so the keeping is tied to the Remove from Library button. The placeholder is the series title."
     },
     "%@ is not a library state MangaBaka supports." : {
 
@@ -228,6 +254,29 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld chapters"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld chapters saved" : {
+      "comment" : "Accessibility label of the Library card chip. The count is the number of saved chapters.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld chapter saved"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld chapters saved"
                 }
               }
             }
@@ -450,6 +499,29 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld percent"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld saved" : {
+      "comment" : "Library card chip: how many chapters of the series are saved on this device. The count is the number of saved chapters.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld saved"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld saved"
                 }
               }
             }
@@ -1234,6 +1306,9 @@
     },
     "Downloads couldn't be retried. Check the list before trying again." : {
       "comment" : "Downloads manager bulk Retry failure"
+    },
+    "Downloads not deleted" : {
+      "comment" : "Library: a series was removed from the Library, but its saved chapters could not be deleted."
     },
     "Downloads use %@" : {
       "comment" : "Downloads storage usage when free space could not be read"
@@ -2356,6 +2431,9 @@
     "Remove %@?" : {
 
     },
+    "Remove Library and Downloads" : {
+      "comment" : "Removes the series from the Library and deletes its saved chapters and queued downloads"
+    },
     "Remove Plugin" : {
 
     },
@@ -2373,6 +2451,9 @@
     },
     "Remove unavailable" : {
 
+    },
+    "Removed from Library. Its downloads couldn't be deleted; delete them in Downloads." : {
+      "comment" : "Library: removal committed, then deleting the series' downloads failed. Never claims the removal was undone."
     },
     "Removes all cookies, cached website data and Cloudflare clearance. Sources that use a website login will need you to sign in again." : {
 

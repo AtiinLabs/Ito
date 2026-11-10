@@ -14,6 +14,38 @@ struct LibraryCategoryPresentation: Identifiable, Equatable {
     let name: String
 }
 
+/// A removal waiting for the user's confirmation. Whether the series holds downloads is fixed when it is
+/// requested, so the dialog and the removal agree on what was shown.
+struct LibraryRemovalRequest: Equatable {
+    let item: LibraryItem
+    /// The series holds a copy of any state, or a queue entry.
+    let hasDownloads: Bool
+    /// Its verified saved chapters.
+    let savedChapterCount: Int
+
+    /// Reading history and progress are kept either way. The dialog shows this one message above all its
+    /// buttons, so it says which button keeps the downloads; Remove Library and Downloads deletes them.
+    var message: String {
+        switch (hasDownloads, savedChapterCount > 0) {
+        case (false, _):
+            return String(
+                localized: "\(item.title) is also removed from your lists. Reading history and progress are kept.",
+                comment: "Confirm removing a series from the Library. The placeholder is the series title."
+            )
+        case (true, true):
+            return String(
+                localized: "\(item.title) is also removed from your lists. Reading history and progress are kept. Remove from Library keeps its \(savedChapterCount) downloaded chapters.",
+                comment: "Confirm removing a series that has saved chapters. The dialog also has a Remove Library and Downloads button that deletes them, so the keeping is tied to the Remove from Library button. The first placeholder is the series title, the second the number of saved chapters."
+            )
+        case (true, false):
+            return String(
+                localized: "\(item.title) is also removed from your lists. Reading history and progress are kept. Remove from Library keeps its downloads.",
+                comment: "Confirm removing a series whose downloads are damaged or still queued. The dialog also has a Remove Library and Downloads button that deletes them, so the keeping is tied to the Remove from Library button. The placeholder is the series title."
+            )
+        }
+    }
+}
+
 struct LibraryExportPresentation: Identifiable {
     let id: UUID
     let document: BackupDocument
@@ -54,7 +86,7 @@ final class LibraryViewModel: ObservableObject {
     @Published private(set) var selectedCategoryID: String?
     @Published private(set) var isEditing = false
     @Published private(set) var categoryAssignmentItemID: String?
-    @Published private(set) var pendingRemoval: LibraryItem?
+    @Published private(set) var pendingRemoval: LibraryRemovalRequest?
     @Published private(set) var removingItemIDs: Set<String> = []
     @Published private(set) var updateSnapshot: LibraryUpdateSnapshot
     @Published private(set) var installedPluginIDs: Set<String>
@@ -63,6 +95,8 @@ final class LibraryViewModel: ObservableObject {
     @Published private(set) var alert: LibraryAlert?
     /// Whether the device reports no network. The Library says so and keeps showing what is saved.
     @Published private(set) var isOffline: Bool
+    /// Saved chapters per series and which series hold downloads, from one observation of the whole Library.
+    @Published private(set) var downloadSummary: LibraryDownloadSummary
 
     private let dependencies: PreparedLibraryDependencies
     private let tabRouter: any LibraryTabRouting
@@ -104,6 +138,7 @@ final class LibraryViewModel: ObservableObject {
         updateSnapshot = dependencies.updates.libraryUpdateSnapshot
         installedPluginIDs = Set(dependencies.plugins.libraryPluginSnapshot.plugins.keys)
         isOffline = dependencies.connectivity.isOffline
+        downloadSummary = dependencies.downloads.downloadSummary
 
         dependencies.library.rootSnapshotPublisher
             .sink { [weak self] snapshot in
@@ -128,6 +163,11 @@ final class LibraryViewModel: ObservableObject {
         dependencies.connectivity.isOfflinePublisher
             .sink { [weak self] isOffline in
                 self?.isOffline = isOffline
+            }
+            .store(in: &cancellables)
+        dependencies.downloads.downloadSummaryPublisher
+            .sink { [weak self] summary in
+                self?.downloadSummary = summary
             }
             .store(in: &cancellables)
     }
@@ -290,29 +330,50 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
-    /// Asks the user to confirm removing a series.
+    /// Asks the user to confirm removing a series. Whether it holds downloads is read now, so the dialog and
+    /// the removal agree on what the user was shown.
     func requestRemoval(_ item: LibraryItem) {
         guard removalOperationIDs[item.id] == nil, contains(item) else { return }
-        pendingRemoval = item
+        let media = item.mediaIdentity
+        pendingRemoval = LibraryRemovalRequest(
+            item: item,
+            hasDownloads: downloadSummary.mediaWithDownloads.contains(media),
+            savedChapterCount: downloadSummary.savedCount(for: media)
+        )
     }
 
     func cancelRemoval() {
         pendingRemoval = nil
     }
 
-    /// Removes the item the confirmation dialog presented. The dialog may already have reset
-    /// `pendingRemoval` while dismissing, so the item comes from the dialog, and `remove`
-    /// re-checks that it is still in the library.
-    func confirmRemoval(_ item: LibraryItem) {
-        if pendingRemoval?.id == item.id { pendingRemoval = nil }
-        remove(item)
+    /// Removes the series the confirmation dialog presented. The dialog may already have reset
+    /// `pendingRemoval` while dismissing, so the request comes from the dialog, and `remove` re-checks that
+    /// the series is still in the library. `includingDownloads` also deletes its downloads, when the dialog
+    /// showed that it had any.
+    func confirmRemoval(_ request: LibraryRemovalRequest, includingDownloads: Bool) {
+        if pendingRemoval == request { pendingRemoval = nil }
+        remove(request.item, includingDownloads: includingDownloads && request.hasDownloads)
+    }
+
+    /// Saved chapters on a card. Zero hides the count, including when there is no offline store.
+    func savedCount(for item: LibraryItem) -> Int {
+        downloadSummary.savedCount(for: item.mediaIdentity)
     }
 
     private func contains(_ item: LibraryItem) -> Bool {
         snapshot.items.contains { $0.id == item.id && $0.pluginId == item.pluginId }
     }
 
-    private func remove(_ item: LibraryItem) {
+    private enum RemovalResult {
+        case removed
+        case removedButDownloadsRemain
+        case libraryFailed
+    }
+
+    /// The Library removal commits first. Only when it has, are the downloads deleted, so a Library removal
+    /// that fails deletes nothing. A download deletion that fails leaves the series removed from the Library,
+    /// and says so.
+    private func remove(_ item: LibraryItem, includingDownloads: Bool) {
         guard removalOperationIDs[item.id] == nil, contains(item) else { return }
 
         let operationID = UUID()
@@ -320,21 +381,22 @@ final class LibraryViewModel: ObservableObject {
         removingItemIDs.insert(item.id)
         logStarted(kind: .libraryMutation, operationID: operationID)
         let library = dependencies.library
-        removalTasks[item.id] = Task { @MainActor [weak self, library] in
+        let downloads = dependencies.downloads
+        removalTasks[item.id] = Task { @MainActor [weak self, library, downloads] in
+            var result = RemovalResult.removed
             do {
                 try await library.removeItem(itemID: item.id, pluginID: item.pluginId, mediaKind: item.effectiveType)
-                self?.publishRemovalCompletion(
-                    itemID: item.id,
-                    operationID: operationID,
-                    succeeded: true
-                )
+                if includingDownloads {
+                    do {
+                        try await downloads.deleteDownloads(of: item.mediaIdentity)
+                    } catch {
+                        result = .removedButDownloadsRemain
+                    }
+                }
             } catch {
-                self?.publishRemovalCompletion(
-                    itemID: item.id,
-                    operationID: operationID,
-                    succeeded: false
-                )
+                result = .libraryFailed
             }
+            self?.publishRemovalCompletion(itemID: item.id, operationID: operationID, result: result)
         }
     }
 
@@ -478,7 +540,7 @@ final class LibraryViewModel: ObservableObject {
         }) == true {
             categoryAssignmentItemID = nil
         }
-        if let pendingRemoval, !contains(pendingRemoval) {
+        if let pendingRemoval, !contains(pendingRemoval.item) {
             self.pendingRemoval = nil
         }
         if oldCategoryName != selectedCategoryName || selectedCategoryID == nil {
@@ -544,7 +606,7 @@ final class LibraryViewModel: ObservableObject {
     private func publishRemovalCompletion(
         itemID: String,
         operationID: UUID,
-        succeeded: Bool
+        result: RemovalResult
     ) {
         guard removalOperationIDs[itemID] == operationID else {
             logFinished(
@@ -557,19 +619,15 @@ final class LibraryViewModel: ObservableObject {
         removalOperationIDs[itemID] = nil
         removalTasks[itemID] = nil
         removingItemIDs.remove(itemID)
-        if succeeded {
-            logFinished(
-                kind: .libraryMutation,
-                operationID: operationID,
-                outcome: .succeeded
-            )
-        } else {
+        switch result {
+        case .removed:
+            logFinished(kind: .libraryMutation, operationID: operationID, outcome: .succeeded)
+        case .removedButDownloadsRemain:
+            messagePresenter.present(.downloadsNotDeleted)
+            logFinished(kind: .libraryMutation, operationID: operationID, outcome: .partiallySucceeded(.persistence))
+        case .libraryFailed:
             messagePresenter.present(.itemRemovalFailed)
-            logFinished(
-                kind: .libraryMutation,
-                operationID: operationID,
-                outcome: .failed(.persistence)
-            )
+            logFinished(kind: .libraryMutation, operationID: operationID, outcome: .failed(.persistence))
         }
     }
 

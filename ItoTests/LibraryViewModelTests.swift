@@ -219,46 +219,51 @@ final class LibraryViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.filteredItems.map(\.id), ["one", "two"])
     }
 
-    func testRemovalNeedsConfirmationAndCancelRemovesNothing() async {
+    func testRemovalNeedsConfirmationAndCancelRemovesNothing() async throws {
         let first = item("one", "One", pluginID: "plugin.one")
         let subject = makeSubject(snapshot: snapshot(items: [first]))
 
         subject.viewModel.requestRemoval(first)
-        XCTAssertEqual(subject.viewModel.pendingRemoval?.id, "one")
+        XCTAssertEqual(subject.viewModel.pendingRemoval?.item.id, "one")
         subject.viewModel.cancelRemoval()
         XCTAssertNil(subject.viewModel.pendingRemoval)
         XCTAssertTrue(subject.library.removeRequests.isEmpty)
 
         subject.viewModel.requestRemoval(first)
+        let request = try XCTUnwrap(subject.viewModel.pendingRemoval)
         subject.library.publish(snapshot(items: []))
         XCTAssertNil(subject.viewModel.pendingRemoval)
         // A confirmation for a series that is no longer in the library does nothing.
-        subject.viewModel.confirmRemoval(first)
+        subject.viewModel.confirmRemoval(request, includingDownloads: false)
         XCTAssertTrue(subject.library.removeRequests.isEmpty)
     }
 
-    func testConfirmingAfterTheDialogAlreadyDismissedStillRemovesThePresentedItem() async {
+    func testConfirmingAfterTheDialogAlreadyDismissedStillRemovesThePresentedItem() async throws {
         let first = item("one", "One", pluginID: "plugin.one")
         let subject = makeSubject(snapshot: snapshot(items: [first]))
 
         subject.viewModel.requestRemoval(first)
+        let request = try XCTUnwrap(subject.viewModel.pendingRemoval)
         // Some iOS versions set the dialog binding to false before running the button action.
         subject.viewModel.cancelRemoval()
-        subject.viewModel.confirmRemoval(first)
+        subject.viewModel.confirmRemoval(request, includingDownloads: false)
 
         await waitUntil { subject.library.removeRequests.count == 1 }
         XCTAssertEqual(subject.library.removeRequests.first, .init(itemID: "one", pluginID: "plugin.one", mediaKind: .manga))
     }
 
-    func testDurableRemoveSuppressesDuplicateAndFollowsAuthoritativePublication() async {
+    func testDurableRemoveSuppressesDuplicateAndFollowsAuthoritativePublication() async throws {
         let first = item("one", "One", pluginID: "plugin.one")
         let second = item("two", "Two", pluginID: "plugin.two")
         let subject = makeSubject(snapshot: snapshot(items: [first, second]))
 
         subject.viewModel.requestRemoval(first)
-        subject.viewModel.confirmRemoval(first)
+        let firstRequest = try XCTUnwrap(subject.viewModel.pendingRemoval)
+        subject.viewModel.confirmRemoval(firstRequest, includingDownloads: false)
         subject.viewModel.requestRemoval(first)
-        subject.viewModel.confirmRemoval(first)
+        // A series already being removed is not offered again.
+        XCTAssertNil(subject.viewModel.pendingRemoval)
+        subject.viewModel.confirmRemoval(firstRequest, includingDownloads: false)
         XCTAssertNil(subject.viewModel.pendingRemoval)
         await waitUntil { subject.library.removeRequests.count == 1 }
         XCTAssertEqual(subject.library.removeRequests[0], .init(itemID: "one", pluginID: "plugin.one", mediaKind: .manga))
@@ -270,7 +275,8 @@ final class LibraryViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.filteredItems.map(\.id), ["two"])
 
         subject.viewModel.requestRemoval(second)
-        subject.viewModel.confirmRemoval(second)
+        let secondRequest = try XCTUnwrap(subject.viewModel.pendingRemoval)
+        subject.viewModel.confirmRemoval(secondRequest, includingDownloads: false)
         await waitUntil { subject.library.removeRequests.count == 2 }
         subject.library.resolveRemove(at: 0, result: .failure(TestFailure.expected))
         await waitUntil { subject.messages.messages == [.itemRemovalFailed] }

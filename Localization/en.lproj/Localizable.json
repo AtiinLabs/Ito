@@ -7,6 +7,11 @@
     "one": "%1$@ has %2$lld new episode.",
     "other": "%1$@ has %2$lld new episodes."
   },
+  "%@ is also removed from your lists. Reading history and progress are kept. Remove from Library keeps its %lld downloaded chapters.": {
+    "description": "Confirm removing a series that has saved chapters. The dialog also has a Remove Library and Downloads button that deletes them, so the keeping is tied to the Remove from Library button. The first placeholder is the series title, the second the number of saved chapters.",
+    "one": "%1$@ is also removed from your lists. Reading history and progress are kept. Remove from Library keeps its %2$lld downloaded chapter.",
+    "other": "%1$@ is also removed from your lists. Reading history and progress are kept. Remove from Library keeps its %2$lld downloaded chapters."
+  },
   "%lld Earlier Chapters": {
     "description": "History: expand a series' earlier chapters",
     "one": "%lld Earlier Chapter",
@@ -24,6 +29,11 @@
   "%lld chapters": {
     "one": "%lld chapter",
     "other": "%lld chapters"
+  },
+  "%lld chapters saved": {
+    "description": "Accessibility label of the Library card chip. The count is the number of saved chapters.",
+    "one": "%lld chapter saved",
+    "other": "%lld chapters saved"
   },
   "%lld chapters · %@": {
     "description": "Downloaded series storage summary\nDownloads manager series: stored edition count and bytes, including damaged copies",
@@ -66,6 +76,11 @@
   "%lld percent": {
     "one": "%lld percent",
     "other": "%lld percent"
+  },
+  "%lld saved": {
+    "description": "Library card chip: how many chapters of the series are saved on this device. The count is the number of saved chapters.",
+    "one": "%lld saved",
+    "other": "%lld saved"
   },
   "%lld sources need attention": {
     "one": "%lld source needs attention",
