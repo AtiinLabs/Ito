@@ -128,32 +128,36 @@ final class ZoomablePageTests: XCTestCase {
         window.makeKeyAndVisible()
         controller.view.layoutIfNeeded()
         defer { window.isHidden = true }
-        let interrupted = expectation(description: "A new request interrupts an intermediate native zoom frame")
         let reset = expectation(description: "The new native zoom reaches its requested minimum")
         let observer = NativeZoomAnimationObserver(controller: controller)
-        var requestedReset = false
         var completedReset = false
         observer.onFrame = { [weak observer] in
-            guard let presentation = controller.imageView.layer.presentation() else { return }
-            if !requestedReset, presentation.frame.width > 301, presentation.frame.width < 740 {
-                requestedReset = true
-                controller.zoom(
-                    at: CGPoint(x: controller.scrollView.bounds.midX, y: controller.scrollView.bounds.midY),
-                    animated: true
-                )
-                interrupted.fulfill()
-            } else if requestedReset, !completedReset, abs(presentation.frame.width - 300) < 0.5,
-                      controller.scrollView.zoomScale <= 1.001 {
-                completedReset = true
-                observer?.stopFrames()
-                reset.fulfill()
-            }
+            // Landed means at the minimum with no zoom animation left that could still land elsewhere, so
+            // a late completion of the replaced zoom-in cannot slip past; no frame has to be caught
+            // mid-animation.
+            guard !completedReset,
+                  controller.imageView.layer.animationKeys()?.isEmpty ?? true,
+                  let presentation = controller.imageView.layer.presentation(),
+                  abs(presentation.frame.width - 300) < 0.5,
+                  controller.scrollView.zoomScale <= 1.001 else { return }
+            completedReset = true
+            observer?.stopFrames()
+            reset.fulfill()
         }
         controller.scrollView.delegate = observer
+
+        controller.zoom(at: CGPoint(x: 100, y: 160), animated: true)
+        // The zoom-in is in flight: its animation is attached, and no frame has rendered in this turn of
+        // the run loop, so it cannot have landed. Retargeting now interrupts it at a known point.
+        XCTAssertFalse(controller.imageView.layer.animationKeys()?.isEmpty ?? true)
+        XCTAssertGreaterThan(controller.scrollView.zoomScale, 1.001)
+        controller.zoom(
+            at: CGPoint(x: controller.scrollView.bounds.midX, y: controller.scrollView.bounds.midY),
+            animated: true
+        )
         observer.startFrames()
         defer { observer.stopFrames() }
-        controller.zoom(at: CGPoint(x: 100, y: 160), animated: true)
-        await fulfillment(of: [interrupted, reset], timeout: 5)
+        await fulfillment(of: [reset], timeout: 5)
         controller.scrollView.delegate = controller
         XCTAssertEqual(controller.scrollView.zoomScale, 1, accuracy: 0.001)
         XCTAssertEqual(controller.scrollView.contentOffset, .zero)
