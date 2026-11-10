@@ -158,10 +158,8 @@ struct LibraryDownloadsThumbnails: DownloadsThumbnailServing {
     var changes: AnyPublisher<String, Never> { covers.thumbnailChanges }
 
     func thumbnail(for item: LibraryItem) async -> LibraryDurableCover? {
-        guard let address = item.coverUrl,
-              let cover = await covers.thumbnail(for: item.id),
-              cover.coverURLSHA256 == LibraryCoverThumbnailStore.coverHash(address) else { return nil }
-        return cover
+        guard let address = item.coverUrl else { return nil }
+        return await covers.thumbnail(itemID: item.id, coverUrl: address)
     }
 }
 

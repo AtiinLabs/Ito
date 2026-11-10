@@ -137,6 +137,7 @@ nonisolated final class ScriptedSourceState: @unchecked Sendable {
     private var trust = 0
     private var listingHook: (@Sendable (PluginRunnerHostModules) async -> Void)?
     private var listingGate: DownloadTestGate?
+    private var listedRequests: [(entry: MediaEntry, chapter: Chapter)] = []
     private var pages: [Page]
     let imageRunnerCreations = DownloadCallCounter()
     let listings = DownloadCallCounter()
@@ -188,6 +189,15 @@ nonisolated final class ScriptedSourceState: @unchecked Sendable {
     func setListingGate(_ gate: DownloadTestGate) {
         lock.withLock { listingGate = gate }
     }
+
+    /// Every entry and chapter a listing was asked for, in order.
+    var listedRequestsSnapshot: [(entry: MediaEntry, chapter: Chapter)] {
+        lock.withLock { listedRequests }
+    }
+
+    func recordListing(entry: MediaEntry, chapter: Chapter) {
+        lock.withLock { listedRequests.append((entry, chapter)) }
+    }
 }
 
 /// Lists the scripted pages. It runs the hook first, with the same modules the download runtime holds.
@@ -202,6 +212,7 @@ nonisolated final class ScriptedChapterPages: ChapterPageProviding, @unchecked S
 
     func getChapterPages(entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
         state.listings.increment()
+        state.recordListing(entry: entry, chapter: chapter)
         if let hook = state.currentListingHook {
             await hook(modules)
         }

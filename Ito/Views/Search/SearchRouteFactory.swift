@@ -164,6 +164,7 @@ struct AppViewFactory {
             installer: libraryDependencies.installer,
             payloadDecoder: libraryDependencies.payloadDecoder,
             offlineReading: offlineReading,
+            coverThumbnails: libraryDependencies.coverThumbnails,
             presentationLogger: presentationLogger
         )
     }
