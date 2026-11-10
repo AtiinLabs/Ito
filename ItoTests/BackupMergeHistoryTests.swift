@@ -458,7 +458,7 @@ struct BackupMergeHistoryTests {
             affectedItemIds: affectedItemIds
         )
 
-        #expect(remapResult == .init(remappedItemCount: 1, movedLinkCount: 1, movedHistoryCount: 1))
+        #expect(remapResult == .init(remappedItemCount: 1, movedLinkCount: 1, movedHistoryCount: 1, cancelledDownloadJobCount: 0))
         try await database.dbPool.read { db in
             #expect(try LibraryItem.fetchOne(db, key: local.id) == nil)
             let persistedDestination = try LibraryItem.fetchOne(db, key: destinationId)

@@ -396,6 +396,8 @@ final class MediaDetailRelinkFake: MediaDetailRelinkServing {
     }
 
     var error: (any Error)?
+    /// What the next relink reports as cancelled downloads.
+    var cancelledDownloadCount = 0
     var suspend = false
     private var pending: [CheckedContinuation<Void, any Error>] = []
     private(set) var requests: [Request] = []
@@ -409,7 +411,7 @@ final class MediaDetailRelinkFake: MediaDetailRelinkServing {
         title: String,
         coverURL: String?,
         rawPayload: Data
-    ) async throws {
+    ) async throws -> Int {
         requests.append(
             Request(
                 pluginID: pluginID,
@@ -425,6 +427,7 @@ final class MediaDetailRelinkFake: MediaDetailRelinkServing {
         if suspend {
             try await withCheckedThrowingContinuation { pending.append($0) }
         }
+        return cancelledDownloadCount
     }
 
     func resolve(with result: Result<Void, any Error>) {

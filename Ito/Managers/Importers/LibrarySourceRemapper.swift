@@ -8,6 +8,10 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
         let remappedItemCount: Int
         let movedLinkCount: Int
         let movedHistoryCount: Int
+        /// Queued, waiting, downloading and failed downloads of the moved series that were deleted. A
+        /// job's frozen series snapshot belongs to the old series, so it is cancelled, not carried.
+        /// Stored copies move with the series.
+        let cancelledDownloadJobCount: Int
     }
 
     nonisolated enum RemapError: Error, Equatable, LocalizedError {
@@ -52,6 +56,10 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
         self.dbPool = dbPool
     }
 
+    /// Moves each item to the new plugin. The offline state of every item moves with it
+    /// (`OfflineChapterStore.rekeyMedia`): stored copies stay readable, queued downloads are cancelled.
+    /// A source migration that remaps through this method inherits that behaviour and reports the
+    /// cancelled count in the result.
     func remap(
         oldPluginId: String,
         newPluginId: String,
@@ -240,6 +248,29 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                 }
             }
 
+            var cancelledJobCount = 0
+            for mapping in mappings {
+                let kind = mapping.source.effectiveType
+                let cancelled = try OfflineChapterStore.rekeyMedia(
+                    in: db,
+                    from: MediaIdentity(
+                        pluginId: oldPluginId,
+                        canonicalMediaId: ImportedMediaIdentity.canonicalMediaId(
+                            itemId: mapping.source.id, pluginId: oldPluginId, mediaKind: kind
+                        ),
+                        mediaKind: kind
+                    ),
+                    to: MediaIdentity(
+                        pluginId: newPluginId,
+                        canonicalMediaId: ImportedMediaIdentity.canonicalMediaId(
+                            itemId: mapping.destinationId, pluginId: newPluginId, mediaKind: kind
+                        ),
+                        mediaKind: kind
+                    )
+                )
+                cancelledJobCount += cancelled.count
+            }
+
             for mapping in mappings {
                 _ = try LibraryItem.deleteOne(db, key: mapping.source.id)
             }
@@ -247,7 +278,8 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
             return Result(
                 remappedItemCount: mappings.count,
                 movedLinkCount: movedLinkCount,
-                movedHistoryCount: historyMappings.count
+                movedHistoryCount: historyMappings.count,
+                cancelledDownloadJobCount: cancelledJobCount
             )
         }
     }
@@ -319,8 +351,16 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                 )
             }
         }
+
+        try OfflineChapterStore.preflightRekey(
+            in: db,
+            from: MediaIdentity(pluginId: oldPluginId, canonicalMediaId: sourceCanonicalMediaId, mediaKind: mediaKind),
+            to: MediaIdentity(pluginId: newPluginId, canonicalMediaId: destinationCanonicalMediaId, mediaKind: mediaKind)
+        )
     }
 
+    /// Moves one item to another entry of the same plugin. Its stored copies move with it and stay readable;
+    /// its queued downloads are cancelled and counted in the result.
     func relink(
         pluginId: String,
         mediaKind: MediaKind,
@@ -430,11 +470,18 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                 )
             }
 
+            let cancelledJobIDs = try OfflineChapterStore.rekeyMedia(
+                in: db,
+                from: MediaIdentity(pluginId: pluginId, canonicalMediaId: sourceCanonicalMediaId, mediaKind: mediaKind),
+                to: MediaIdentity(pluginId: pluginId, canonicalMediaId: destinationCanonicalMediaId, mediaKind: mediaKind)
+            )
+
             _ = try LibraryItem.deleteOne(db, key: source.id)
             return Result(
                 remappedItemCount: 1,
                 movedLinkCount: movedLinkCount,
-                movedHistoryCount: histories.count
+                movedHistoryCount: histories.count,
+                cancelledDownloadJobCount: cancelledJobIDs.count
             )
         }
     }

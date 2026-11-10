@@ -54,6 +54,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     @Published private(set) var relinkSearchResults: [M] = []
     @Published private(set) var relinkSearchState: RelinkSearchState = .idle
     @Published private(set) var relinkMutationState: RelinkMutationState = .idle
+    /// How many queued downloads the last relink cancelled. Zero when it cancelled none.
+    @Published private(set) var relinkCancelledDownloadCount = 0
     @Published private(set) var libraryMutationState: LibraryMutationState = .idle
     @Published private(set) var readerDestination: MediaDetailReaderDestination?
     @Published private(set) var trackerSheetIntent: MediaDetailTrackerSheetIntent?
@@ -494,6 +496,10 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         relinkPresentation = nil
     }
 
+    func dismissRelinkDownloadsNotice() {
+        relinkCancelledDownloadCount = 0
+    }
+
     func performRelink(with selectedMedia: M) async {
         guard let loadDetails = routeContext.loadDetails,
               let presentation = relinkPresentation,
@@ -504,12 +510,13 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         let selectedKey = selectedMedia.key
         relinkMutationOperationID = operationID
         relinkMutationState = .relinking(resultID: selectedKey)
+        relinkCancelledDownloadCount = 0
         logStarted(kind: .relink, operationID: operationID)
 
         do {
             let hydrated = try await loadDetails(selectedMedia)
             let payload = try JSONEncoder().encode(hydrated)
-            try await dependencies.relink.relink(
+            let cancelledDownloadCount = try await dependencies.relink.relink(
                 pluginID: pluginID,
                 mediaKind: hydrated.mediaKind,
                 possibleSourceItemIDs: [
@@ -540,6 +547,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             relinkSearchResults = []
             relinkSearchState = .idle
             relinkMutationState = .idle
+            relinkCancelledDownloadCount = cancelledDownloadCount
             libraryMutationState = .idle
             relinkMutationOperationID = nil
             isSaved = true

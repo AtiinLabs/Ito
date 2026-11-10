@@ -126,7 +126,7 @@ struct LibrarySourceRemapperTests {
             affectedItemIds: [sourceId]
         )
 
-        #expect(result == .init(remappedItemCount: 1, movedLinkCount: 2, movedHistoryCount: 2))
+        #expect(result == .init(remappedItemCount: 1, movedLinkCount: 2, movedHistoryCount: 2, cancelledDownloadJobCount: 0))
         try await database.dbPool.read { db in
             let removedSource = try LibraryItem.fetchOne(db, key: sourceId)
             let fetchedDestination = try LibraryItem.fetchOne(db, key: destinationId)
@@ -572,7 +572,7 @@ struct LibrarySourceRemapperTests {
             rawPayload: Data([1, 2, 3])
         )
 
-        #expect(result == .init(remappedItemCount: 1, movedLinkCount: 1, movedHistoryCount: 1))
+        #expect(result == .init(remappedItemCount: 1, movedLinkCount: 1, movedHistoryCount: 1, cancelledDownloadJobCount: 0))
         try await database.dbPool.read { db in
             #expect(try LibraryItem.fetchOne(db, key: sourceId) == nil)
             let destination = try LibraryItem.fetchOne(db, key: destinationId)
@@ -874,7 +874,7 @@ struct LibrarySourceRemapperTests {
             newPluginId: newPluginId,
             affectedItemIds: [mangaItemId]
         )
-        #expect(result == .init(remappedItemCount: 1, movedLinkCount: 0, movedHistoryCount: 1))
+        #expect(result == .init(remappedItemCount: 1, movedLinkCount: 0, movedHistoryCount: 1, cancelledDownloadJobCount: 0))
 
         let expectedMangaDestId = "source.migrated\u{1F}manga\u{1F}42"
         try await database.dbPool.read { db in
