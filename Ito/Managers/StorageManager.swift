@@ -14,14 +14,17 @@ public class StorageManager: ObservableObject {
     private var dataCache: DataCache?
     private var settingsCancellable: AnyCancellable?
     private var imagePipelineController: PluginImagePipelineController?
-    private let pluginManager: PluginManager
     /// Bumped by every measurement so an older, slower one cannot overwrite a newer result.
     private var cacheSizeGeneration = 0
     private var settingsStore: AppSettingsStore?
 
     public init(pluginManager: PluginManager) {
-        self.pluginManager = pluginManager
-        setupNukePipeline()
+        setupNukePipeline(pluginManager: pluginManager)
+    }
+
+    /// A cache-scoped instance for isolated storage operations, without installing a global pipeline.
+    init(dataCache: DataCache) {
+        self.dataCache = dataCache
     }
 
     func configure(settingsStore: AppSettingsStore) {
@@ -44,7 +47,7 @@ public class StorageManager: ObservableObject {
         updateCacheLimit()
     }
 
-    private func setupNukePipeline() {
+    private func setupNukePipeline(pluginManager: PluginManager) {
         let capacityBytes = Int(diskCacheLimitGB * 1024 * 1024 * 1024)
         do {
             let cache = try DataCache(name: "com.ito.datacache")

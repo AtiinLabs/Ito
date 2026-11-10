@@ -73,6 +73,9 @@
 History filter: every kind of media */
 "All" = "All";
 
+/* Storage settings warns that deleting downloads removes saved chapters, cancels the download queue, and waits for open readers */
+"All saved chapters are deleted and all queued downloads are cancelled. Chapters still held by an open reader are removed when the reader closes." = "All saved chapters are deleted and all queued downloads are cancelled. Chapters still held by an open reader are removed when the reader closes.";
+
 "All sources resolved" = "All sources resolved";
 
 "All-Time Popular" = "All-Time Popular";
@@ -173,16 +176,25 @@ History: kind of media */
 
 "Cache Limit" = "Cache Limit";
 
-"Cached images and pages are removed and downloaded again when needed." = "Cached images and pages are removed and downloaded again when needed.";
+/* Clear Cache confirmation: offline chapters are not cache data */
+"Cached images and pages are removed and downloaded again when needed. Downloaded chapters are kept." = "Cached images and pages are removed and downloaded again when needed. Downloaded chapters are kept.";
 
+/* Offline storage total is being measured */
 "Calculating…" = "Calculating…";
 
 "Cancel" = "Cancel";
 
 "Cancel Action" = "Cancel Action";
 
-/* Chapter menu: remove this chapter from the download queue */
+/* Downloads manager: cancel all queued jobs, keeping saved copies */
+"Cancel All" = "Cancel All";
+
+/* Chapter menu: remove this chapter from the download queue
+Downloads queue: cancel one job */
 "Cancel Download" = "Cancel Download";
+
+/* Downloads manager: cancel the selected queued or running downloads */
+"Cancel Downloads" = "Cancel Downloads";
 
 /* Series status */
 "Cancelled" = "Cancelled";
@@ -247,6 +259,9 @@ History: kind of media */
 "Clear Score" = "Clear Score";
 
 "Clear selection" = "Clear selection";
+
+/* Offline chapters are durable data, separate from the image and network cache */
+"Clearing the cache doesn't remove downloaded chapters." = "Clearing the cache doesn't remove downloaded chapters.";
 
 "Close" = "Close";
 
@@ -361,12 +376,30 @@ History: kind of media */
 
 "Debug logs could not be loaded. Please try again." = "Debug logs could not be loaded. Please try again.";
 
+/* Delete selected downloaded chapters
+Downloads manager: delete selected series */
+"Delete" = "Delete";
+
 "Delete %@?" = "Delete %@?";
 
 /* Chapter menu: remove the saved copy of this chapter */
 "Delete Download" = "Delete Download";
 
+/* Confirm deleting offline chapters, not image cache
+Storage settings: delete every stored chapter, separate from Clear Cache */
+"Delete Downloaded Chapters" = "Delete Downloaded Chapters";
+
+/* Storage settings confirm offline data deletion */
+"Delete Downloaded Chapters?" = "Delete Downloaded Chapters?";
+
+/* Confirm deletion of selected offline chapters
+Confirm permanent deletion of selected downloads */
+"Delete Downloads" = "Delete Downloads";
+
 "Delete List" = "Delete List";
+
+/* Downloads manager deletion failed or its cleanup failed after removing inventory. Never claims rollback. */
+"Deletion couldn't be completed for: %@. Check the list; some downloads may already have been removed." = "Deletion couldn't be completed for: %@. Check the list; some downloads may already have been removed.";
 
 "Dependency repaired" = "Dependency repaired";
 
@@ -404,11 +437,43 @@ History: kind of media */
 /* Chapter download status */
 "Download failed" = "Download failed";
 
-/* Chapter download status */
+/* Storage settings failed to read offline inventory totals */
+"Download storage couldn't be measured. Try opening Storage again." = "Download storage couldn't be measured. Try opening Storage again.";
+
+/* Chapter download status
+Downloads manager stored inventory section */
 "Downloaded" = "Downloaded";
+
+/* Storage settings: offline chapters disk usage */
+"Downloaded Chapters" = "Downloaded Chapters";
 
 /* Chapter download status */
 "Downloading" = "Downloading";
+
+/* Downloads action error alert title
+Downloads manager title
+Empty downloaded series title
+Library toolbar: open the downloads manager
+Storage settings offline downloads section */
+"Downloads" = "Downloads";
+
+/* Downloads manager bulk Cancel failure */
+"Downloads couldn't be cancelled. Check the list before trying again." = "Downloads couldn't be cancelled. Check the list before trying again.";
+
+/* Storage settings could not read downloads before deletion */
+"Downloads couldn't be deleted. Open Manage Downloads to review them." = "Downloads couldn't be deleted. Open Manage Downloads to review them.";
+
+/* Downloads manager: inventory observation failed */
+"Downloads couldn't be loaded. Open Downloads again to retry." = "Downloads couldn't be loaded. Open Downloads again to retry.";
+
+/* Downloads manager bulk Retry failure */
+"Downloads couldn't be retried. Check the list before trying again." = "Downloads couldn't be retried. Check the list before trying again.";
+
+/* Downloads storage usage when free space could not be read */
+"Downloads use %@" = "Downloads use %@";
+
+/* Downloads storage usage and volume free space */
+"Downloads use %@ · %@ available" = "Downloads use %1$@ · %2$@ available";
 
 "Drop a .ito plugin file here, or browse repositories to find and install plugins." = "Drop a .ito plugin file here, or browse repositories to find and install plugins.";
 
@@ -586,6 +651,9 @@ History: an episode without a title */
 
 "Importer aliases" = "Importer aliases";
 
+/* Downloads manager queue section */
+"In Progress" = "In Progress";
+
 "Include" = "Include";
 
 "Incognito Mode" = "Incognito Mode";
@@ -759,6 +827,9 @@ History: an episode without a title */
 
 "MainTabView requires a prepared runtime" = "MainTabView requires a prepared runtime";
 
+/* Storage settings: open the downloads manager */
+"Manage Downloads" = "Manage Downloads";
+
 "Manage Lists" = "Manage Lists";
 
 "Manage plugin repositories" = "Manage plugin repositories";
@@ -868,6 +939,10 @@ Manga format */
 
 "No custom lists yet" = "No custom lists yet";
 
+/* Downloaded series is empty after deletion
+Downloads manager empty inventory */
+"No downloaded chapters" = "No downloaded chapters";
+
 "No items in %@." = "No items in %@.";
 
 "No local reading or watching history was found for this series." = "No local reading or watching history was found for this series.";
@@ -939,6 +1014,7 @@ Manga format: light novel */
 
 "Number of images ahead of your current position to preload. Higher values use more data but reduce loading times." = "Number of images ahead of your current position to preload. Higher values use more data but reduce loading times.";
 
+/* Dismiss downloads action error */
 "OK" = "OK";
 
 /* Anime format: original net animation */
@@ -970,6 +1046,7 @@ Manga format: light novel */
 /* Button on a library series whose source is unavailable: shows the details saved in the library. */
 "Open Saved Details" = "Open Saved Details";
 
+/* Open saved Library details; reading is through details */
 "Open Series" = "Open Series";
 
 "Open Settings" = "Open Settings";
@@ -1206,10 +1283,20 @@ History: the page a chapter was left on */
 
 "Resume" = "Resume";
 
+/* Approve a download paused after restoring a backup
+Downloads manager: approve jobs paused after restoring a backup
+Downloads manager: explicitly approve selected restored jobs */
+"Resume Paused" = "Resume Paused";
+
+/* Downloads manager: retry selected jobs
+Downloads queue: retry a failed or paused job */
 "Retry" = "Retry";
 
 /* Chapter menu */
 "Retry Download" = "Retry Download";
+
+/* Downloads manager: retry failures and source-related pauses */
+"Retry Failed" = "Retry Failed";
 
 "Retry Install" = "Retry Install";
 

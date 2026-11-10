@@ -235,6 +235,52 @@
         }
       }
     },
+    "%lld chapters · %@" : {
+      "comment" : "Downloaded series storage summary\nDownloads manager series: stored edition count and bytes, including damaged copies",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld chapter · %2$@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld chapters · %2$@"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld damaged" : {
+      "comment" : "Downloads manager damaged edition count",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld damaged"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld damaged"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld episodes" : {
       "localizations" : {
         "en" : {
@@ -558,6 +604,9 @@
     "All" : {
       "comment" : "Filter chip: show every list\nHistory filter: every kind of media"
     },
+    "All saved chapters are deleted and all queued downloads are cancelled. Chapters still held by an open reader are removed when the reader closes." : {
+      "comment" : "Storage settings warns that deleting downloads removes saved chapters, cancels the download queue, and waits for open readers"
+    },
     "All sources resolved" : {
 
     },
@@ -706,11 +755,11 @@
     "Cache Limit" : {
 
     },
-    "Cached images and pages are removed and downloaded again when needed." : {
-
+    "Cached images and pages are removed and downloaded again when needed. Downloaded chapters are kept." : {
+      "comment" : "Clear Cache confirmation: offline chapters are not cache data"
     },
     "Calculating…" : {
-
+      "comment" : "Offline storage total is being measured"
     },
     "Cancel" : {
 
@@ -718,8 +767,14 @@
     "Cancel Action" : {
 
     },
+    "Cancel All" : {
+      "comment" : "Downloads manager: cancel all queued jobs, keeping saved copies"
+    },
     "Cancel Download" : {
-      "comment" : "Chapter menu: remove this chapter from the download queue"
+      "comment" : "Chapter menu: remove this chapter from the download queue\nDownloads queue: cancel one job"
+    },
+    "Cancel Downloads" : {
+      "comment" : "Downloads manager: cancel the selected queued or running downloads"
     },
     "Cancelled" : {
       "comment" : "Series status"
@@ -825,6 +880,9 @@
     },
     "Clear selection" : {
 
+    },
+    "Clearing the cache doesn't remove downloaded chapters." : {
+      "comment" : "Offline chapters are durable data, separate from the image and network cache"
     },
     "Close" : {
 
@@ -1009,14 +1067,75 @@
     "Debug logs could not be loaded. Please try again." : {
 
     },
+    "Delete" : {
+      "comment" : "Delete selected downloaded chapters\nDownloads manager: delete selected series"
+    },
     "Delete %@?" : {
 
+    },
+    "Delete %lld downloaded chapters (%@)?" : {
+      "comment" : "Confirm deletion of selected offline editions and their stored bytes",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Delete %1$lld downloaded chapter (%2$@)?"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Delete %1$lld downloaded chapters (%2$@)?"
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "Delete Download" : {
       "comment" : "Chapter menu: remove the saved copy of this chapter"
     },
+    "Delete Downloaded Chapters" : {
+      "comment" : "Confirm deleting offline chapters, not image cache\nStorage settings: delete every stored chapter, separate from Clear Cache"
+    },
+    "Delete Downloaded Chapters?" : {
+      "comment" : "Storage settings confirm offline data deletion"
+    },
+    "Delete Downloads" : {
+      "comment" : "Confirm deletion of selected offline chapters\nConfirm permanent deletion of selected downloads"
+    },
     "Delete List" : {
 
+    },
+    "Deleted downloads for %lld series. Deletion couldn't be completed for: %@. Check the list; some downloads may already have been removed." : {
+      "comment" : "Downloads manager partial delete result. Names identify the failed series; successful deletions are not rolled back.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Deleted downloads for %1$lld series. Deletion couldn't be completed for: %2$@. Check the list; some downloads may already have been removed."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Deleted downloads for %1$lld series. Deletion couldn't be completed for: %2$@. Check the list; some downloads may already have been removed."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Deletion couldn't be completed for: %@. Check the list; some downloads may already have been removed." : {
+      "comment" : "Downloads manager deletion failed or its cleanup failed after removing inventory. Never claims rollback."
     },
     "Dependency repaired" : {
 
@@ -1066,11 +1185,69 @@
     "Download failed" : {
       "comment" : "Chapter download status"
     },
+    "Download storage couldn't be measured. Try opening Storage again." : {
+      "comment" : "Storage settings failed to read offline inventory totals"
+    },
     "Downloaded" : {
-      "comment" : "Chapter download status"
+      "comment" : "Chapter download status\nDownloads manager stored inventory section"
+    },
+    "Downloaded Chapters" : {
+      "comment" : "Storage settings: offline chapters disk usage"
     },
     "Downloading" : {
       "comment" : "Chapter download status"
+    },
+    "Downloads" : {
+      "comment" : "Downloads action error alert title\nDownloads manager title\nEmpty downloaded series title\nLibrary toolbar: open the downloads manager\nStorage settings offline downloads section"
+    },
+    "Downloads couldn't be cancelled. Check the list before trying again." : {
+      "comment" : "Downloads manager bulk Cancel failure"
+    },
+    "Downloads couldn't be deleted. Open Manage Downloads to review them." : {
+      "comment" : "Storage settings could not read downloads before deletion"
+    },
+    "Downloads couldn't be fully deleted for %lld series. Other deletions were kept. Review the remaining downloads in Manage Downloads." : {
+      "comment" : "Storage settings reports partial download deletion, never rollback",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Downloads couldn't be fully deleted for %lld series. Other deletions were kept. Review the remaining downloads in Manage Downloads."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Downloads couldn't be fully deleted for %lld series. Other deletions were kept. Review the remaining downloads in Manage Downloads."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Downloads couldn't be loaded. Open Downloads again to retry." : {
+      "comment" : "Downloads manager: inventory observation failed"
+    },
+    "Downloads couldn't be retried. Check the list before trying again." : {
+      "comment" : "Downloads manager bulk Retry failure"
+    },
+    "Downloads use %@" : {
+      "comment" : "Downloads storage usage when free space could not be read"
+    },
+    "Downloads use %@ · %@ available" : {
+      "comment" : "Downloads storage usage and volume free space",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Downloads use %1$@ · %2$@ available"
+          }
+        }
+      }
     },
     "Drop a .ito plugin file here, or browse repositories to find and install plugins." : {
 
@@ -1358,6 +1535,9 @@
     "Importer aliases" : {
 
     },
+    "In Progress" : {
+      "comment" : "Downloads manager queue section"
+    },
     "Include" : {
 
     },
@@ -1627,6 +1807,9 @@
     "MainTabView requires a prepared runtime" : {
 
     },
+    "Manage Downloads" : {
+      "comment" : "Storage settings: open the downloads manager"
+    },
     "Manage Lists" : {
 
     },
@@ -1777,6 +1960,9 @@
     "No custom lists yet" : {
 
     },
+    "No downloaded chapters" : {
+      "comment" : "Downloaded series is empty after deletion\nDownloads manager empty inventory"
+    },
     "No items in %@." : {
 
     },
@@ -1880,7 +2066,7 @@
 
     },
     "OK" : {
-
+      "comment" : "Dismiss downloads action error"
     },
     "ONA" : {
       "comment" : "Anime format: original net animation"
@@ -1916,7 +2102,7 @@
       "comment" : "Button on a library series whose source is unavailable: shows the details saved in the library."
     },
     "Open Series" : {
-
+      "comment" : "Open saved Library details; reading is through details"
     },
     "Open Settings" : {
 
@@ -2266,11 +2452,17 @@
     "Resume" : {
 
     },
+    "Resume Paused" : {
+      "comment" : "Approve a download paused after restoring a backup\nDownloads manager: approve jobs paused after restoring a backup\nDownloads manager: explicitly approve selected restored jobs"
+    },
     "Retry" : {
-
+      "comment" : "Downloads manager: retry selected jobs\nDownloads queue: retry a failed or paused job"
     },
     "Retry Download" : {
       "comment" : "Chapter menu"
+    },
+    "Retry Failed" : {
+      "comment" : "Downloads manager: retry failures and source-related pauses"
     },
     "Retry Install" : {
 
@@ -2310,6 +2502,29 @@
     },
     "Saved Source • %@ • Confirmed" : {
 
+    },
+    "Saved chapters of %lld series are deleted, and their queued downloads are cancelled." : {
+      "comment" : "Confirm deleting selected downloaded series. The count is the number of selected series; deletion also cancels their queued downloads.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Saved chapters of %lld series are deleted, and their queued downloads are cancelled."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Saved chapters of %lld series are deleted, and their queued downloads are cancelled."
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "Saved credentials are currently unavailable." : {
 

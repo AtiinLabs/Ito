@@ -335,6 +335,12 @@ struct LibraryView: View {
                     Image(systemName: "clock.arrow.circlepath")
                         .accessibilityLabel("History")
                 }
+                if viewFactory.hasDownloads {
+                    NavigationLink(destination: viewFactory.makeDownloadsView()) {
+                        Image(systemName: "arrow.down.circle")
+                            .accessibilityLabel(Text("Downloads", comment: "Library toolbar: open the downloads manager"))
+                    }
+                }
                 if viewModel.hasItems {
                     Button {
                         Task { await viewModel.requestUpdate() }

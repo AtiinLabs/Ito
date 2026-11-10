@@ -25,6 +25,16 @@
     "one": "%lld chapter",
     "other": "%lld chapters"
   },
+  "%lld chapters · %@": {
+    "description": "Downloaded series storage summary\nDownloads manager series: stored edition count and bytes, including damaged copies",
+    "one": "%1$lld chapter · %2$@",
+    "other": "%1$lld chapters · %2$@"
+  },
+  "%lld damaged": {
+    "description": "Downloads manager damaged edition count",
+    "one": "%lld damaged",
+    "other": "%lld damaged"
+  },
   "%lld episodes": {
     "one": "%lld episode",
     "other": "%lld episodes"
@@ -69,9 +79,29 @@
     "one": "%lld waiting to sync",
     "other": "%lld waiting to sync"
   },
+  "Delete %lld downloaded chapters (%@)?": {
+    "description": "Confirm deletion of selected offline editions and their stored bytes",
+    "one": "Delete %1$lld downloaded chapter (%2$@)?",
+    "other": "Delete %1$lld downloaded chapters (%2$@)?"
+  },
+  "Deleted downloads for %lld series. Deletion couldn't be completed for: %@. Check the list; some downloads may already have been removed.": {
+    "description": "Downloads manager partial delete result. Names identify the failed series; successful deletions are not rolled back.",
+    "one": "Deleted downloads for %1$lld series. Deletion couldn't be completed for: %2$@. Check the list; some downloads may already have been removed.",
+    "other": "Deleted downloads for %1$lld series. Deletion couldn't be completed for: %2$@. Check the list; some downloads may already have been removed."
+  },
+  "Downloads couldn't be fully deleted for %lld series. Other deletions were kept. Review the remaining downloads in Manage Downloads.": {
+    "description": "Storage settings reports partial download deletion, never rollback",
+    "one": "Downloads couldn't be fully deleted for %lld series. Other deletions were kept. Review the remaining downloads in Manage Downloads.",
+    "other": "Downloads couldn't be fully deleted for %lld series. Other deletions were kept. Review the remaining downloads in Manage Downloads."
+  },
   "Failed to refresh %lld repositories.": {
     "one": "Failed to refresh %lld repository.",
     "other": "Failed to refresh %lld repositories."
+  },
+  "Saved chapters of %lld series are deleted, and their queued downloads are cancelled.": {
+    "description": "Confirm deleting selected downloaded series. The count is the number of selected series; deletion also cancels their queued downloads.",
+    "one": "Saved chapters of %lld series are deleted, and their queued downloads are cancelled.",
+    "other": "Saved chapters of %lld series are deleted, and their queued downloads are cancelled."
   },
   "Score: %lld percent": {
     "one": "Score: %lld percent",
