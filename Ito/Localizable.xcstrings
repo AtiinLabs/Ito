@@ -1894,6 +1894,12 @@
     "Official" : {
       "comment" : "Discord status: chapter from the official release"
     },
+    "Offline — showing saved Library" : {
+      "comment" : "Banner above the Library grid while the device has no network. The series, details and covers shown are the ones saved on this device."
+    },
+    "Offline — showing saved details" : {
+      "comment" : "Notice above a saved series whose details could not be refreshed because the device has no network. The details shown are the ones saved on this device."
+    },
     "Oldest First" : {
 
     },
@@ -3236,6 +3242,9 @@
     },
     "Update failed. Please try again." : {
 
+    },
+    "Updated %@" : {
+      "comment" : "Line under a notice about saved series details. The placeholder is a relative time such as '3 hours ago'."
     },
     "Updates Available" : {
 

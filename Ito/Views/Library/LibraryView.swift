@@ -112,6 +112,15 @@ struct LibraryView: View {
 
     private var mainContentView: some View {
         VStack(spacing: 0) {
+            if viewModel.isOffline {
+                OfflineBanner(
+                    text: String(
+                        localized: "Offline — showing saved Library",
+                        comment: "Banner above the Library grid while the device has no network. The series, details and covers shown are the ones saved on this device."
+                    ),
+                    systemImage: "wifi.slash"
+                )
+            }
             if viewModel.layoutStyle == .tabbed {
                 pillBar
                 Divider()
@@ -259,6 +268,8 @@ struct LibraryView: View {
                     isEditing: viewModel.isEditing,
                     destination: viewFactory.makeDeferredPluginView(item: item),
                     onSelect: { viewModel.itemSelected(item) },
+                    onCoverLoaded: { image in viewModel.coverLoaded(for: item, image: image) },
+                    loadDurableCover: { await viewModel.durableCover(for: item) },
                     onAssignCategories: {
                         viewModel.presentCategoryAssignment(for: item.id)
                     },
@@ -402,6 +413,8 @@ struct LibraryView: View {
                         isEditing: false,
                         destination: viewFactory.makeDeferredPluginView(item: fakeItem),
                         onSelect: {},
+                        onCoverLoaded: { _ in },
+                        loadDurableCover: { nil },
                         onAssignCategories: {},
                         onRemove: {}
                     )
@@ -497,6 +510,10 @@ struct LibraryItemView: View {
     let isEditing: Bool
     let destination: DeferredPluginView
     let onSelect: () -> Void
+    /// Told when the card's cover finished loading, with the image it displays.
+    let onCoverLoaded: (UIImage) -> Void
+    /// Reads the cover saved on this device.
+    let loadDurableCover: () async -> UIImage?
     let onAssignCategories: () -> Void
     let onRemove: () -> Void
 
@@ -623,16 +640,44 @@ struct LibraryItemView: View {
                         .scaledToFill()
                         .frame(width: width)
                         .saturation(isPluginInstalled ? 1.0 : 0.35)
-                } else if state.error != nil {
-                    coverPlaceholder(icon: "exclamationmark.triangle")
                 } else {
-                    ShimmerView()
+                    // One view for both states, so the saved cover found while loading is not dropped when the
+                    // load then fails.
+                    durableCover(width: width, failed: state.error != nil) { failed in
+                        if failed {
+                            coverPlaceholder(icon: "exclamationmark.triangle")
+                        } else {
+                            ShimmerView()
+                        }
+                    }
+                }
+            }
+            // The image is the processed one the card shows; keeping it costs no request.
+            .onCompletion { result in
+                if case .success(let response) = result {
+                    onCoverLoaded(response.image)
                 }
             }
             .processors([.resize(size: targetSize)])
         } else {
             coverPlaceholder(icon: "photo.on.rectangle.angled")
         }
+    }
+
+    /// The cover saved on this device, while the network cache has none to show.
+    private func durableCover<Placeholder: View>(
+        width: CGFloat,
+        failed: Bool,
+        @ViewBuilder placeholder: @escaping (Bool) -> Placeholder
+    ) -> some View {
+        DurableCoverFallback(
+            loadKey: "\(item.id)\u{1F}\(item.coverUrl ?? "")",
+            load: loadDurableCover,
+            width: width,
+            saturation: isPluginInstalled ? 1.0 : 0.35,
+            failed: failed,
+            placeholder: placeholder
+        )
     }
 
     private func coverPlaceholder(icon: String) -> some View {
@@ -642,6 +687,51 @@ struct LibraryItemView: View {
                 .font(.title3)
                 .foregroundStyle(.tertiary)
         }
+    }
+}
+
+/// Shows the cover kept on this device in place of a cover that is loading or failed, and the placeholder when
+/// there is none.
+private struct DurableCoverFallback<Placeholder: View>: View {
+    let loadKey: String
+    let load: () async -> UIImage?
+    let width: CGFloat
+    let saturation: Double
+    let failed: Bool
+    @ViewBuilder let placeholder: (Bool) -> Placeholder
+    @State private var image: UIImage?
+
+    var body: some View {
+        ZStack {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: width)
+                    .saturation(saturation)
+            } else {
+                placeholder(failed)
+            }
+        }
+        .task(id: loadKey) {
+            image = await load()
+        }
+    }
+}
+
+/// A slim notice above content that is shown from what this device saved.
+struct OfflineBanner: View {
+    let text: String
+    let systemImage: String
+
+    var body: some View {
+        Label(text, systemImage: systemImage)
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(Color(.secondarySystemBackground))
+            .accessibilityElement(children: .combine)
     }
 }
 

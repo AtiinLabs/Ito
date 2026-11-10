@@ -59,6 +59,11 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     @Published private(set) var relinkPresentation: MediaDetailRelinkPresentation?
     /// This series' chapter download states, keyed by chapter key.
     @Published private(set) var chapterDownloadStates: [String: ChapterDownloadState] = [:]
+    /// Whether the device reports no network.
+    @Published private(set) var isOffline: Bool
+    /// When the saved details of this series were last refreshed from their source; nil when unknown. Read
+    /// only for the screens that show saved details, and set again when a refresh replaces them.
+    @Published var snapshotRefreshedAt: Date?
 
     let pluginID: String
 
@@ -72,6 +77,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     private let messagePresenter: any MediaDetailMessagePresenting
     /// Downloads for this series' chapters. Unavailable where offline chapters are not composed.
     let downloads: any MediaDetailDownloadServing
+    let snapshots: MediaDetailSnapshotRefresher
     private let presentationLogger: any PresentationEventLogging
 
     private var detailTask: Task<Void, Never>?
@@ -81,6 +87,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     private var trackerProgressTask: Task<Void, Never>?
     private var savedChapterTask: Task<Void, Never>?
     private var savedChapterOperationID: UUID?
+    var snapshotDateTask: Task<Void, Never>?
     private var detailOperationID: UUID?
     private var themeOperationID: UUID?
     private var relinkSearchOperationID: UUID?
@@ -118,12 +125,14 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         self.dependencies = dependencies
         self.messagePresenter = messagePresenter
         downloads = dependencies.downloads
+        snapshots = MediaDetailSnapshotRefresher(library: dependencies.library)
         self.presentationLogger = presentationLogger
         pendingOpenIntent = openIntent
 
         let identity = MediaIdentity(pluginId: pluginID, canonicalMediaId: media.key, mediaKind: media.mediaKind)
         let libraryState = dependencies.library.state
         isSaved = libraryState.isSaved(media: identity)
+        isOffline = dependencies.connectivity.isOffline
         hasCustomCategories = libraryState.hasCustomCategories
         let trackerState = dependencies.tracker.state(for: identity, isAnime: media is Anime)
         isTrackingAvailable = trackerState.isAvailable
@@ -156,6 +165,11 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
                 self?.chapterDownloadStates = states
             }
             .store(in: &cancellables)
+        dependencies.connectivity.isOfflinePublisher
+            .sink { [weak self] isOffline in
+                self?.isOffline = isOffline
+            }
+            .store(in: &cancellables)
     }
 
     deinit {
@@ -165,6 +179,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         baselineTask?.cancel()
         trackerProgressTask?.cancel()
         savedChapterTask?.cancel()
+        snapshotDateTask?.cancel()
     }
 
     var mediaIdentity: MediaIdentity {
@@ -596,8 +611,14 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         detailOperationID = operationID
         detailLoadState = .loading
         logStarted(kind: .detailLoad, operationID: operationID)
+        let snapshots = snapshots
+        let tokenIdentity: MediaIdentity? = isSaved ? mediaIdentity : nil
         let task = Task { [weak self] in
             do {
+                // Read before the source is asked: a refresh may replace only the details this load started
+                // from. A token that cannot be read means no refresh, never a failed load.
+                var snapshotToken: LibrarySnapshotToken?
+                if let tokenIdentity { snapshotToken = await snapshots.token(for: tokenIdentity) }
                 let updated = try await loader(requestedMedia)
                 guard self?.isCurrentDetailOperation(operationID, mediaKey: requestedKey) == true else {
                     self?.logFinished(
@@ -622,6 +643,9 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
                     self?.beginBaselineAdvanceIfNeeded()
                 }
                 self?.performPendingOpenIntent()
+                if let snapshotToken {
+                    await self?.refreshSavedSnapshot(snapshotToken, with: updated, requestedKey: requestedKey)
+                }
             } catch is CancellationError {
                 self?.publishDetailCancellation(operationID: operationID)
             } catch {
@@ -639,6 +663,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         detailTask = nil
         detailOperationID = nil
         detailLoadState = .savedOnly
+        loadSnapshotRefreshDate()
         performPendingOpenIntent()
         return Task {}
     }
@@ -846,6 +871,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         // A screen that could not load stays on its error instead of opening a stale chapter.
         pendingOpenIntent = nil
         detailLoadState = .failure(String(localized: "Failed to load details. Please try again."))
+        loadSnapshotRefreshDate()
         messagePresenter.present(.detailLoadFailed)
         logFinished(
             kind: .detailLoad,
@@ -965,6 +991,9 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         baselineTask = nil
         trackerProgressTask = nil
         savedChapterTask = nil
+        snapshotDateTask?.cancel()
+        snapshotDateTask = nil
+        snapshotRefreshedAt = nil
     }
 
     private var mayPresentUserOutput: Bool {

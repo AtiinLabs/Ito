@@ -387,6 +387,10 @@ struct PreparedLibraryDependencies {
     let plugins: any LibraryPluginServing
     let installer: any DeferredPluginInstalling
     let payloadDecoder: any DeferredPluginPayloadDecoding
+    /// Never offline unless the composition root passes the live observer.
+    var connectivity: any ConnectivityServing = UnavailableConnectivity()
+    /// No durable covers unless the composition root passes the live service.
+    var coverThumbnails: any LibraryCoverThumbnailServing = UnavailableLibraryCoverThumbnails()
 
     static func production(
         libraryManager: LibraryManager,
@@ -395,7 +399,9 @@ struct PreparedLibraryDependencies {
         backupManager: BackupManager,
         discordRPCManager: DiscordRPCManager,
         pluginManager: PluginManager,
-        repoManager: RepoManager
+        repoManager: RepoManager,
+        connectivity: any ConnectivityServing = UnavailableConnectivity(),
+        coverThumbnails: any LibraryCoverThumbnailServing = UnavailableLibraryCoverThumbnails()
     ) -> Self {
         Self(
             library: libraryManager,
@@ -405,7 +411,9 @@ struct PreparedLibraryDependencies {
             discord: discordRPCManager,
             plugins: pluginManager,
             installer: repoManager,
-            payloadDecoder: JSONDeferredPluginPayloadDecoder()
+            payloadDecoder: JSONDeferredPluginPayloadDecoder(),
+            connectivity: connectivity,
+            coverThumbnails: coverThumbnails
         )
     }
 

@@ -118,7 +118,11 @@ struct PreparedApplicationDependencies {
         browsePluginsDirectory: URL? = nil,
         completionRecovery: (any PluginCompletionRecovering)? = nil,
         /// The offline store, worker and download center, composed together or not at all.
-        downloads: DownloadStack? = nil
+        downloads: DownloadStack? = nil,
+        /// Whether the device is offline; never offline when not composed.
+        connectivity: (any ConnectivityServing)? = nil,
+        /// Durable Library covers; none when not composed.
+        coverThumbnails: (any LibraryCoverThumbnailServing)? = nil
     ) -> Self {
         let fileOperations = LocalBrowsePluginFileOperations(
             pluginsDirectory: browsePluginsDirectory
@@ -156,7 +160,8 @@ struct PreparedApplicationDependencies {
                 settingsStore: settingsStore,
                 pluginManager: pluginManager,
                 discordRPCManager: discordRPCManager,
-                downloads: downloads?.center
+                downloads: downloads?.center,
+                connectivity: connectivity ?? UnavailableConnectivity()
             ),
             mangaReader: .production(
                 readProgressManager: readProgressManager,
@@ -200,7 +205,9 @@ struct PreparedApplicationDependencies {
                 backupManager: backupManager,
                 discordRPCManager: discordRPCManager,
                 pluginManager: pluginManager,
-                repoManager: repoManager
+                repoManager: repoManager,
+                connectivity: connectivity ?? UnavailableConnectivity(),
+                coverThumbnails: coverThumbnails ?? UnavailableLibraryCoverThumbnails()
             ),
             categoryHistory: .production(
                 libraryManager: libraryManager,
@@ -578,7 +585,9 @@ final class AppScope {
         recentSearchDefaults: UserDefaults = .standard,
         browsePluginsDirectory: URL? = nil,
         completionRecovery: (any PluginCompletionRecovering)? = nil,
-        downloads: DownloadStack? = nil
+        downloads: DownloadStack? = nil,
+        connectivity: (any ConnectivityServing)? = nil,
+        coverThumbnails: (any LibraryCoverThumbnailServing)? = nil
     ) -> AppScope {
         AppScope(
             preparedDependencies: .production(
@@ -603,7 +612,9 @@ final class AppScope {
                 recentSearchDefaults: recentSearchDefaults,
                 browsePluginsDirectory: browsePluginsDirectory,
                 completionRecovery: completionRecovery,
-                downloads: downloads
+                downloads: downloads,
+                connectivity: connectivity,
+                coverThumbnails: coverThumbnails
             )
         )
     }

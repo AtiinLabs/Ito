@@ -130,3 +130,40 @@ struct MediaDetailRelinkPresentation: Identifiable, Equatable {
     let id: UUID
     let mediaKey: String
 }
+
+/// What a series' detail screen says above its chapters when it shows saved details instead of fresh ones.
+struct MediaDetailOfflineNotice: Equatable {
+    enum Kind: Equatable {
+        /// The details could not be loaded and the device is offline.
+        case offline
+        /// The series opened without a source that could refresh it.
+        case savedOnly
+    }
+
+    let kind: Kind
+    /// When the saved details were last refreshed from their source; nil when that is not known.
+    let refreshedAt: Date?
+
+    /// Shared: formatters are expensive to make, and this runs on every refresh of the line.
+    static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.formattingContext = .middleOfSentence
+        formatter.locale = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "en")
+        return formatter
+    }()
+
+    /// "Updated 3 hours ago", or nil when the age is not known. A saved payload that no refresh wrote,
+    /// such as one restored from a backup, has no date rather than a wrong one. A date ahead of `now`
+    /// (a clock that moved back) reads as now, never as the future.
+    func updatedText(
+        relativeTo now: Date,
+        formatter: RelativeDateTimeFormatter = MediaDetailOfflineNotice.relativeFormatter
+    ) -> String? {
+        guard let refreshedAt else { return nil }
+        let relative = formatter.localizedString(for: min(refreshedAt, now), relativeTo: now)
+        return String(
+            localized: "Updated \(relative)",
+            comment: "Line under a notice about saved series details. The placeholder is a relative time such as '3 hours ago'."
+        )
+    }
+}

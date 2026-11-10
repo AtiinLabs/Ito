@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import UIKit
 
 struct LibraryPresentationGroup: Identifiable, Equatable {
     let id: String
@@ -60,6 +61,8 @@ final class LibraryViewModel: ObservableObject {
     @Published private(set) var isGeneratingExport = false
     @Published private(set) var exportPresentation: LibraryExportPresentation?
     @Published private(set) var alert: LibraryAlert?
+    /// Whether the device reports no network. The Library says so and keeps showing what is saved.
+    @Published private(set) var isOffline: Bool
 
     private let dependencies: PreparedLibraryDependencies
     private let tabRouter: any LibraryTabRouting
@@ -100,6 +103,7 @@ final class LibraryViewModel: ObservableObject {
         layoutStyle = initialLayout
         updateSnapshot = dependencies.updates.libraryUpdateSnapshot
         installedPluginIDs = Set(dependencies.plugins.libraryPluginSnapshot.plugins.keys)
+        isOffline = dependencies.connectivity.isOffline
 
         dependencies.library.rootSnapshotPublisher
             .sink { [weak self] snapshot in
@@ -119,6 +123,11 @@ final class LibraryViewModel: ObservableObject {
         dependencies.plugins.libraryPluginSnapshotPublisher
             .sink { [weak self] snapshot in
                 self?.installedPluginIDs = Set(snapshot.plugins.keys)
+            }
+            .store(in: &cancellables)
+        dependencies.connectivity.isOfflinePublisher
+            .sink { [weak self] isOffline in
+                self?.isOffline = isOffline
             }
             .store(in: &cancellables)
     }
@@ -203,6 +212,21 @@ final class LibraryViewModel: ObservableObject {
 
     func badgeCount(for item: LibraryItem) -> Int {
         updateSnapshot.badgeCount(for: mediaIdentity(for: item))
+    }
+
+    /// Keeps the cover a card displayed, so the card can show it again without the network.
+    func coverLoaded(for item: LibraryItem, image: UIImage) {
+        guard let coverUrl = item.coverUrl else { return }
+        dependencies.coverThumbnails.capture(itemID: item.id, coverUrl: coverUrl, image: image)
+    }
+
+    /// The durable cover of a card whose cover could not be loaded from the network cache. It is used only
+    /// while it was captured for the card's current cover address.
+    func durableCover(for item: LibraryItem) async -> UIImage? {
+        guard let coverUrl = item.coverUrl,
+              let cover = await dependencies.coverThumbnails.thumbnail(for: item.id),
+              cover.coverURLSHA256 == LibraryCoverThumbnailStore.coverHash(coverUrl) else { return nil }
+        return cover.image
     }
 
     func selectCategory(_ categoryID: String?) {
@@ -439,6 +463,8 @@ final class LibraryViewModel: ObservableObject {
 
     private func applyLibrarySnapshot(_ newSnapshot: LibraryRootSnapshot) {
         let oldCategoryName = selectedCategoryName
+        let removedItemIDs = Set(snapshot.items.map(\.id)).subtracting(newSnapshot.items.map(\.id))
+        if !removedItemIDs.isEmpty { dependencies.coverThumbnails.forget(itemIDs: removedItemIDs) }
         snapshot = newSnapshot
         if let selectedCategoryID,
            !newSnapshot.categories.contains(where: { $0.id == selectedCategoryID }) {

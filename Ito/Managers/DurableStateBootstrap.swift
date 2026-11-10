@@ -88,6 +88,9 @@ public final class DurableStateBootstrap: ObservableObject {
     private let pluginTokens: PluginSecretStore
     private let pluginTrust: PluginTrustStore
     private let offlineChapterStore: OfflineChapterStore?
+    /// The one network path monitor of the process, shared by the download queue and the screens that
+    /// say when the device is offline.
+    private let networkPath: any NetworkPathObserving
     private var preparationTask: Task<Bool, Never>?
     private var sourcesPrepared = false
     private var runtime: Runtime?
@@ -121,7 +124,9 @@ public final class DurableStateBootstrap: ObservableObject {
         let downloads: DownloadStack?
     }
 
-    public init(
+    /// - Parameter networkPath: The process's one network path monitor. It is shared with the download queue
+    ///   and the screens that say when the device is offline; tests pass one they drive.
+    init(
         dbPool: DatabasePool,
         migration: @escaping @MainActor @Sendable () async throws -> Void,
         extensions: [any DurableStateBootstrapExtension] = [],
@@ -138,7 +143,8 @@ public final class DurableStateBootstrap: ObservableObject {
             keychain: SystemPluginSecretKeychain(service: PluginSecretStore.tokenService)
         ),
         pluginTrust: PluginTrustStore = PluginTrustStore(),
-        offlineChaptersRoot: URL? = nil
+        offlineChaptersRoot: URL? = nil,
+        networkPath: any NetworkPathObserving = NWPathNetworkObserver()
     ) {
         self.dbPool = dbPool
         self.migration = migration
@@ -154,6 +160,7 @@ public final class DurableStateBootstrap: ObservableObject {
         self.pluginCookies = pluginCookies
         self.pluginTokens = pluginTokens
         self.pluginTrust = pluginTrust
+        self.networkPath = networkPath
         // One store per installation directory for the whole process: a rebuilt runtime reuses it, so
         // its leases, live attempts and once-only reconciliation are never split across two actors.
         offlineChapterStore = offlineChaptersRoot.map { root in
@@ -445,6 +452,7 @@ public final class DurableStateBootstrap: ObservableObject {
                 dbPool: dbPool,
                 pluginManager: plugins,
                 pluginSettings: pluginSettings,
+                path: networkPath,
                 predecessor: predecessor
             )
         }
@@ -554,7 +562,9 @@ public final class DurableStateBootstrap: ObservableObject {
             recentSearchDefaults: runtime.recentSearchDefaults,
             browsePluginsDirectory: installedPluginsDirectory,
             completionRecovery: runtime.completionCoordinator,
-            downloads: runtime.downloads
+            downloads: runtime.downloads,
+            connectivity: NetworkPathConnectivity(observer: networkPath),
+            coverThumbnails: LibraryCoverThumbnails(database: dbPool)
         )
     }
 

@@ -543,6 +543,7 @@ public final class AppDatabase: Sendable {
         registerHistoryChapterDetailsMigration(&migrator)
         registerOfflineChaptersMigration(&migrator)
         registerDownloadBatchesMigration(&migrator)
+        registerLibraryOfflineMetadataMigration(&migrator)
         return migrator
     }
 

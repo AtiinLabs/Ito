@@ -71,6 +71,30 @@ struct DurableStateBootstrapTests {
         #expect(Set(values.dropFirst()) == ["foreground", "background"])
     }
 
+    @Test func theInjectedNetworkPathIsTheOneTheScreensReadOfflineStateFrom() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let path = ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied))
+        let bootstrap = DurableStateBootstrap(
+            dbPool: database.dbPool,
+            migration: {},
+            sourceDatabaseURL: database.databaseURL,
+            networkPath: path
+        )
+
+        #expect(await bootstrap.prepare())
+
+        let scope = try #require(bootstrap.appScope)
+        let library = scope.dependencies.library
+        let mediaDetail = scope.dependencies.mediaDetail
+        let detail = try #require(mediaDetail)
+        #expect(!library.connectivity.isOffline)
+        #expect(!detail.connectivity.isOffline)
+        path.set(NetworkPathSnapshot(status: .unsatisfied))
+        #expect(library.connectivity.isOffline)
+        #expect(detail.connectivity.isOffline)
+    }
+
     @Test func failureStaysOutOfReadyAndRetryConstructsConsumersOnce() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }

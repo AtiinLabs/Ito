@@ -31,6 +31,20 @@ protocol MediaDetailLibraryServing: AnyObject {
     func saveAnime(_ anime: Anime, pluginID: String) async throws -> String
     func saveNovel(_ novel: Novel, pluginID: String) async throws -> String
     func unsave(media: MediaIdentity) async throws
+    /// Names the saved details of a saved media, read before its source is asked for fresh ones. Nil when
+    /// the media is not saved.
+    func snapshotToken(for media: MediaIdentity) async throws -> LibrarySnapshotToken?
+    /// Replaces the saved details by a refreshed copy while they are still the ones `token` named.
+    func replaceSnapshot(
+        _ token: LibrarySnapshotToken,
+        payload: Data,
+        coverURL: String?,
+        chapterRowCount: Int,
+        catalog: LibraryCatalogDescription,
+        refreshedAt: Date
+    ) async throws -> LibrarySnapshotReplaceOutcome
+    /// When the saved details were last refreshed; nil when unknown.
+    func snapshotRefreshDate(for media: MediaIdentity) async throws -> Date?
     func refresh() async throws
 }
 
@@ -71,6 +85,24 @@ extension LibraryManager: MediaDetailLibraryServing {
 
     func unsave(media: MediaIdentity) async throws {
         try await removeItemDurably(media: media)
+    }
+
+    func replaceSnapshot(
+        _ token: LibrarySnapshotToken,
+        payload: Data,
+        coverURL: String?,
+        chapterRowCount: Int,
+        catalog: LibraryCatalogDescription,
+        refreshedAt: Date
+    ) async throws -> LibrarySnapshotReplaceOutcome {
+        try await replaceSnapshotDurably(
+            token,
+            payload: payload,
+            coverUrl: coverURL,
+            chapterRowCount: chapterRowCount,
+            catalog: catalog,
+            refreshedAt: refreshedAt
+        )
     }
 
     func refresh() async throws {
@@ -339,6 +371,8 @@ struct PreparedMediaDetailDependencies {
     let discord: any MediaDetailDiscordPresenting
     /// Unavailable unless the composition root passes the live download center.
     var downloads: any MediaDetailDownloadServing = UnavailableMediaDetailDownloads()
+    /// Never offline unless the composition root passes the live observer.
+    var connectivity: any ConnectivityServing = UnavailableConnectivity()
 
     static func production(
         libraryManager: LibraryManager,
@@ -350,7 +384,8 @@ struct PreparedMediaDetailDependencies {
         settingsStore: AppSettingsStore,
         pluginManager: PluginManager,
         discordRPCManager: DiscordRPCManager,
-        downloads: (any MediaDetailDownloadServing)?
+        downloads: (any MediaDetailDownloadServing)?,
+        connectivity: any ConnectivityServing = UnavailableConnectivity()
     ) -> Self {
         Self(
             library: libraryManager,
@@ -364,7 +399,8 @@ struct PreparedMediaDetailDependencies {
             settings: settingsStore,
             pluginMetadata: pluginManager,
             discord: discordRPCManager,
-            downloads: downloads ?? UnavailableMediaDetailDownloads()
+            downloads: downloads ?? UnavailableMediaDetailDownloads(),
+            connectivity: connectivity
         )
     }
 }

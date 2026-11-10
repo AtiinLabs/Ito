@@ -200,11 +200,11 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     @ViewBuilder
     private var loadedChapterSection: some View {
         if case .failure(let message) = viewModel.detailLoadState {
-            detailFailureBanner(message: message)
+            detailFailureBanner(message: message, notice: viewModel.offlineNotice)
         }
 
-        if viewModel.detailLoadState == .savedOnly {
-            savedOnlyNotice
+        if let notice = viewModel.offlineNotice, notice.kind == .savedOnly {
+            savedOnlyNotice(notice)
         }
 
         if let chapters = viewModel.media.chapterList, !chapters.isEmpty {
@@ -224,26 +224,46 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     }
 
     /// Shown above a saved series that opens without a source that can refresh it.
-    private var savedOnlyNotice: some View {
-        Text(String(
-            localized: "Showing saved details. They refresh when the source is available again.",
-            comment: "Notice above a saved series shown from this device's saved copy because its source is not installed, is incompatible, or failed to load. The details refresh once the source works again."
-        ))
+    private func savedOnlyNotice(_ notice: MediaDetailOfflineNotice) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(String(
+                localized: "Showing saved details. They refresh when the source is available again.",
+                comment: "Notice above a saved series shown from this device's saved copy because its source is not installed, is incompatible, or failed to load. The details refresh once the source works again."
+            ))
+            OfflineNoticeUpdatedLine(notice: notice)
+        }
         .font(.subheadline)
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
     }
 
-    private func detailFailureBanner(message: String) -> some View {
+    private func detailFailureBanner(message: String, notice: MediaDetailOfflineNotice?) -> some View {
         VStack(spacing: 12) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 36, weight: .thin))
-                .foregroundStyle(.red)
-            Text(message)
+            if let notice, notice.kind == .offline {
+                Image(systemName: "wifi.slash")
+                    .font(.system(size: 36, weight: .thin))
+                    .foregroundStyle(.secondary)
+                Text(String(
+                    localized: "Offline — showing saved details",
+                    comment: "Notice above a saved series whose details could not be refreshed because the device has no network. The details shown are the ones saved on this device."
+                ))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                OfflineNoticeUpdatedLine(notice: notice)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            } else {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 36, weight: .thin))
+                    .foregroundStyle(.red)
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
             Button("Retry") {
                 viewModel.retryDetailLoad()
             }
@@ -617,5 +637,20 @@ private struct ActiveFilterPill: View {
             .cornerRadius(12)
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// "Updated 3 hours ago", kept current while the screen stays open.
+private struct OfflineNoticeUpdatedLine: View {
+    let notice: MediaDetailOfflineNotice
+
+    var body: some View {
+        if notice.refreshedAt != nil {
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                if let text = notice.updatedText(relativeTo: context.date) {
+                    Text(text)
+                }
+            }
+        }
     }
 }
