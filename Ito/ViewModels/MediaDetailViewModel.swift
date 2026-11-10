@@ -453,6 +453,16 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         openSavedChapter(current)
     }
 
+    /// Opens a downloaded chapter from its source for this reading only. Nothing is stored: the next
+    /// opening reads the downloaded copy again, and a locked chapter or a series without a source never
+    /// gets here.
+    func readOnlineThisTime(_ chapter: M.Chapter) {
+        let current = media.chapterList?.first { $0.key == chapter.key } ?? chapter
+        guard !current.isPaywalled, detailLoadState != .savedOnly else { return }
+        readerDestination = routeContext.makeReaderDestination(media, current)
+            .preferring(.remoteThisTime(chapterKey: current.key))
+    }
+
     /// A saved-only series reads its downloaded chapters only. The copy is checked at the tap, so a
     /// download that finished after the route opened still reads. A tap while a check is running does
     /// nothing.

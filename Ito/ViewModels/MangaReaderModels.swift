@@ -100,19 +100,23 @@ struct MangaContinuousReaderSnapshot {
     /// Increases with every publication; the renderer skips a revision it already applied.
     let revision: UInt64
     let pages: [FlatPage]
-    let previousChapter: Manga.Chapter?
-    let nextChapter: Manga.Chapter?
+    let previousBoundary: ReaderChapterBoundary<Manga.Chapter>
+    let nextBoundary: ReaderChapterBoundary<Manga.Chapter>
     let loadingPrevious: Bool
     let loadingNext: Bool
     let prependFailed: Bool
     let appendFailed: Bool
     let isWebtoon: Bool
 
+    /// The chapter the next row loads, when the reader can open it.
+    var nextChapter: Manga.Chapter? { nextBoundary.chapter }
+    var previousChapter: Manga.Chapter? { previousBoundary.chapter }
+
     static let empty = MangaContinuousReaderSnapshot(
         revision: 0,
         pages: [],
-        previousChapter: nil,
-        nextChapter: nil,
+        previousBoundary: .end,
+        nextBoundary: .end,
         loadingPrevious: false,
         loadingNext: false,
         prependFailed: false,

@@ -7,17 +7,23 @@ struct MediaDetailReaderViewFactory {
     private let novelReaderDependencies: PreparedNovelReaderDependencies
     private let videoPlayerDependencies: PreparedVideoPlayerDependencies
     private let offlineReading: any OfflineChapterReading
+    private let downloads: any MediaDetailDownloadServing
+    private let connectivity: any ConnectivityServing
 
     init(
         mangaReaderDependencies: PreparedMangaReaderDependencies,
         novelReaderDependencies: PreparedNovelReaderDependencies = .unavailable(),
         videoPlayerDependencies: PreparedVideoPlayerDependencies = .unavailable(),
-        offlineReading: any OfflineChapterReading = UnavailableOfflineChapterReading()
+        offlineReading: any OfflineChapterReading = UnavailableOfflineChapterReading(),
+        downloads: any MediaDetailDownloadServing = UnavailableMediaDetailDownloads(),
+        connectivity: any ConnectivityServing = UnavailableConnectivity()
     ) {
         self.mangaReaderDependencies = mangaReaderDependencies
         self.novelReaderDependencies = novelReaderDependencies
         self.videoPlayerDependencies = videoPlayerDependencies
         self.offlineReading = offlineReading
+        self.downloads = downloads
+        self.connectivity = connectivity
     }
 
     @ViewBuilder
@@ -59,16 +65,19 @@ struct MediaDetailReaderViewFactory {
         entry: MediaEntry,
         chapter: Chapter
     ) -> MangaReaderViewModel {
-        MangaReaderViewModel(
-            pageLoader: ResolvingMangaPageLoader(
-                pluginID: pluginID,
-                local: offlineReading,
-                remote: content.remote.map { ItoRunnerMangaPageLoader(runner: $0) as any MangaPageLoading }
-            ),
+        let loader = ResolvingMangaPageLoader(
+            pluginID: pluginID,
+            local: offlineReading,
+            remote: content.remote.map { ItoRunnerMangaPageLoader(runner: $0) as any MangaPageLoading },
+            preference: content.preference
+        )
+        return MangaReaderViewModel(
+            pageLoader: loader,
             pluginID: pluginID,
             entry: entry,
             initialChapter: chapter,
-            dependencies: mangaReaderDependencies
+            dependencies: mangaReaderDependencies,
+            offline: makeOfflineContext(pluginID: pluginID, entry: entry, content: content, loader: loader)
         )
     }
 
@@ -78,16 +87,39 @@ struct MediaDetailReaderViewFactory {
         entry: MediaEntry,
         chapter: Chapter
     ) -> NovelReaderViewModel {
-        NovelReaderViewModel(
-            chapterLoader: ResolvingNovelChapterLoader(
-                pluginID: pluginID,
-                local: offlineReading,
-                remote: content.remote.map { ItoRunnerNovelChapterLoader(runner: $0) as any NovelChapterLoading }
-            ),
+        let loader = ResolvingNovelChapterLoader(
+            pluginID: pluginID,
+            local: offlineReading,
+            remote: content.remote.map { ItoRunnerNovelChapterLoader(runner: $0) as any NovelChapterLoading },
+            preference: content.preference
+        )
+        return NovelReaderViewModel(
+            chapterLoader: loader,
             pluginID: pluginID,
             entry: entry,
             initialChapter: chapter,
-            dependencies: novelReaderDependencies
+            dependencies: novelReaderDependencies,
+            offline: makeOfflineContext(pluginID: pluginID, entry: entry, content: content, loader: loader)
+        )
+    }
+
+    /// The series' stored copies and the network, as the reader's boundaries need them. Where downloads
+    /// are unavailable (release builds until they ship) the reader keeps its earlier behavior.
+    private func makeOfflineContext(
+        pluginID: String,
+        entry: MediaEntry,
+        content: ReaderContentSource,
+        loader: any DownloadedCopyReopening
+    ) -> ReaderOfflineContext {
+        guard downloads.isAvailable else { return ReaderOfflineContext() }
+        return ReaderOfflineContext(
+            availability: ObservedReaderOfflineAvailability(
+                media: MediaIdentity(pluginId: pluginID, canonicalMediaId: entry.key, mediaKind: entry.kind),
+                downloads: downloads,
+                connectivity: connectivity
+            ),
+            isSavedOnly: content.remote == nil,
+            downloadedCopy: loader
         )
     }
 
@@ -138,7 +170,9 @@ struct MediaDetailViewFactory {
             mangaReaderDependencies: mangaReaderDependencies,
             novelReaderDependencies: novelReaderDependencies,
             videoPlayerDependencies: videoPlayerDependencies,
-            offlineReading: offlineReading
+            offlineReading: offlineReading,
+            downloads: dependencies.downloads,
+            connectivity: dependencies.connectivity
         )
     }
 

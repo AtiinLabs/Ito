@@ -565,6 +565,7 @@ struct NovelReaderTestSubject {
     let presence: NovelReaderPresenceFake
     let metadata: NovelReaderPluginMetadataFake
     let logger: PresentationEventCaptureSpy
+    let dependencies: PreparedNovelReaderDependencies
 }
 
 @MainActor
@@ -578,9 +579,17 @@ func makeNovelReaderSubject(
         theme: .system,
         isPaging: false,
         prefetchChapters: true
-    )
+    ),
+    offlineAvailability: any ReaderOfflineAvailability = UnavailableReaderOfflineAvailability(),
+    isSavedOnly: Bool = false
 ) -> NovelReaderTestSubject {
-    makeNovelReaderSubject(entry: .novel(novel), initialChapter: initialChapter, settingsSnapshot: settingsSnapshot)
+    makeNovelReaderSubject(
+        entry: .novel(novel),
+        initialChapter: initialChapter,
+        settingsSnapshot: settingsSnapshot,
+        offlineAvailability: offlineAvailability,
+        isSavedOnly: isSavedOnly
+    )
 }
 
 @MainActor
@@ -594,7 +603,9 @@ func makeNovelReaderSubject(
         theme: .system,
         isPaging: false,
         prefetchChapters: true
-    )
+    ),
+    offlineAvailability: any ReaderOfflineAvailability = UnavailableReaderOfflineAvailability(),
+    isSavedOnly: Bool = false
 ) -> NovelReaderTestSubject {
     let events = NovelReaderEventRecorder()
     let loader = NovelChapterLoaderFake()
@@ -620,7 +631,8 @@ func makeNovelReaderSubject(
         pluginID: "plugin.test",
         entry: entry,
         initialChapter: initialChapter,
-        dependencies: dependencies
+        dependencies: dependencies,
+        offline: ReaderOfflineContext(availability: offlineAvailability, isSavedOnly: isSavedOnly)
     )
     return NovelReaderTestSubject(
         viewModel: viewModel,
@@ -632,6 +644,7 @@ func makeNovelReaderSubject(
         settings: settings,
         presence: presence,
         metadata: metadata,
-        logger: logger
+        logger: logger,
+        dependencies: dependencies
     )
 }

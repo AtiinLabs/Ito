@@ -57,7 +57,7 @@ final class MediaDetailDownloadActionTests: XCTestCase {
             (.waiting(.sourceUnavailable), [.retry, .cancel]),
             (.waiting(.restoredPendingReview), [.retry, .cancel]),
             (.failed(.network), [.retry, .cancel]),
-            (.downloaded, [.delete]),
+            (.downloaded, [.readOnlineThisTime, .delete]),
             (.damaged, [.delete])
         ]
         for (state, expected) in cases {
@@ -184,7 +184,7 @@ final class MediaDetailDownloadActionTests: XCTestCase {
         XCTAssertEqual(viewModel.downloadState(for: chapter("chapter-1")), .downloading(completed: 1, total: 3))
 
         downloads.set(.downloaded, chapterKey: "chapter-1")
-        XCTAssertEqual(viewModel.downloadActions(for: chapter("chapter-1")), [.delete])
+        XCTAssertEqual(viewModel.downloadActions(for: chapter("chapter-1")), [.readOnlineThisTime, .delete])
     }
 
     func testDownloadDecidesOnTheCurrentChapterAndRefusesOneNoLongerListedOrNowLocked() async {
@@ -220,6 +220,62 @@ final class MediaDetailDownloadActionTests: XCTestCase {
         let viewModel = makeViewModel(media: Self.series, saved: true, downloads: downloads)
 
         XCTAssertEqual(viewModel.downloadActions(for: chapter("locked")), [.delete])
+    }
+
+    func testADownloadedChapterOffersReadOnlineThisTimeOnlyWhereASourceExistsAndTheChapterIsUnlocked() {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.set(.downloaded, chapterKey: "chapter-1")
+        downloads.set(.downloaded, chapterKey: "locked")
+        downloads.set(.damaged, chapterKey: "damaged")
+        let withSource = makeViewModel(media: Self.series, saved: true, downloads: downloads)
+        let savedOnly = makeViewModel(media: Self.series, saved: true, downloads: downloads, savedOnly: true)
+        savedOnly.start()
+
+        XCTAssertEqual(withSource.downloadActions(for: chapter("chapter-1")), [.readOnlineThisTime, .delete])
+        XCTAssertEqual(withSource.downloadActions(for: chapter("locked")), [.delete])
+        XCTAssertEqual(withSource.downloadActions(for: chapter("damaged")), [.delete])
+        XCTAssertEqual(savedOnly.detailLoadState, .savedOnly)
+        XCTAssertEqual(savedOnly.downloadActions(for: chapter("chapter-1")), [.delete])
+    }
+
+    func testReadOnlineThisTimeOpensTheReaderForThatChapterOnlyAndChangesNothingStored() {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.set(.downloaded, chapterKey: "chapter-1")
+        let viewModel = makeViewModel(media: Self.series, saved: true, downloads: downloads)
+
+        viewModel.performDownloadAction(.readOnlineThisTime, for: chapter("chapter-1"))
+
+        guard case .pages(_, let content, _, _, let opened)? = viewModel.readerDestination else {
+            return XCTFail("The page reader opens")
+        }
+        XCTAssertEqual(content.preference, .remoteThisTime(chapterKey: "chapter-1"))
+        XCTAssertEqual(opened.key, "chapter-1")
+        XCTAssertTrue(downloads.downloadRequests.isEmpty)
+        XCTAssertTrue(downloads.editionCalls.isEmpty)
+        XCTAssertEqual(viewModel.downloadState(for: chapter("chapter-1")), .downloaded)
+
+        // Opening the chapter afterwards reads the downloaded copy again.
+        viewModel.dismissReader()
+        viewModel.selectChapter(chapter("chapter-1"))
+        guard case .pages(_, let reopened, _, _, _)? = viewModel.readerDestination else {
+            return XCTFail("The page reader opens")
+        }
+        XCTAssertEqual(reopened.preference, .localFirst)
+    }
+
+    func testReadOnlineThisTimeDoesNothingWhereItIsNotOffered() {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.set(.downloaded, chapterKey: "chapter-1")
+        downloads.set(.downloaded, chapterKey: "locked")
+        let withSource = makeViewModel(media: Self.series, saved: true, downloads: downloads)
+        let savedOnly = makeViewModel(media: Self.series, saved: true, downloads: downloads, savedOnly: true)
+        savedOnly.start()
+
+        withSource.performDownloadAction(.readOnlineThisTime, for: chapter("locked"))
+        savedOnly.performDownloadAction(.readOnlineThisTime, for: chapter("chapter-1"))
+
+        XCTAssertNil(withSource.readerDestination)
+        XCTAssertNil(savedOnly.readerDestination)
     }
 
     // MARK: - Subjects

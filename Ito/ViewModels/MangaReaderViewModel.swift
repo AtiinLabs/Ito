@@ -7,6 +7,8 @@ final class MangaReaderViewModel: ObservableObject {
     let pluginID: String
     let entry: MediaEntry
     let pageLoader: any MangaPageLoading
+    /// Stored copies and the route's source: where reading stops, and the downloaded copy to offer.
+    let offline: ReaderOfflineContext
 
     @Published private(set) var currentChapter: Manga.Chapter
     @Published private(set) var loadPhase: MangaReaderLoadPhase = .idle
@@ -44,10 +46,10 @@ final class MangaReaderViewModel: ObservableObject {
 
     private(set) var markedChapterKeys: Set<String> = []
 
-    private let dependencies: PreparedMangaReaderDependencies
+    let dependencies: PreparedMangaReaderDependencies
     private let imagePrefetcher: any MangaReaderImagePrefetching
     let imageSession: ReaderPageImageSession
-    private let mediaIdentity: MediaIdentity
+    let mediaIdentity: MediaIdentity
     /// Captured once per reader session; every chapter in the session shares it.
     private let completionContext: PluginCompletionContext
 
@@ -60,6 +62,10 @@ final class MangaReaderViewModel: ObservableObject {
     private var mainLoadOperationID: UUID?
     private var adjacentPrefetchTask: Task<Void, Never>?
     private var adjacentPrefetchOperationID: UUID?
+    /// The neighbors the last prefetch was started for.
+    private var adjacentPrefetchKeys: Set<String> = []
+    /// A boundary changed while the reader was inactive; `appear()` applies it.
+    private var offlineChangeWaiting = false
     private var appendTask: Task<Void, Never>?
     private var appendOperationID: UUID?
     private var prependTask: Task<Void, Never>?
@@ -88,11 +94,13 @@ final class MangaReaderViewModel: ObservableObject {
         pluginID: String,
         entry: MediaEntry,
         initialChapter: Manga.Chapter,
-        dependencies: PreparedMangaReaderDependencies
+        dependencies: PreparedMangaReaderDependencies,
+        offline: ReaderOfflineContext
     ) {
         self.pageLoader = pageLoader
         self.pluginID = pluginID
         self.entry = entry
+        self.offline = offline
         currentChapter = entry.chapters?.first { $0.key == initialChapter.key } ?? initialChapter
         self.dependencies = dependencies
         imagePrefetcher = dependencies.makeImagePrefetcher()
@@ -102,6 +110,7 @@ final class MangaReaderViewModel: ObservableObject {
         completionContext = dependencies.progress.captureCompletionContext(media: mediaIdentity, mediaKey: entry.key)
         overrideViewer = dependencies.progress.savedViewer(media: mediaIdentity) ?? .Default
         publishContinuousSnapshot()
+        observeOfflineChanges()
     }
 
     private func rebuildFlatPages() {
@@ -131,26 +140,14 @@ final class MangaReaderViewModel: ObservableObject {
         continuousSnapshot = MangaContinuousReaderSnapshot(
             revision: continuousSnapshotRevision,
             pages: flatPages,
-            previousChapter: previousChapterForFirstSegment,
-            nextChapter: nextChapterForLastSegment,
+            previousBoundary: previousBoundaryForFirstSegment,
+            nextBoundary: nextBoundaryForLastSegment,
             loadingPrevious: loadingPrevChapter,
             loadingNext: loadingNextChapter,
             prependFailed: prependFailed,
             appendFailed: appendFailed,
             isWebtoon: activeViewer == .Webtoon
         )
-    }
-
-    /// Lets the image session forget requests of pages no longer loaded; their failures with them.
-    private func retainImageRequestsForChapterWindow() {
-        var pages = segments.flatMap(\.pages)
-        if isPaged {
-            pages += pagedPages
-            for chapter in [chapterBefore(currentChapter), chapterAfter(currentChapter)].compactMap({ $0 }) {
-                pages += prefetchedChapters[chapter.key] ?? []
-            }
-        }
-        imageSession.retainRequests(Self.imageKeys(of: pages))
     }
 
     private func beginContinuousMutation() {
@@ -189,6 +186,7 @@ final class MangaReaderViewModel: ObservableObject {
         if isResumingCancelledLoad {
             beginMainLoad(for: currentChapter)
         }
+        if offlineChangeWaiting { applyOfflineChange() }
     }
 
     func disappear() {
@@ -217,6 +215,39 @@ final class MangaReaderViewModel: ObservableObject {
         continuousPageIndex = 0
         scrollTarget = nil
         beginMainLoad(for: currentChapter)
+    }
+
+    /// A download finishing or the network changing moves a boundary: the prompts follow, and a paged
+    /// reader resting on a notice page loads the chapter that just became available.
+    private func observeOfflineChanges() {
+        offline.observe { [weak self] in
+            guard let self else { return }
+            objectWillChange.send()
+            publishContinuousSnapshot()
+            // This runs navigation synchronously inside the download center's publish: nothing on this
+            // path may read the center back synchronously.
+            applyOfflineChange()
+        }
+    }
+
+    /// Applies a boundary change to a paged reader. One that arrives while the reader is inactive waits
+    /// for `appear()`. A prefetch in flight is left alone unless the neighbors to fetch changed.
+    private func applyOfflineChange() {
+        guard isActive else { return offlineChangeWaiting = true }
+        offlineChangeWaiting = false
+        guard isPaged, loadPhase == .content, !pagedPages.isEmpty else { return }
+        if pagedIndex < 0 || pagedIndex >= pagedPages.count {
+            setPagedIndex(pagedIndex)
+        } else if adjacentPrefetchOperationID == nil || adjacentNeighborKeys != adjacentPrefetchKeys {
+            beginAdjacentChapterPrefetch()
+        }
+    }
+
+    /// Opens the failed chapter local-first, as if it had been opened without the online choice.
+    func readDownloadedCopy() {
+        guard isActive, canReadDownloadedCopy else { return }
+        offline.readDownloadedCopy(chapterKey: currentChapter.key)
+        retry()
     }
 
     // MARK: - Viewer and settings
@@ -279,10 +310,10 @@ final class MangaReaderViewModel: ObservableObject {
         guard isActive else { return }
         pagedIndex = newIndex
         if newIndex == pagedPages.count,
-           let next = chapterAfter(currentChapter) {
+           let next = boundaryAfter(currentChapter).chapter {
             pagedGoToChapter(next)
         } else if newIndex == -1,
-           let previous = chapterBefore(currentChapter) {
+                  let previous = boundaryBefore(currentChapter).chapter {
             // Swiping back past the first page continues from the end of the previous chapter.
             pagedGoToChapter(previous, opensAtEnd: true)
         } else if pagedPages.indices.contains(newIndex) {
@@ -324,7 +355,7 @@ final class MangaReaderViewModel: ObservableObject {
 
     func goToNextChapter() {
         guard isActive else { return }
-        guard let next = chapterAfter(currentChapter) else { return }
+        guard let next = boundaryAfter(currentChapter).chapter else { return }
         if isPaged {
             pagedGoToChapter(next)
         } else {
@@ -334,7 +365,7 @@ final class MangaReaderViewModel: ObservableObject {
 
     func goToPreviousChapter() {
         guard isActive else { return }
-        guard let previous = chapterBefore(currentChapter) else { return }
+        guard let previous = boundaryBefore(currentChapter).chapter else { return }
         if isPaged {
             pagedGoToChapter(previous)
         } else {
@@ -580,7 +611,8 @@ final class MangaReaderViewModel: ObservableObject {
         adjacentPrefetchTask?.cancel()
         let reference = currentChapter
         let referenceToken = ChapterToken(reference)
-        let candidates = [chapterAfter(reference), chapterBefore(reference)].compactMap { $0 }
+        let candidates = [boundaryAfter(reference).chapter, boundaryBefore(reference).chapter].compactMap { $0 }
+        adjacentPrefetchKeys = Set(candidates.map(\.key))
         let missing = candidates.filter { prefetchedChapters[$0.key] == nil }
         guard !missing.isEmpty, isActive, isPaged else {
             adjacentPrefetchTask = nil
@@ -678,7 +710,7 @@ final class MangaReaderViewModel: ObservableObject {
               appendOperationID == nil,
               !isPaged,
               let last = segments.last,
-              let chapter = chapterAfter(last.chapter) else { return }
+              let chapter = boundaryAfter(last.chapter).chapter else { return }
 
         loadingNextChapter = true
         let boundary = ChapterToken(last.chapter)
@@ -787,7 +819,7 @@ final class MangaReaderViewModel: ObservableObject {
               prependOperationID == nil,
               !isPaged,
               let first = segments.first,
-              let chapter = chapterBefore(first.chapter) else { return }
+              let chapter = boundaryBefore(first.chapter).chapter else { return }
 
         loadingPrevChapter = true
         prependFailed = false
@@ -953,7 +985,7 @@ final class MangaReaderViewModel: ObservableObject {
         }
 
         segments = [ChapterSegment(chapter: currentChapter, pages: pagedPages)]
-        let position = pagedPages.indices.contains(pagedIndex) ? pagedIndex : 0
+        let position = min(max(pagedIndex, 0), pagedPages.count - 1)
         continuousPageIndex = position
         scrollTarget = MangaScrollRequest(
             pageID: FlatPage.id(chapterKey: currentChapter.key, position: position),
@@ -963,16 +995,6 @@ final class MangaReaderViewModel: ObservableObject {
     }
 
     // MARK: - Chapter effects
-
-    /// The page to open `chapter` at: where the reader stopped last time, unless that was the
-    /// last page, which means the chapter was finished and starts over.
-    private func startPage(for chapter: Manga.Chapter, pageCount: Int) -> Int {
-        guard let saved = dependencies.progress.savedPage(
-            media: mediaIdentity,
-            chapterID: chapter.key
-        ), saved > 0, saved < pageCount - 1 else { return 0 }
-        return saved
-    }
 
     /// Records the chapter in history once per reader session; crossing back and forth over a
     /// chapter boundary does not add a row each time.
@@ -1109,27 +1131,6 @@ final class MangaReaderViewModel: ObservableObject {
         loadingPrevChapter = false
         appendFailed = false
         prependFailed = false
-    }
-
-    private func logStarted(kind: PresentationEventKind, operationID: UUID) {
-        dependencies.presentationLogger.log(
-            .started(feature: .mangaReader, kind: kind, operationID: operationID)
-        )
-    }
-
-    private func logFinished(
-        kind: PresentationEventKind,
-        operationID: UUID,
-        outcome: PresentationEventOutcome
-    ) {
-        dependencies.presentationLogger.log(
-            .finished(
-                feature: .mangaReader,
-                kind: kind,
-                operationID: operationID,
-                outcome: outcome
-            )
-        )
     }
 
 #if DEBUG

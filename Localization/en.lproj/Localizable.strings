@@ -929,6 +929,18 @@ Manga format */
 
 "Next Page" = "Next Page";
 
+/* Reader: shown after the last page when the next chapter needs an unlock */
+"Next chapter is locked" = "Next chapter is locked";
+
+/* Reader: the next chapter has no saved copy and the source cannot be reached */
+"Next chapter isn't downloaded" = "Next chapter isn't downloaded";
+
+/* Reader: the next chapter is made of pages; go back to the series to open it */
+"Next chapter opens in the page reader" = "Next chapter opens in the page reader";
+
+/* Reader: the next chapter is text; go back to the series to open it */
+"Next chapter opens in the text reader" = "Next chapter opens in the text reader";
+
 "No History" = "No History";
 
 /* Source match: no match found */
@@ -1150,6 +1162,15 @@ History: the page a chapter was left on */
 
 "Previous Page" = "Previous Page";
 
+/* Reader: shown before the first page when the previous chapter needs an unlock */
+"Previous chapter is locked" = "Previous chapter is locked";
+
+/* Reader: the previous chapter has no saved copy and the source cannot be reached */
+"Previous chapter isn't downloaded" = "Previous chapter isn't downloaded";
+
+/* Reader: the previous chapter is text; go back to the series to open it */
+"Previous chapter opens in the text reader" = "Previous chapter opens in the text reader";
+
 "Privacy" = "Privacy";
 
 "Progress" = "Progress";
@@ -1160,6 +1181,12 @@ History: the page a chapter was left on */
 "Re-link failed. Please try again." = "Re-link failed. Please try again.";
 
 "Read Again" = "Read Again";
+
+/* Reader error: reopen this chapter from its saved copy after reading it online failed */
+"Read Downloaded Copy" = "Read Downloaded Copy";
+
+/* Chapter menu: open this downloaded chapter from its source once, without changing the saved copy */
+"Read Online This Time" = "Read Online This Time";
 
 "Read Progress Sync" = "Read Progress Sync";
 
