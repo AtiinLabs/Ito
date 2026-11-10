@@ -93,6 +93,8 @@ enum ChapterDownloadAction: Hashable, Identifiable {
     case download
     case cancel
     case retry
+    /// Opens a downloaded chapter from its source for this reading only.
+    case readOnlineThisTime
     case delete
 
     var id: Self { self }

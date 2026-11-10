@@ -11,6 +11,40 @@ nonisolated enum ReaderChapterTitle {
     }
 }
 
+/// What lies past a chapter in reading order. `locked` is a candidate the account cannot open;
+/// `otherReader` and `notAvailableOffline` are decided by the reader that asks, since they depend
+/// on the chapter's format and on what is stored.
+nonisolated enum ReaderChapterBoundary<C> {
+    case chapter(C)
+    case end
+    case locked(C)
+    case otherReader(C)
+    case notAvailableOffline(C)
+
+    /// The neighbor to open, when the reader can open it.
+    var chapter: C? {
+        guard case .chapter(let chapter) = self else { return nil }
+        return chapter
+    }
+
+    /// The neighbor in reading order, whether or not the reader can open it; nil at the end.
+    var candidate: C? {
+        switch self {
+        case .chapter(let chapter), .locked(let chapter), .otherReader(let chapter), .notAvailableOffline(let chapter):
+            chapter
+        case .end:
+            nil
+        }
+    }
+
+    var isEnd: Bool {
+        guard case .end = self else { return false }
+        return true
+    }
+}
+
+nonisolated extension ReaderChapterBoundary: Equatable where C: Equatable {}
+
 nonisolated enum ReaderChapterOrdering {
     static let chapterNumberEpsilon: Float32 = 0.0001
 
@@ -21,21 +55,7 @@ nonisolated enum ReaderChapterOrdering {
         in chapters: [Manga.Chapter]?,
         preferredScanlator: String?
     ) -> Manga.Chapter? {
-        guard let chapters else { return nil }
-        guard let currentNumber = chapter.chapter else {
-            return unlocked(listNeighbor(of: chapter.key, in: chapters, offset: -1, key: \.key))
-        }
-        // Unnumbered chapters are left out: their place among numbered ones is unknown.
-        guard let nextNumber = chapters.compactMap(\.chapter).filter({
-            $0 > currentNumber + chapterNumberEpsilon
-        }).min() else {
-            return nil
-        }
-        return unlocked(preferredMangaSource(
-            for: nextNumber,
-            in: chapters,
-            preferredScanlator: preferredScanlator
-        ))
+        boundary(after: chapter, in: chapters, preferredScanlator: preferredScanlator).chapter
     }
 
     /// The previous chapter, mirroring `mangaChapter(after:)`.
@@ -44,16 +64,49 @@ nonisolated enum ReaderChapterOrdering {
         in chapters: [Manga.Chapter]?,
         preferredScanlator: String?
     ) -> Manga.Chapter? {
-        guard let chapters else { return nil }
+        boundary(before: chapter, in: chapters, preferredScanlator: preferredScanlator).chapter
+    }
+
+    /// What follows `chapter`: the candidate before the lock check, so a locked one is reported
+    /// instead of skipped.
+    static func boundary(
+        after chapter: Manga.Chapter,
+        in chapters: [Manga.Chapter]?,
+        preferredScanlator: String?
+    ) -> ReaderChapterBoundary<Manga.Chapter> {
+        guard let chapters else { return .end }
         guard let currentNumber = chapter.chapter else {
-            return unlocked(listNeighbor(of: chapter.key, in: chapters, offset: 1, key: \.key))
+            return gated(listNeighbor(of: chapter.key, in: chapters, offset: -1, key: \.key))
+        }
+        // Unnumbered chapters are left out: their place among numbered ones is unknown.
+        guard let nextNumber = chapters.compactMap(\.chapter).filter({
+            $0 > currentNumber + chapterNumberEpsilon
+        }).min() else {
+            return .end
+        }
+        return gated(preferredMangaSource(
+            for: nextNumber,
+            in: chapters,
+            preferredScanlator: preferredScanlator
+        ))
+    }
+
+    /// What precedes `chapter`, mirroring `boundary(after:in:preferredScanlator:)`.
+    static func boundary(
+        before chapter: Manga.Chapter,
+        in chapters: [Manga.Chapter]?,
+        preferredScanlator: String?
+    ) -> ReaderChapterBoundary<Manga.Chapter> {
+        guard let chapters else { return .end }
+        guard let currentNumber = chapter.chapter else {
+            return gated(listNeighbor(of: chapter.key, in: chapters, offset: 1, key: \.key))
         }
         guard let previousNumber = chapters.compactMap(\.chapter).filter({
             $0 < currentNumber - chapterNumberEpsilon
         }).max() else {
-            return nil
+            return .end
         }
-        return unlocked(preferredMangaSource(
+        return gated(preferredMangaSource(
             for: previousNumber,
             in: chapters,
             preferredScanlator: preferredScanlator
@@ -78,15 +131,7 @@ nonisolated enum ReaderChapterOrdering {
         after chapter: Novel.Chapter,
         in chapters: [Novel.Chapter]?
     ) -> Novel.Chapter? {
-        guard let chapters else { return nil }
-        guard let currentNumber = chapter.chapter else {
-            return unlocked(listNeighbor(of: chapter.key, in: chapters, offset: -1, key: \.key))
-        }
-        let candidate = numbered(chapters)
-            .filter { $0.number > currentNumber + chapterNumberEpsilon }
-            .min { $0.number < $1.number }?
-            .chapter
-        return unlocked(candidate)
+        boundary(after: chapter, in: chapters).chapter
     }
 
     /// The previous chapter, mirroring `novelChapter(after:)`.
@@ -94,21 +139,45 @@ nonisolated enum ReaderChapterOrdering {
         before chapter: Novel.Chapter,
         in chapters: [Novel.Chapter]?
     ) -> Novel.Chapter? {
-        guard let chapters else { return nil }
+        boundary(before: chapter, in: chapters).chapter
+    }
+
+    /// What follows `chapter`, before the lock check.
+    static func boundary(
+        after chapter: Novel.Chapter,
+        in chapters: [Novel.Chapter]?
+    ) -> ReaderChapterBoundary<Novel.Chapter> {
+        guard let chapters else { return .end }
         guard let currentNumber = chapter.chapter else {
-            return unlocked(listNeighbor(of: chapter.key, in: chapters, offset: 1, key: \.key))
+            return gated(listNeighbor(of: chapter.key, in: chapters, offset: -1, key: \.key))
+        }
+        let candidate = numbered(chapters)
+            .filter { $0.number > currentNumber + chapterNumberEpsilon }
+            .min { $0.number < $1.number }?
+            .chapter
+        return gated(candidate)
+    }
+
+    /// What precedes `chapter`, mirroring `boundary(after:in:)`.
+    static func boundary(
+        before chapter: Novel.Chapter,
+        in chapters: [Novel.Chapter]?
+    ) -> ReaderChapterBoundary<Novel.Chapter> {
+        guard let chapters else { return .end }
+        guard let currentNumber = chapter.chapter else {
+            return gated(listNeighbor(of: chapter.key, in: chapters, offset: 1, key: \.key))
         }
         let candidate = numbered(chapters)
             .filter { $0.number < currentNumber - chapterNumberEpsilon }
             .max { $0.number < $1.number }?
             .chapter
-        return unlocked(candidate)
+        return gated(candidate)
     }
 
     /// Select first, then check access: filtering the list would skip a locked boundary.
-    private static func unlocked(_ chapter: Chapter?) -> Chapter? {
-        guard let chapter, chapter.paywalled != true else { return nil }
-        return chapter
+    private static func gated(_ chapter: Chapter?) -> ReaderChapterBoundary<Chapter> {
+        guard let chapter else { return .end }
+        return chapter.paywalled == true ? .locked(chapter) : .chapter(chapter)
     }
 
     private static func numbered(
@@ -131,6 +200,68 @@ nonisolated enum ReaderChapterOrdering {
             return match
         }
         return sources.first
+    }
+}
+
+/// What a reader says where it stops instead of opening the neighboring chapter. The user returns to
+/// the details and opens that chapter there; a reader never switches by itself.
+nonisolated struct ReaderBoundaryNotice: Equatable {
+    let text: String
+    let systemImage: String
+
+    /// The page reader's notice before or after its chapters; nil when the neighbor opens there or
+    /// there is none.
+    static func pages<C>(for boundary: ReaderChapterBoundary<C>, isNext: Bool) -> ReaderBoundaryNotice? {
+        switch boundary {
+        case .chapter, .end:
+            return nil
+        case .locked:
+            return locked(isNext: isNext)
+        case .otherReader:
+            return ReaderBoundaryNotice(
+                text: isNext
+                    ? String(localized: "Next chapter opens in the text reader", comment: "Reader: the next chapter is text; go back to the series to open it")
+                    : String(localized: "Previous chapter opens in the text reader", comment: "Reader: the previous chapter is text; go back to the series to open it"),
+                systemImage: "text.alignleft"
+            )
+        case .notAvailableOffline:
+            return notDownloaded(isNext: isNext)
+        }
+    }
+
+    /// The text reader's notice after its last loaded chapter. It shows nothing before the first one.
+    static func textAfterLast<C>(for boundary: ReaderChapterBoundary<C>) -> ReaderBoundaryNotice? {
+        switch boundary {
+        case .chapter, .end:
+            return nil
+        case .locked:
+            return locked(isNext: true)
+        case .otherReader:
+            return ReaderBoundaryNotice(
+                text: String(localized: "Next chapter opens in the page reader", comment: "Reader: the next chapter is made of pages; go back to the series to open it"),
+                systemImage: "photo.on.rectangle"
+            )
+        case .notAvailableOffline:
+            return notDownloaded(isNext: true)
+        }
+    }
+
+    private static func locked(isNext: Bool) -> ReaderBoundaryNotice {
+        ReaderBoundaryNotice(
+            text: isNext
+                ? String(localized: "Next chapter is locked", comment: "Reader: shown after the last page when the next chapter needs an unlock")
+                : String(localized: "Previous chapter is locked", comment: "Reader: shown before the first page when the previous chapter needs an unlock"),
+            systemImage: "lock.fill"
+        )
+    }
+
+    private static func notDownloaded(isNext: Bool) -> ReaderBoundaryNotice {
+        ReaderBoundaryNotice(
+            text: isNext
+                ? String(localized: "Next chapter isn't downloaded", comment: "Reader: the next chapter has no saved copy and the source cannot be reached")
+                : String(localized: "Previous chapter isn't downloaded", comment: "Reader: the previous chapter has no saved copy and the source cannot be reached"),
+            systemImage: "arrow.down.circle"
+        )
     }
 }
 

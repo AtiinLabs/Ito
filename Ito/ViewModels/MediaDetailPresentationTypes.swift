@@ -53,6 +53,8 @@ enum ChapterFilterOption: String, CaseIterable {
 struct ReaderContentSource {
     /// nil when the plugin is missing or cannot be loaded.
     let remote: ItoRunner?
+    /// Where this opening reads its chapter from. Never stored.
+    var preference: ReaderContentPreference = .localFirst
 }
 
 enum MediaDetailReaderDestination: Identifiable {
@@ -101,6 +103,21 @@ extension MediaDetailReaderDestination {
             return .text(id: UUID(), content: content, pluginID: pluginID, entry: entry, chapter: chapter)
         }
         return .pages(id: UUID(), content: content, pluginID: pluginID, entry: entry, chapter: chapter)
+    }
+
+    /// The same reader opened with another content preference. An episode has no stored form, so it is
+    /// returned unchanged.
+    func preferring(_ preference: ReaderContentPreference) -> Self {
+        switch self {
+        case .pages(let id, var content, let pluginID, let entry, let chapter):
+            content.preference = preference
+            return .pages(id: id, content: content, pluginID: pluginID, entry: entry, chapter: chapter)
+        case .text(let id, var content, let pluginID, let entry, let chapter):
+            content.preference = preference
+            return .text(id: id, content: content, pluginID: pluginID, entry: entry, chapter: chapter)
+        case .anime:
+            return self
+        }
     }
 }
 

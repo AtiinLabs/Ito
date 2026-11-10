@@ -64,6 +64,16 @@ struct NovelReaderView: View {
                         .buttonStyle(.bordered)
                         .tint(viewModel.theme.textColor)
                         .padding(.top, 4)
+                    if viewModel.canReadDownloadedCopy {
+                        Button {
+                            viewModel.readDownloadedCopy()
+                        } label: {
+                            Text("Read Downloaded Copy",
+                                 comment: "Reader error: reopen this chapter from its saved copy after reading it online failed")
+                        }
+                            .buttonStyle(.bordered)
+                            .tint(viewModel.theme.textColor)
+                    }
                 }
                 .padding(32)
             case .content:
@@ -117,6 +127,9 @@ struct NovelReaderView: View {
                 onLoadNextChapter: { viewModel.loadNextChapter() },
                 appendFailed: viewModel.appendFailed,
                 onRetryNextChapter: { viewModel.retryNextChapter() },
+                boundaryNotice: viewModel.loadedChapters.last.flatMap {
+                    ReaderBoundaryNotice.textAfterLast(for: viewModel.boundaryAfter($0.chapter))
+                },
                 currentChapter: Binding(
                     get: { viewModel.currentChapter },
                     set: { viewModel.pagedChapterChanged($0) }
@@ -207,30 +220,49 @@ struct NovelReaderView: View {
                 .tint(viewModel.theme.textColor)
                 .frame(maxWidth: .infinity)
                 .padding()
-        } else if let last = viewModel.loadedChapters.last,
-                  let next = viewModel.chapterAfter(last.chapter) {
-            if viewModel.appendFailed {
+        } else if let last = viewModel.loadedChapters.last {
+            let boundary = viewModel.boundaryAfter(last.chapter)
+            if let notice = ReaderBoundaryNotice.textAfterLast(for: boundary) {
                 VStack(spacing: 8) {
-                    Text("Couldn't load the next chapter")
+                    Image(systemName: notice.systemImage)
+                        .font(.title2)
+                        .accessibilityHidden(true)
+                    Text(notice.text)
                         .font(.subheadline)
-                        .foregroundColor(viewModel.theme.textColor)
-                    Button("Try Again") { viewModel.retryNextChapter() }
+                    if let candidate = boundary.candidate {
+                        Text(chapterTitle(candidate))
+                            .font(.footnote)
+                            .opacity(0.7)
+                    }
                 }
+                .multilineTextAlignment(.center)
+                .foregroundColor(viewModel.theme.textColor)
                 .frame(maxWidth: .infinity)
                 .padding()
-            } else if !viewModel.prefetchChapters {
-                Button(action: { viewModel.loadNextChapter() }) {
-                    VStack(spacing: 4) {
-                        Text("Next Chapter")
-                            .font(.caption.weight(.semibold))
-                            .textCase(.uppercase)
-                        Text(chapterTitle(next))
-                            .font(.headline)
-                            .multilineTextAlignment(.center)
+            } else if let next = boundary.chapter {
+                if viewModel.appendFailed {
+                    VStack(spacing: 8) {
+                        Text("Couldn't load the next chapter")
+                            .font(.subheadline)
+                            .foregroundColor(viewModel.theme.textColor)
+                        Button("Try Again") { viewModel.retryNextChapter() }
                     }
-                    .foregroundColor(viewModel.theme.textColor)
                     .frame(maxWidth: .infinity)
                     .padding()
+                } else if !viewModel.prefetchChapters {
+                    Button(action: { viewModel.loadNextChapter() }) {
+                        VStack(spacing: 4) {
+                            Text("Next Chapter")
+                                .font(.caption.weight(.semibold))
+                                .textCase(.uppercase)
+                            Text(chapterTitle(next))
+                                .font(.headline)
+                                .multilineTextAlignment(.center)
+                        }
+                        .foregroundColor(viewModel.theme.textColor)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                    }
                 }
             }
         }

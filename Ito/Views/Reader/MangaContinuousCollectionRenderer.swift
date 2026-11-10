@@ -265,12 +265,12 @@ final class MangaContinuousCollectionViewController: UIViewController,
 
     static func rows(for snapshot: MangaContinuousReaderSnapshot) -> [MangaContinuousRow] {
         var rows: [MangaContinuousRow] = []
-        if snapshot.previousChapter != nil { rows.append(.previousChapter) }
+        if !snapshot.previousBoundary.isEnd { rows.append(.previousChapter) }
         for page in snapshot.pages {
             if page.chapterPosition == 0 && page.segmentIndex > 0 { rows.append(.divider(page.id)) }
             rows.append(.page(page.id))
         }
-        if snapshot.nextChapter != nil { rows.append(.nextChapter) }
+        if !snapshot.nextBoundary.isEnd { rows.append(.nextChapter) }
         return rows
     }
 
@@ -807,21 +807,23 @@ final class MangaContinuousCollectionViewController: UIViewController,
     }
 
     private func previousPrompt() -> MangaContinuousChapterPrompt {
-        let snapshot = snapshot
+        let boundary = snapshot?.previousBoundary ?? .end
         return MangaContinuousChapterPrompt(
-            chapter: snapshot?.previousChapter,
+            chapter: boundary.candidate,
             isNext: false,
             phase: snapshot?.loadingPrevious == true ? .loading : snapshot?.prependFailed == true ? .failed : .tap,
+            notice: ReaderBoundaryNotice.pages(for: boundary, isNext: false),
             action: { [weak self] in self?.viewModel.prependPreviousChapter() }
         )
     }
 
     private func nextPrompt() -> MangaContinuousChapterPrompt {
-        let snapshot = snapshot
+        let boundary = snapshot?.nextBoundary ?? .end
         return MangaContinuousChapterPrompt(
-            chapter: snapshot?.nextChapter,
+            chapter: boundary.candidate,
             isNext: true,
             phase: snapshot?.loadingNext == true ? .loading : snapshot?.appendFailed == true ? .failed : .tap,
+            notice: ReaderBoundaryNotice.pages(for: boundary, isNext: true),
             action: { [weak self] in
                 guard let self else { return }
                 if self.snapshot?.appendFailed == true {
@@ -995,11 +997,28 @@ private struct MangaContinuousChapterPrompt: View {
     let chapter: Manga.Chapter?
     let isNext: Bool
     let phase: Phase
+    /// Set where the reader stops at this neighbor; the prompt then only says why and does nothing.
+    let notice: ReaderBoundaryNotice?
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 16) {
+        if notice != nil {
+            // Where reading stops there is nothing to press: the prompt only says why.
+            content.accessibilityElement(children: .combine)
+        } else {
+            Button(action: action) { content }
+                .disabled(phase == .loading)
+        }
+    }
+
+    private var content: some View {
+        VStack(spacing: 16) {
+            if let notice {
+                Image(systemName: notice.systemImage)
+                    .font(.system(size: 40))
+                    .foregroundColor(.white)
+                    .accessibilityHidden(true)
+            } else {
                 switch phase {
                 case .loading:
                     ProgressView().tint(.white)
@@ -1012,28 +1031,28 @@ private struct MangaContinuousChapterPrompt: View {
                         .font(.system(size: 40))
                         .foregroundColor(.white)
                 }
-                Text(prompt)
-                    .foregroundColor(.white)
-                    .font(.headline)
-                    .multilineTextAlignment(.center)
-                if let chapter {
-                    Text(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))
-                        .foregroundColor(.gray)
-                        .font(.subheadline)
-                }
             }
-            .frame(maxWidth: .infinity, minHeight: 400, alignment: .center)
-            .padding(40)
+            Text(prompt)
+                .foregroundColor(.white)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+            if let chapter {
+                Text(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))
+                    .foregroundColor(.gray)
+                    .font(.subheadline)
+            }
         }
-        .disabled(phase == .loading)
+        .frame(maxWidth: .infinity, minHeight: 400, alignment: .center)
+        .padding(40)
     }
 
     /// Identifies everything that affects this prompt's height.
     var measurementKey: String {
-        "prompt|\(isNext)|\(phase)|\(chapter.map { ReaderChapterTitle.text(title: $0.title, number: $0.chapter) } ?? "")"
+        "prompt|\(isNext)|\(phase)|\(notice?.text ?? "")|\(chapter.map { ReaderChapterTitle.text(title: $0.title, number: $0.chapter) } ?? "")"
     }
 
     private var prompt: String {
+        if let notice { return notice.text }
         switch (phase, isNext) {
         case (.tap, true): return String(localized: "Tap to Load Next Chapter")
         case (.tap, false): return String(localized: "Tap to Load Previous Chapter")

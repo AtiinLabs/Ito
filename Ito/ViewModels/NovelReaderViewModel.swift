@@ -46,6 +46,8 @@ final class NovelReaderViewModel: ObservableObject {
     let entry: MediaEntry
     let imageSession: ReaderPageImageSession
     let chapterLoader: any NovelChapterLoading
+    /// Stored copies and the route's source: where reading stops, and the downloaded copy to offer.
+    let offline: ReaderOfflineContext
 
     @Published private(set) var currentChapter: Novel.Chapter
     @Published private(set) var loadedChapters: [NovelLoadedChapter] = [] {
@@ -68,7 +70,10 @@ final class NovelReaderViewModel: ObservableObject {
     @Published private(set) var fontFamily: NovelFont
     @Published private(set) var theme: NovelTheme
     @Published private(set) var isPaging: Bool
-    @Published private(set) var prefetchChapters: Bool
+    @Published private(set) var prefetchChapters: Bool {
+        // Without Seamless Reading nothing appends by itself, so a held-back append is dropped.
+        didSet { if !prefetchChapters { appendWaitsForBoundary = false } }
+    }
 
     private let dependencies: PreparedNovelReaderDependencies
     private let mediaIdentity: MediaIdentity
@@ -84,6 +89,8 @@ final class NovelReaderViewModel: ObservableObject {
     private var mainLoadOperationID: UUID?
     private var appendTask: Task<Void, Never>?
     private var appendOperationID: UUID?
+    /// The last append was refused only because the next chapter is not downloaded and cannot be fetched.
+    private var appendWaitsForBoundary = false
     private var effectTasks: [UUID: Task<Void, Never>] = [:]
     private var finishedChapterKeys: Set<String> = []
     /// Continuous-mode blocks on screen; the topmost one is where the reader is.
@@ -113,12 +120,14 @@ final class NovelReaderViewModel: ObservableObject {
         pluginID: String,
         entry: MediaEntry,
         initialChapter: Novel.Chapter,
-        dependencies: PreparedNovelReaderDependencies
+        dependencies: PreparedNovelReaderDependencies,
+        offline: ReaderOfflineContext
     ) {
         self.chapterLoader = chapterLoader
         imageSession = dependencies.makeImageSession()
         self.pluginID = pluginID
         self.entry = entry
+        self.offline = offline
         currentChapter = entry.chapters?.first { $0.key == initialChapter.key } ?? initialChapter
         self.dependencies = dependencies
         mediaIdentity = MediaIdentity(pluginId: pluginID, canonicalMediaId: entry.key, mediaKind: entry.kind)
@@ -140,14 +149,16 @@ final class NovelReaderViewModel: ObservableObject {
                 guard let self, self.isActive else { return }
                 self.applySettings(settings)
             }
+        // A download finishing or the network changing moves a boundary: the prompts follow.
+        offline.observe { [weak self] in self?.offlineAvailabilityChanged() }
     }
 
     var nextChapter: Novel.Chapter? {
-        chapterAfter(currentChapter)
+        boundaryAfter(currentChapter).chapter
     }
 
     var previousChapter: Novel.Chapter? {
-        chapterBefore(currentChapter)
+        boundaryBefore(currentChapter).chapter
     }
 
     // MARK: - Presentation lifecycle
@@ -177,6 +188,7 @@ final class NovelReaderViewModel: ObservableObject {
         if shouldRestartLoad {
             beginMainLoad(for: currentChapter)
         }
+        resumeHeldAppend()
     }
 
     func disappear() {
@@ -224,6 +236,21 @@ final class NovelReaderViewModel: ObservableObject {
         ReaderChapterOrdering.novelChapter(before: chapter, in: entry.chapters).flatMap(textChapter)
     }
 
+    /// What follows `chapter` for this reader: a chapter it can open, or why it stops.
+    func boundaryAfter(_ chapter: Novel.Chapter) -> ReaderChapterBoundary<Novel.Chapter> {
+        offline.resolving(
+            ReaderChapterOrdering.boundary(after: chapter, in: entry.chapters),
+            opensHere: { textChapter($0) != nil }
+        )
+    }
+
+    func boundaryBefore(_ chapter: Novel.Chapter) -> ReaderChapterBoundary<Novel.Chapter> {
+        offline.resolving(
+            ReaderChapterOrdering.boundary(before: chapter, in: entry.chapters),
+            opensHere: { textChapter($0) != nil }
+        )
+    }
+
     private func textChapter(_ chapter: Novel.Chapter) -> Novel.Chapter? {
         entry.contentKind(of: chapter) == .text ? chapter : nil
     }
@@ -239,6 +266,7 @@ final class NovelReaderViewModel: ObservableObject {
     }
 
     func goToChapter(_ chapter: Novel.Chapter) {
+        appendWaitsForBoundary = false
         let chapter = entry.chapters?.first { $0.key == chapter.key } ?? chapter
         guard isActive, !chapter.isPaywalled else { return }
         changeCurrentChapter(to: chapter)
@@ -250,12 +278,44 @@ final class NovelReaderViewModel: ObservableObject {
     }
 
     func retry() {
+        appendWaitsForBoundary = false
         guard isActive, case .failure = loadPhase else { return }
         loadedChapters = []
         restoreAnchor = nil
         loadPhase = .loading
         invalidateContentOperations()
         beginMainLoad(for: currentChapter)
+    }
+
+    /// Whether the chapter that failed was opened to read online this time and has a downloaded copy to
+    /// read instead.
+    var canReadDownloadedCopy: Bool {
+        guard case .failure = loadPhase else { return false }
+        return offline.canReadDownloadedCopy(chapterKey: currentChapter.key)
+    }
+
+    /// Opens the failed chapter local-first, as if it had been opened without the online choice.
+    func readDownloadedCopy() {
+        guard isActive, canReadDownloadedCopy else { return }
+        offline.readDownloadedCopy(chapterKey: currentChapter.key)
+        retry()
+    }
+
+    /// A download finishing or the network changing moves a boundary: the prompts follow, and an append
+    /// that was held back at the end now goes ahead.
+    private func offlineAvailabilityChanged() {
+        objectWillChange.send()
+        resumeHeldAppend()
+    }
+
+    /// Appends the chapter a held-back append was waiting for, once it can be opened. An inactive reader
+    /// keeps the flag for `appear()`; `loadNextChapter` clears it itself when it goes ahead.
+    private func resumeHeldAppend() {
+        guard appendWaitsForBoundary,
+              prefetchChapters,
+              let last = loadedChapters.last,
+              boundaryAfter(last.chapter).chapter != nil else { return }
+        loadNextChapter()
     }
 
     func continuousChapterTitleAppeared(_ loadedChapter: NovelLoadedChapter) {
@@ -519,11 +579,17 @@ final class NovelReaderViewModel: ObservableObject {
               appendOperationID == nil,
               !isLoadingNext,
               !appendFailed,
-              let last = loadedChapters.last,
-              let next = chapterAfter(last.chapter),
+              let last = loadedChapters.last else { return }
+        let boundary = boundaryAfter(last.chapter)
+        if case .notAvailableOffline = boundary {
+            // Shown instead of an append that would fail; it goes ahead if the chapter becomes available.
+            appendWaitsForBoundary = true
+        }
+        guard let next = boundary.chapter,
               !next.isPaywalled,
               // Never append a chapter twice; ordering must not loop back to a loaded one.
               !loadedChapters.contains(where: { $0.chapter.key == next.key }) else { return }
+        appendWaitsForBoundary = false
 
         let operationID = UUID()
         let session = sessionID

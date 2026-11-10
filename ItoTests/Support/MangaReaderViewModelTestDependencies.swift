@@ -34,6 +34,7 @@ final class MangaPageLoaderFake: MangaPageLoading {
     private(set) var requestedChapterKeys: [String] = []
     private(set) var requestedEntries: [MediaEntry] = []
     private var pending: [Pending] = []
+    private var pendingWaiters: [(String, Int, CheckedContinuation<Void, Never>)] = []
     func enqueue(_ response: Response, for chapterKey: String) {
         responses[chapterKey, default: []].append(response)
     }
@@ -54,12 +55,23 @@ final class MangaPageLoaderFake: MangaPageLoading {
                 pending.append(
                     Pending(chapterKey: chapter.key, continuation: continuation)
                 )
+                let satisfied = pendingWaiters.filter { pendingCount(for: $0.0) >= $0.1 }
+                pendingWaiters.removeAll { pendingCount(for: $0.0) >= $0.1 }
+                satisfied.forEach { $0.2.resume() }
             }
         }
     }
 
     func callCount(for chapterKey: String) -> Int {
         requestedChapterKeys.filter { $0 == chapterKey }.count
+    }
+
+    /// Returns once at least `count` requests for the chapter are waiting for an answer.
+    func waitForPendingCount(_ count: Int, for chapterKey: String) async {
+        guard pendingCount(for: chapterKey) < count else { return }
+        await withCheckedContinuation { continuation in
+            pendingWaiters.append((chapterKey, count, continuation))
+        }
     }
 
     func pendingCount(for chapterKey: String) -> Int {
@@ -306,7 +318,9 @@ func makeMangaReaderSubject(
     entry: MediaEntry,
     initialChapter: Chapter,
     preloadImageCount: Int = 5,
-    imageSession: ReaderPageImageSession = ReaderPageImageSession()
+    imageSession: ReaderPageImageSession = ReaderPageImageSession(),
+    offlineAvailability: any ReaderOfflineAvailability = UnavailableReaderOfflineAvailability(),
+    isSavedOnly: Bool = false
 ) -> MangaReaderTestSubject {
     let events = MangaReaderEventRecorder()
     let loader = MangaPageLoaderFake()
@@ -333,7 +347,8 @@ func makeMangaReaderSubject(
         pluginID: "plugin.test",
         entry: entry,
         initialChapter: initialChapter,
-        dependencies: dependencies
+        dependencies: dependencies,
+        offline: ReaderOfflineContext(availability: offlineAvailability, isSavedOnly: isSavedOnly)
     )
     return MangaReaderTestSubject(
         viewModel: viewModel,
@@ -356,12 +371,16 @@ func makeMangaReaderSubject(
     manga: Manga,
     initialChapter: Manga.Chapter,
     preloadImageCount: Int = 5,
-    imageSession: ReaderPageImageSession = ReaderPageImageSession()
+    imageSession: ReaderPageImageSession = ReaderPageImageSession(),
+    offlineAvailability: any ReaderOfflineAvailability = UnavailableReaderOfflineAvailability(),
+    isSavedOnly: Bool = false
 ) -> MangaReaderTestSubject {
     makeMangaReaderSubject(
         entry: .manga(manga),
         initialChapter: initialChapter,
         preloadImageCount: preloadImageCount,
-        imageSession: imageSession
+        imageSession: imageSession,
+        offlineAvailability: offlineAvailability,
+        isSavedOnly: isSavedOnly
     )
 }

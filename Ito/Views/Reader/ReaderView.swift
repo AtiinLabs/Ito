@@ -67,6 +67,16 @@ struct ReaderView: View {
                         .buttonStyle(.bordered)
                         .tint(.white)
                         .padding(.top, 4)
+                    if viewModel.canReadDownloadedCopy {
+                        Button {
+                            viewModel.readDownloadedCopy()
+                        } label: {
+                            Text("Read Downloaded Copy",
+                                 comment: "Reader error: reopen this chapter from its saved copy after reading it online failed")
+                        }
+                            .buttonStyle(.bordered)
+                            .tint(.white)
+                    }
                 }
                 .padding(32)
             case .content:
@@ -89,13 +99,13 @@ struct ReaderView: View {
 
                     ReaderFooterView(
                         displayIndex: viewModel.isPaged
-                            ? viewModel.pagedIndex
+                            ? viewModel.pagedDisplayIndex
                             : viewModel.continuousChapterPage.index,
                         displayTotal: viewModel.isPaged
                             ? viewModel.pagedPages.count
                             : viewModel.continuousChapterPage.count,
-                        hasPrev: viewModel.chapterBefore(viewModel.currentChapter) != nil,
-                        hasNext: viewModel.chapterAfter(viewModel.currentChapter) != nil,
+                        hasPrev: viewModel.boundaryBefore(viewModel.currentChapter).chapter != nil,
+                        hasNext: viewModel.boundaryAfter(viewModel.currentChapter).chapter != nil,
                         overrideViewer: Binding(
                             get: { viewModel.overrideViewer },
                             set: { viewModel.setViewerOverride($0) }
@@ -135,14 +145,14 @@ struct ReaderView: View {
     private var pagedReader: some View {
         let chapter = viewModel.currentChapter
         let pages = viewModel.pagedPages
-        let previous = viewModel.chapterBefore(chapter)
-        let next = viewModel.chapterAfter(chapter)
+        let previous = viewModel.boundaryBefore(chapter)
+        let next = viewModel.boundaryAfter(chapter)
         let isRightToLeft = viewModel.activeViewer == .Rtl || viewModel.activeViewer == .Default
         return MangaPagedReaderView(
             chapterKey: chapter.key,
             pageCount: pages.count,
-            hasPrevious: previous != nil,
-            hasNext: next != nil,
+            hasPrevious: !previous.isEnd,
+            hasNext: !next.isEnd,
             index: viewModel.pagedIndex,
             isRightToLeft: isRightToLeft,
             content: { position in
@@ -154,25 +164,35 @@ struct ReaderView: View {
         )
     }
 
-    /// A pager position: the previous chapter's loading page (-1), a page, or the next chapter's.
+    /// A pager position: the previous chapter's loading page (-1) or where reading stops before it, a
+    /// page, or the same for the next chapter.
     @ViewBuilder
     private func pagedPosition(
         _ position: Int,
         chapter: Manga.Chapter,
         pages: [Page],
-        previous: Manga.Chapter?,
-        next: Manga.Chapter?
+        previous: ReaderChapterBoundary<Manga.Chapter>,
+        next: ReaderChapterBoundary<Manga.Chapter>
     ) -> some View {
-        if position < 0, let previous {
-            loadingChapterView(chapter: previous, isNext: false)
+        if position < 0 {
+            neighborView(previous, isNext: false)
         } else if pages.indices.contains(position) {
             pageImage(
                 for: pages[position],
                 number: position + 1,
                 pageID: FlatPage.id(chapterKey: chapter.key, position: position)
             )
-        } else if let next {
-            loadingChapterView(chapter: next, isNext: true)
+        } else {
+            neighborView(next, isNext: true)
+        }
+    }
+
+    @ViewBuilder
+    private func neighborView(_ boundary: ReaderChapterBoundary<Manga.Chapter>, isNext: Bool) -> some View {
+        if let notice = ReaderBoundaryNotice.pages(for: boundary, isNext: isNext) {
+            boundaryNoticeView(notice, chapter: boundary.candidate)
+        } else if let chapter = boundary.chapter {
+            loadingChapterView(chapter: chapter, isNext: isNext)
         }
     }
 
@@ -185,6 +205,29 @@ struct ReaderView: View {
     }
 
     // MARK: - Shared views
+
+    private func boundaryNoticeView(_ notice: ReaderBoundaryNotice, chapter: Manga.Chapter?) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: notice.systemImage)
+                .font(.system(size: 40))
+                .foregroundColor(.white)
+                .accessibilityHidden(true)
+            Text(notice.text)
+                .foregroundColor(.white)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+            if let chapter {
+                Text(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))
+                    .foregroundColor(.gray)
+                    .font(.subheadline)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 400, maxHeight: .infinity, alignment: .center)
+        .padding(40)
+        .accessibilityElement(children: .combine)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: toggleUI)
+    }
 
     private func loadingChapterView(chapter: Manga.Chapter, isNext: Bool) -> some View {
         VStack(spacing: 16) {

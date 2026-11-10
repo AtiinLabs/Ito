@@ -158,6 +158,8 @@ extension ChapterDownloadAction {
             return Text("Cancel Download", comment: "Chapter menu: remove this chapter from the download queue")
         case .retry:
             return Text("Retry Download", comment: "Chapter menu")
+        case .readOnlineThisTime:
+            return Text("Read Online This Time", comment: "Chapter menu: open this downloaded chapter from its source once, without changing the saved copy")
         case .delete:
             return Text("Delete Download", comment: "Chapter menu: remove the saved copy of this chapter")
         }
@@ -168,6 +170,7 @@ extension ChapterDownloadAction {
         case .download: return "arrow.down.circle"
         case .cancel: return "xmark.circle"
         case .retry: return "arrow.clockwise"
+        case .readOnlineThisTime: return "globe"
         case .delete: return "trash"
         }
     }

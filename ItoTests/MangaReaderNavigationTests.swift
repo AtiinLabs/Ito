@@ -104,7 +104,8 @@ extension MangaReaderViewModelTests {
             pluginID: subject.viewModel.pluginID,
             entry: subject.viewModel.entry,
             initialChapter: makeChapter("a", number: 1),
-            dependencies: subject.dependencies
+            dependencies: subject.dependencies,
+            offline: ReaderOfflineContext()
         )
         XCTAssertEqual(reopened.overrideViewer, .Webtoon)
         XCTAssertFalse(reopened.isPaged)

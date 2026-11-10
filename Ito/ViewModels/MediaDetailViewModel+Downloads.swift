@@ -15,7 +15,8 @@ extension MediaDetailViewModel {
     }
 
     /// What the chapter's menu offers. Download needs a saved series whose source can fetch it, so a
-    /// locked chapter and a saved-only series offer none. A Retry is offered only where an event cannot
+    /// locked chapter and a saved-only series offer none. Reading a downloaded chapter online this time
+    /// needs the same source and an unlocked chapter. A Retry is offered only where an event cannot
     /// clear the wait.
     func downloadActions(for chapter: M.Chapter) -> [ChapterDownloadAction] {
         guard showsDownloadControls else { return [] }
@@ -29,7 +30,11 @@ extension MediaDetailViewModel {
             return reason.requiresRetry ? [.retry, .cancel] : [.cancel]
         case .failed:
             return [.retry, .cancel]
-        case .downloaded, .damaged:
+        case .downloaded:
+            // Reading online needs a source to read from and a chapter the account can open.
+            guard detailLoadState != .savedOnly, !chapter.isPaywalled else { return [.delete] }
+            return [.readOnlineThisTime, .delete]
+        case .damaged:
             return [.delete]
         }
     }
@@ -76,6 +81,13 @@ extension MediaDetailViewModel {
                     self?.presentDownloadMessage(.downloadRefused)
                 }
             }
+        case .readOnlineThisTime:
+            // The row's state and the lock are read again at the tap, under the rule that offered the action.
+            let current = media.chapterList.map { list in list.first { $0.key == chapter.key } } ?? chapter
+            if let current, downloadActions(for: current).contains(.readOnlineThisTime) {
+                readOnlineThisTime(current)
+            }
+            return Task {}
         case .cancel, .retry, .delete:
             return Task { [weak self] in
                 do {
@@ -83,7 +95,7 @@ extension MediaDetailViewModel {
                     case .cancel: try await downloads.cancel(edition)
                     case .retry: try await downloads.retry(edition)
                     case .delete: try await downloads.delete(edition)
-                    case .download: break
+                    case .download, .readOnlineThisTime: break
                     }
                 } catch {
                     self?.presentDownloadMessage(.downloadActionFailed)

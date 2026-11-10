@@ -18,14 +18,23 @@ extension MangaReaderViewModel {
         Self.isPagedViewer(activeViewer)
     }
 
+    /// What follows the last loaded chapter; the end when none is loaded.
+    var nextBoundaryForLastSegment: ReaderChapterBoundary<Manga.Chapter> {
+        guard let last = segments.last else { return .end }
+        return boundaryAfter(last.chapter)
+    }
+
+    var previousBoundaryForFirstSegment: ReaderChapterBoundary<Manga.Chapter> {
+        guard let first = segments.first else { return .end }
+        return boundaryBefore(first.chapter)
+    }
+
     var nextChapterForLastSegment: Manga.Chapter? {
-        guard let last = segments.last else { return nil }
-        return chapterAfter(last.chapter)
+        nextBoundaryForLastSegment.chapter
     }
 
     var previousChapterForFirstSegment: Manga.Chapter? {
-        guard let first = segments.first else { return nil }
-        return chapterBefore(first.chapter)
+        previousBoundaryForFirstSegment.chapter
     }
 
     /// The current page within its chapter and that chapter's page count, as paged mode counts.

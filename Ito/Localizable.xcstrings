@@ -2011,6 +2011,18 @@
     "Next Page" : {
 
     },
+    "Next chapter is locked" : {
+      "comment" : "Reader: shown after the last page when the next chapter needs an unlock"
+    },
+    "Next chapter isn't downloaded" : {
+      "comment" : "Reader: the next chapter has no saved copy and the source cannot be reached"
+    },
+    "Next chapter opens in the page reader" : {
+      "comment" : "Reader: the next chapter is made of pages; go back to the series to open it"
+    },
+    "Next chapter opens in the text reader" : {
+      "comment" : "Reader: the next chapter is text; go back to the series to open it"
+    },
     "No History" : {
 
     },
@@ -2315,6 +2327,15 @@
     "Previous Page" : {
 
     },
+    "Previous chapter is locked" : {
+      "comment" : "Reader: shown before the first page when the previous chapter needs an unlock"
+    },
+    "Previous chapter isn't downloaded" : {
+      "comment" : "Reader: the previous chapter has no saved copy and the source cannot be reached"
+    },
+    "Previous chapter opens in the text reader" : {
+      "comment" : "Reader: the previous chapter is text; go back to the series to open it"
+    },
     "Privacy" : {
 
     },
@@ -2329,6 +2350,12 @@
     },
     "Read Again" : {
 
+    },
+    "Read Downloaded Copy" : {
+      "comment" : "Reader error: reopen this chapter from its saved copy after reading it online failed"
+    },
+    "Read Online This Time" : {
+      "comment" : "Chapter menu: open this downloaded chapter from its source once, without changing the saved copy"
     },
     "Read Progress Sync" : {
 

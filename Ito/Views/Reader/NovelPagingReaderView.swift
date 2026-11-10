@@ -14,6 +14,8 @@ struct NovelPagingReaderView: View {
     /// The next chapter failed to load; `onRetryNextChapter` tries again.
     let appendFailed: Bool
     let onRetryNextChapter: () -> Void
+    /// Why reading stops after the last loaded chapter, when the next one cannot be opened here.
+    let boundaryNotice: ReaderBoundaryNotice?
     @Binding var currentChapter: Novel.Chapter
     /// A place to open at once pages exist; reported back through `onRestoreAnchorApplied`.
     let restoreAnchor: NovelReadingAnchor?
@@ -82,7 +84,27 @@ struct NovelPagingReaderView: View {
                     }
                     .allowsHitTesting(false)
 
-                    if appendFailed && currentPageIndex >= flattenedPages.count - 3 {
+                    if let boundaryNotice, currentPageIndex == flattenedPages.count - 1 {
+                        VStack {
+                            Spacer()
+                            HStack(spacing: 8) {
+                                Image(systemName: boundaryNotice.systemImage)
+                                    .accessibilityHidden(true)
+                                Text(boundaryNotice.text)
+                            }
+                            .accessibilityElement(children: .combine)
+                            .font(.footnote)
+                            .foregroundColor(theme.textColor)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(theme.backgroundColor.opacity(0.95), in: Capsule())
+                            .overlay(Capsule().stroke(theme.textColor.opacity(0.2), lineWidth: 1))
+                            .padding(.bottom, 32)
+                        }
+                        .allowsHitTesting(false)
+                    }
+
+                    if appendFailed, boundaryNotice == nil, currentPageIndex >= flattenedPages.count - 3 {
                         VStack {
                             Spacer()
                             HStack(spacing: 12) {
