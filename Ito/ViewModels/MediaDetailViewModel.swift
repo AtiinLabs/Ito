@@ -39,7 +39,9 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         case failedUnsaving
     }
 
-    @Published private(set) var media: M
+    @Published private(set) var media: M {
+        didSet { downloadBatch.mediaDidChange() }
+    }
     @Published private(set) var detailLoadState: DetailLoadState = .idle
     @Published var sortOrder: ChapterSortOrder = .descending
     @Published var filterOption: ChapterFilterOption = .all
@@ -77,6 +79,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     private let messagePresenter: any MediaDetailMessagePresenting
     /// Downloads for this series' chapters. Unavailable where offline chapters are not composed.
     let downloads: any MediaDetailDownloadServing
+    /// The presets, scanlator choice, preview and saved-only rows of the download controls.
+    let downloadBatch: MediaDetailDownloadBatchModel
     let snapshots: MediaDetailSnapshotRefresher
     private let presentationLogger: any PresentationEventLogging
 
@@ -126,6 +130,13 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         self.messagePresenter = messagePresenter
         downloads = dependencies.downloads
         snapshots = MediaDetailSnapshotRefresher(library: dependencies.library)
+        downloadBatch = MediaDetailDownloadBatchModel(
+            downloads: dependencies.downloads,
+            progress: dependencies.progress,
+            snapshots: snapshots,
+            inventory: routeContext.inventoryChapters,
+            loadsFromSource: routeContext.loadDetails != nil
+        )
         self.presentationLogger = presentationLogger
         pendingOpenIntent = openIntent
 
@@ -139,6 +150,10 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         isTracked = trackerState.isTracked
         selectedGroup = Self.preferredAnimeGroup(for: media)
 
+        downloadBatch.host = self
+        downloadBatch.objectWillChange
+            .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &cancellables)
         dependencies.library.statePublisher
             .sink { [weak self] state in
                 self?.applyLibraryState(state)
@@ -159,10 +174,11 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         $media
             .map { [pluginID] in MediaIdentity(pluginId: pluginID, canonicalMediaId: $0.key, mediaKind: $0.mediaKind) }
             .removeDuplicates()
-            .map { downloads.chapterStates(for: $0) }
+            .map { identity in downloads.chapterStates(for: identity).map { (identity, $0) } }
             .switchToLatest()
-            .sink { [weak self] states in
+            .sink { [weak self] identity, states in
                 self?.chapterDownloadStates = states
+                self?.downloadBatch.statesDidChange(states, for: identity)
             }
             .store(in: &cancellables)
         dependencies.connectivity.isOfflinePublisher
@@ -214,49 +230,6 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             || !dependencies.progress.readChapterNumbers(for: identity).isEmpty
     }
 
-    var displayedChapters: [M.Chapter] {
-        guard let chapters = media.chapterList else { return [] }
-        let identity = mediaIdentity
-        let filtered: [M.Chapter]
-        switch filterOption {
-        case .all:
-            filtered = chapters
-        case .unread:
-            filtered = chapters.filter {
-                !dependencies.progress.isRead(
-                    media: identity,
-                    chapterID: $0.key,
-                    chapterNumber: $0.chapterNumber
-                )
-            }
-        case .read:
-            filtered = chapters.filter {
-                dependencies.progress.isRead(
-                    media: identity,
-                    chapterID: $0.key,
-                    chapterNumber: $0.chapterNumber
-                )
-            }
-        }
-
-        switch sortOrder {
-        case .descending:
-            return filtered.sorted {
-                ($0.chapterNumber ?? -Float.infinity) >
-                    ($1.chapterNumber ?? -Float.infinity)
-            }
-        case .ascending:
-            return filtered.sorted {
-                ($0.chapterNumber ?? Float.infinity) <
-                    ($1.chapterNumber ?? Float.infinity)
-            }
-        case .dateDescending:
-            return filtered.sorted { ($0.dateUpload ?? "") > ($1.dateUpload ?? "") }
-        case .dateAscending:
-            return filtered.sorted { ($0.dateUpload ?? "") < ($1.dateUpload ?? "") }
-        }
-    }
-
     /// What Resume opens; a known lock on it is a boundary, not a reason to skip ahead.
     var resumeChapter: M.Chapter? {
         guard let candidate = resumeTarget?.chapter, !candidate.isPaywalled else { return nil }
@@ -297,6 +270,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             return
         }
         hasStarted = true
+        downloadBatch.reload()
         loadCachedTheme()
         _ = beginDetailLoad(advanceBaselineWhenFinished: true)
     }
@@ -447,6 +421,11 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         let current = media.chapterList?.first { $0.key == chapter.key } ?? chapter
         guard !current.isPaywalled else { return }
         guard detailLoadState == .savedOnly else {
+            // Offline, only a downloaded chapter can open: any other would fail to load.
+            if showsDownloadControls, isOffline, downloadState(for: current) != .downloaded {
+                presentDownloadMessage(.chapterNotDownloaded)
+                return
+            }
             readerDestination = routeContext.makeReaderDestination(media, current)
             return
         }
@@ -818,6 +797,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         applyLibraryState(dependencies.library.state)
         refreshTrackerState()
         objectWillChange.send()
+        downloadBatch.reload()
     }
 
     private func applyLibraryState(_ state: MediaDetailLibraryState) {
@@ -1004,6 +984,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         snapshotDateTask?.cancel()
         snapshotDateTask = nil
         snapshotRefreshedAt = nil
+        downloadBatch.reset()
     }
 
     private var mayPresentUserOutput: Bool {

@@ -31,8 +31,9 @@ extension MediaDetailViewModel {
         case .failed:
             return [.retry, .cancel]
         case .downloaded:
-            // Reading online needs a source to read from and a chapter the account can open.
-            guard detailLoadState != .savedOnly, !chapter.isPaywalled else { return [.delete] }
+            // Reading online needs a source to read from, a chapter the account can open and a chapter
+            // the source still lists: a saved-only edition has no online copy to read.
+            guard detailLoadState != .savedOnly, !chapter.isPaywalled, !isSavedOnlyRow(chapter) else { return [.delete] }
             return [.readOnlineThisTime, .delete]
         case .damaged:
             return [.delete]

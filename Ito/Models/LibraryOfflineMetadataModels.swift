@@ -78,6 +78,35 @@ nonisolated struct LibrarySnapshotStateRecord: Codable, Equatable, Sendable, Fet
     }
 }
 
+/// What a series' saved details say about its catalog, for the "entire series offline" claim: the freshness
+/// record, the digest of the payload saved now, and the chapter rows of that saved payload. The claim is about
+/// the saved catalog, never about the list a later load returned, so the rows come from the payload itself.
+nonisolated struct LibrarySnapshotBasis: Equatable, Sendable {
+    let snapshot: SeriesOfflineSnapshot
+    /// SHA-256 hex digest of the `libraryItem.rawPayload` saved now.
+    let currentPayloadSHA256: String
+    /// The chapter rows of the saved payload.
+    let catalog: [ChapterFacts]
+}
+
+extension LibrarySnapshotStateRecord {
+    /// The freshness `SeriesOfflineCoverage` reads. A catalog is `complete` only when it covers the entire
+    /// series (`coversEntireSeries`); a complete catalog of what the source shows by default is not that.
+    var offlineSnapshot: SeriesOfflineSnapshot {
+        let scope: SeriesCatalogScope
+        if coversEntireSeries {
+            scope = .complete
+        } else if catalogCompleteness == .partial {
+            scope = .partial
+        } else if catalogScope == .visible {
+            scope = .visible
+        } else {
+            scope = .unknown
+        }
+        return SeriesOfflineSnapshot(catalogScope: scope, payloadSHA256: payloadSHA256, refreshedAt: refreshedAt)
+    }
+}
+
 /// A durable cover kept with a Library item, captured from the cover the Library card already displayed.
 nonisolated struct LibraryCoverThumbnailRecord: Codable, Equatable, Sendable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "libraryCoverThumbnail"

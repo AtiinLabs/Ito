@@ -129,6 +129,9 @@ struct MediaDetailRouteContext<M: MediaDisplayable> {
     let makeReaderDestination: (M, M.Chapter) -> MediaDetailReaderDestination
     /// Whether a chapter has a verified offline copy. A saved-only route opens only those chapters.
     var isChapterAvailableOffline: ((M.Chapter) async -> Bool)?
+    /// The stored copies of a series, for the saved-only rows of a runner route. It is asked for the series
+    /// shown now, which a relink changes. Nil where no offline store is composed.
+    var inventoryChapters: ((MediaIdentity) async -> [DownloadedChapterRecord])?
 }
 
 struct MediaDetailTrackerSheetIntent: Identifiable, Equatable {

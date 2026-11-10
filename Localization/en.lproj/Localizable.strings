@@ -8,6 +8,9 @@
 
 "%@ already contains state for destination media \"%@\"." = "%1$@ already contains state for destination media \"%2$@\".";
 
+/* Download preview: free space on this device. The placeholder is a size such as 4.2 GB. */
+"%@ available" = "%@ available";
+
 /* Confirm removing a series from the Library. The placeholder is the series title. */
 "%@ is also removed from your lists. Reading history and progress are kept." = "%@ is also removed from your lists. Reading history and progress are kept.";
 
@@ -77,10 +80,19 @@
 History filter: every kind of media */
 "All" = "All";
 
+/* Download menu item: download every chapter, including those already read. */
+"All Chapters" = "All Chapters";
+
+/* Download menu item: download every unread chapter. */
+"All Unread Chapters" = "All Unread Chapters";
+
 /* Storage settings warns that deleting downloads removes saved chapters, cancels the download queue, and waits for open readers */
 "All saved chapters are deleted and all queued downloads are cancelled. Chapters still held by an open reader are removed when the reader closes." = "All saved chapters are deleted and all queued downloads are cancelled. Chapters still held by an open reader are removed when the reader closes.";
 
 "All sources resolved" = "All sources resolved";
+
+/* Scanlator choice: download every upload of every chapter. An advanced choice. */
+"All uploads" = "All uploads";
 
 "All-Time Popular" = "All-Time Popular";
 
@@ -216,6 +228,9 @@ Downloads queue: cancel one job */
 
 "Chapters" = "Chapters";
 
+/* Download preview footer: read chapters are not downloaded by this preset. */
+"Chapters marked read are skipped." = "Chapters marked read are skipped.";
+
 "Check AniList Discord Status" = "Check AniList Discord Status";
 
 "Check for Updates" = "Check for Updates";
@@ -244,6 +259,9 @@ Downloads queue: cancel one job */
 "Choose a list status before adding this entry to MyAnimeList." = "Choose a list status before adding this entry to MyAnimeList.";
 
 "Choose a valid score for your scoring format." = "Choose a valid score for your scoring format.";
+
+/* Scanlator choice: download only chapters from the scanlators the user ticks. */
+"Choose scanlators" = "Choose scanlators";
 
 "Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports." = "Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports.";
 
@@ -337,6 +355,9 @@ Downloads queue: cancel one job */
 
 "Couldn't load trending titles: %@" = "Couldn't load trending titles: %@";
 
+/* Series details: reading the scanlators remembered for this series failed this time. The choice itself may be fine. */
+"Couldn't read the saved scanlator choice" = "Couldn't read the saved scanlator choice";
+
 /* Series details: a Download, Cancel, Retry or Delete Download action did not take effect. */
 "Couldn't update the download" = "Couldn't update the download";
 
@@ -364,6 +385,9 @@ Downloads queue: cancel one job */
 "Cross-origin redirects are blocked for plugin image requests." = "Cross-origin redirects are blocked for plugin image requests.";
 
 "Current Usage" = "Current Usage";
+
+/* Download preview section: chapters whose saved copy failed verification. */
+"Damaged downloads" = "Damaged downloads";
 
 /* Reader background theme */
 "Dark" = "Dark";
@@ -402,6 +426,9 @@ Confirm permanent deletion of selected downloads */
 
 "Delete List" = "Delete List";
 
+/* Download preview footer: a damaged copy must be deleted before the chapter can be downloaded again. */
+"Delete damaged downloads to download them again." = "Delete damaged downloads to download them again.";
+
 /* Downloads manager deletion failed or its cleanup failed after removing inventory. Never claims rollback. */
 "Deletion couldn't be completed for: %@. Check the list; some downloads may already have been removed." = "Deletion couldn't be completed for: %@. Check the list; some downloads may already have been removed.";
 
@@ -434,6 +461,9 @@ Confirm permanent deletion of selected downloads */
 
 /* Chapter menu: save this chapter for offline reading */
 "Download" = "Download";
+
+/* Accessibility label of the menu that queues several chapters for offline reading. */
+"Download chapters" = "Download chapters";
 
 /* Chapter download status: the saved copy no longer matches what was downloaded */
 "Download damaged" = "Download damaged";
@@ -473,6 +503,9 @@ Storage settings offline downloads section */
 /* Downloads manager bulk Retry failure */
 "Downloads couldn't be retried. Check the list before trying again." = "Downloads couldn't be retried. Check the list before trying again.";
 
+/* Footer under the All uploads scanlator choice. */
+"Downloads every upload, including several translations of the same chapter." = "Downloads every upload, including several translations of the same chapter.";
+
 /* Library: a series was removed from the Library, but its saved chapters could not be deleted. */
 "Downloads not deleted" = "Downloads not deleted";
 
@@ -506,6 +539,9 @@ Storage settings offline downloads section */
 "Enter the full URL to the repository. The app will fetch index.json from this address." = "Enter the full URL to the repository. The app will fetch index.json from this address.";
 
 "Enter values between %@ and %@, with minimum no greater than maximum." = "Enter values between %1$@ and %2$@, with minimum no greater than maximum.";
+
+/* Series details: every chapter of the series is saved on this device, and the source confirmed its chapter list is complete. */
+"Entire series offline" = "Entire series offline";
 
 /* Discord status: episode number
 History: an episode without a title */
@@ -580,6 +616,9 @@ History: an episode without a title */
 
 "Fetching Logs..." = "Fetching Logs...";
 
+/* Download preview warning: the selected scanlators do not have enough chapters to fill the preset. */
+"Fewer chapters match the selected scanlators than you asked for." = "Fewer chapters match the selected scanlators than you asked for.";
+
 "File copy error: The plugin could not be imported." = "File copy error: The plugin could not be imported.";
 
 /* History: filter button */
@@ -599,6 +638,9 @@ History: an episode without a title */
 
 /* Series status: complete */
 "Finished" = "Finished";
+
+/* Scanlator choice: download whatever the source lists, from every scanlator it shows. */
+"Follow the source's list" = "Follow the source's list";
 
 "Format" = "Format";
 
@@ -688,6 +730,9 @@ History: an episode without a title */
 "Invalid Server Address" = "Invalid Server Address";
 
 "Invalid URL" = "Invalid URL";
+
+/* Series details: detail when the chosen scanlators could not be remembered for the series, so the choice applies to the current download only. */
+"It applies to this download only." = "It applies to this download only.";
 
 "Items only in this list move to %@. Nothing is removed from your library." = "Items only in this list move to %@. Nothing is removed from your library.";
 
@@ -822,6 +867,9 @@ History: an episode without a title */
 
 "Local progress not updated" = "Local progress not updated";
 
+/* Download preview footer: locked chapters are not downloaded and the reader stops at them. */
+"Locked chapters are skipped. Reading still stops at them." = "Locked chapters are skipped. Reading still stops at them.";
+
 "Logged in" = "Logged in";
 
 "Logged in as %@" = "Logged in as %@";
@@ -925,9 +973,18 @@ Manga format */
 
 "Newest First" = "Newest First";
 
+/* Download menu item: download the next ten unread chapters. */
+"Next 10 Chapters" = "Next 10 Chapters";
+
+/* Download menu item: download the next five unread chapters. */
+"Next 5 Chapters" = "Next 5 Chapters";
+
 "Next Chapter" = "Next Chapter";
 
 "Next Page" = "Next Page";
+
+/* Download menu item: download the next unread chapter. */
+"Next Unread Chapter" = "Next Unread Chapter";
 
 /* Reader: shown after the last page when the next chapter needs an unlock */
 "Next chapter is locked" = "Next chapter is locked";
@@ -954,6 +1011,9 @@ Manga format */
 
 "No Trackers Authenticated" = "No Trackers Authenticated";
 
+/* Scanlator choice: a remembered scanlator that the source's current list has no chapters from. */
+"No chapters in the current list" = "No chapters in the current list";
+
 "No content found." = "No content found.";
 
 "No custom lists yet" = "No custom lists yet";
@@ -961,6 +1021,9 @@ Manga format */
 /* Downloaded series is empty after deletion
 Downloads manager empty inventory */
 "No downloaded chapters" = "No downloaded chapters";
+
+/* Scanlator choice: the chapters whose source names no scanlator. */
+"No group listed" = "No group listed";
 
 "No items in %@." = "No items in %@.";
 
@@ -1017,6 +1080,12 @@ Downloads manager empty inventory */
 "Nothing in your history matches this search or filter." = "Nothing in your history matches this search or filter.";
 
 "Nothing in your library matches\n\"%@\"." = "Nothing in your library matches\n\"%@\".";
+
+/* Series details: a download preset found every chapter in its range already saved or queued, or none to download. */
+"Nothing new to download" = "Nothing new to download";
+
+/* Download preview: no chapter would be queued. */
+"Nothing to download." = "Nothing to download.";
 
 "Notification permission was denied, but the preference could not be disabled. Please try again." = "Notification permission was denied, but the preference could not be disabled. Please try again.";
 
@@ -1090,6 +1159,9 @@ Manga format: light novel */
 /* Discord status: video in its original language */
 "Original" = "Original";
 
+/* Download preview section: uploads from scanlators outside the selection that sit inside the range. */
+"Other scanlators' uploads in this range" = "Other scanlators' uploads in this range";
+
 "Packages" = "Packages";
 
 /* Accessibility label of a manga page; number is its position in the chapter
@@ -1124,6 +1196,7 @@ History: the page a chapter was left on */
 
 "Please enable notifications for Ito in your device Settings to receive update alerts." = "Please enable notifications for Ito in your device Settings to receive update alerts.";
 
+/* Series details: detail when the remembered scanlators could not be read and nothing was changed. */
 "Please try again." = "Please try again.";
 
 "Plugin identities" = "Plugin identities";
@@ -1245,6 +1318,9 @@ History: the page a chapter was left on */
 
 "Remapping \"%@\" would not change its identifier." = "Remapping \"%@\" would not change its identifier.";
 
+/* Toggle: keep this scanlator choice for the series, so downloads follow it next time. */
+"Remember for this series" = "Remember for this series";
+
 "Remove" = "Remove";
 
 "Remove %@" = "Remove %@";
@@ -1352,6 +1428,9 @@ Downloads queue: retry a failed or paused job */
 
 "Revert" = "Revert";
 
+/* Series details: detail when the scanlators remembered for this series cannot be read, so the download is shown for review instead of being queued. */
+"Review this download before it starts." = "Review this download before it starts.";
+
 /* Reading mode */
 "Right to Left" = "Right to Left";
 
@@ -1370,6 +1449,12 @@ Downloads queue: retry a failed or paused job */
 
 "Saved credentials will be checked when protected data is available." = "Saved credentials will be checked when protected data is available.";
 
+/* Caption on a chapter row: this saved copy is not in the source's current chapter list, but it can still be read from this device. */
+"Saved only · not in current list" = "Saved only · not in current list";
+
+/* Series details: the scanlators remembered for this series could not be read. */
+"Saved scanlator choice unavailable" = "Saved scanlator choice unavailable";
+
 "Saved sign-in data in the backup could not be used." = "Saved sign-in data in the backup could not be used.";
 
 "Saved to Uncategorized" = "Saved to Uncategorized";
@@ -1377,6 +1462,18 @@ Downloads queue: retry a failed or paused job */
 "Saved value isn't valid; the source uses the default." = "Saved value isn't valid; the source uses the default.";
 
 "Saving" = "Saving";
+
+/* Series details: the chosen scanlators could not be remembered for this series. */
+"Scanlator choice not remembered" = "Scanlator choice not remembered";
+
+/* Series details: the scanlators chosen for this series could not be saved. */
+"Scanlator choice not saved" = "Scanlator choice not saved";
+
+/* Title of the sheet where the user chooses which scanlators to download. */
+"Scanlators" = "Scanlators";
+
+/* Download menu item: choose which scanlators' chapters the download presets select. */
+"Scanlators…" = "Scanlators…";
 
 "Scope" = "Scope";
 
@@ -1522,13 +1619,22 @@ Downloads queue: retry a failed or paused job */
 
 "Site Data Cleared" = "Site Data Cleared";
 
+/* Download preview: the size of the chapters cannot be known before they are downloaded. */
+"Size is known after download." = "Size is known after download.";
+
 "Skip" = "Skip";
 
 "Skip Completed Series" = "Skip Completed Series";
 
 "Skipped" = "Skipped";
 
+/* Download preview section: chapters the source marks locked, which are not downloaded. */
+"Skipped, locked" = "Skipped, locked";
+
 "Smaller Text" = "Smaller Text";
+
+/* Download preview warning: several scanlators uploaded the same numbered chapter. */
+"Some chapters have uploads from more than one scanlator." = "Some chapters have uploads from more than one scanlator.";
 
 "Some filter options couldn't be loaded." = "Some filter options couldn't be loaded.";
 
@@ -1671,6 +1777,18 @@ Reading font: the system font */
 
 "The certificate couldn't be saved. Try again." = "The certificate couldn't be saved. Try again.";
 
+/* Download preview: the series' chapter list changed while the preview was open, so it was made again. */
+"The chapter list changed; review again." = "The chapter list changed; review again.";
+
+/* Download preview warning: the last-read chapter belongs to a scanlator that is not selected. */
+"The chapter you last read isn't in the selected scanlators, so this starts from the first unread chapter." = "The chapter you last read isn't in the selected scanlators, so this starts from the first unread chapter.";
+
+/* Scanlator sheet warning: reading the scanlators remembered for this series failed this time, so the stored choice is kept unless the user turns Remember on. */
+"The choice saved for this series couldn't be loaded. It isn't replaced unless you turn on Remember." = "The choice saved for this series couldn't be loaded. It isn't replaced unless you turn on Remember.";
+
+/* Scanlator sheet warning: the scanlators remembered for this series cannot be read, and a new choice replaces them. */
+"The choice saved for this series couldn't be read. Saving a new one replaces it." = "The choice saved for this series couldn't be read. Saving a new one replaces it.";
+
 "The configured repositories could not be refreshed. Please try again." = "The configured repositories could not be refreshed. Please try again.";
 
 /* Series details: detail for a download action that did not take effect. */
@@ -1737,6 +1855,9 @@ Reading font: the system font */
 "The queued progress could not be updated. Try again." = "The queued progress could not be updated. Try again.";
 
 "The queued read progress could not be read or updated." = "The queued read progress could not be read or updated.";
+
+/* Download preview warning: the order of the chapters could not be worked out confidently. */
+"The reading order of this series isn't certain. Check the list before downloading." = "The reading order of this series isn't certain. Check the list before downloading.";
 
 "The remote entry changed, but its local link still needs to be saved." = "The remote entry changed, but its local link still needs to be saved.";
 
@@ -1808,6 +1929,9 @@ Reading font: the system font */
 
 "Theme" = "Theme";
 
+/* Download preview footer: other scanlators' uploads are only downloaded when ticked. */
+"These aren't downloaded unless you tick them." = "These aren't downloaded unless you tick them.";
+
 "These settings can't be shown." = "These settings can't be shown.";
 
 "This action is unsupported by the source." = "This action is unsupported by the source.";
@@ -1817,7 +1941,8 @@ Reading font: the system font */
 
 "This chapter is locked on the source." = "This chapter is locked on the source.";
 
-/* Shown when a chapter has no offline copy and no installed source can load it. Used as the reader's load-failure text and as a notice on the series details screen. */
+/* Shown when a chapter has no offline copy and cannot be loaded: no installed source can load it, or the device is offline. Used as the reader's load-failure text and as a notice on the series details screen.
+Shown when a chapter has no offline copy and no installed source can load it. Used as the reader's load-failure text and as a notice on the series details screen. */
 "This chapter isn't downloaded." = "This chapter isn't downloaded.";
 
 "This control type (%u) is not supported." = "This control type (%u) is not supported.";
@@ -1833,6 +1958,9 @@ Reading font: the system font */
 "This extension was not found in your configured repositories." = "This extension was not found in your configured repositories.";
 
 "This filter requires a newer version of Ito." = "This filter requires a newer version of Ito.";
+
+/* Download preview warning: the chapters come from more than one scanlator. */
+"This includes chapters from several scanlators." = "This includes chapters from several scanlators.";
 
 "This is an ambiguous match. Are you sure you want to link it?" = "This is an ambiguous match. Are you sure you want to link it?";
 
@@ -1998,6 +2126,9 @@ Reading font: the system font */
 
 "Updating queued progress…" = "Updating queued progress…";
 
+/* Button on the scanlator sheet: apply the choice and continue with the download. */
+"Use Selection" = "Use Selection";
+
 "Use a Personal Access Token" = "Use a Personal Access Token";
 
 "Use this when a source stays blocked by Cloudflare or a website login stops working." = "Use this when a source stays blocked by Cloudflare or a website login stops working.";
@@ -2098,6 +2229,9 @@ Reading font: the system font */
 "Your Lists" = "Your Lists";
 
 "Your changes could not be saved. Please try again." = "Your changes could not be saved. Please try again.";
+
+/* Series details: detail when the scanlators chosen for this series could not be saved. */
+"Your choice couldn't be stored. Please try again." = "Your choice couldn't be stored. Please try again.";
 
 "Your history couldn't be cleared. Please try again." = "Your history couldn't be cleared. Please try again.";
 

@@ -151,6 +151,11 @@ struct DurableStateSchemaTests {
                 columns: ["libraryItemId", "coverURLSHA256", "imageData", "pixelWidth", "pixelHeight", "storedAt"],
                 primaryKey: ["libraryItemId"],
                 nullable: []
+            ),
+            "seriesEditionPreference": .init(
+                columns: ["pluginId", "mediaKind", "canonicalMediaId", "selection", "updatedAt"],
+                primaryKey: ["pluginId", "mediaKind", "canonicalMediaId"],
+                nullable: []
             )
         ]
         let preexistingTables: Set<String> = [

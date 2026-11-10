@@ -278,6 +278,32 @@ final class MediaDetailDownloadActionTests: XCTestCase {
         XCTAssertNil(savedOnly.readerDestination)
     }
 
+    /// A chapter another edition's read mark covers by number is still an edition of its own: the explicit
+    /// Download is offered and queues exactly that edition. Presets skip it; this action never reads progress.
+    func testASingleDownloadIsStillOfferedForAnEditionWhoseNumberAnotherEditionMarkedRead() async {
+        let series = Manga(
+            key: "series-1",
+            title: "Series One",
+            chapters: [
+                Chapter(key: "a16", chapter: 16, scanlator: "A"),
+                Chapter(key: "b16", chapter: 16, scanlator: "B")
+            ]
+        )
+        let progress = MediaDetailProgressFake()
+        progress.readChapterIDs[MediaDetailDownloadsFake.series] = ["b16"]
+        progress.readChapterNumbers[MediaDetailDownloadsFake.series] = [16]
+        let downloads = MediaDetailDownloadsFake()
+        let viewModel = makeViewModel(media: series, saved: true, downloads: downloads, progress: progress)
+        let aSixteen = Chapter(key: "a16", chapter: 16, scanlator: "A")
+
+        XCTAssertTrue(viewModel.isRead(aSixteen), "The list shows a16 read, by number")
+        XCTAssertEqual(viewModel.downloadActions(for: aSixteen), [.download])
+
+        await viewModel.performDownloadAction(.download, for: aSixteen).value
+
+        XCTAssertEqual(downloads.downloadRequests.map(\.chapterKey), ["a16"])
+    }
+
     // MARK: - Subjects
 
     private func chapter(_ key: String) -> Chapter {
@@ -289,7 +315,8 @@ final class MediaDetailDownloadActionTests: XCTestCase {
         saved: Bool,
         downloads: MediaDetailDownloadsFake,
         messages: MediaDetailMessageSpy = MediaDetailMessageSpy(),
-        savedOnly: Bool = false
+        savedOnly: Bool = false,
+        progress: MediaDetailProgressFake = MediaDetailProgressFake()
     ) -> MediaDetailViewModel<M> {
         let state = MediaDetailLibraryState(
             records: saved
@@ -312,7 +339,7 @@ final class MediaDetailDownloadActionTests: XCTestCase {
         )
         var dependencies = PreparedMediaDetailDependencies(
             library: MediaDetailLibraryFake(state: state),
-            progress: MediaDetailProgressFake(),
+            progress: progress,
             tracker: MediaDetailTrackerFake(),
             theme: MediaDetailThemeFake(),
             relink: MediaDetailRelinkFake(),
@@ -357,6 +384,26 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
     var failure: Error?
     private(set) var downloadRequests: [DownloadRequest] = []
     private(set) var editionCalls: [EditionCall] = []
+    /// What `enqueueBatch` answers; nil queues every requested chapter.
+    var batchOutcome: DownloadBatchOutcome?
+    var preferenceWriteFailure: Error?
+    var preferenceReadFailure: Error?
+    var capacity: Int64?
+    var storedBytes: Int64?
+    /// While set, the call waits until the test releases it, so a test can act in between.
+    var holdsPreferenceReads = false
+    var holdsPreferenceWrites = false
+    var holdsBatches = false
+    private(set) var batchRequests: [DownloadBatchRequest] = []
+    private(set) var storedPreferences: [MediaIdentity: EditionSelection] = [:]
+    private(set) var preferenceReadCount = 0
+    private(set) var preferenceWriteCount = 0
+    private var pendingPreferenceReads: [CheckedContinuation<Void, Never>] = []
+    private var pendingPreferenceWrites: [CheckedContinuation<Void, Never>] = []
+    private var pendingBatches: [CheckedContinuation<Void, Never>] = []
+    var pendingPreferenceReadCount: Int { pendingPreferenceReads.count }
+    var pendingPreferenceWriteCount: Int { pendingPreferenceWrites.count }
+    var pendingBatchCount: Int { pendingBatches.count }
     private let states = CurrentValueSubject<[MediaIdentity: [String: ChapterDownloadState]], Never>([:])
 
     init(isAvailable: Bool = true) {
@@ -408,5 +455,51 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
     func delete(_ edition: OfflineChapterEdition) async throws {
         editionCalls.append(.delete(edition))
         if let failure { throw failure }
+    }
+
+    func enqueueBatch(_ request: DownloadBatchRequest) async -> DownloadBatchOutcome {
+        batchRequests.append(request)
+        if holdsBatches { await withCheckedContinuation { pendingBatches.append($0) } }
+        return batchOutcome ?? DownloadBatchOutcome(queued: request.chapters.count)
+    }
+
+    func editionPreference(for media: MediaIdentity) async throws -> EditionSelection? {
+        preferenceReadCount += 1
+        if holdsPreferenceReads { await withCheckedContinuation { pendingPreferenceReads.append($0) } }
+        if let preferenceReadFailure { throw preferenceReadFailure }
+        return storedPreferences[media]
+    }
+
+    func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity) async throws {
+        preferenceWriteCount += 1
+        if holdsPreferenceWrites { await withCheckedContinuation { pendingPreferenceWrites.append($0) } }
+        if let preferenceWriteFailure { throw preferenceWriteFailure }
+        storedPreferences[media] = selection
+    }
+
+    func availableCapacity() async -> Int64? {
+        capacity
+    }
+
+    func storedByteCount(for media: MediaIdentity) async -> Int64? {
+        storedBytes
+    }
+
+    func releasePreferenceReads() {
+        let pending = pendingPreferenceReads
+        pendingPreferenceReads = []
+        pending.forEach { $0.resume() }
+    }
+
+    func releasePreferenceWrites() {
+        let pending = pendingPreferenceWrites
+        pendingPreferenceWrites = []
+        pending.forEach { $0.resume() }
+    }
+
+    func releaseBatches() {
+        let pending = pendingBatches
+        pendingBatches = []
+        pending.forEach { $0.resume() }
     }
 }

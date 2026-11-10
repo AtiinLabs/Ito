@@ -33,6 +33,9 @@
         }
       }
     },
+    "%@ available" : {
+      "comment" : "Download preview: free space on this device. The placeholder is a size such as 4.2 GB."
+    },
     "%@ has %lld new chapters." : {
       "localizations" : {
         "en" : {
@@ -239,7 +242,77 @@
         }
       }
     },
+    "%lld already queued" : {
+      "comment" : "Download preview: how many chapters in range are already queued. The placeholder is a number, which needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld already queued"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld already queued"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld already saved" : {
+      "comment" : "Download preview: how many chapters in range are already saved on this device. The placeholder is a number, which needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld already saved"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld already saved"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld already saved or queued" : {
+      "comment" : "Series details: how many chapters of a download preset's range were already saved or queued. The placeholder is a number, which needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld already saved or queued"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld already saved or queued"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld chapters" : {
+      "comment" : "Scanlator choice: how many chapters of the series this scanlator has. The placeholder is a number, which needs plural forms.",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -262,7 +335,7 @@
       }
     },
     "%lld chapters saved" : {
-      "comment" : "Accessibility label of the Library card chip. The count is the number of saved chapters.",
+      "comment" : "Accessibility label for a count of chapters saved on this device, on a Library card and in a series' details header. The placeholder is the number of saved chapters.",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -308,7 +381,7 @@
       }
     },
     "%lld damaged" : {
-      "comment" : "Downloads manager damaged edition count",
+      "comment" : "Downloads manager damaged edition count\nSeries details: how many saved chapters of the series failed verification and need deleting. The placeholder is a number, which needs plural forms.",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -345,6 +418,52 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld episodes"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld failed" : {
+      "comment" : "Series details: how many chapters of the series failed to download. The placeholder is a number, which needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld failed"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld failed"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld failed · retry from the chapter menu" : {
+      "comment" : "Download preview: how many chapters in range have a failed download, which is not queued again. The placeholder is a number, which needs plural forms. Retry is in each chapter's menu.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld failed · retry from the chapter menu"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld failed · retry from the chapter menu"
                 }
               }
             }
@@ -440,6 +559,29 @@
         }
       }
     },
+    "%lld marked read, skipped" : {
+      "comment" : "Download preview: how many chapters in range are marked read and so are not downloaded. The placeholder is a number, which needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld marked read, skipped"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld marked read, skipped"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld packages" : {
       "localizations" : {
         "en" : {
@@ -506,8 +648,31 @@
         }
       }
     },
+    "%lld queued" : {
+      "comment" : "Series details: how many chapters of the series are queued or downloading. The placeholder is a number, which needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld queued"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld queued"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld saved" : {
-      "comment" : "Library card chip: how many chapters of the series are saved on this device. The count is the number of saved chapters.",
+      "comment" : "Library card chip: how many chapters of the series are saved on this device. The count is the number of saved chapters.\nSeries details: how many chapters of the series are saved on this device. The placeholder is a number, which needs plural forms.",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -676,11 +841,20 @@
     "All" : {
       "comment" : "Filter chip: show every list\nHistory filter: every kind of media"
     },
+    "All Chapters" : {
+      "comment" : "Download menu item: download every chapter, including those already read."
+    },
+    "All Unread Chapters" : {
+      "comment" : "Download menu item: download every unread chapter."
+    },
     "All saved chapters are deleted and all queued downloads are cancelled. Chapters still held by an open reader are removed when the reader closes." : {
       "comment" : "Storage settings warns that deleting downloads removes saved chapters, cancels the download queue, and waits for open readers"
     },
     "All sources resolved" : {
 
+    },
+    "All uploads" : {
+      "comment" : "Scanlator choice: download every upload of every chapter. An advanced choice."
     },
     "All-Time Popular" : {
 
@@ -877,6 +1051,9 @@
     "Chapters" : {
 
     },
+    "Chapters marked read are skipped." : {
+      "comment" : "Download preview footer: read chapters are not downloaded by this preset."
+    },
     "Check AniList Discord Status" : {
 
     },
@@ -925,6 +1102,9 @@
     },
     "Choose a valid score for your scoring format." : {
 
+    },
+    "Choose scanlators" : {
+      "comment" : "Scanlator choice: download only chapters from the scanlators the user ticks."
     },
     "Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports." : {
 
@@ -1072,6 +1252,9 @@
     "Couldn't load trending titles: %@" : {
 
     },
+    "Couldn't read the saved scanlator choice" : {
+      "comment" : "Series details: reading the scanlators remembered for this series failed this time. The choice itself may be fine."
+    },
     "Couldn't update the download" : {
       "comment" : "Series details: a Download, Cancel, Retry or Delete Download action did not take effect."
     },
@@ -1110,6 +1293,9 @@
     },
     "Current Usage" : {
 
+    },
+    "Damaged downloads" : {
+      "comment" : "Download preview section: chapters whose saved copy failed verification."
     },
     "Dark" : {
       "comment" : "Reader background theme"
@@ -1183,6 +1369,9 @@
     "Delete List" : {
 
     },
+    "Delete damaged downloads to download them again." : {
+      "comment" : "Download preview footer: a damaged copy must be deleted before the chapter can be downloaded again."
+    },
     "Deleted downloads for %lld series. Deletion couldn't be completed for: %@. Check the list; some downloads may already have been removed." : {
       "comment" : "Downloads manager partial delete result. Names identify the failed series; successful deletions are not rolled back.",
       "localizations" : {
@@ -1251,6 +1440,32 @@
     "Download" : {
       "comment" : "Chapter menu: save this chapter for offline reading"
     },
+    "Download %lld Chapters" : {
+      "comment" : "Button on the download preview: queue the listed chapters. The placeholder is the number of chapters, which needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Download %lld Chapter"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Download %lld Chapters"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Download chapters" : {
+      "comment" : "Accessibility label of the menu that queues several chapters for offline reading."
+    },
     "Download damaged" : {
       "comment" : "Chapter download status: the saved copy no longer matches what was downloaded"
     },
@@ -1306,6 +1521,9 @@
     },
     "Downloads couldn't be retried. Check the list before trying again." : {
       "comment" : "Downloads manager bulk Retry failure"
+    },
+    "Downloads every upload, including several translations of the same chapter." : {
+      "comment" : "Footer under the All uploads scanlator choice."
     },
     "Downloads not deleted" : {
       "comment" : "Library: a series was removed from the Library, but its saved chapters could not be deleted."
@@ -1373,6 +1591,9 @@
           }
         }
       }
+    },
+    "Entire series offline" : {
+      "comment" : "Series details: every chapter of the series is saved on this device, and the source confirmed its chapter list is complete."
     },
     "Episode %@" : {
       "comment" : "Discord status: episode number\nHistory: an episode without a title"
@@ -1505,6 +1726,9 @@
     "Fetching Logs..." : {
 
     },
+    "Fewer chapters match the selected scanlators than you asked for." : {
+      "comment" : "Download preview warning: the selected scanlators do not have enough chapters to fill the preset."
+    },
     "File copy error: The plugin could not be imported." : {
 
     },
@@ -1528,6 +1752,9 @@
     },
     "Finished" : {
       "comment" : "Series status: complete"
+    },
+    "Follow the source's list" : {
+      "comment" : "Scanlator choice: download whatever the source lists, from every scanlator it shows."
     },
     "Format" : {
 
@@ -1654,6 +1881,9 @@
     },
     "Invalid URL" : {
 
+    },
+    "It applies to this download only." : {
+      "comment" : "Series details: detail when the chosen scanlators could not be remembered for the series, so the choice applies to the current download only."
     },
     "Items only in this list move to %@. Nothing is removed from your library." : {
 
@@ -1864,6 +2094,9 @@
     "Local progress not updated" : {
 
     },
+    "Locked chapters are skipped. Reading still stops at them." : {
+      "comment" : "Download preview footer: locked chapters are not downloaded and the reader stops at them."
+    },
     "Logged in" : {
 
     },
@@ -2005,11 +2238,20 @@
     "Newest First" : {
 
     },
+    "Next 10 Chapters" : {
+      "comment" : "Download menu item: download the next ten unread chapters."
+    },
+    "Next 5 Chapters" : {
+      "comment" : "Download menu item: download the next five unread chapters."
+    },
     "Next Chapter" : {
 
     },
     "Next Page" : {
 
+    },
+    "Next Unread Chapter" : {
+      "comment" : "Download menu item: download the next unread chapter."
     },
     "Next chapter is locked" : {
       "comment" : "Reader: shown after the last page when the next chapter needs an unlock"
@@ -2041,6 +2283,9 @@
     "No Trackers Authenticated" : {
 
     },
+    "No chapters in the current list" : {
+      "comment" : "Scanlator choice: a remembered scanlator that the source's current list has no chapters from."
+    },
     "No content found." : {
 
     },
@@ -2049,6 +2294,9 @@
     },
     "No downloaded chapters" : {
       "comment" : "Downloaded series is empty after deletion\nDownloads manager empty inventory"
+    },
+    "No group listed" : {
+      "comment" : "Scanlator choice: the chapters whose source names no scanlator."
     },
     "No items in %@." : {
 
@@ -2134,6 +2382,12 @@
     "Nothing in your library matches\n\"%@\"." : {
 
     },
+    "Nothing new to download" : {
+      "comment" : "Series details: a download preset found every chapter in its range already saved or queued, or none to download."
+    },
+    "Nothing to download." : {
+      "comment" : "Download preview: no chapter would be queued."
+    },
     "Notification permission was denied, but the preference could not be disabled. Please try again." : {
 
     },
@@ -2218,6 +2472,9 @@
     "Original" : {
       "comment" : "Discord status: video in its original language"
     },
+    "Other scanlators' uploads in this range" : {
+      "comment" : "Download preview section: uploads from scanlators outside the selection that sit inside the range."
+    },
     "Packages" : {
 
     },
@@ -2271,7 +2528,7 @@
 
     },
     "Please try again." : {
-
+      "comment" : "Series details: detail when the remembered scanlators could not be read and nothing was changed."
     },
     "Plugin identities" : {
 
@@ -2344,6 +2601,29 @@
     },
     "Queued" : {
       "comment" : "Chapter download status: waiting for its turn"
+    },
+    "Queued %lld chapters" : {
+      "comment" : "Series details: a download preset queued chapters. The placeholder is the number of chapters, which needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Queued %lld chapter"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Queued %lld chapters"
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "Re-link failed. Please try again." : {
 
@@ -2445,6 +2725,9 @@
     },
     "Remapping \"%@\" would not change its identifier." : {
 
+    },
+    "Remember for this series" : {
+      "comment" : "Toggle: keep this scanlator choice for the series, so downloads follow it next time."
     },
     "Remove" : {
 
@@ -2593,6 +2876,9 @@
     "Revert" : {
 
     },
+    "Review this download before it starts." : {
+      "comment" : "Series details: detail when the scanlators remembered for this series cannot be read, so the download is shown for review instead of being queued."
+    },
     "Right to Left" : {
       "comment" : "Reading mode"
     },
@@ -2640,6 +2926,12 @@
     "Saved credentials will be checked when protected data is available." : {
 
     },
+    "Saved only · not in current list" : {
+      "comment" : "Caption on a chapter row: this saved copy is not in the source's current chapter list, but it can still be read from this device."
+    },
+    "Saved scanlator choice unavailable" : {
+      "comment" : "Series details: the scanlators remembered for this series could not be read."
+    },
     "Saved sign-in data in the backup could not be used." : {
 
     },
@@ -2651,6 +2943,18 @@
     },
     "Saving" : {
 
+    },
+    "Scanlator choice not remembered" : {
+      "comment" : "Series details: the chosen scanlators could not be remembered for this series."
+    },
+    "Scanlator choice not saved" : {
+      "comment" : "Series details: the scanlators chosen for this series could not be saved."
+    },
+    "Scanlators" : {
+      "comment" : "Title of the sheet where the user chooses which scanlators to download."
+    },
+    "Scanlators…" : {
+      "comment" : "Download menu item: choose which scanlators' chapters the download presets select."
     },
     "Scope" : {
 
@@ -2891,6 +3195,9 @@
     "Site Data Cleared" : {
 
     },
+    "Size is known after download." : {
+      "comment" : "Download preview: the size of the chapters cannot be known before they are downloaded."
+    },
     "Skip" : {
 
     },
@@ -2900,8 +3207,14 @@
     "Skipped" : {
 
     },
+    "Skipped, locked" : {
+      "comment" : "Download preview section: chapters the source marks locked, which are not downloaded."
+    },
     "Smaller Text" : {
 
+    },
+    "Some chapters have uploads from more than one scanlator." : {
+      "comment" : "Download preview warning: several scanlators uploaded the same numbered chapter."
     },
     "Some filter options couldn't be loaded." : {
 
@@ -3092,6 +3405,18 @@
     "The certificate couldn't be saved. Try again." : {
 
     },
+    "The chapter list changed; review again." : {
+      "comment" : "Download preview: the series' chapter list changed while the preview was open, so it was made again."
+    },
+    "The chapter you last read isn't in the selected scanlators, so this starts from the first unread chapter." : {
+      "comment" : "Download preview warning: the last-read chapter belongs to a scanlator that is not selected."
+    },
+    "The choice saved for this series couldn't be loaded. It isn't replaced unless you turn on Remember." : {
+      "comment" : "Scanlator sheet warning: reading the scanlators remembered for this series failed this time, so the stored choice is kept unless the user turns Remember on."
+    },
+    "The choice saved for this series couldn't be read. Saving a new one replaces it." : {
+      "comment" : "Scanlator sheet warning: the scanlators remembered for this series cannot be read, and a new choice replaces them."
+    },
     "The configured repositories could not be refreshed. Please try again." : {
 
     },
@@ -3190,6 +3515,9 @@
     },
     "The queued read progress could not be read or updated." : {
 
+    },
+    "The reading order of this series isn't certain. Check the list before downloading." : {
+      "comment" : "Download preview warning: the order of the chapters could not be worked out confidently."
     },
     "The remote entry changed, but its local link still needs to be saved." : {
 
@@ -3296,6 +3624,9 @@
     "Theme" : {
 
     },
+    "These aren't downloaded unless you tick them." : {
+      "comment" : "Download preview footer: other scanlators' uploads are only downloaded when ticked."
+    },
     "These settings can't be shown." : {
 
     },
@@ -3309,7 +3640,7 @@
 
     },
     "This chapter isn't downloaded." : {
-      "comment" : "Shown when a chapter has no offline copy and no installed source can load it. Used as the reader's load-failure text and as a notice on the series details screen."
+      "comment" : "Shown when a chapter has no offline copy and cannot be loaded: no installed source can load it, or the device is offline. Used as the reader's load-failure text and as a notice on the series details screen.\nShown when a chapter has no offline copy and no installed source can load it. Used as the reader's load-failure text and as a notice on the series details screen."
     },
     "This control type (%u) is not supported." : {
 
@@ -3331,6 +3662,9 @@
     },
     "This filter requires a newer version of Ito." : {
 
+    },
+    "This includes chapters from several scanlators." : {
+      "comment" : "Download preview warning: the chapters come from more than one scanlator."
     },
     "This is an ambiguous match. Are you sure you want to link it?" : {
 
@@ -3385,6 +3719,29 @@
     },
     "This tracker does not support manual scoring." : {
 
+    },
+    "To download · %lld" : {
+      "comment" : "Download preview section: the chapters that will be queued. The placeholder is their number.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "To download · %lld"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "To download · %lld"
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "To read this content, you must install the '%@' extension." : {
 
@@ -3575,6 +3932,9 @@
     "Updating queued progress…" : {
 
     },
+    "Use Selection" : {
+      "comment" : "Button on the scanlator sheet: apply the choice and continue with the download."
+    },
     "Use a Personal Access Token" : {
 
     },
@@ -3731,6 +4091,9 @@
     },
     "Your changes could not be saved. Please try again." : {
 
+    },
+    "Your choice couldn't be stored. Please try again." : {
+      "comment" : "Series details: detail when the scanlators chosen for this series could not be saved."
     },
     "Your history couldn't be cleared. Please try again." : {
 

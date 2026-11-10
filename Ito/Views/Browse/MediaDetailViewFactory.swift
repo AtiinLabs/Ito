@@ -199,7 +199,8 @@ struct MediaDetailViewFactory {
                 pluginID: pluginID,
                 mediaKind: .manga,
                 canonicalMediaId: media.key
-            )
+            ),
+            inventoryChapters: offlineInventory()
         )
         return makeView(media: media, pluginID: pluginID, context: context, openIntent: openIntent)
     }
@@ -254,7 +255,8 @@ struct MediaDetailViewFactory {
                 pluginID: pluginID,
                 mediaKind: .novel,
                 canonicalMediaId: media.key
-            )
+            ),
+            inventoryChapters: offlineInventory()
         )
         return makeView(media: media, pluginID: pluginID, context: context, openIntent: openIntent)
     }
@@ -286,6 +288,20 @@ struct MediaDetailViewFactory {
         let media = MediaIdentity(pluginId: pluginID, canonicalMediaId: canonicalMediaId, mediaKind: mediaKind)
         return { chapter in
             await reader.verifiedEdition(OfflineChapterEdition(media: media, chapterKey: chapter.key))
+        }
+    }
+
+    /// The stored copies of the series asked for, read when the saved-only rows of a runner route need them.
+    /// Nil where no offline store is composed.
+    private func offlineInventory() -> ((MediaIdentity) async -> [DownloadedChapterRecord])? {
+        let reader = offlineReading
+        guard reader.isAvailable else { return nil }
+        return { media in
+            await reader.inventoryChapters(
+                pluginId: media.pluginId,
+                mediaKind: media.mediaKind,
+                canonicalMediaId: media.canonicalMediaId
+            )
         }
     }
 

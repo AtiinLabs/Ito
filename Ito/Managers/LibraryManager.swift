@@ -264,6 +264,12 @@ public class LibraryManager: ObservableObject {
                     .filter(Column("canonicalMediaId") == media.canonicalMediaId)
                     .filter(Column("mediaKind") == media.mediaKind.rawValue)
                     .deleteAll(db)
+                // A remembered scanlator choice is for a series in the Library.
+                try SeriesEditionPreferenceRecord
+                    .filter(Column("pluginId") == media.pluginId)
+                    .filter(Column("canonicalMediaId") == media.canonicalMediaId)
+                    .filter(Column("mediaKind") == media.mediaKind.rawValue)
+                    .deleteAll(db)
                 removedMedia.append(media)
             }
             let publication = try Self.makePublication(
@@ -388,6 +394,59 @@ public class LibraryManager: ObservableObject {
                 return OfflineDigest.sha256Hex(item.rawPayload) == state.payloadSHA256 ? state.refreshedAt : nil
             }
             return nil
+        }
+    }
+
+    /// What the saved details say about the series' catalog, with the digest of the payload saved now. Nil
+    /// when no refresh was ever recorded for the series, or it is not in the Library.
+    func snapshotBasis(for media: MediaIdentity) async throws -> LibrarySnapshotBasis? {
+        let candidates = ImportedMediaIdentity.localItemIDs(
+            pluginId: media.pluginId,
+            canonicalMediaId: media.canonicalMediaId,
+            mediaKind: media.mediaKind
+        )
+        return try await dbPool.read { db in
+            let state = try LibrarySnapshotStateRecord
+                .filter(Column("pluginId") == media.pluginId)
+                .filter(Column("canonicalMediaId") == media.canonicalMediaId)
+                .filter(Column("mediaKind") == media.mediaKind.rawValue)
+                .fetchOne(db)
+            guard let state else { return nil }
+            for id in candidates {
+                guard let item = try LibraryItem.fetchOne(db, key: id),
+                      item.mediaIdentity == media else { continue }
+                let digest = OfflineDigest.sha256Hex(item.rawPayload)
+                // The rows only back a claim about the entire series, which needs a complete catalog that this
+                // payload was saved with; for anything else they are not read.
+                let backsClaim = state.coversEntireSeries && state.payloadSHA256 == digest
+                return LibrarySnapshotBasis(
+                    snapshot: state.offlineSnapshot,
+                    currentPayloadSHA256: digest,
+                    catalog: backsClaim ? Self.savedCatalog(of: item) : []
+                )
+            }
+            return nil
+        }
+    }
+
+    /// The chapter rows of the payload saved with an item. A payload that cannot be read has no rows, which
+    /// can never back a claim about the entire series.
+    private nonisolated static func savedCatalog(of item: LibraryItem) -> [ChapterFacts] {
+        let decoder = JSONDecoder()
+        let chapters: [Chapter]?
+        switch item.effectiveType {
+        case .manga: chapters = (try? decoder.decode(Manga.self, from: item.rawPayload))?.chapters
+        case .novel: chapters = (try? decoder.decode(Novel.self, from: item.rawPayload))?.chapters
+        case .anime: chapters = nil
+        }
+        return (chapters ?? []).map {
+            ChapterFacts(
+                key: $0.key,
+                number: $0.chapter,
+                volume: $0.volume,
+                scanlator: $0.scanlator,
+                isLocked: $0.paywalled ?? false
+            )
         }
     }
 

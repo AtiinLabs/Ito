@@ -18,6 +18,11 @@ struct MediaDetailSnapshotRefresher {
         try? await library.snapshotRefreshDate(for: media)
     }
 
+    /// What the saved details say about the series' catalog; nil when that is unknown.
+    func basis(for media: MediaIdentity) async -> LibrarySnapshotBasis? {
+        try? await library.snapshotBasis(for: media)
+    }
+
     /// Saves a successfully loaded series as the Library's details for it, if they are still the ones
     /// `token` named. A list without chapters is never saved: it is not evidence that the series has none.
     /// Downloaded chapters are not touched, whichever chapters the new list leaves out.

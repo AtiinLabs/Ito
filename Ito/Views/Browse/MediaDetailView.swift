@@ -65,6 +65,9 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             .sheet(item: relinkPresentationBinding) { _ in
                 relinkSearchSheet
             }
+            .sheet(item: downloadSheetBinding) { sheet in
+                downloadSheetContent(sheet)
+            }
     }
 
     private var navigationContent: some View {
@@ -164,6 +167,37 @@ struct MediaDetailView<M: MediaDisplayable>: View {
         )
     }
 
+    private var downloadSheetBinding: Binding<DownloadSheet?> {
+        Binding(
+            get: { viewModel.downloadBatch.sheet },
+            set: { if $0 == nil { viewModel.downloadBatch.dismissDownloadSheet() } }
+        )
+    }
+
+    /// The one download sheet: the scanlator chooser, then the preview, in the same presentation.
+    @ViewBuilder
+    private func downloadSheetContent(_ sheet: DownloadSheet) -> some View {
+        switch sheet {
+        case .chooser(let presentation):
+            EditionChooserSheet(
+                presentation: presentation,
+                isApplying: viewModel.downloadBatch.isApplyingChoice,
+                onConfirm: { selection, remember in
+                    viewModel.downloadBatch.applyEditionChoice(selection, remember: remember, then: presentation.preset)
+                },
+                onCancel: viewModel.downloadBatch.dismissDownloadSheet
+            )
+        case .preview(let preview):
+            DownloadPreviewSheet(
+                preview: preview,
+                availableBytes: viewModel.downloadBatch.availableBytes,
+                isEnqueuing: viewModel.downloadBatch.isEnqueuing,
+                onConfirm: { viewModel.downloadBatch.confirmDownloadPreview(including: $0) },
+                onCancel: viewModel.downloadBatch.dismissDownloadSheet
+            )
+        }
+    }
+
     private var readerDestinationBinding: Binding<MediaDetailReaderDestination?> {
         Binding(
             get: { viewModel.readerDestination },
@@ -207,14 +241,22 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             savedOnlyNotice(notice)
         }
 
-        if let chapters = viewModel.media.chapterList, !chapters.isEmpty {
-            let displayed = viewModel.displayedChapters
-            chapterListHeader(allChapters: chapters, displayedChapters: displayed)
+        let displayed = viewModel.displayedChapters
+        let chapters = viewModel.media.chapterList ?? []
+        // Saved editions the list lacks still show, even when the list itself is empty. An empty list still
+        // offers to link the series to a source that has chapters.
+        if viewModel.offersRelinkBanner {
+            relinkBanner
+        }
+        if !chapters.isEmpty || viewModel.savedOnlyChapterCount > 0 {
+            chapterListHeader(
+                totalCount: chapters.count + viewModel.savedOnlyChapterCount,
+                displayedChapters: displayed
+            )
             let textKeys = chapters.textChapterKeysInMixedSeries(defaultKind: viewModel.media is Novel ? .text : .images)
             chapterList(chapters: displayed, textKeys: textKeys)
-        } else if viewModel.isSaved, viewModel.canRelink {
-            relinkBanner
-        } else if viewModel.detailLoadState == .content || viewModel.detailLoadState == .savedOnly {
+        } else if !viewModel.offersRelinkBanner,
+                  viewModel.detailLoadState == .content || viewModel.detailLoadState == .savedOnly {
             Text("No content found.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -275,7 +317,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     }
 
     private func chapterListHeader(
-        allChapters: [M.Chapter],
+        totalCount: Int,
         displayedChapters: [M.Chapter]
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -307,7 +349,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             }
 
             chapterControls(
-                allChapterCount: allChapters.count,
+                allChapterCount: totalCount,
                 displayedChapterCount: displayedChapters.count
             )
         }
@@ -349,9 +391,25 @@ struct MediaDetailView<M: MediaDisplayable>: View {
 
                 Spacer()
 
+                if viewModel.showsBatchDownloadControls {
+                    DownloadPresetMenu(
+                        isEnabled: !viewModel.downloadBatch.isEnqueuing,
+                        onSelect: { viewModel.downloadBatch.startDownload($0) },
+                        onChooseScanlators: { viewModel.downloadBatch.openEditionChooser() }
+                    )
+                    .padding(.trailing, 8)
+                }
                 chapterFilterMenu(isFiltered: isFiltered)
             }
             .padding(.horizontal, 16)
+
+            if viewModel.showsDownloadControls, !viewModel.downloadBatch.summary.isEmpty {
+                SeriesDownloadSummaryView(
+                    summary: viewModel.downloadBatch.summary,
+                    byteCount: viewModel.downloadBatch.storedBytes,
+                    coversEntireSeries: viewModel.offlineCoverage() == .entireSeries
+                )
+            }
 
             if isFiltered {
                 activeFilters
@@ -444,7 +502,8 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                     chapter: chapter,
                     isRead: viewModel.isRead(chapter),
                     marksText: textKeys.contains(chapter.key),
-                    downloadState: viewModel.downloadState(for: chapter)
+                    downloadState: viewModel.downloadState(for: chapter),
+                    isSavedOnly: viewModel.isSavedOnlyRow(chapter)
                 ) {
                     viewModel.selectChapter(chapter)
                 }
