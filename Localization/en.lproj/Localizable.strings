@@ -952,6 +952,12 @@ Manga format: light novel */
 /* Discord status: chapter from the official release */
 "Official" = "Official";
 
+/* Banner above the Library grid while the device has no network. The series, details and covers shown are the ones saved on this device. */
+"Offline — showing saved Library" = "Offline — showing saved Library";
+
+/* Notice above a saved series whose details could not be refreshed because the device has no network. The details shown are the ones saved on this device. */
+"Offline — showing saved details" = "Offline — showing saved details";
+
 "Oldest First" = "Oldest First";
 
 /* Manga format: single chapter */
@@ -1857,6 +1863,9 @@ Reading font: the system font */
 "Update check failed" = "Update check failed";
 
 "Update failed. Please try again." = "Update failed. Please try again.";
+
+/* Line under a notice about saved series details. The placeholder is a relative time such as '3 hours ago'. */
+"Updated %@" = "Updated %@";
 
 "Updates Available" = "Updates Available";
 

@@ -65,6 +65,23 @@ final class LibraryViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.filteredItems.map(\.id), ["two"])
     }
 
+    func testItemsThatLeaveTheLibraryAreForgottenByTheDurableCoverService() {
+        let first = item("one", "Alpha")
+        let second = item("two", "Beta")
+        let third = item("three", "Gamma")
+        let subject = makeSubject(snapshot: snapshot(items: [first, second, third]))
+
+        subject.library.publish(snapshot(items: [first, second, third]))
+        XCTAssertTrue(subject.thumbnails.forgotten.isEmpty)
+
+        subject.library.publish(snapshot(items: [first]))
+        XCTAssertEqual(subject.thumbnails.forgotten, [["two", "three"]])
+
+        // An item that stays, or one that arrives, is not forgotten.
+        subject.library.publish(snapshot(items: [first, second]))
+        XCTAssertEqual(subject.thumbnails.forgotten, [["two", "three"]])
+    }
+
     func testSearchAndGroupingPreserveCharacterizedSemanticsAndOrder() {
         let alpha = item("alpha", "Alpha Hero")
         let beta = item("beta", "beta story")
@@ -498,6 +515,7 @@ final class LibraryViewModelTests: XCTestCase {
         let decoder = FakeDeferredDecoder()
         let messages = FakeLibraryMessages()
         let logger = PresentationEventCaptureSpy()
+        let thumbnails = LibraryCoverThumbnailsFake()
         let dependencies = PreparedLibraryDependencies(
             library: library,
             layout: layout,
@@ -506,7 +524,8 @@ final class LibraryViewModelTests: XCTestCase {
             discord: discord,
             plugins: plugins,
             installer: installer,
-            payloadDecoder: decoder
+            payloadDecoder: decoder,
+            coverThumbnails: thumbnails
         )
         return LibrarySubject(
             viewModel: LibraryViewModel(
@@ -521,7 +540,8 @@ final class LibraryViewModelTests: XCTestCase {
             export: export,
             discord: discord,
             messages: messages,
-            logger: logger
+            logger: logger,
+            thumbnails: thumbnails
         )
     }
 
@@ -599,6 +619,7 @@ private struct LibrarySubject {
     let discord: FakeLibraryDiscord
     let messages: FakeLibraryMessages
     let logger: PresentationEventCaptureSpy
+    let thumbnails: LibraryCoverThumbnailsFake
 }
 
 private enum TestFailure: Error {

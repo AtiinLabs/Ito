@@ -39,6 +39,8 @@ final class MediaRouteHarness<M: MediaDisplayable> {
     var searchResponses: [SearchResponse] = []
     private(set) var loadRequests: [M] = []
     private(set) var searchQueries: [String] = []
+    /// Runs once a suspended load's continuation is pending, so a test can resolve it safely.
+    var onLoadSuspended: (() -> Void)?
     private var pendingLoads: [CheckedContinuation<M, any Error>] = []
     private var pendingSearches: [CheckedContinuation<[M], any Error>] = []
 
@@ -54,6 +56,7 @@ final class MediaRouteHarness<M: MediaDisplayable> {
         case .suspended:
             return try await withCheckedThrowingContinuation {
                 pendingLoads.append($0)
+                onLoadSuspended?()
             }
         }
     }
@@ -96,6 +99,17 @@ final class MediaDetailLibraryFake: MediaDetailLibraryServing {
     private(set) var saveKinds: [SaveKind] = []
     private(set) var unsaveRequests: [MediaIdentity] = []
     private(set) var refreshCount = 0
+    /// What `snapshotToken(for:)` returns; nil means the media has no saved details to refresh.
+    var tokenToReturn: LibrarySnapshotToken?
+    var snapshotTokenError: (any Error)?
+    var replaceOutcome: LibrarySnapshotReplaceOutcome = .replaced
+    var replaceError: (any Error)?
+    var refreshDate: Date?
+    private(set) var snapshotTokenRequests: [MediaIdentity] = []
+    private(set) var replaceRequests: [SnapshotReplaceRequest] = []
+    private(set) var refreshDateRequests: [MediaIdentity] = []
+    /// Called when the token is read, so a test can see what happened before it.
+    var onSnapshotTokenRead: (@MainActor () -> Void)?
 
     init(
         state: MediaDetailLibraryState = MediaDetailLibraryState(
@@ -126,6 +140,49 @@ final class MediaDetailLibraryFake: MediaDetailLibraryServing {
     func saveNovel(_ novel: Novel, pluginID: String) async throws -> String {
         saveKinds.append(.novel)
         return try await performSave(itemID: novel.key, pluginID: pluginID, mediaKind: .novel)
+    }
+
+    struct SnapshotReplaceRequest: Equatable {
+        let token: LibrarySnapshotToken
+        let payload: Data
+        let coverURL: String?
+        let chapterRowCount: Int
+        let catalog: LibraryCatalogDescription
+        let refreshedAt: Date
+    }
+
+    func snapshotToken(for media: MediaIdentity) async throws -> LibrarySnapshotToken? {
+        snapshotTokenRequests.append(media)
+        onSnapshotTokenRead?()
+        if let snapshotTokenError { throw snapshotTokenError }
+        return tokenToReturn
+    }
+
+    func replaceSnapshot(
+        _ token: LibrarySnapshotToken,
+        payload: Data,
+        coverURL: String?,
+        chapterRowCount: Int,
+        catalog: LibraryCatalogDescription,
+        refreshedAt: Date
+    ) async throws -> LibrarySnapshotReplaceOutcome {
+        replaceRequests.append(
+            SnapshotReplaceRequest(
+                token: token,
+                payload: payload,
+                coverURL: coverURL,
+                chapterRowCount: chapterRowCount,
+                catalog: catalog,
+                refreshedAt: refreshedAt
+            )
+        )
+        if let replaceError { throw replaceError }
+        return replaceOutcome
+    }
+
+    func snapshotRefreshDate(for media: MediaIdentity) async throws -> Date? {
+        refreshDateRequests.append(media)
+        return refreshDate
     }
 
     func unsave(media: MediaIdentity) async throws {

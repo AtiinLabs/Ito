@@ -259,6 +259,11 @@ public class LibraryManager: ObservableObject {
                     .filter(Column("canonicalMediaId") == media.canonicalMediaId)
                     .filter(Column("mediaKind") == media.mediaKind.rawValue)
                     .deleteAll(db)
+                try LibrarySnapshotStateRecord
+                    .filter(Column("pluginId") == media.pluginId)
+                    .filter(Column("canonicalMediaId") == media.canonicalMediaId)
+                    .filter(Column("mediaKind") == media.mediaKind.rawValue)
+                    .deleteAll(db)
                 removedMedia.append(media)
             }
             let publication = try Self.makePublication(
@@ -270,6 +275,120 @@ public class LibraryManager: ObservableObject {
         }
         apply(publication)
         updateManager?.forgetBadges(for: removedMedia)
+    }
+
+    // MARK: - Saved Details Snapshot
+
+    /// Names the details saved for this media, to be read before its source is asked for fresh ones.
+    /// Nil when the media is not in the Library.
+    func snapshotToken(for media: MediaIdentity) async throws -> LibrarySnapshotToken? {
+        let candidates = ImportedMediaIdentity.localItemIDs(
+            pluginId: media.pluginId,
+            canonicalMediaId: media.canonicalMediaId,
+            mediaKind: media.mediaKind
+        )
+        return try await dbPool.read { db in
+            for id in candidates {
+                guard let item = try LibraryItem.fetchOne(db, key: id),
+                      item.mediaIdentity == media else { continue }
+                return LibrarySnapshotToken(
+                    itemID: item.id,
+                    media: media,
+                    payloadSHA256: OfflineDigest.sha256Hex(item.rawPayload)
+                )
+            }
+            return nil
+        }
+    }
+
+    /// Replaces the details saved with a Library item by a refreshed copy, only while the item still holds
+    /// the payload the token named, so a refresh that raced a relink, a restore or a new save changes
+    /// nothing. The Library title is the user's own and is kept; a refresh without a cover keeps the
+    /// saved one. Downloads are untouched, whatever chapters the new list leaves out.
+    ///
+    /// - Parameter catalog: How the source described the catalog; `unknown` until a source says more. A
+    ///   catalog saved as complete over every eligible upload is replaced only by another such catalog. The
+    ///   same bytes and cover only record a new refresh time.
+    func replaceSnapshotDurably(
+        _ token: LibrarySnapshotToken,
+        payload: Data,
+        coverUrl: String?,
+        chapterRowCount: Int,
+        catalog: LibraryCatalogDescription = .unknown,
+        refreshedAt: Date
+    ) async throws -> LibrarySnapshotReplaceOutcome {
+        guard chapterRowCount > 0 else { return .rejectedIncomplete }
+        let publicationClock = publicationClock
+        let result = try await dbPool.write { db -> (LibrarySnapshotReplaceOutcome, LibraryPublication?) in
+            guard let item = try LibraryItem.fetchOne(db, key: token.itemID),
+                  item.mediaIdentity == token.media,
+                  OfflineDigest.sha256Hex(item.rawPayload) == token.payloadSHA256 else {
+                return (.stale, nil)
+            }
+            let media = token.media
+            let stored = try LibrarySnapshotStateRecord
+                .filter(Column("pluginId") == media.pluginId)
+                .filter(Column("canonicalMediaId") == media.canonicalMediaId)
+                .filter(Column("mediaKind") == media.mediaKind.rawValue)
+                .fetchOne(db)
+            // A saved complete catalog is only replaced by another complete one.
+            if let stored,
+               stored.payloadSHA256 == token.payloadSHA256,
+               stored.catalog.coversEntireSeries,
+               !catalog.coversEntireSeries {
+                return (.rejectedIncomplete, nil)
+            }
+            let newCover = coverUrl.flatMap { $0.isEmpty ? nil : $0 }
+            let payloadDigest = OfflineDigest.sha256Hex(payload)
+            // The same bytes and cover change nothing the Library shows: only the refresh time is recorded,
+            // and no publication is made.
+            let isUnchanged = payloadDigest == token.payloadSHA256 && (newCover == nil || newCover == item.coverUrl)
+            if !isUnchanged {
+                try db.execute(
+                    sql: "UPDATE libraryItem SET rawPayload = ?, coverUrl = COALESCE(?, coverUrl) WHERE id = ?",
+                    arguments: [payload, newCover, item.id]
+                )
+            }
+            try LibrarySnapshotStateRecord(
+                pluginId: media.pluginId,
+                mediaKind: media.mediaKind,
+                canonicalMediaId: media.canonicalMediaId,
+                payloadSHA256: payloadDigest,
+                refreshedAt: refreshedAt,
+                catalogScope: catalog.scope,
+                catalogCompleteness: catalog.completeness,
+                chapterRowCount: chapterRowCount
+            ).save(db)
+            guard !isUnchanged else { return (.replaced, nil) }
+            let publication = try Self.makePublication(db, clock: publicationClock, changedLibrary: true)
+            return (.replaced, publication)
+        }
+        if let publication = result.1 { apply(publication) }
+        return result.0
+    }
+
+    /// When the details saved for this media were last refreshed. Nil when they never were, and when the
+    /// saved payload is not the one that refresh wrote, as after a restore: its age is unknown.
+    func snapshotRefreshDate(for media: MediaIdentity) async throws -> Date? {
+        let candidates = ImportedMediaIdentity.localItemIDs(
+            pluginId: media.pluginId,
+            canonicalMediaId: media.canonicalMediaId,
+            mediaKind: media.mediaKind
+        )
+        return try await dbPool.read { db in
+            let state = try LibrarySnapshotStateRecord
+                .filter(Column("pluginId") == media.pluginId)
+                .filter(Column("canonicalMediaId") == media.canonicalMediaId)
+                .filter(Column("mediaKind") == media.mediaKind.rawValue)
+                .fetchOne(db)
+            guard let state else { return nil }
+            for id in candidates {
+                guard let item = try LibraryItem.fetchOne(db, key: id),
+                      item.mediaIdentity == media else { continue }
+                return OfflineDigest.sha256Hex(item.rawPayload) == state.payloadSHA256 ? state.refreshedAt : nil
+            }
+            return nil
+        }
     }
 
     private func saveItemDurably(

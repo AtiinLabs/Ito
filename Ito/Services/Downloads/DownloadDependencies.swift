@@ -27,7 +27,8 @@ enum OfflineChaptersLocation {
 }
 
 /// The download services one runtime owns. The store is shared: the composition root builds it once per
-/// process and passes it to every stack. Nothing runs until the coordinator is started in the foreground.
+/// process and passes it to every stack, together with the one network path observer. Nothing runs until
+/// the coordinator is started in the foreground.
 @MainActor
 struct DownloadStack {
     let store: OfflineChapterStore
@@ -40,6 +41,7 @@ struct DownloadStack {
         dbPool: DatabasePool,
         pluginManager: PluginManager,
         pluginSettings: PluginSettingsStore,
+        path: any NetworkPathObserving,
         predecessor: Task<Void, Never>?
     ) {
         let progress = DownloadProgressBoard()
@@ -60,7 +62,7 @@ struct DownloadStack {
                     cloudflareUserAgent: { host in await cloudflare.cachedUserAgent(for: host) }
                 )
             },
-            path: NWPathNetworkObserver(),
+            path: path,
             protectedData: UIApplicationProtectedDataAvailability(),
             protectedDataBecameAvailable: NotificationCenter.default
                 .publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)
