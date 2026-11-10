@@ -203,6 +203,8 @@ final class TrackingMediaDetailAdapter: MediaDetailTrackerServing {
 
 @MainActor
 protocol MediaDetailRelinkServing: AnyObject {
+    /// Moves the series to its new entry. Returns how many download jobs the move cancelled (queued, waiting,
+    /// downloading or failed). Stored copies move with the series and are not counted.
     func relink(
         pluginID: String,
         mediaKind: MediaKind,
@@ -211,7 +213,7 @@ protocol MediaDetailRelinkServing: AnyObject {
         title: String,
         coverURL: String?,
         rawPayload: Data
-    ) async throws
+    ) async throws -> Int
 }
 
 extension LibrarySourceRemapper: MediaDetailRelinkServing {
@@ -223,8 +225,8 @@ extension LibrarySourceRemapper: MediaDetailRelinkServing {
         title: String,
         coverURL: String?,
         rawPayload: Data
-    ) async throws {
-        _ = try await relink(
+    ) async throws -> Int {
+        try await relink(
             pluginId: pluginID,
             mediaKind: mediaKind,
             possibleSourceItemIds: possibleSourceItemIDs,
@@ -232,7 +234,7 @@ extension LibrarySourceRemapper: MediaDetailRelinkServing {
             title: title,
             coverUrl: coverURL,
             rawPayload: rawPayload
-        )
+        ).cancelledDownloadJobCount
     }
 }
 

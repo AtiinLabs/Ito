@@ -77,7 +77,7 @@ struct DurableStateAPIScanTests {
         let dependencies = try read("Ito/Services/MediaDetail/MediaDetailDependencies.swift")
         #expect(viewModel.contains("dependencies.relink.relink("))
         #expect(dependencies.contains("extension LibrarySourceRemapper: MediaDetailRelinkServing"))
-        #expect(dependencies.contains("_ = try await relink("))
+        #expect(dependencies.contains("try await relink("))
         #expect(dependencies.contains("possibleSourceItemIds: possibleSourceItemIDs"))
         for source in [viewModel, dependencies] {
             #expect(!source.contains("AppDatabase.shared"))

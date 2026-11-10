@@ -113,6 +113,11 @@
     "one": "%lld queued",
     "other": "%lld queued"
   },
+  "%lld queued downloads were cancelled. Download them again from the new source.": {
+    "description": "Notice on a series after it was linked to another source. The number of downloads that were still waiting to download when the link was made; they were cancelled, and chapters already saved on this device were kept. Plural-ready.",
+    "one": "%lld queued download was cancelled. Download it again from the new source.",
+    "other": "%lld queued downloads were cancelled. Download them again from the new source."
+  },
   "%lld saved": {
     "description": "Library card chip: how many chapters of the series are saved on this device. The count is the number of saved chapters.\nSeries details: how many chapters of the series are saved on this device. The placeholder is a number, which needs plural forms.",
     "one": "%lld saved",

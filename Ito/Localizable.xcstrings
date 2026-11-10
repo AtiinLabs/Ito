@@ -671,6 +671,29 @@
         }
       }
     },
+    "%lld queued downloads were cancelled. Download them again from the new source." : {
+      "comment" : "Notice on a series after it was linked to another source. The number of downloads that were still waiting to download when the link was made; they were cancelled, and chapters already saved on this device were kept. Plural-ready.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld queued download was cancelled. Download it again from the new source."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld queued downloads were cancelled. Download them again from the new source."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld saved" : {
       "comment" : "Library card chip: how many chapters of the series are saved on this device. The count is the number of saved chapters.\nSeries details: how many chapters of the series are saved on this device. The placeholder is a number, which needs plural forms.",
       "localizations" : {
@@ -1433,6 +1456,9 @@
     },
     "DiscoverView requires a prepared runtime" : {
 
+    },
+    "Dismiss" : {
+      "comment" : "Accessibility label of the button that closes the notice about downloads that were cancelled when a series was linked to another source."
     },
     "Done" : {
 

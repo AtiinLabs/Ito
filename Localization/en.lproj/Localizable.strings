@@ -457,6 +457,9 @@ Confirm permanent deletion of selected downloads */
 
 "DiscoverView requires a prepared runtime" = "DiscoverView requires a prepared runtime";
 
+/* Accessibility label of the button that closes the notice about downloads that were cancelled when a series was linked to another source. */
+"Dismiss" = "Dismiss";
+
 "Done" = "Done";
 
 /* Chapter menu: save this chapter for offline reading */

@@ -48,6 +48,10 @@ final class LibrarySourceRemapperMigrationAdapter: MigrationSourceRemapping {
         self.aliasWriter = aliasWriter
     }
 
+    /// Remaps through `LibrarySourceRemapper.remap`, so the offline state moves with each series the way a
+    /// relink moves it: stored copies stay readable under the new source, and queued downloads are
+    /// cancelled. The migration report does not show how many were; the cancelled count is in the remap
+    /// result, which this adapter does not surface.
     func remapSource(_ request: MigrationRemapRequest) async throws -> MigrationRemapOutcome {
         let aliasWriter = self.aliasWriter
         do {

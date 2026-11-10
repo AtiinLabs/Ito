@@ -49,6 +49,13 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             .refreshable {
                 await viewModel.refresh()
             }
+            .onChange(of: viewModel.relinkDownloadsNotice) { message in
+                // Announced once when a relink produces the notice; the banner reappearing after a reload
+                // or a pushed screen is not news.
+                if let message {
+                    UIAccessibility.post(notification: .announcement, argument: message)
+                }
+            }
     }
 
     private var presentationContent: some View {
@@ -233,6 +240,10 @@ struct MediaDetailView<M: MediaDisplayable>: View {
 
     @ViewBuilder
     private var loadedChapterSection: some View {
+        if let message = viewModel.relinkDownloadsNotice {
+            relinkDownloadsNotice(message)
+        }
+
         if case .failure(let message) = viewModel.detailLoadState {
             detailFailureBanner(message: message, notice: viewModel.offlineNotice)
         }
@@ -263,6 +274,26 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 32)
         }
+    }
+
+    /// Shown after a relink cancelled queued downloads, until the user dismisses it.
+    private func relinkDownloadsNotice(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: viewModel.dismissRelinkDownloadsNotice) {
+                Image(systemName: "xmark")
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel(String(
+                localized: "Dismiss",
+                comment: "Accessibility label of the button that closes the notice about downloads that were cancelled when a series was linked to another source."
+            ))
+        }
+        .padding(.horizontal, 16)
     }
 
     /// Shown above a saved series that opens without a source that can refresh it.

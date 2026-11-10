@@ -10,10 +10,10 @@ actor DownloadTestGate {
     private let cancellationError: any Error
     private var entered = false
     private var released = false
-    private var arrivalWaiters: [CheckedContinuation<Void, Never>] = []
+    private var arrivalWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var releaseWaiters: [UUID: CheckedContinuation<Void, Error>] = [:]
     private var cancelled = false
-    private var cancellationWaiters: [CheckedContinuation<Void, Never>] = []
+    private var cancellationWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
 
     init(cancellationError: any Error = CancellationError()) {
         self.cancellationError = cancellationError
@@ -23,8 +23,8 @@ actor DownloadTestGate {
     func pass() async throws {
         entered = true
         let waiters = arrivalWaiters
-        arrivalWaiters = []
-        for waiter in waiters {
+        arrivalWaiters = [:]
+        for waiter in waiters.values {
             waiter.resume()
         }
         if released {
@@ -44,12 +44,23 @@ actor DownloadTestGate {
         }
     }
 
+    /// Waits until the work has reached the gate. A cancelled waiter returns, so a test that ends by its time
+    /// limit does not hang here.
     func awaitArrival() async {
         if entered {
             return
         }
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            arrivalWaiters.append(continuation)
+        let id = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                if Task.isCancelled {
+                    continuation.resume()
+                    return
+                }
+                arrivalWaiters[id] = continuation
+            }
+        } onCancel: {
+            Task { await self.dropArrivalWaiter(id) }
         }
     }
 
@@ -68,19 +79,36 @@ actor DownloadTestGate {
         if cancelled {
             return
         }
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            cancellationWaiters.append(continuation)
+        let id = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                if Task.isCancelled {
+                    continuation.resume()
+                    return
+                }
+                cancellationWaiters[id] = continuation
+            }
+        } onCancel: {
+            Task { await self.dropCancellationWaiter(id) }
         }
     }
 
     /// Whether the gate was ever released.
     var wasReleased: Bool { released }
 
+    private func dropArrivalWaiter(_ id: UUID) {
+        arrivalWaiters.removeValue(forKey: id)?.resume()
+    }
+
+    private func dropCancellationWaiter(_ id: UUID) {
+        cancellationWaiters.removeValue(forKey: id)?.resume()
+    }
+
     private func cancelWaiter(_ id: UUID) {
         cancelled = true
         let observers = cancellationWaiters
-        cancellationWaiters = []
-        for observer in observers {
+        cancellationWaiters = [:]
+        for observer in observers.values {
             observer.resume()
         }
         releaseWaiters.removeValue(forKey: id)?.resume(throwing: cancellationError)
