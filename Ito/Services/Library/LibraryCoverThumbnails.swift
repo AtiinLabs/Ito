@@ -165,6 +165,13 @@ protocol LibraryCoverThumbnailServing: AnyObject {
 
 extension LibraryCoverThumbnailServing {
     var thumbnailChanges: AnyPublisher<String, Never> { Empty().eraseToAnyPublisher() }
+
+    /// The durable cover of an item, only while it was captured for the item's current cover address.
+    func thumbnail(itemID: String, coverUrl: String) async -> LibraryDurableCover? {
+        guard let cover = await thumbnail(for: itemID),
+              cover.coverURLSHA256 == LibraryCoverThumbnailStore.coverHash(coverUrl) else { return nil }
+        return cover
+    }
 }
 
 @MainActor

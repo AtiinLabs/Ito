@@ -263,10 +263,8 @@ final class LibraryViewModel: ObservableObject {
     /// The durable cover of a card whose cover could not be loaded from the network cache. It is used only
     /// while it was captured for the card's current cover address.
     func durableCover(for item: LibraryItem) async -> UIImage? {
-        guard let coverUrl = item.coverUrl,
-              let cover = await dependencies.coverThumbnails.thumbnail(for: item.id),
-              cover.coverURLSHA256 == LibraryCoverThumbnailStore.coverHash(coverUrl) else { return nil }
-        return cover.image
+        guard let coverUrl = item.coverUrl else { return nil }
+        return await dependencies.coverThumbnails.thumbnail(itemID: item.id, coverUrl: coverUrl)?.image
     }
 
     func selectCategory(_ categoryID: String?) {

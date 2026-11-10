@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import ito_runner
+import UIKit
 
 enum DeferredPluginFailure: Equatable {
     case packageLookup
@@ -8,6 +9,12 @@ enum DeferredPluginFailure: Equatable {
     case install
     case runnerLoad
     case payloadDecode
+}
+
+/// What the Library row itself saved about a series, shown when its payload can't be decoded.
+struct DeferredSavedFields: Equatable {
+    let title: String
+    let coverURL: URL?
 }
 
 enum DeferredPluginDestination {
@@ -87,6 +94,7 @@ final class DeferredPluginViewModel: ObservableObject {
     private let installer: any DeferredPluginInstalling
     private let payloadDecoder: any DeferredPluginPayloadDecoding
     private let offlineReading: any OfflineChapterReading
+    private let coverThumbnails: any LibraryCoverThumbnailServing
     private let presentationLogger: any PresentationEventLogging
 
     private var pluginSnapshot: LibraryPluginSnapshot
@@ -109,6 +117,7 @@ final class DeferredPluginViewModel: ObservableObject {
         installer: any DeferredPluginInstalling,
         payloadDecoder: any DeferredPluginPayloadDecoding,
         offlineReading: any OfflineChapterReading = UnavailableOfflineChapterReading(),
+        coverThumbnails: any LibraryCoverThumbnailServing = UnavailableLibraryCoverThumbnails(),
         presentationLogger: any PresentationEventLogging
     ) {
         self.item = item
@@ -117,6 +126,7 @@ final class DeferredPluginViewModel: ObservableObject {
         self.installer = installer
         self.payloadDecoder = payloadDecoder
         self.offlineReading = offlineReading
+        self.coverThumbnails = coverThumbnails
         self.presentationLogger = presentationLogger
         pluginSnapshot = plugins.libraryPluginSnapshot
 
@@ -138,6 +148,20 @@ final class DeferredPluginViewModel: ObservableObject {
     var route: DeferredPluginRoute? {
         guard case .ready(let route) = phase else { return nil }
         return route
+    }
+
+    /// The Library row's own saved fields, while its payload can't be decoded. The row stays in the
+    /// Library; this only lets the failure screen say which series it is.
+    var savedFieldsFallback: DeferredSavedFields? {
+        guard case .failure(.payloadDecode) = phase, decodedMedia == nil else { return nil }
+        return DeferredSavedFields(title: item.title, coverURL: item.coverUrl.flatMap { URL(string: $0) })
+    }
+
+    /// The cover this device saved for the row, used only while it was captured for the row's current cover
+    /// address, as the Library card does.
+    func savedCover() async -> UIImage? {
+        guard let coverUrl = item.coverUrl else { return nil }
+        return await coverThumbnails.thumbnail(itemID: item.id, coverUrl: coverUrl)?.image
     }
 
     var isBusy: Bool {

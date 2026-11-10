@@ -930,7 +930,8 @@ struct DeferredPluginView: View {
                 title: "Couldn't Load Saved Item",
                 message: "The saved media data is invalid or incompatible.",
                 retryTitle: "Retry",
-                retry: viewModel.retry
+                retry: viewModel.retry,
+                savedFields: viewModel.savedFieldsFallback
             )
         }
     }
@@ -939,33 +940,83 @@ struct DeferredPluginView: View {
         title: LocalizedStringKey,
         message: LocalizedStringKey,
         retryTitle: LocalizedStringKey?,
-        retry: (() -> Void)?
+        retry: (() -> Void)?,
+        savedFields: DeferredSavedFields? = nil
     ) -> some View {
-        VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 42, weight: .thin))
-                .foregroundStyle(.red)
-            Text(title).font(.headline)
-            Text(message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-            if let retryTitle, let retry {
-                Button(retryTitle, action: retry)
-                    .itoProminentButtonStyle()
-            }
-            if viewModel.canOpenSavedDetails {
-                Button(action: viewModel.openSavedDetails) {
-                    Text(
-                        "Open Saved Details",
-                        comment: "Button on a library series whose source is unavailable: shows the details saved in the library."
-                    )
+        // Scrolls, so Retry stays reachable at accessibility text sizes; short content stays centered.
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 16) {
+                    if let savedFields {
+                        savedFieldsHeader(savedFields)
+                    }
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 42, weight: .thin))
+                        .foregroundStyle(.red)
+                    Text(title).font(.headline)
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                    if let retryTitle, let retry {
+                        Button(retryTitle, action: retry)
+                            .itoProminentButtonStyle()
+                    }
+                    if viewModel.canOpenSavedDetails {
+                        Button(action: viewModel.openSavedDetails) {
+                            Text(
+                                "Open Saved Details",
+                                comment: "Button on a library series whose source is unavailable: shows the details saved in the library."
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 }
-                .buttonStyle(.bordered)
+                .padding(.vertical, 16)
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// The series the Library row still names, with the cover it saved: the cover from the network cache, or
+    /// the one this device kept while that is loading or failed.
+    private func savedFieldsHeader(_ savedFields: DeferredSavedFields) -> some View {
+        VStack(spacing: 8) {
+            savedCover(savedFields)
+                .frame(width: 96, height: 144)
+                .cornerRadius(8)
+                .clipped()
+                .accessibilityHidden(true)
+            Text(verbatim: savedFields.title)
+                .font(.title3)
+                .fontWeight(.semibold)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func savedCover(_ savedFields: DeferredSavedFields) -> some View {
+        let loadKey = "\(viewModel.item.id)\u{1F}\(viewModel.item.coverUrl ?? "")"
+        if let url = savedFields.coverURL {
+            LazyImage(url: url) { state in
+                if let image = state.image {
+                    image.resizable().scaledToFill()
+                } else {
+                    DurableCoverFallback(
+                        loadKey: loadKey, load: viewModel.savedCover, width: 96,
+                        saturation: 1, failed: state.error != nil
+                    ) { _ in Color.itoCardBackground }
+                }
+            }
+        } else {
+            DurableCoverFallback(
+                loadKey: loadKey, load: viewModel.savedCover, width: 96,
+                saturation: 1, failed: false
+            ) { _ in Color.itoCardBackground }
+        }
     }
 }
 
