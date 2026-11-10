@@ -76,21 +76,49 @@ final class OfflineStoreFixture {
         chapterKey: String = "chapter-1",
         mediaKind: MediaKind = .manga,
         paywalled: Bool? = nil,
-        sourceEpoch: String? = OfflineStoreFixture.epoch
+        sourceEpoch: String? = OfflineStoreFixture.epoch,
+        canonicalMediaId: String = "series-1"
     ) -> DownloadEnqueueRequest {
         DownloadEnqueueRequest(
             pluginId: "plugin.test",
             mediaKind: mediaKind,
-            canonicalMediaId: "series-1",
-            entry: .manga(Manga(key: "series-1", title: "Series One")),
-            chapter: Chapter(
-                key: chapterKey,
-                title: "Chapter",
-                url: "https://source.test/read/\(chapterKey)?token=signed-secret",
-                paywalled: paywalled
-            ),
+            canonicalMediaId: canonicalMediaId,
+            entry: .manga(Manga(key: canonicalMediaId, title: "Series One")),
+            chapter: chapter(chapterKey, paywalled: paywalled),
             seriesTitle: "Series One",
             sourceEpoch: sourceEpoch
+        )
+    }
+
+    static func chapter(_ key: String, paywalled: Bool? = nil) -> Chapter {
+        Chapter(
+            key: key,
+            title: "Chapter",
+            url: "https://source.test/read/\(key)?token=signed-secret",
+            paywalled: paywalled
+        )
+    }
+
+    /// A batch of chapters in the given reading order. `lockedKeys` are marked paywalled.
+    static func batchRequest(
+        chapterKeys: [String],
+        lockedKeys: Set<String> = [],
+        mediaKind: MediaKind = .manga,
+        canonicalMediaId: String = "series-1",
+        preset: DownloadBatchPreset = .next5,
+        selection: Data = DownloadBatchRecord.sourceListSelection,
+        catalogDigest: String? = String(repeating: "d", count: 64)
+    ) -> DownloadBatchRequest {
+        DownloadBatchRequest(
+            pluginId: "plugin.test",
+            mediaKind: mediaKind,
+            canonicalMediaId: canonicalMediaId,
+            entry: .manga(Manga(key: canonicalMediaId, title: "Series One")),
+            seriesTitle: "Series One",
+            preset: preset,
+            selection: selection,
+            catalogDigest: catalogDigest,
+            chapters: chapterKeys.map { chapter($0, paywalled: lockedKeys.contains($0) ? true : nil) }
         )
     }
 
@@ -114,26 +142,55 @@ final class OfflineStoreFixture {
         _ store: OfflineChapterStore,
         chapterKey: String = "chapter-1",
         mediaKind: MediaKind = .manga,
-        sourceEpoch: String? = OfflineStoreFixture.epoch
+        sourceEpoch: String? = OfflineStoreFixture.epoch,
+        canonicalMediaId: String = "series-1"
     ) async throws -> String {
         _ = await store.reconcile()
         let outcome = try await store.enqueue(
-            Self.request(chapterKey: chapterKey, mediaKind: mediaKind, sourceEpoch: sourceEpoch)
+            Self.request(
+                chapterKey: chapterKey,
+                mediaKind: mediaKind,
+                sourceEpoch: sourceEpoch,
+                canonicalMediaId: canonicalMediaId
+            )
         )
         guard outcome == .queued else { throw OfflineStoreFixtureError.notQueued }
         let jobs = try await store.jobs()
-        guard let job = jobs.last(where: { $0.chapterKey == chapterKey }) else {
+        guard let job = jobs.last(where: { $0.chapterKey == chapterKey && $0.canonicalMediaId == canonicalMediaId }) else {
             throw OfflineStoreFixtureError.notQueued
         }
         return job.id
     }
 
+    /// Reconciles, then queues the chapters as one batch and returns their job ids in request order.
+    func enqueueBatch(
+        _ store: OfflineChapterStore,
+        chapterKeys: [String],
+        canonicalMediaId: String = "series-1"
+    ) async throws -> [String] {
+        _ = await store.reconcile()
+        let outcome = try await store.enqueueBatch(
+            Self.batchRequest(chapterKeys: chapterKeys, canonicalMediaId: canonicalMediaId),
+            sourceEpoch: Self.epoch
+        )
+        guard outcome.queued == chapterKeys.count else { throw OfflineStoreFixtureError.notQueued }
+        let jobs = try await store.jobs()
+        return try chapterKeys.map { key in
+            guard let job = jobs.first(where: { $0.chapterKey == key && $0.canonicalMediaId == canonicalMediaId }) else {
+                throw OfflineStoreFixtureError.notQueued
+            }
+            return job.id
+        }
+    }
+
     /// Reconciles, queues the chapter and publishes three pages through the whole protocol.
     func publishedEdition(
         _ store: OfflineChapterStore,
-        chapterKey: String = "chapter-1"
+        chapterKey: String = "chapter-1",
+        canonicalMediaId: String = "series-1"
     ) async throws -> String {
-        let jobID = try await enqueue(store, chapterKey: chapterKey)
+        let jobID = try await enqueue(store, chapterKey: chapterKey, canonicalMediaId: canonicalMediaId)
+
         let pages = [Self.imagePage(0), Self.imagePage(1), Self.imagePage(2)]
         let outcome = try await store.perform(
             .publish(jobID: jobID, pages: pages, commitGuard: { _ in true }),
@@ -166,6 +223,15 @@ final class OfflineStoreFixture {
         #expect(Set(fileSystem.childNames(of: versionsURL)) == referencedVersions)
         #expect(jobs.allSatisfy { $0.state != .downloading })
         #expect(Set(jobs.map(\.edition)).count == jobs.count)
+        // I4: every batch has a job, so a frozen snapshot never outlives the work it was frozen for.
+        #expect(try await rowCount("downloadBatch") == (Set(jobs.map(\.batchId))).count)
+    }
+
+    /// The number of rows in one of the offline tables.
+    func rowCount(_ table: String) async throws -> Int {
+        try await database.dbPool.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table)") ?? 0
+        }
     }
 }
 

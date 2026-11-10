@@ -123,10 +123,10 @@ actor OfflineChapterStore {
     /// Shared with the offline image loader. Leases are never persisted.
     nonisolated let leases = OfflineLeaseDirectory()
 
-    private let database: DatabasePool
+    let database: DatabasePool
     nonisolated private let fileSystem: any OfflineFileSystem
     private let protectedData: any ProtectedDataAvailability
-    private let clock: @Sendable () -> Date
+    let clock: @Sendable () -> Date
     /// Set once a run completes. Crash recovery runs at most once per instance after that.
     private var completedReconciliation: OfflineReconcileReport?
     private var reconciliation: Task<OfflineReconcileReport, Never>?
@@ -148,7 +148,7 @@ actor OfflineChapterStore {
         self.clock = clock
     }
 
-    private var isReconciled: Bool { completedReconciliation != nil }
+    var isReconciled: Bool { completedReconciliation != nil }
 
     // MARK: - Layout
 
@@ -201,6 +201,7 @@ actor OfflineChapterStore {
             try fileSystem.createDirectory(trashDirectory)
             try await bindInstallation(&details)
             try await settleDownloadingJobs(commitGuard: rollForwardGuard, &details)
+            try await sweepOrphanBatches(&details)
             try await reconcileInventory(&details)
             var collection = OfflineCollectionReport()
             try await collectGarbage(into: &collection)
@@ -443,64 +444,47 @@ actor OfflineChapterStore {
 
     // MARK: - Queue
 
-    /// P0: queues one chapter. Refuses paywalled chapters, unsupported kinds and requests with no
-    /// captured source epoch. A verified copy or an existing job for the edition wins over a new job.
+    /// P0: queues one chapter as a one-chapter `single` batch. Refuses paywalled chapters, unsupported
+    /// kinds and requests with no captured source epoch. A verified copy or an existing job for the
+    /// edition wins over a new job.
     func enqueue(_ request: DownloadEnqueueRequest) async throws -> DownloadEnqueueOutcome {
-        guard isReconciled else { throw OfflineStoreError.reconciliationPending }
-        guard request.mediaKind == .manga || request.mediaKind == .novel else {
-            return .refused(.unsupportedKind)
-        }
-        guard request.chapter.paywalled != true else { return .refused(.paywalled) }
-        guard let sourceEpoch = request.sourceEpoch else { return .refused(.unavailable) }
-
-        let edition = request.edition
-        let entrySnapshot = try JSONEncoder().encode(request.entry)
-        let chapterSnapshot = try JSONEncoder().encode(request.chapter)
-        let seriesTitle = request.seriesTitle
-        let now = clock()
-        let identifier = UUID().uuidString
-        return try await database.write { db -> DownloadEnqueueOutcome in
-            if let existing = try DownloadedChapterRecord.filter(edition.predicate).fetchOne(db) {
-                return existing.state == .verified ? .alreadyDownloaded : .refused(.unavailable)
-            }
-            if try DownloadJobRecord.filter(edition.predicate).fetchCount(db) > 0 {
-                return .alreadyQueued
-            }
-            try DownloadJobRecord(
-                id: identifier,
-                pluginId: edition.pluginId,
-                mediaKind: edition.mediaKind,
-                canonicalMediaId: edition.canonicalMediaId,
-                chapterKey: edition.chapterKey,
-                authorityScope: edition.authorityScope,
-                entrySnapshot: entrySnapshot,
-                chapterSnapshot: chapterSnapshot,
-                seriesTitle: seriesTitle,
-                sourceEpoch: sourceEpoch,
-                state: .queued,
-                waitingReason: nil,
-                failureReason: nil,
-                stagingVersionId: nil,
-                attemptCount: 0,
-                createdAt: now,
-                updatedAt: now
-            ).insert(db)
-            return .queued
-        }
+        let batch = DownloadBatchRequest(
+            pluginId: request.pluginId,
+            mediaKind: request.mediaKind,
+            canonicalMediaId: request.canonicalMediaId,
+            entry: request.entry,
+            seriesTitle: request.seriesTitle,
+            preset: .single,
+            selection: DownloadBatchRecord.sourceListSelection,
+            catalogDigest: nil,
+            chapters: [request.chapter]
+        )
+        let outcome = try await enqueueBatch(batch, sourceEpoch: request.sourceEpoch)
+        if let refusal = outcome.refusal { return .refused(refusal) }
+        if outcome.queued > 0 { return .queued }
+        if outcome.alreadySaved > 0 { return .alreadyDownloaded }
+        if outcome.alreadyQueued > 0 { return .alreadyQueued }
+        if outcome.refusedLocked > 0 { return .refused(.paywalled) }
+        return .refused(.unavailable)
     }
 
     /// Stops a job before commit. An attempt that is running is cancelled by its caller; its staging
     /// directory is removed here, and its late commit is refused because the job is gone.
     func cancel(jobID: String) async throws {
-        let removed = try await database.write { db -> DownloadJobRecord? in
-            guard let job = try DownloadJobRecord.fetchOne(db, key: jobID) else { return nil }
-            _ = try DownloadJobRecord.deleteOne(db, key: jobID)
-            return job
-        }
-        if let versionId = removed?.stagingVersionId {
+        try await cancel(jobIDs: [jobID])
+    }
+
+    /// Stops several jobs in one transaction, then removes the staging directory of each one that was
+    /// downloading. Jobs that no longer exist are skipped. A batch left with no job is deleted in the same
+    /// transaction. Returns the ids of the jobs removed.
+    @discardableResult
+    func cancel(jobIDs: [String]) async throws -> [String] {
+        let removed = try await removeJobs(ids: jobIDs)
+        for versionId in removed.compactMap(\.stagingVersionId) {
             liveAttemptVersions.remove(versionId)
             try? fileSystem.removeItem(at: stagingDirectory(versionId))
         }
+        return removed.map(\.id)
     }
 
     /// Re-queues a failed or waiting job and re-freezes the source epoch the caller now reads.
@@ -564,7 +548,7 @@ actor OfflineChapterStore {
     /// Every job in queue order (oldest first).
     func jobs() async throws -> [DownloadJobRecord] {
         try await database.read { db in
-            try DownloadJobRecord.order(Column("createdAt"), Column("id")).fetchAll(db)
+            try DownloadJobRecord.order(DownloadJobRecord.queueOrder).fetchAll(db)
         }
     }
 
@@ -586,6 +570,47 @@ actor OfflineChapterStore {
     /// them. Leased bytes are reclaimed when the last lease is released.
     func delete(_ edition: OfflineChapterEdition) async throws {
         _ = try await perform(.delete(edition), through: .all)
+    }
+
+    /// Removes the rows and jobs of every listed edition in one transaction (D1), then each version's
+    /// bytes as `delete(_:)` does (D2, D3). With `suppress`, each removed copy also records that the
+    /// user deleted it, in the same transaction. Editions that have nothing stored are skipped.
+    @discardableResult
+    func delete(_ editions: [OfflineChapterEdition], suppress: Bool) async throws -> DownloadDeleteSummary {
+        try await runDelete(.editions(editions), suppress: suppress, through: .all)
+    }
+
+    /// `delete(_:suppress:)` for every copy and job of one series.
+    @discardableResult
+    func deleteMedia(_ media: MediaIdentity, suppress: Bool) async throws -> DownloadDeleteSummary {
+        try await runDelete(.media(media), suppress: suppress, through: .all)
+    }
+
+    /// D1 to D3 for a delete scope, stopping after `limit`. Production uses `.all`; crash tests stop
+    /// after a step and drop the store.
+    private func runDelete(
+        _ scope: OfflineDeleteScope,
+        suppress: Bool,
+        through limit: OfflineStepLimit
+    ) async throws -> DownloadDeleteSummary {
+        let now = clock()
+        let removed = try await database.write { db in
+            try Self.removeRows(scope, suppress: suppress, now: now, in: db)
+        }
+        let summary = DownloadDeleteSummary(removedCopies: removed.versionIds.count, removedJobs: removed.removedJobs)
+        if limit == .delete(.commitRow) { return summary }
+
+        for stagingVersionId in removed.stagingVersionIds {
+            liveAttemptVersions.remove(stagingVersionId)
+            try? fileSystem.removeItem(at: stagingDirectory(stagingVersionId))
+        }
+        let trashed = removed.versionIds.compactMap { detachToTrash($0) }
+        if limit == .delete(.detach) { return summary }
+
+        for url in trashed {
+            try? fileSystem.removeItem(at: url)
+        }
+        return summary
     }
 
     // MARK: - Publish
@@ -614,7 +639,10 @@ actor OfflineChapterStore {
             if limit == .publish(.stream) { return nil }
             return try await runPublish(attempt, commitGuard: commitGuard, through: limit)
         case .delete(let edition):
-            try await runDelete(edition, through: limit)
+            _ = try await runDelete(.editions([edition]), suppress: false, through: limit)
+            return nil
+        case .deleteScope(let scope, let suppress):
+            _ = try await runDelete(scope, suppress: suppress, through: limit)
             return nil
         }
     }
@@ -804,7 +832,7 @@ actor OfflineChapterStore {
             return try refusal(.jobGone, versionId: versionId, in: db)
         }
         if try DownloadedChapterRecord.filter(job.edition.predicate).fetchCount(db) > 0 {
-            _ = try DownloadJobRecord.deleteOne(db, key: jobID)
+            try Self.deleteJob(id: jobID, batchId: job.batchId, in: db)
             return try refusal(.alreadyVerified, versionId: versionId, in: db)
         }
         let currentEpoch = try PluginCompletionScope.current(pluginID: job.pluginId, in: db)
@@ -847,7 +875,7 @@ actor OfflineChapterStore {
             sourceEpoch: job.sourceEpoch,
             verifiedAt: now
         ).insert(db)
-        _ = try DownloadJobRecord.deleteOne(db, key: jobID)
+        try deleteJob(id: jobID, batchId: job.batchId, in: db)
         return OfflineCommitDecision(outcome: .published(versionId: versionId), versionIsReferenced: true)
     }
 
@@ -937,41 +965,7 @@ actor OfflineChapterStore {
         }
     }
 
-    // MARK: - Delete
-
-    nonisolated private struct RemovedEdition: Sendable {
-        let versionId: String?
-        let stagingVersionId: String?
-    }
-
-    private func runDelete(_ edition: OfflineChapterEdition, through limit: OfflineStepLimit) async throws {
-        let removed = try await database.write { db -> RemovedEdition in
-            let row = try DownloadedChapterRecord.filter(edition.predicate).fetchOne(db)
-            if row != nil {
-                try DownloadedChapterRecord.filter(edition.predicate).deleteAll(db)
-            }
-            let job = try DownloadJobRecord.filter(edition.predicate).fetchOne(db)
-            if job != nil {
-                try DownloadJobRecord.filter(edition.predicate).deleteAll(db)
-            }
-            return RemovedEdition(versionId: row?.versionId, stagingVersionId: job?.stagingVersionId)
-        }
-        if limit == .delete(.commitRow) { return }
-
-        if let stagingVersionId = removed.stagingVersionId {
-            liveAttemptVersions.remove(stagingVersionId)
-            try? fileSystem.removeItem(at: stagingDirectory(stagingVersionId))
-        }
-        var trashed: URL?
-        if let versionId = removed.versionId {
-            trashed = detachToTrash(versionId)
-        }
-        if limit == .delete(.detach) { return }
-
-        if let trashed {
-            try? fileSystem.removeItem(at: trashed)
-        }
-    }
+    // MARK: - Leases
 
     /// Runs after a lease is released, and at collection. Removes the version when nothing
     /// references it any more. Called by `OfflineChapterLease`.
@@ -1149,7 +1143,7 @@ actor OfflineChapterStore {
         }
         do {
             let manifest = try OfflineChapterManifest.decode(data)
-            try manifest.validate(edition: row.edition, versionId: row.versionId)
+            try manifest.validate(edition: row.manifestIdentity, versionId: row.versionId)
             return .valid(manifest)
         } catch {
             return .damaged(.manifestUnreadable)

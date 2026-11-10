@@ -15,7 +15,7 @@ extension ItoRunner: PluginImageRunner {}
 /// Intercepts requests that have custom schemes or special paths
 /// and routes them through the PluginManager to the appropriate Wasm module.
 public final class PluginDataLoader: DataLoading, @unchecked Sendable {
-    private let defaultLoader: DataLoader
+    private let defaultLoader: any DataLoading
     private let runnerProvider: @Sendable (String) async throws -> any PluginImageRunner
     private let runnerEvictor: (@Sendable (String, any PluginImageRunner) async -> Void)?
     private let imageTransport: PluginImageTransport
@@ -36,13 +36,16 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
         )
     }
 
+    /// - Parameter defaultLoader: loads every request that is not `ito://`, and the direct requests a plugin
+    ///   resolves to. Nil uses Nuke's loader over `configuration`.
     init(
         configuration: URLSessionConfiguration,
         trust: PluginTrustStore? = nil,
+        defaultLoader: (any DataLoading)? = nil,
         runnerProvider: @escaping @Sendable (String) async throws -> any PluginImageRunner,
         runnerEvictor: (@Sendable (String, any PluginImageRunner) async -> Void)? = nil
     ) {
-        self.defaultLoader = DataLoader(configuration: configuration)
+        self.defaultLoader = defaultLoader ?? DataLoader(configuration: configuration)
         self.runnerProvider = runnerProvider
         self.runnerEvictor = runnerEvictor
         self.imageTransport = PluginImageTransport(configuration: configuration, trust: trust)

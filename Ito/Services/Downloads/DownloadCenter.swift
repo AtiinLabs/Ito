@@ -75,7 +75,7 @@ final class DownloadCenter: ObservableObject {
         let observation = ValueObservation.tracking { db -> DownloadTableSnapshot in
             DownloadTableSnapshot(
                 copies: try DownloadedChapterRecord.fetchAll(db),
-                jobs: try DownloadJobRecord.order(Column("createdAt"), Column("id")).fetchAll(db)
+                jobs: try DownloadJobRecord.order(DownloadJobRecord.queueOrder).fetchAll(db)
             )
         }
         self.observation = observation.start(
@@ -123,6 +123,24 @@ final class DownloadCenter: ObservableObject {
         }
     }
 
+    /// Queues many chapters of one series as one frozen batch. The source's epoch is read once, here, and
+    /// frozen on every job of the batch. The outcome counts how each chapter was settled; a refusal means
+    /// the request as a whole was not queued.
+    func enqueueBatch(_ request: DownloadBatchRequest) async -> DownloadBatchOutcome {
+        guard let epoch = try? captureEpoch(request.pluginId) else {
+            return .refused(.unavailable)
+        }
+        do {
+            let outcome = try await store.enqueueBatch(request, sourceEpoch: epoch)
+            if outcome.queued > 0 {
+                coordinator.wake()
+            }
+            return outcome
+        } catch {
+            return .refused(.unavailable)
+        }
+    }
+
     /// Removes a chapter's queue entry and stops its attempt. A verified copy is kept. Throws when the
     /// queue could not be read or changed, so the caller can say the chapter is still queued.
     func cancel(_ edition: OfflineChapterEdition) async throws {
@@ -140,6 +158,29 @@ final class DownloadCenter: ObservableObject {
         coordinator.wake()
     }
 
+    /// Removes the queue entries with these ids in one transaction and stops the attempt among them. Copies
+    /// are kept. Ids that no longer exist are skipped. Throws when the queue could not be changed, so the
+    /// caller can say the chapters are still queued.
+    func cancel(jobIDs: [String]) async throws {
+        let removed = try await store.cancel(jobIDs: jobIDs)
+        for jobID in removed {
+            coordinator.cancelAttempt(jobID: jobID)
+        }
+    }
+
+    /// Queues the failed and waiting chapters among these jobs again, re-freezing each source's current
+    /// epoch, in one transaction. Throws, changing nothing, when a source's scope could not be read.
+    func retry(jobIDs: [String]) async throws {
+        let jobs = try await store.jobs(ids: jobIDs)
+        var epochs: [String: String] = [:]
+        for pluginId in Set(jobs.map(\.pluginId)) {
+            epochs[pluginId] = try captureEpoch(pluginId)
+        }
+        if try await store.retry(jobIDs: jobIDs, epochs: epochs) > 0 {
+            coordinator.wake()
+        }
+    }
+
     /// Removes a chapter's copy and queue entry, and stops its attempt. Bytes a reader still holds stay
     /// until that reader lets go. Throws when the copy could not be removed.
     func delete(_ edition: OfflineChapterEdition) async throws {
@@ -147,13 +188,49 @@ final class DownloadCenter: ObservableObject {
         coordinator.cancelAttempt(for: edition)
     }
 
+    /// Removes the copies and queue entries of these chapters in one transaction and stops their attempt.
+    /// With `suppress`, each removed copy is also recorded as deliberately deleted. Bytes a reader still
+    /// holds stay until that reader lets go. Throws when the copies could not be removed.
+    @discardableResult
+    func delete(_ editions: [OfflineChapterEdition], suppress: Bool) async throws -> DownloadDeleteSummary {
+        let summary = try await store.delete(editions, suppress: suppress)
+        for edition in editions {
+            coordinator.cancelAttempt(for: edition)
+        }
+        return summary
+    }
+
+    /// `delete(_:suppress:)` for every copy and queue entry of one series.
+    @discardableResult
+    func deleteMedia(_ media: MediaIdentity, suppress: Bool) async throws -> DownloadDeleteSummary {
+        let summary = try await store.deleteMedia(media, suppress: suppress)
+        coordinator.cancelAttempt(for: media)
+        return summary
+    }
+
     private func queuedJob(for edition: OfflineChapterEdition) async throws -> DownloadJobRecord? {
-        try await store.jobs().first { $0.edition == edition }
+        try await store.job(for: edition)
     }
 
     private func apply(_ current: DownloadTableSnapshot) {
         snapshot = current
+        // A running job the observation does not list was cancelled, deleted or moved away: stop its attempt
+        // now instead of at the next gate. The commit's job check still decides correctness.
+        if let runningID = coordinator.runningJobID, !current.jobs.contains(where: { $0.id == runningID }) {
+            Task { await self.cancelAttemptIfJobIsGone(runningID) }
+        }
         republish(progress: progress.progress)
+    }
+
+    /// An observed snapshot can predate a job that has just started running, so absence from it is
+    /// confirmed against the store first. A removed job never comes back under the same id.
+    private func cancelAttemptIfJobIsGone(_ jobID: String) async {
+        do {
+            guard try await store.job(id: jobID) == nil else { return }
+        } catch {
+            return
+        }
+        coordinator.cancelAttempt(jobID: jobID)
     }
 
     private func republish(progress current: [String: DownloadProgress]) {

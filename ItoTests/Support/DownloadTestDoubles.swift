@@ -12,6 +12,8 @@ actor DownloadTestGate {
     private var released = false
     private var arrivalWaiters: [CheckedContinuation<Void, Never>] = []
     private var releaseWaiters: [UUID: CheckedContinuation<Void, Error>] = [:]
+    private var cancelled = false
+    private var cancellationWaiters: [CheckedContinuation<Void, Never>] = []
 
     init(cancellationError: any Error = CancellationError()) {
         self.cancellationError = cancellationError
@@ -60,9 +62,28 @@ actor DownloadTestGate {
         }
     }
 
+    /// Returns once a waiter inside `pass()` has been cancelled. It never completes by being released, so
+    /// a test that expects a cancellation fails by time limit rather than by passing for the wrong reason.
+    func awaitCancellation() async {
+        if cancelled {
+            return
+        }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            cancellationWaiters.append(continuation)
+        }
+    }
+
+    /// Whether the gate was ever released.
+    var wasReleased: Bool { released }
+
     private func cancelWaiter(_ id: UUID) {
-        guard let waiter = releaseWaiters.removeValue(forKey: id) else { return }
-        waiter.resume(throwing: cancellationError)
+        cancelled = true
+        let observers = cancellationWaiters
+        cancellationWaiters = []
+        for observer in observers {
+            observer.resume()
+        }
+        releaseWaiters.removeValue(forKey: id)?.resume(throwing: cancellationError)
     }
 }
 

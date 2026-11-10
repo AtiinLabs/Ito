@@ -92,6 +92,8 @@ nonisolated struct DownloadedChapterRecord: Codable, Sendable, FetchableRecord, 
     /// Provenance only in Milestone 0.
     var sourceEpoch: String?
     var verifiedAt: Date
+    /// JSON `OfflineOriginIdentity`; nil while the row has the identity its manifest was written under.
+    var originIdentity: Data?
 
     var edition: OfflineChapterEdition {
         OfflineChapterEdition(
@@ -102,6 +104,31 @@ nonisolated struct DownloadedChapterRecord: Codable, Sendable, FetchableRecord, 
             authorityScope: authorityScope
         )
     }
+
+    /// The identity the immutable manifest was written under. It differs from `edition` only after the
+    /// row moved to another series (relink or source remap): the manifest keeps the identity it was
+    /// published with, and `originIdentity` names it. An origin that cannot be decoded is ignored, so
+    /// the manifest then has to match the row's own identity or the copy is marked damaged.
+    var manifestIdentity: OfflineChapterEdition {
+        guard let originIdentity,
+              let origin = try? JSONDecoder().decode(OfflineOriginIdentity.self, from: originIdentity) else {
+            return edition
+        }
+        return OfflineChapterEdition(
+            pluginId: origin.pluginId,
+            mediaKind: mediaKind,
+            canonicalMediaId: origin.canonicalMediaId,
+            chapterKey: chapterKey,
+            authorityScope: authorityScope
+        )
+    }
+}
+
+/// The series identity a copy was first published under, stored as JSON in
+/// `downloadedChapter.originIdentity`. The column is NULL while the row still has that identity.
+nonisolated struct OfflineOriginIdentity: Codable, Hashable, Sendable {
+    let pluginId: String
+    let canonicalMediaId: String
 }
 
 nonisolated enum DownloadJobState: String, Codable, CaseIterable, Sendable {
@@ -151,18 +178,26 @@ nonisolated enum DownloadFailureReason: String, Codable, CaseIterable, Equatable
     case fileSystem
 }
 
-/// One queued, waiting, downloading or failed chapter. Removed on commit, cancel or delete.
+/// One queued, waiting, downloading or failed chapter. Removed on commit, cancel or delete. The frozen
+/// series snapshot lives once on its `downloadBatch`, not on each job.
 nonisolated struct DownloadJobRecord: Codable, Sendable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "downloadJob"
 
+    /// Queue order: oldest batch first, then the batch's own reading order. `batchId` keeps two batches
+    /// created at the same instant from interleaving their jobs.
+    static var queueOrder: [any SQLOrderingTerm] {
+        [Column("createdAt"), Column("batchId"), Column("sequence"), Column("id")]
+    }
+
     var id: String
+    var batchId: String
+    /// Position inside the batch, in reading order.
+    var sequence: Int
     var pluginId: String
     var mediaKind: MediaKind
     var canonicalMediaId: String
     var chapterKey: String
     var authorityScope: OfflineAuthorityScope
-    /// JSON `MediaEntry` frozen at enqueue.
-    var entrySnapshot: Data
     /// JSON `Chapter` as the source returned it; `getChapterPages` input.
     var chapterSnapshot: Data
     var seriesTitle: String
@@ -194,6 +229,105 @@ nonisolated struct DownloadStoreRecord: Codable, Sendable, FetchableRecord, Pers
     var id = 1
     var storeId: String
     var createdAt: Date
+}
+
+/// What the user asked for when the batch was queued. `single` is one chapter chosen on its own.
+nonisolated enum DownloadBatchPreset: String, Codable, CaseIterable, Sendable {
+    case single
+    case next
+    case next5
+    case next10
+    case unread
+    case all
+}
+
+/// The frozen request behind one or more jobs: the series snapshot, the preset, the edition selection
+/// and the catalog digest the plan was made from. Written once at enqueue and never updated; it is
+/// removed in the transaction that removes its last job.
+nonisolated struct DownloadBatchRecord: Codable, Sendable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "downloadBatch"
+
+    /// The edition selection of a chapter queued on its own, and of every job queued before batches
+    /// existed: follow the source's list.
+    static let sourceListSelection = Data(#"{"formatVersion":1,"kind":"sourceList"}"#.utf8)
+
+    var id: String
+    var pluginId: String
+    var mediaKind: MediaKind
+    var canonicalMediaId: String
+    var preset: DownloadBatchPreset
+    /// `EditionSelection` JSON, version 1. The store keeps these bytes as given and never reads them.
+    var selection: Data
+    /// SHA-256 hex of the chapter list the plan was made from; nil when no plan was involved.
+    var catalogDigest: String?
+    /// JSON `MediaEntry` frozen at enqueue.
+    var entrySnapshot: Data
+    var createdAt: Date
+}
+
+/// A job together with the series snapshot of its batch: everything an attempt needs.
+nonisolated struct DownloadJobWork: Sendable {
+    let job: DownloadJobRecord
+    /// JSON `MediaEntry` frozen on the job's batch.
+    let entrySnapshot: Data
+}
+
+/// A chapter the user deleted on purpose. A later automatic download must not bring it back until the
+/// user downloads it again, which clears the record.
+nonisolated struct DownloadSuppressionRecord: Codable, Sendable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "downloadSuppression"
+
+    var pluginId: String
+    var mediaKind: MediaKind
+    var canonicalMediaId: String
+    var chapterKey: String
+    var authorityScope: OfflineAuthorityScope
+    var suppressedAt: Date
+}
+
+/// What a caller asks for when it queues several chapters of one series at once. `chapters` are the
+/// frozen source values in reading order; the store never fetches anything itself.
+nonisolated struct DownloadBatchRequest: Sendable {
+    let pluginId: String
+    let mediaKind: MediaKind
+    let canonicalMediaId: String
+    let entry: MediaEntry
+    let seriesTitle: String
+    let preset: DownloadBatchPreset
+    /// `EditionSelection` JSON, version 1, encoded by the caller. It must be a JSON object.
+    let selection: Data
+    /// SHA-256 hex digest (64 characters) of the chapter list the plan was made from, if any.
+    let catalogDigest: String?
+    let chapters: [Chapter]
+}
+
+/// How each requested chapter was settled. The counts add up to the number of chapters requested
+/// unless `refusal` is set, which refuses the whole request before any chapter is examined.
+nonisolated struct DownloadBatchOutcome: Equatable, Sendable {
+    /// Jobs inserted.
+    var queued = 0
+    /// Chapters that already have a verified copy.
+    var alreadySaved = 0
+    /// Chapters that already have a job, including a repeat inside the request.
+    var alreadyQueued = 0
+    /// Chapters marked locked by the source; they are never queued.
+    var refusedLocked = 0
+    /// Chapters whose stored copy is damaged: it has to be deleted before the chapter can be queued.
+    var blockedDamaged = 0
+    /// Set when the request as a whole was refused.
+    var refusal: DownloadRefusal?
+    /// The batch row, present only when at least one job was queued.
+    var batchId: String?
+
+    static func refused(_ refusal: DownloadRefusal) -> DownloadBatchOutcome {
+        DownloadBatchOutcome(refusal: refusal)
+    }
+}
+
+/// What a bulk delete removed.
+nonisolated struct DownloadDeleteSummary: Equatable, Sendable {
+    var removedCopies = 0
+    var removedJobs = 0
 }
 
 /// What a caller asks for when it queues a chapter. `chapter` and `entry` are the frozen source
