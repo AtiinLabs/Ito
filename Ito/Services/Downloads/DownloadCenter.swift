@@ -44,6 +44,8 @@ final class DownloadCenter: ObservableObject {
     @Published private(set) var states: [MediaIdentity: [String: ChapterDownloadState]] = [:]
     /// Volatile page progress keeps the persisted job identity, not merely its chapter edition.
     @Published private(set) var jobProgress: [String: DownloadProgress] = [:]
+    /// What the Library shows about downloads. It changes only when the tables do.
+    @Published private(set) var librarySummary = LibraryDownloadSummary.empty
 
     private let dbPool: DatabasePool
     private let store: OfflineChapterStore
@@ -221,6 +223,9 @@ final class DownloadCenter: ObservableObject {
         if let runningID = coordinator.runningJobID, !current.jobs.contains(where: { $0.id == runningID }) {
             Task { await self.cancelAttemptIfJobIsGone(runningID) }
         }
+        // Derived from the tables, not from `states`, which page progress republishes many times a second.
+        let summary = LibraryDownloadSummary(copies: current.copies, jobs: current.jobs)
+        if summary != librarySummary { librarySummary = summary }
         republish(progress: progress.progress)
     }
 

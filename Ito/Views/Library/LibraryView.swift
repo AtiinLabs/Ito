@@ -178,10 +178,26 @@ struct LibraryView: View {
             isPresented: removalConfirmationBinding,
             titleVisibility: .visible,
             presenting: viewModel.pendingRemoval
-        ) { item in
-            Button("Remove", role: .destructive) { viewModel.confirmRemoval(item) }
-        } message: { item in
-            Text("\(item.title) is also removed from your lists. Reading history and progress are kept.")
+        ) { request in
+            if request.hasDownloads {
+                Button("Remove from Library") {
+                    viewModel.confirmRemoval(request, includingDownloads: false)
+                }
+                Button(role: .destructive) {
+                    viewModel.confirmRemoval(request, includingDownloads: true)
+                } label: {
+                    Text(
+                        "Remove Library and Downloads",
+                        comment: "Removes the series from the Library and deletes its saved chapters and queued downloads"
+                    )
+                }
+            } else {
+                Button("Remove", role: .destructive) {
+                    viewModel.confirmRemoval(request, includingDownloads: false)
+                }
+            }
+        } message: { request in
+            Text(request.message)
         }
     }
 
@@ -264,6 +280,7 @@ struct LibraryView: View {
                 LibraryItemView(
                     item: item,
                     badgeCount: viewModel.badgeCount(for: item),
+                    savedCount: viewModel.savedCount(for: item),
                     isPluginInstalled: viewModel.isPluginInstalled(for: item),
                     isEditing: viewModel.isEditing,
                     destination: viewFactory.makeDeferredPluginView(item: item),
@@ -415,6 +432,7 @@ struct LibraryView: View {
                     LibraryItemView(
                         item: fakeItem,
                         badgeCount: 0,
+                        savedCount: 0,
                         isPluginInstalled: true,
                         isEditing: false,
                         destination: viewFactory.makeDeferredPluginView(item: fakeItem),
@@ -512,6 +530,8 @@ struct SectionHeaderView: View {
 struct LibraryItemView: View {
     let item: LibraryItem
     let badgeCount: Int
+    /// Verified saved chapters; the card shows nothing for zero.
+    let savedCount: Int
     let isPluginInstalled: Bool
     let isEditing: Bool
     let destination: DeferredPluginView
@@ -632,8 +652,32 @@ struct LibraryItemView: View {
             }
         }
         .aspectRatio(2 / 3, contentMode: .fit)
+        .overlay(alignment: .bottomLeading) {
+            if savedCount > 0 {
+                savedChip
+            }
+        }
         .cornerRadius(8)
         .clipped()
+    }
+
+    /// Verified saved chapters of the series. It is not shown for zero, so a damaged or queued copy never
+    /// reads as saved.
+    private var savedChip: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "arrow.down.circle.fill")
+            Text("\(savedCount) saved", comment: "Library card chip: how many chapters of the series are saved on this device. The count is the number of saved chapters.")
+        }
+        .font(.caption2.weight(.semibold))
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .foregroundColor(.white)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(Capsule().fill(Color.black.opacity(0.65)))
+        .padding(4)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("\(savedCount) chapters saved", comment: "Accessibility label of the Library card chip. The count is the number of saved chapters."))
     }
 
     @ViewBuilder

@@ -48,6 +48,82 @@ extension LibraryManager: LibraryRootServing {
     }
 }
 
+/// What the Library shows about downloads, read from the whole inventory and queue at once.
+nonisolated struct LibraryDownloadSummary: Equatable, Sendable {
+    /// Verified, readable editions per series. Damaged and queued chapters are not counted, and a series
+    /// with none is absent.
+    let savedCounts: [MediaIdentity: Int]
+    /// Every series that holds a copy of any state, or a queue entry. Removing such a series from the Library
+    /// leaves something behind to decide about.
+    let mediaWithDownloads: Set<MediaIdentity>
+
+    static let empty = Self(savedCounts: [:], mediaWithDownloads: [])
+
+    init(savedCounts: [MediaIdentity: Int], mediaWithDownloads: Set<MediaIdentity>) {
+        self.savedCounts = savedCounts
+        self.mediaWithDownloads = mediaWithDownloads
+    }
+
+    init(copies: [DownloadedChapterRecord], jobs: [DownloadJobRecord]) {
+        var counts: [MediaIdentity: Int] = [:]
+        var held: Set<MediaIdentity> = []
+        for copy in copies {
+            let media = MediaIdentity(pluginId: copy.pluginId, canonicalMediaId: copy.canonicalMediaId, mediaKind: copy.mediaKind)
+            held.insert(media)
+            if copy.state == .verified { counts[media, default: 0] += 1 }
+        }
+        for job in jobs {
+            held.insert(MediaIdentity(pluginId: job.pluginId, canonicalMediaId: job.canonicalMediaId, mediaKind: job.mediaKind))
+        }
+        self.init(savedCounts: counts, mediaWithDownloads: held)
+    }
+
+    func savedCount(for media: MediaIdentity) -> Int {
+        savedCounts[media] ?? 0
+    }
+}
+
+@MainActor
+protocol LibraryDownloadServing: AnyObject {
+    var downloadSummary: LibraryDownloadSummary { get }
+    var downloadSummaryPublisher: AnyPublisher<LibraryDownloadSummary, Never> { get }
+
+    /// Deletes every saved chapter and queue entry of one series and records the deletion as deliberate.
+    /// Throws when the downloads could not be deleted.
+    func deleteDownloads(of media: MediaIdentity) async throws
+}
+
+extension DownloadCenter: LibraryDownloadServing {
+    var downloadSummary: LibraryDownloadSummary { librarySummary }
+
+    var downloadSummaryPublisher: AnyPublisher<LibraryDownloadSummary, Never> {
+        $librarySummary.eraseToAnyPublisher()
+    }
+
+    func deleteDownloads(of media: MediaIdentity) async throws {
+        try await deleteMedia(media, suppress: true)
+    }
+}
+
+private enum UnavailableLibraryDownloadsError: Error {
+    case unavailable
+}
+
+/// Used when the offline store is unavailable: no counts, so no card shows one.
+@MainActor
+final class UnavailableLibraryDownloads: LibraryDownloadServing {
+    var downloadSummary: LibraryDownloadSummary { .empty }
+
+    var downloadSummaryPublisher: AnyPublisher<LibraryDownloadSummary, Never> {
+        Just(.empty).eraseToAnyPublisher()
+    }
+
+    func deleteDownloads(of media: MediaIdentity) async throws {
+        _ = media
+        throw UnavailableLibraryDownloadsError.unavailable
+    }
+}
+
 @MainActor
 protocol LibraryLayoutPersisting: AnyObject {
     var storedLibraryLayoutStyle: Int { get }
@@ -346,6 +422,8 @@ struct JSONDeferredPluginPayloadDecoder: DeferredPluginPayloadDecoding {
 enum LibraryMessage: Equatable {
     case layoutPersistenceFailed
     case itemRemovalFailed
+    /// The series left the Library, but its downloads could not be deleted.
+    case downloadsNotDeleted
     case updateFailed
     case noUpdateSources
 }
@@ -369,6 +447,8 @@ final class AppMessageLibraryPresenter: LibraryMessagePresenting {
             messageCenter.publish(.libraryLayoutPersistenceFailed)
         case .itemRemovalFailed:
             messageCenter.publish(.libraryItemRemovalFailed)
+        case .downloadsNotDeleted:
+            messageCenter.publish(.libraryDownloadsNotDeleted)
         case .updateFailed:
             messageCenter.publish(.libraryUpdateFailed)
         case .noUpdateSources:
@@ -391,6 +471,8 @@ struct PreparedLibraryDependencies {
     var connectivity: any ConnectivityServing = UnavailableConnectivity()
     /// No durable covers unless the composition root passes the live service.
     var coverThumbnails: any LibraryCoverThumbnailServing = UnavailableLibraryCoverThumbnails()
+    /// No saved-chapter counts, and nothing to delete, unless the composition root passes the live download center.
+    var downloads: any LibraryDownloadServing = UnavailableLibraryDownloads()
 
     static func production(
         libraryManager: LibraryManager,
@@ -401,7 +483,8 @@ struct PreparedLibraryDependencies {
         pluginManager: PluginManager,
         repoManager: RepoManager,
         connectivity: any ConnectivityServing = UnavailableConnectivity(),
-        coverThumbnails: any LibraryCoverThumbnailServing = UnavailableLibraryCoverThumbnails()
+        coverThumbnails: any LibraryCoverThumbnailServing = UnavailableLibraryCoverThumbnails(),
+        downloads: any LibraryDownloadServing = UnavailableLibraryDownloads()
     ) -> Self {
         Self(
             library: libraryManager,
@@ -413,7 +496,8 @@ struct PreparedLibraryDependencies {
             installer: repoManager,
             payloadDecoder: JSONDeferredPluginPayloadDecoder(),
             connectivity: connectivity,
-            coverThumbnails: coverThumbnails
+            coverThumbnails: coverThumbnails,
+            downloads: downloads
         )
     }
 

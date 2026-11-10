@@ -8,7 +8,11 @@
 
 "%@ already contains state for destination media \"%@\"." = "%1$@ already contains state for destination media \"%2$@\".";
 
+/* Confirm removing a series from the Library. The placeholder is the series title. */
 "%@ is also removed from your lists. Reading history and progress are kept." = "%@ is also removed from your lists. Reading history and progress are kept.";
+
+/* Confirm removing a series whose downloads are damaged or still queued. The dialog also has a Remove Library and Downloads button that deletes them, so the keeping is tied to the Remove from Library button. The placeholder is the series title. */
+"%@ is also removed from your lists. Reading history and progress are kept. Remove from Library keeps its downloads." = "%@ is also removed from your lists. Reading history and progress are kept. Remove from Library keeps its downloads.";
 
 "%@ is not a library state MangaBaka supports." = "%@ is not a library state MangaBaka supports.";
 
@@ -468,6 +472,9 @@ Storage settings offline downloads section */
 
 /* Downloads manager bulk Retry failure */
 "Downloads couldn't be retried. Check the list before trying again." = "Downloads couldn't be retried. Check the list before trying again.";
+
+/* Library: a series was removed from the Library, but its saved chapters could not be deleted. */
+"Downloads not deleted" = "Downloads not deleted";
 
 /* Downloads storage usage when free space could not be read */
 "Downloads use %@" = "Downloads use %@";
@@ -1219,6 +1226,9 @@ History: the page a chapter was left on */
 
 "Remove %@?" = "Remove %@?";
 
+/* Removes the series from the Library and deletes its saved chapters and queued downloads */
+"Remove Library and Downloads" = "Remove Library and Downloads";
+
 "Remove Plugin" = "Remove Plugin";
 
 "Remove Repository" = "Remove Repository";
@@ -1230,6 +1240,9 @@ History: the page a chapter was left on */
 "Remove from Library?" = "Remove from Library?";
 
 "Remove unavailable" = "Remove unavailable";
+
+/* Library: removal committed, then deleting the series' downloads failed. Never claims the removal was undone. */
+"Removed from Library. Its downloads couldn't be deleted; delete them in Downloads." = "Removed from Library. Its downloads couldn't be deleted; delete them in Downloads.";
 
 "Removes all cookies, cached website data and Cloudflare clearance. Sources that use a website login will need you to sign in again." = "Removes all cookies, cached website data and Cloudflare clearance. Sources that use a website login will need you to sign in again.";
 

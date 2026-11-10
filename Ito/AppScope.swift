@@ -214,7 +214,8 @@ struct PreparedApplicationDependencies {
                 pluginManager: pluginManager,
                 repoManager: repoManager,
                 connectivity: connectivity ?? UnavailableConnectivity(),
-                coverThumbnails: covers
+                coverThumbnails: covers,
+                downloads: downloads?.center ?? UnavailableLibraryDownloads()
             ),
             categoryHistory: .production(
                 libraryManager: libraryManager,

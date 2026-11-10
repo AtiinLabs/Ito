@@ -39,6 +39,8 @@ enum AppMessageKind: Equatable {
     case mediaDetailDownloadActionFailed
     case libraryLayoutPersistenceFailed
     case libraryItemRemovalFailed
+    /// The series left the Library, but its downloads are still stored.
+    case libraryDownloadsNotDeleted
     case libraryUpdateFailed
     case libraryNoUpdateSources
     case categoryCreateFailed
@@ -327,6 +329,18 @@ extension AppMessageKind {
                 style: .error,
                 title: String(localized: "Still in library"),
                 detail: String(localized: "The library item could not be removed. Please try again.")
+            )
+        case .libraryDownloadsNotDeleted:
+            return .init(
+                style: .error,
+                title: String(
+                    localized: "Downloads not deleted",
+                    comment: "Library: a series was removed from the Library, but its saved chapters could not be deleted."
+                ),
+                detail: String(
+                    localized: "Removed from Library. Its downloads couldn't be deleted; delete them in Downloads.",
+                    comment: "Library: removal committed, then deleting the series' downloads failed. Never claims the removal was undone."
+                )
             )
         case .libraryUpdateFailed:
             return .init(
