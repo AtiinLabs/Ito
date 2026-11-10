@@ -285,6 +285,50 @@ nonisolated struct DownloadSuppressionRecord: Codable, Sendable, FetchableRecord
     var suppressedAt: Date
 }
 
+nonisolated enum SeriesEditionPreferenceError: Error, Equatable {
+    /// A choice is stored, but its bytes are not a selection this build understands.
+    case unreadable
+}
+
+/// The scanlators a user chose to download for one series, when they asked to remember the choice.
+/// Installation-local, like the queue: it is not a backup component.
+nonisolated struct SeriesEditionPreferenceRecord: Codable, Sendable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "seriesEditionPreference"
+
+    var pluginId: String
+    var mediaKind: MediaKind
+    var canonicalMediaId: String
+    /// `EditionSelection` JSON, as `EditionSelection.storageData()` wrote it.
+    var selection: Data
+    var updatedAt: Date
+
+    /// The stored choice for a series, or nil when none was remembered. Throws `unreadable` when a choice is
+    /// stored but this build cannot read it: that is not "no choice", and it is never read as another one.
+    static func selection(for media: MediaIdentity, in db: Database) throws -> EditionSelection? {
+        let record = try SeriesEditionPreferenceRecord.fetchOne(
+            db,
+            key: ["pluginId": media.pluginId, "mediaKind": media.mediaKind.rawValue, "canonicalMediaId": media.canonicalMediaId]
+        )
+        guard let record else { return nil }
+        do {
+            return try JSONDecoder().decode(EditionSelection.self, from: record.selection)
+        } catch {
+            throw SeriesEditionPreferenceError.unreadable
+        }
+    }
+
+    /// Stores `selection` as the series' choice, replacing an earlier one.
+    static func save(_ selection: EditionSelection, for media: MediaIdentity, at date: Date, in db: Database) throws {
+        try SeriesEditionPreferenceRecord(
+            pluginId: media.pluginId,
+            mediaKind: media.mediaKind,
+            canonicalMediaId: media.canonicalMediaId,
+            selection: try selection.storageData(),
+            updatedAt: date
+        ).save(db)
+    }
+}
+
 /// What a caller asks for when it queues several chapters of one series at once. `chapters` are the
 /// frozen source values in reading order; the store never fetches anything itself.
 nonisolated struct DownloadBatchRequest: Sendable {

@@ -52,7 +52,8 @@ nonisolated public struct BackupExportOperation: Sendable {
         DownloadSuppressionRecord.databaseTableName,
         DownloadStoreRecord.databaseTableName,
         LibrarySnapshotStateRecord.databaseTableName,
-        LibraryCoverThumbnailRecord.databaseTableName
+        LibraryCoverThumbnailRecord.databaseTableName,
+        SeriesEditionPreferenceRecord.databaseTableName
     ]
 
     static let excludedTableReasons: [String: String] = [
@@ -93,7 +94,9 @@ nonisolated public struct BackupExportOperation: Sendable {
         LibrarySnapshotStateRecord.databaseTableName:
             "Installation-local freshness of saved series details; a restored payload has unknown age.",
         LibraryCoverThumbnailRecord.databaseTableName:
-            "Installation-local cover thumbnails regenerated from the saved cover address."
+            "Installation-local cover thumbnails regenerated from the saved cover address.",
+        SeriesEditionPreferenceRecord.databaseTableName:
+            "Installation-local scanlator choices for downloads; joins backups with automatic download rules."
     ]
 
     static let durableTablesByComponent: [BackupComponent: [String]] = [

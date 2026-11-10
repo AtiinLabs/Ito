@@ -594,28 +594,14 @@ final class DeferredPluginViewModel: ObservableObject {
     ) -> DeferredPluginDestination? {
         switch media {
         case .manga(var manga):
-            manga.chapters = mergedChapters(manga.chapters, inventory: inventory)
+            manga.chapters = SavedChapterMerge.merged(manga.chapters, inventory: inventory)
             return .manga(pluginID: pluginID, runner: nil, media: manga)
         case .novel(var novel):
-            novel.chapters = mergedChapters(novel.chapters, inventory: inventory)
+            novel.chapters = SavedChapterMerge.merged(novel.chapters, inventory: inventory)
             return .novel(pluginID: pluginID, runner: nil, media: novel)
         case .anime:
             return nil
         }
-    }
-
-    /// The payload's chapters, then the downloaded chapters whose key the payload does not list. Chapters
-    /// are matched by key only, never by number or scanlator.
-    private static func mergedChapters(_ payload: [Chapter]?, inventory: [DownloadedChapterRecord]) -> [Chapter]? {
-        let listedKeys = Set((payload ?? []).map(\.key))
-        let inventoryOnly = inventory.compactMap { row -> Chapter? in
-            guard !listedKeys.contains(row.chapterKey),
-                  let chapter = try? JSONDecoder().decode(Chapter.self, from: row.chapterSnapshot),
-                  chapter.key == row.chapterKey else { return nil }
-            return chapter
-        }
-        guard !inventoryOnly.isEmpty else { return payload }
-        return (payload ?? []) + inventoryOnly
     }
 
     private func beginNewGeneration() {

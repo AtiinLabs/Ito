@@ -26,12 +26,28 @@
     "one": "%lld Hour",
     "other": "%lld Hours"
   },
+  "%lld already queued": {
+    "description": "Download preview: how many chapters in range are already queued. The placeholder is a number, which needs plural forms.",
+    "one": "%lld already queued",
+    "other": "%lld already queued"
+  },
+  "%lld already saved": {
+    "description": "Download preview: how many chapters in range are already saved on this device. The placeholder is a number, which needs plural forms.",
+    "one": "%lld already saved",
+    "other": "%lld already saved"
+  },
+  "%lld already saved or queued": {
+    "description": "Series details: how many chapters of a download preset's range were already saved or queued. The placeholder is a number, which needs plural forms.",
+    "one": "%lld already saved or queued",
+    "other": "%lld already saved or queued"
+  },
   "%lld chapters": {
+    "description": "Scanlator choice: how many chapters of the series this scanlator has. The placeholder is a number, which needs plural forms.",
     "one": "%lld chapter",
     "other": "%lld chapters"
   },
   "%lld chapters saved": {
-    "description": "Accessibility label of the Library card chip. The count is the number of saved chapters.",
+    "description": "Accessibility label for a count of chapters saved on this device, on a Library card and in a series' details header. The placeholder is the number of saved chapters.",
     "one": "%lld chapter saved",
     "other": "%lld chapters saved"
   },
@@ -41,13 +57,23 @@
     "other": "%1$lld chapters · %2$@"
   },
   "%lld damaged": {
-    "description": "Downloads manager damaged edition count",
+    "description": "Downloads manager damaged edition count\nSeries details: how many saved chapters of the series failed verification and need deleting. The placeholder is a number, which needs plural forms.",
     "one": "%lld damaged",
     "other": "%lld damaged"
   },
   "%lld episodes": {
     "one": "%lld episode",
     "other": "%lld episodes"
+  },
+  "%lld failed": {
+    "description": "Series details: how many chapters of the series failed to download. The placeholder is a number, which needs plural forms.",
+    "one": "%lld failed",
+    "other": "%lld failed"
+  },
+  "%lld failed · retry from the chapter menu": {
+    "description": "Download preview: how many chapters in range have a failed download, which is not queued again. The placeholder is a number, which needs plural forms. Retry is in each chapter's menu.",
+    "one": "%lld failed · retry from the chapter menu",
+    "other": "%lld failed · retry from the chapter menu"
   },
   "%lld history entries": {
     "one": "%lld history entry",
@@ -65,6 +91,11 @@
     "one": "%lld item imported",
     "other": "%lld items imported"
   },
+  "%lld marked read, skipped": {
+    "description": "Download preview: how many chapters in range are marked read and so are not downloaded. The placeholder is a number, which needs plural forms.",
+    "one": "%lld marked read, skipped",
+    "other": "%lld marked read, skipped"
+  },
   "%lld packages": {
     "one": "%lld package",
     "other": "%lld packages"
@@ -77,8 +108,13 @@
     "one": "%lld percent",
     "other": "%lld percent"
   },
+  "%lld queued": {
+    "description": "Series details: how many chapters of the series are queued or downloading. The placeholder is a number, which needs plural forms.",
+    "one": "%lld queued",
+    "other": "%lld queued"
+  },
   "%lld saved": {
-    "description": "Library card chip: how many chapters of the series are saved on this device. The count is the number of saved chapters.",
+    "description": "Library card chip: how many chapters of the series are saved on this device. The count is the number of saved chapters.\nSeries details: how many chapters of the series are saved on this device. The placeholder is a number, which needs plural forms.",
     "one": "%lld saved",
     "other": "%lld saved"
   },
@@ -104,6 +140,11 @@
     "one": "Deleted downloads for %1$lld series. Deletion couldn't be completed for: %2$@. Check the list; some downloads may already have been removed.",
     "other": "Deleted downloads for %1$lld series. Deletion couldn't be completed for: %2$@. Check the list; some downloads may already have been removed."
   },
+  "Download %lld Chapters": {
+    "description": "Button on the download preview: queue the listed chapters. The placeholder is the number of chapters, which needs plural forms.",
+    "one": "Download %lld Chapter",
+    "other": "Download %lld Chapters"
+  },
   "Downloads couldn't be fully deleted for %lld series. Other deletions were kept. Review the remaining downloads in Manage Downloads.": {
     "description": "Storage settings reports partial download deletion, never rollback",
     "one": "Downloads couldn't be fully deleted for %lld series. Other deletions were kept. Review the remaining downloads in Manage Downloads.",
@@ -113,6 +154,11 @@
     "one": "Failed to refresh %lld repository.",
     "other": "Failed to refresh %lld repositories."
   },
+  "Queued %lld chapters": {
+    "description": "Series details: a download preset queued chapters. The placeholder is the number of chapters, which needs plural forms.",
+    "one": "Queued %lld chapter",
+    "other": "Queued %lld chapters"
+  },
   "Saved chapters of %lld series are deleted, and their queued downloads are cancelled.": {
     "description": "Confirm deleting selected downloaded series. The count is the number of selected series; deletion also cancels their queued downloads.",
     "one": "Saved chapters of %lld series are deleted, and their queued downloads are cancelled.",
@@ -121,5 +167,10 @@
   "Score: %lld percent": {
     "one": "Score: %lld percent",
     "other": "Score: %lld percent"
+  },
+  "To download · %lld": {
+    "description": "Download preview section: the chapters that will be queued. The placeholder is their number.",
+    "one": "To download · %lld",
+    "other": "To download · %lld"
   }
 }

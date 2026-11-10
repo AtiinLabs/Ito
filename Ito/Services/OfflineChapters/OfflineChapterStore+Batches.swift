@@ -316,6 +316,16 @@ extension OfflineChapterStore {
         let totalBytes: Int64
     }
 
+    /// The bytes one series' stored copies occupy, damaged copies included.
+    func inventoryByteCount(for media: MediaIdentity) async throws -> Int64 {
+        try await database.read { db in
+            try Int64.fetchOne(db, sql: """
+                SELECT COALESCE(SUM(byteCount), 0) FROM downloadedChapter
+                WHERE pluginId = ? AND mediaKind = ? AND canonicalMediaId = ?
+                """, arguments: [media.pluginId, media.mediaKind.rawValue, media.canonicalMediaId]) ?? 0
+        }
+    }
+
     /// Inventory totals include damaged copies: they still occupy storage until explicitly deleted.
     func inventorySummary() async throws -> [OfflineInventorySummary] {
         try await database.read { db in

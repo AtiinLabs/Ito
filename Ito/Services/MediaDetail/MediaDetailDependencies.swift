@@ -45,6 +45,8 @@ protocol MediaDetailLibraryServing: AnyObject {
     ) async throws -> LibrarySnapshotReplaceOutcome
     /// When the saved details were last refreshed; nil when unknown.
     func snapshotRefreshDate(for media: MediaIdentity) async throws -> Date?
+    /// What the saved details say about the series' catalog, for the entire-series claim; nil when unknown.
+    func snapshotBasis(for media: MediaIdentity) async throws -> LibrarySnapshotBasis?
     func refresh() async throws
 }
 
@@ -308,12 +310,25 @@ enum MediaDetailMessage: Equatable {
     case chapterUnavailable(isEpisode: Bool)
     /// History asked for a chapter that is now locked.
     case chapterLocked(isEpisode: Bool)
-    /// A saved-only series was opened for a chapter that has no offline copy.
+    /// A chapter was opened that has no offline copy and cannot be loaded: a saved-only series, or a device
+    /// with no network.
     case chapterNotDownloaded
     /// The chapter cannot be downloaded: it is locked, or its kind or source cannot be stored.
     case downloadRefused
     /// A Download, Cancel, Retry or Delete did not reach the store.
     case downloadActionFailed
+    /// A preset queued chapters. `alreadyStored` counts the chapters of its range that were saved or queued.
+    case downloadsQueued(queued: Int, alreadyStored: Int)
+    /// A preset found nothing new to queue.
+    case nothingToDownload
+    /// The scanlator choice could not be remembered for the series; it applies to this download only.
+    case editionChoiceNotRemembered
+    /// The scanlator choice made on its own could not be saved.
+    case editionChoiceNotSaved
+    /// The choice stored for the series cannot be read by this build; the download is reviewed first.
+    case editionChoiceUnreadable
+    /// Reading the stored choice failed this time. `reviewing` says the download goes on to a preview.
+    case editionChoiceReadFailed(reviewing: Bool)
 }
 
 @MainActor
@@ -350,6 +365,18 @@ final class AppMessageMediaDetailPresenter: MediaDetailMessagePresenting {
             messageCenter.publish(.mediaDetailDownloadRefused)
         case .downloadActionFailed:
             messageCenter.publish(.mediaDetailDownloadActionFailed)
+        case .downloadsQueued(let queued, let alreadyStored):
+            messageCenter.publish(.mediaDetailDownloadsQueued(queued: queued, alreadyStored: alreadyStored))
+        case .nothingToDownload:
+            messageCenter.publish(.mediaDetailNothingToDownload)
+        case .editionChoiceNotRemembered:
+            messageCenter.publish(.mediaDetailEditionChoiceNotRemembered)
+        case .editionChoiceNotSaved:
+            messageCenter.publish(.mediaDetailEditionChoiceNotSaved)
+        case .editionChoiceUnreadable:
+            messageCenter.publish(.mediaDetailEditionChoiceUnreadable)
+        case .editionChoiceReadFailed(let reviewing):
+            messageCenter.publish(.mediaDetailEditionChoiceReadFailed(reviewing: reviewing))
         }
     }
 

@@ -37,6 +37,13 @@ enum AppMessageKind: Equatable {
     case mediaDetailChapterNotDownloaded
     case mediaDetailDownloadRefused
     case mediaDetailDownloadActionFailed
+    /// A download preset queued chapters; `alreadyStored` of its range were saved or queued before.
+    case mediaDetailDownloadsQueued(queued: Int, alreadyStored: Int)
+    case mediaDetailNothingToDownload
+    case mediaDetailEditionChoiceNotRemembered
+    case mediaDetailEditionChoiceNotSaved
+    case mediaDetailEditionChoiceUnreadable
+    case mediaDetailEditionChoiceReadFailed(reviewing: Bool)
     case libraryLayoutPersistenceFailed
     case libraryItemRemovalFailed
     /// The series left the Library, but its downloads are still stored.
@@ -293,7 +300,7 @@ extension AppMessageKind {
                 style: .info,
                 title: String(
                     localized: "This chapter isn't downloaded.",
-                    comment: "Shown when a chapter has no offline copy and no installed source can load it. Used as the reader's load-failure text and as a notice on the series details screen."
+                    comment: "Shown when a chapter has no offline copy and cannot be loaded: no installed source can load it, or the device is offline. Used as the reader's load-failure text and as a notice on the series details screen."
                 ),
                 detail: nil
             )
@@ -317,6 +324,82 @@ extension AppMessageKind {
                     localized: "The download could not be changed. Please try again.",
                     comment: "Series details: detail for a download action that did not take effect."
                 )
+            )
+        case .mediaDetailDownloadsQueued(let queued, let alreadyStored):
+            return .init(
+                style: .success,
+                title: String(
+                    localized: "Queued \(queued) chapters",
+                    comment: "Series details: a download preset queued chapters. The placeholder is the number of chapters, which needs plural forms."
+                ),
+                detail: alreadyStored > 0
+                    ? String(
+                        localized: "\(alreadyStored) already saved or queued",
+                        comment: "Series details: how many chapters of a download preset's range were already saved or queued. The placeholder is a number, which needs plural forms."
+                    )
+                    : nil
+            )
+        case .mediaDetailNothingToDownload:
+            return .init(
+                style: .info,
+                title: String(
+                    localized: "Nothing new to download",
+                    comment: "Series details: a download preset found every chapter in its range already saved or queued, or none to download."
+                ),
+                detail: nil
+            )
+        case .mediaDetailEditionChoiceNotRemembered:
+            return .init(
+                style: .error,
+                title: String(
+                    localized: "Scanlator choice not remembered",
+                    comment: "Series details: the chosen scanlators could not be remembered for this series."
+                ),
+                detail: String(
+                    localized: "It applies to this download only.",
+                    comment: "Series details: detail when the chosen scanlators could not be remembered for the series, so the choice applies to the current download only."
+                )
+            )
+        case .mediaDetailEditionChoiceNotSaved:
+            return .init(
+                style: .error,
+                title: String(
+                    localized: "Scanlator choice not saved",
+                    comment: "Series details: the scanlators chosen for this series could not be saved."
+                ),
+                detail: String(
+                    localized: "Your choice couldn't be stored. Please try again.",
+                    comment: "Series details: detail when the scanlators chosen for this series could not be saved."
+                )
+            )
+        case .mediaDetailEditionChoiceUnreadable:
+            return .init(
+                style: .error,
+                title: String(
+                    localized: "Saved scanlator choice unavailable",
+                    comment: "Series details: the scanlators remembered for this series could not be read."
+                ),
+                detail: String(
+                    localized: "Review this download before it starts.",
+                    comment: "Series details: detail when the scanlators remembered for this series cannot be read, so the download is shown for review instead of being queued."
+                )
+            )
+        case .mediaDetailEditionChoiceReadFailed(let reviewing):
+            return .init(
+                style: .error,
+                title: String(
+                    localized: "Couldn't read the saved scanlator choice",
+                    comment: "Series details: reading the scanlators remembered for this series failed this time. The choice itself may be fine."
+                ),
+                detail: reviewing
+                    ? String(
+                        localized: "Review this download before it starts.",
+                        comment: "Series details: detail when the scanlators remembered for this series cannot be read, so the download is shown for review instead of being queued."
+                    )
+                    : String(
+                        localized: "Please try again.",
+                        comment: "Series details: detail when the remembered scanlators could not be read and nothing was changed."
+                    )
             )
         case .libraryLayoutPersistenceFailed:
             return .init(

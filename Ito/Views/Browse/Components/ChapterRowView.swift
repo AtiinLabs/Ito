@@ -9,6 +9,8 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
     let marksText: Bool
     /// The chapter's download state. Nil shows nothing, as for a chapter that was never downloaded.
     let downloadState: ChapterDownloadState?
+    /// A saved edition the source's current list does not have: it stays readable from this device.
+    let isSavedOnly: Bool
 
     @State private var isPressed = false
 
@@ -21,12 +23,14 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
         isRead: Bool,
         marksText: Bool = false,
         downloadState: ChapterDownloadState?,
+        isSavedOnly: Bool = false,
         onTap: @escaping () -> Void
     ) {
         self.chapter = chapter
         self.isRead = isRead
         self.marksText = marksText
         self.downloadState = downloadState
+        self.isSavedOnly = isSavedOnly
         self.onTap = onTap
     }
 
@@ -36,6 +40,14 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
                 VStack(alignment: .leading, spacing: 3) {
                     chapterTitle
                     chapterSubtitle
+                    if isSavedOnly {
+                        Text(
+                            "Saved only · not in current list",
+                            comment: "Caption on a chapter row: this saved copy is not in the source's current chapter list, but it can still be read from this device."
+                        )
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 trailingIcon

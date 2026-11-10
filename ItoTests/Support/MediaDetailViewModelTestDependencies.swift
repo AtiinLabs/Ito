@@ -185,6 +185,15 @@ final class MediaDetailLibraryFake: MediaDetailLibraryServing {
         return refreshDate
     }
 
+    /// What `snapshotBasis(for:)` returns; nil means no refresh was ever recorded.
+    var snapshotBasis: LibrarySnapshotBasis?
+    private(set) var snapshotBasisRequests: [MediaIdentity] = []
+
+    func snapshotBasis(for media: MediaIdentity) async throws -> LibrarySnapshotBasis? {
+        snapshotBasisRequests.append(media)
+        return snapshotBasis
+    }
+
     func unsave(media: MediaIdentity) async throws {
         unsaveRequests.append(media)
         if let unsaveError { throw unsaveError }
@@ -480,6 +489,8 @@ final class MediaDetailMessageSpy: MediaDetailMessagePresenting {
     private(set) var messages: [MediaDetailMessage] = []
     private(set) var savedItemIDs: [String] = []
     func present(_ message: MediaDetailMessage) { messages.append(message) }
+    /// Forgets what was presented, so a test can look at what a later step says.
+    func clear() { messages.removeAll() }
     func presentSaved(itemID: String) {
         savedItemIDs.append(itemID)
     }

@@ -20,6 +20,17 @@ protocol MediaDetailDownloadServing: AnyObject {
     func cancel(_ edition: OfflineChapterEdition) async throws
     func retry(_ edition: OfflineChapterEdition) async throws
     func delete(_ edition: OfflineChapterEdition) async throws
+    /// Queues many chapters of this series as one frozen batch. A refusal means nothing was queued.
+    func enqueueBatch(_ request: DownloadBatchRequest) async -> DownloadBatchOutcome
+    /// The scanlators the user asked to remember for a series; nil when none were. Throws when a stored choice
+    /// could not be read, which is not the same as having none.
+    func editionPreference(for media: MediaIdentity) async throws -> EditionSelection?
+    /// Remembers the scanlators chosen for a series. Throws when the choice could not be written.
+    func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity) async throws
+    /// The free space where downloads are stored; nil when it cannot be read.
+    func availableCapacity() async -> Int64?
+    /// The bytes this series' stored copies occupy; nil when they cannot be read.
+    func storedByteCount(for media: MediaIdentity) async -> Int64?
 }
 
 extension DownloadCenter: MediaDetailDownloadServing {
@@ -85,6 +96,26 @@ final class UnavailableMediaDetailDownloads: MediaDetailDownloadServing {
 
     func delete(_ edition: OfflineChapterEdition) async throws {
         throw Unavailable.noOfflineStore
+    }
+
+    func enqueueBatch(_ request: DownloadBatchRequest) async -> DownloadBatchOutcome {
+        .refused(.unavailable)
+    }
+
+    func editionPreference(for media: MediaIdentity) async throws -> EditionSelection? {
+        nil
+    }
+
+    func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity) async throws {
+        throw Unavailable.noOfflineStore
+    }
+
+    func availableCapacity() async -> Int64? {
+        nil
+    }
+
+    func storedByteCount(for media: MediaIdentity) async -> Int64? {
+        nil
     }
 }
 

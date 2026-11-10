@@ -212,6 +212,29 @@ final class DownloadCenter: ObservableObject {
         return summary
     }
 
+    /// The scanlators the user asked to remember for a series; nil when none were. Throws when the stored
+    /// choice could not be read, which is not the same as having none.
+    func editionPreference(for media: MediaIdentity) async throws -> EditionSelection? {
+        try await dbPool.read { db in try SeriesEditionPreferenceRecord.selection(for: media, in: db) }
+    }
+
+    /// Remembers the scanlators chosen for a series, replacing an earlier choice. Throws when it could not
+    /// be written.
+    func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity) async throws {
+        let now = Date()
+        try await dbPool.write { db in try SeriesEditionPreferenceRecord.save(selection, for: media, at: now, in: db) }
+    }
+
+    /// The free space where downloads are stored; nil when it cannot be read.
+    func availableCapacity() async -> Int64? {
+        try? await store.availableDownloadCapacity()
+    }
+
+    /// The bytes one series' stored copies occupy, damaged copies included; nil when they cannot be read.
+    func storedByteCount(for media: MediaIdentity) async -> Int64? {
+        try? await store.inventoryByteCount(for: media)
+    }
+
     private func queuedJob(for edition: OfflineChapterEdition) async throws -> DownloadJobRecord? {
         try await store.job(for: edition)
     }

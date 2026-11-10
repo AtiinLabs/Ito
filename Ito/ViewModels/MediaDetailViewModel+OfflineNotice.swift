@@ -40,6 +40,7 @@ extension MediaDetailViewModel {
         snapshotDateTask?.cancel()
         snapshotDateTask = nil
         snapshotRefreshedAt = refreshedAt
+        downloadBatch.loadCoverageBasis()
     }
 
 #if DEBUG

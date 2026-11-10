@@ -677,7 +677,7 @@ struct LibraryItemView: View {
         .background(Capsule().fill(Color.black.opacity(0.65)))
         .padding(4)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("\(savedCount) chapters saved", comment: "Accessibility label of the Library card chip. The count is the number of saved chapters."))
+        .accessibilityLabel(Text("\(savedCount) chapters saved", comment: "Accessibility label for a count of chapters saved on this device, on a Library card and in a series' details header. The placeholder is the number of saved chapters."))
     }
 
     @ViewBuilder
