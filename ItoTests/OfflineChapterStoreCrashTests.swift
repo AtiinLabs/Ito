@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import ito_runner
 import Testing
 @testable import Ito
 
@@ -204,6 +205,66 @@ struct OfflineChapterStoreCrashTests {
         #expect(try await restarted.verifiedEdition(for: OfflineStoreFixture.mangaEdition) == nil)
         #expect(try await restarted.jobs().isEmpty)
         #expect(fixture.fileSystem.childNames(of: fixture.versionsURL).isEmpty)
+        #expect(fixture.fileSystem.childNames(of: fixture.trashURL).isEmpty)
+        try await fixture.assertInvariants(restarted)
+    }
+
+    /// Two copies and two queued jobs, one of them mid-attempt with a staging directory, all deleted in one
+    /// transaction and then the process dies after `step`.
+    @Test(arguments: OfflineDeleteStep.allCases)
+    func crashAfterEachBulkDeleteStepLeavesNoRowNoJobNoBatchAndNoBytes(step: OfflineDeleteStep) async throws {
+        let fixture = try OfflineStoreFixture()
+        let crashed = fixture.makeStore()
+        _ = try await fixture.publishedEdition(crashed, chapterKey: "a")
+        _ = try await fixture.publishedEdition(crashed, chapterKey: "b")
+        let queued = try await fixture.enqueueBatch(crashed, chapterKeys: ["q1", "q2"])
+        let attempt = try await crashed.beginAttempt(jobID: queued[0])
+        try await attempt.append(OfflineStoreFixture.imagePage(0))
+        let editions = ["a", "b", "q1", "q2"].map {
+            OfflineChapterEdition(pluginId: "plugin.test", mediaKind: .manga, canonicalMediaId: "series-1", chapterKey: $0)
+        }
+
+        _ = try await crashed.perform(.deleteScope(.editions(editions), suppress: true), through: .delete(step))
+
+        try await Self.assertBulkDeleteSettled(fixture, step: step)
+    }
+
+    @Test(arguments: OfflineDeleteStep.allCases)
+    func crashAfterEachSeriesDeleteStepLeavesNoRowNoJobNoBatchAndNoBytes(step: OfflineDeleteStep) async throws {
+        let fixture = try OfflineStoreFixture()
+        let crashed = fixture.makeStore()
+        _ = try await fixture.publishedEdition(crashed, chapterKey: "a")
+        _ = try await fixture.publishedEdition(crashed, chapterKey: "b")
+        let queued = try await fixture.enqueueBatch(crashed, chapterKeys: ["q1", "q2"])
+        let attempt = try await crashed.beginAttempt(jobID: queued[0])
+        try await attempt.append(OfflineStoreFixture.imagePage(0))
+        let series = MediaIdentity(pluginId: "plugin.test", canonicalMediaId: "series-1", mediaKind: .manga)
+
+        _ = try await crashed.perform(.deleteScope(.media(series), suppress: true), through: .delete(step))
+
+        try await Self.assertBulkDeleteSettled(fixture, step: step)
+    }
+
+    /// After the crash, the first transaction's effects are all in or all out: here all in. The next launch
+    /// removes every version, staging directory and trash item the dead process left behind.
+    private static func assertBulkDeleteSettled(_ fixture: OfflineStoreFixture, step: OfflineDeleteStep) async throws {
+        let restarted = fixture.makeStore()
+        let report = await restarted.reconcile()
+        guard case .completed = report else {
+            Issue.record("Reconciliation after \(step) did not complete: \(report)")
+            return
+        }
+
+        #expect(try await fixture.rowCount("downloadedChapter") == 0)
+        #expect(try await restarted.jobs().isEmpty)
+        #expect(try await fixture.rowCount("downloadBatch") == 0)
+        // The suppression was committed with the rows, so it survives the crash: copies only, never jobs.
+        let suppressed = try await fixture.database.dbPool.read { db in
+            try DownloadSuppressionRecord.fetchAll(db).map(\.chapterKey).sorted()
+        }
+        #expect(suppressed == ["a", "b"])
+        #expect(fixture.fileSystem.childNames(of: fixture.versionsURL).isEmpty)
+        #expect(fixture.fileSystem.childNames(of: fixture.stagingURL).isEmpty)
         #expect(fixture.fileSystem.childNames(of: fixture.trashURL).isEmpty)
         try await fixture.assertInvariants(restarted)
     }

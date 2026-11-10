@@ -205,6 +205,11 @@ final class DownloadQueueCoordinator {
         }
     }
 
+    /// The job the attempt in flight belongs to, if any.
+    var runningJobID: String? {
+        running?.jobID
+    }
+
     /// Stops the attempt for a job the caller has just removed from the queue.
     func cancelAttempt(jobID: String) {
         guard running?.jobID == jobID else { return }
@@ -214,6 +219,15 @@ final class DownloadQueueCoordinator {
     /// Stops the attempt for an edition the caller has just deleted.
     func cancelAttempt(for edition: OfflineChapterEdition) {
         guard running?.edition == edition else { return }
+        running?.cancel(nil)
+    }
+
+    /// Stops the attempt for a series whose copies and jobs the caller has just deleted.
+    func cancelAttempt(for media: MediaIdentity) {
+        guard let edition = running?.edition,
+              edition.pluginId == media.pluginId,
+              edition.mediaKind == media.mediaKind,
+              edition.canonicalMediaId == media.canonicalMediaId else { return }
         running?.cancel(nil)
     }
 
@@ -248,8 +262,8 @@ final class DownloadQueueCoordinator {
         guard reconciled else { return }
         await readmitClearedWaits()
         while isCurrent(generation) {
-            guard let job = await nextQueuedJob() else { return }
-            guard await runOne(job, generation: generation) == .proceeded else { return }
+            guard let work = await nextQueuedJob() else { return }
+            guard await runOne(work, generation: generation) == .proceeded else { return }
         }
     }
 
@@ -269,15 +283,15 @@ final class DownloadQueueCoordinator {
         try? await store.readmitWaiting(cleared)
     }
 
-    private func nextQueuedJob() async -> DownloadJobRecord? {
-        guard let jobs = try? await store.jobs() else { return nil }
-        return jobs.first { $0.state == .queued }
+    private func nextQueuedJob() async -> DownloadJobWork? {
+        try? await store.nextQueuedJob()
     }
 
     /// Runs the checks that come before network work, in order, and then one attempt. The first failing
     /// check records its reason on the job and starts no network request. The attempt is registered before
     /// the first await, so a suspension or cancel during setup is honoured at the next step.
-    private func runOne(_ job: DownloadJobRecord, generation: Int) async -> Step {
+    private func runOne(_ work: DownloadJobWork, generation: Int) async -> Step {
+        let job = work.job
         guard isCurrent(generation) else { return .blocked }
         let current = RunningAttempt(jobID: job.id, edition: job.edition)
         running = current
@@ -335,7 +349,7 @@ final class DownloadQueueCoordinator {
 
         let board = progress
         let attempt = DownloadAttempt(
-            job: job,
+            work: work,
             staging: staging,
             store: store,
             runtime: runtime,

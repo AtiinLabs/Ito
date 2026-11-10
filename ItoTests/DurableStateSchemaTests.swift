@@ -105,19 +105,34 @@ struct DurableStateSchemaTests {
                 columns: [
                     "pluginId", "mediaKind", "canonicalMediaId", "chapterKey", "authorityScope", "versionId",
                     "state", "damageReason", "contentKind", "pageCount", "byteCount", "manifestFormatVersion",
-                    "manifestSHA256", "chapterSnapshot", "seriesTitle", "sourceEpoch", "verifiedAt"
+                    "manifestSHA256", "chapterSnapshot", "seriesTitle", "sourceEpoch", "verifiedAt", "originIdentity"
                 ],
                 primaryKey: ["pluginId", "mediaKind", "canonicalMediaId", "chapterKey", "authorityScope"],
-                nullable: ["damageReason", "sourceEpoch"]
+                nullable: ["damageReason", "sourceEpoch", "originIdentity"]
             ),
             "downloadJob": .init(
                 columns: [
-                    "id", "pluginId", "mediaKind", "canonicalMediaId", "chapterKey", "authorityScope",
-                    "entrySnapshot", "chapterSnapshot", "seriesTitle", "sourceEpoch", "state", "waitingReason",
+                    "id", "batchId", "sequence", "pluginId", "mediaKind", "canonicalMediaId", "chapterKey",
+                    "authorityScope", "chapterSnapshot", "seriesTitle", "sourceEpoch", "state", "waitingReason",
                     "failureReason", "stagingVersionId", "attemptCount", "createdAt", "updatedAt"
                 ],
                 primaryKey: ["id"],
                 nullable: ["sourceEpoch", "waitingReason", "failureReason", "stagingVersionId"]
+            ),
+            "downloadBatch": .init(
+                columns: [
+                    "id", "pluginId", "mediaKind", "canonicalMediaId", "preset", "selection", "catalogDigest",
+                    "entrySnapshot", "createdAt"
+                ],
+                primaryKey: ["id"],
+                nullable: ["catalogDigest"]
+            ),
+            "downloadSuppression": .init(
+                columns: [
+                    "pluginId", "mediaKind", "canonicalMediaId", "chapterKey", "authorityScope", "suppressedAt"
+                ],
+                primaryKey: ["pluginId", "mediaKind", "canonicalMediaId", "chapterKey", "authorityScope"],
+                nullable: []
             ),
             "downloadStore": .init(
                 columns: ["id", "storeId", "createdAt"],
@@ -153,7 +168,9 @@ struct DurableStateSchemaTests {
                 ("trackerLink", "idx_trackerLink_provider", ["providerId", "remoteMediaId"]),
                 ("pluginIdentityAlias", "idx_pluginIdentityAlias_suiteDomain", ["suiteDomain"]),
                 ("legacyDefaultsOutcome", "idx_legacyDefaultsOutcome_inbox", ["sourceDomain", "sourceKey", "fingerprint"]),
-                ("downloadedChapter", "idx_downloadedChapter_media", ["pluginId", "mediaKind", "canonicalMediaId"])
+                ("downloadedChapter", "idx_downloadedChapter_media", ["pluginId", "mediaKind", "canonicalMediaId"]),
+                ("downloadJob", "idx_downloadJob_queue", ["state", "createdAt", "batchId", "sequence", "id"]),
+                ("downloadJob", "idx_downloadJob_batch", ["batchId"])
             ]
             for (table, name, columns) in requiredIndexes {
                 let index = try #require(db.indexes(on: table).first { $0.name == name })
@@ -188,6 +205,13 @@ struct DurableStateSchemaTests {
                 try foreignKeyDeleteActions(table: "pluginSettingMigrationAuthority", in: db)
                     == Array(repeating: "CASCADE", count: 5)
             )
+
+            let jobForeignKey = try #require(db.foreignKeys(on: "downloadJob").first)
+            #expect(jobForeignKey.destinationTable == "downloadBatch")
+            #expect(jobForeignKey.originColumns == ["batchId"])
+            #expect(jobForeignKey.destinationColumns == ["id"])
+            // A batch cannot disappear under its jobs: the store deletes it only with its last job.
+            #expect(try foreignKeyDeleteAction(table: "downloadJob", in: db) == "NO ACTION")
         }
     }
 
@@ -653,6 +677,144 @@ struct DurableStateSchemaTests {
                 try db.execute(sql: "UPDATE legacyStateMigration SET status = 'captured' WHERE fingerprint = 'monotonic'")
             }
             try db.execute(sql: "UPDATE legacyStateMigration SET status = 'resolved' WHERE fingerprint = 'monotonic'")
+        }
+    }
+
+    @Test func v19CopiesEveryM0JobIntoASingleBatchAndKeepsTheRestOfTheOfflineTables() throws {
+        let dbQueue = try DatabaseQueue()
+        let migrator = AppDatabase.makeMigrator()
+        try migrator.migrate(dbQueue, upTo: "v18")
+
+        struct SeededJob {
+            let id: String
+            let chapterKey: String
+            let state: String
+            let waitingReason: String?
+            let failureReason: String?
+            let stagingVersionId: String?
+            let attemptCount: Int
+            let createdAt: Date
+        }
+        let seeded = [
+            SeededJob(id: UUID().uuidString, chapterKey: "queued", state: "queued", waitingReason: nil,
+                      failureReason: nil, stagingVersionId: nil, attemptCount: 0,
+                      createdAt: Date(timeIntervalSince1970: 1_000)),
+            SeededJob(id: UUID().uuidString, chapterKey: "waiting", state: "waiting", waitingReason: "noConnection",
+                      failureReason: nil, stagingVersionId: nil, attemptCount: 1,
+                      createdAt: Date(timeIntervalSince1970: 2_000)),
+            SeededJob(id: UUID().uuidString, chapterKey: "failed", state: "failed", waitingReason: nil,
+                      failureReason: "network", stagingVersionId: nil, attemptCount: 3,
+                      createdAt: Date(timeIntervalSince1970: 3_000)),
+            SeededJob(id: UUID().uuidString, chapterKey: "downloading", state: "downloading", waitingReason: nil,
+                      failureReason: nil, stagingVersionId: UUID().uuidString, attemptCount: 2,
+                      createdAt: Date(timeIntervalSince1970: 4_000))
+        ]
+        let copyVersionId = UUID().uuidString
+        let storeId = UUID().uuidString
+        let copiedAt = Date(timeIntervalSince1970: 5_000)
+        try dbQueue.write { db in
+            for job in seeded {
+                try db.execute(
+                    sql: """
+                        INSERT INTO downloadJob
+                          (id, pluginId, mediaKind, canonicalMediaId, chapterKey, authorityScope, entrySnapshot,
+                           chapterSnapshot, seriesTitle, sourceEpoch, state, waitingReason, failureReason,
+                           stagingVersionId, attemptCount, createdAt, updatedAt)
+                        VALUES (?, 'plugin.test', 'manga', 'series-1', ?, 'publicUnscoped', ?, ?, 'Series One',
+                                'epoch', ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                    arguments: [
+                        job.id, job.chapterKey, Data("entry-\(job.chapterKey)".utf8),
+                        Data("chapter-\(job.chapterKey)".utf8), job.state, job.waitingReason, job.failureReason,
+                        job.stagingVersionId, job.attemptCount, job.createdAt, job.createdAt
+                    ]
+                )
+            }
+            try db.execute(
+                sql: """
+                    INSERT INTO downloadedChapter
+                      (pluginId, mediaKind, canonicalMediaId, chapterKey, authorityScope, versionId, state,
+                       damageReason, contentKind, pageCount, byteCount, manifestFormatVersion, manifestSHA256,
+                       chapterSnapshot, seriesTitle, sourceEpoch, verifiedAt)
+                    VALUES ('plugin.test', 'manga', 'series-1', 'saved', 'publicUnscoped', ?, 'verified', NULL,
+                            'images', 3, 33, 1, ?, ?, 'Series One', 'epoch', ?)
+                    """,
+                arguments: [copyVersionId, String(repeating: "a", count: 64), Data("{}".utf8), copiedAt]
+            )
+            try db.execute(
+                sql: "INSERT INTO downloadStore (id, storeId, createdAt) VALUES (1, ?, ?)",
+                arguments: [storeId, copiedAt]
+            )
+        }
+
+        try migrator.migrate(dbQueue)
+
+        try dbQueue.read { db in
+            let jobs = try DownloadJobRecord.order(Column("createdAt")).fetchAll(db)
+            #expect(jobs.map(\.id) == seeded.map(\.id))
+            for (job, original) in zip(jobs, seeded) {
+                #expect(job.chapterKey == original.chapterKey)
+                #expect(job.state.rawValue == original.state)
+                #expect(job.waitingReason?.rawValue == original.waitingReason)
+                #expect(job.failureReason?.rawValue == original.failureReason)
+                #expect(job.stagingVersionId == original.stagingVersionId)
+                #expect(job.attemptCount == original.attemptCount)
+                #expect(job.createdAt == original.createdAt)
+                #expect(job.updatedAt == original.createdAt)
+                #expect(job.sequence == 0)
+                #expect(job.sourceEpoch == "epoch")
+                #expect(job.seriesTitle == "Series One")
+                #expect(job.chapterSnapshot == Data("chapter-\(original.chapterKey)".utf8))
+                #expect(job.batchId == original.id)
+            }
+
+            let batches = try DownloadBatchRecord.order(Column("createdAt")).fetchAll(db)
+            #expect(batches.map(\.id) == seeded.map(\.id))
+            for (batch, original) in zip(batches, seeded) {
+                #expect(batch.preset == .single)
+                #expect(batch.selection == DownloadBatchRecord.sourceListSelection)
+                #expect(batch.catalogDigest == nil)
+                #expect(batch.entrySnapshot == Data("entry-\(original.chapterKey)".utf8))
+                #expect(batch.createdAt == original.createdAt)
+                #expect(batch.pluginId == "plugin.test")
+                #expect(batch.mediaKind == .manga)
+                #expect(batch.canonicalMediaId == "series-1")
+            }
+
+            let copy = try #require(try DownloadedChapterRecord.fetchOne(db))
+            #expect(copy.versionId == copyVersionId)
+            #expect(copy.originIdentity == nil)
+            #expect(copy.manifestIdentity == copy.edition)
+            #expect(try DownloadStoreRecord.fetchOne(db)?.storeId == storeId)
+            #expect(try DownloadSuppressionRecord.fetchCount(db) == 0)
+        }
+
+        // The rebuilt table keeps every M0 constraint.
+        try dbQueue.write { db in
+            #expect(throws: DatabaseError.self) {
+                try db.execute(
+                    sql: """
+                        INSERT INTO downloadJob
+                          (id, batchId, sequence, pluginId, mediaKind, canonicalMediaId, chapterKey, authorityScope,
+                           chapterSnapshot, seriesTitle, state, attemptCount, createdAt, updatedAt)
+                        VALUES (?, ?, 0, 'plugin.test', 'manga', 'series-1', 'fresh', 'publicUnscoped',
+                                X'7B7D', 'Series One', 'downloading', 0, ?, ?)
+                        """,
+                    arguments: [UUID().uuidString, seeded[0].id, Date(), Date()]
+                )
+            }
+            #expect(throws: DatabaseError.self) {
+                try db.execute(
+                    sql: """
+                        INSERT INTO downloadJob
+                          (id, batchId, sequence, pluginId, mediaKind, canonicalMediaId, chapterKey, authorityScope,
+                           chapterSnapshot, seriesTitle, state, attemptCount, createdAt, updatedAt)
+                        VALUES (?, ?, 0, 'plugin.test', 'manga', 'series-1', 'queued', 'publicUnscoped',
+                                X'7B7D', 'Series One', 'queued', 0, ?, ?)
+                        """,
+                    arguments: [UUID().uuidString, seeded[0].id, Date(), Date()]
+                )
+            }
         }
     }
 
