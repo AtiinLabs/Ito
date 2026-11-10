@@ -24,6 +24,10 @@ struct AppViewFactory {
     let categoryHistoryViewFactory: CategoryHistoryViewFactory
     let trackingViewFactory: TrackingViewFactory
     let mediaDetailViewFactory: MediaDetailViewFactory?
+    private let downloadsOverview: (any DownloadsOverviewServing)?
+    private let downloadsThumbnails: any DownloadsThumbnailServing
+
+    var hasDownloads: Bool { downloadsOverview != nil }
 
     init(
         rootModels: RootModelStore,
@@ -52,7 +56,9 @@ struct AppViewFactory {
         completionRecovery: (any PluginCompletionRecovering)? = nil,
         settingsDiagnostics: (any PluginSettingsDiagnosing)? = nil,
         pluginCookies: PluginCookieJar? = nil,
-        pluginTrust: PluginTrustStore? = nil
+        pluginTrust: PluginTrustStore? = nil,
+        downloadsOverview: (any DownloadsOverviewServing)? = nil,
+        downloadsThumbnails: any DownloadsThumbnailServing = UnavailableDownloadsThumbnails()
     ) {
         self.rootModels = rootModels
         self.repositoryManagement = repositoryManagement
@@ -71,6 +77,8 @@ struct AppViewFactory {
         self.settingsDiagnostics = settingsDiagnostics
         self.pluginCookies = pluginCookies
         self.pluginTrust = pluginTrust
+        self.downloadsOverview = downloadsOverview
+        self.downloadsThumbnails = downloadsThumbnails
         let categoryHistoryViewFactory = CategoryHistoryViewFactory(
             dependencies: categoryHistoryDependencies,
             messagePresenter: categoryHistoryMessagePresenter,
@@ -131,6 +139,21 @@ struct AppViewFactory {
 
     func makeHistoryView() -> HistoryView {
         categoryHistoryViewFactory.makeHistoryView(viewFactory: self)
+    }
+
+    @ViewBuilder
+    func makeDownloadsView() -> some View {
+        if let downloadsOverview {
+            DownloadsView(
+                viewModel: DownloadsViewModel(
+                    service: downloadsOverview,
+                    library: libraryDependencies.library,
+                    thumbnails: downloadsThumbnails,
+                    sourceName: { pluginManager.installedPlugins[$0]?.info.name ?? $0 }
+                ),
+                viewFactory: self
+            )
+        }
     }
 
     func makeDeferredPluginViewModel(item: LibraryItem, openIntent: MediaDetailOpenIntent? = nil) -> DeferredPluginViewModel {
@@ -470,7 +493,7 @@ struct AppViewFactory {
     }
 
     func makeStorageSettingsView() -> StorageSettingsView {
-        StorageSettingsView(viewModel: rootModels.storageSettingsViewModel)
+        StorageSettingsView(viewModel: rootModels.storageSettingsViewModel, viewFactory: self)
     }
 
     func makeNetworkSettingsView() -> NetworkSettingsView {

@@ -987,6 +987,10 @@ actor OfflineChapterStore {
 
     // MARK: - Reads and leases
 
+    func availableDownloadCapacity() throws -> Int64 {
+        try fileSystem.availableCapacity(at: root)
+    }
+
     /// The inventory row for the edition, only when it is verified.
     func verifiedEdition(for edition: OfflineChapterEdition) async throws -> DownloadedChapterRecord? {
         try await database.read { db in

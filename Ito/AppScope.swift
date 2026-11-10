@@ -32,6 +32,8 @@ struct PreparedApplicationDependencies {
     let pluginTrust: PluginTrustStore?
     /// Verified offline copies, for reading without a source and for saved-only details.
     let offlineReading: any OfflineChapterReading
+    let downloadsOverview: (any DownloadsOverviewServing)?
+    let downloadsThumbnails: any DownloadsThumbnailServing
 
     init(
         settings: PreparedSettingsDependencies,
@@ -62,7 +64,9 @@ struct PreparedApplicationDependencies {
         settingsDiagnostics: (any PluginSettingsDiagnosing)? = nil,
         pluginCookies: PluginCookieJar? = nil,
         pluginTrust: PluginTrustStore? = nil,
-        offlineReading: any OfflineChapterReading = UnavailableOfflineChapterReading()
+        offlineReading: any OfflineChapterReading = UnavailableOfflineChapterReading(),
+        downloadsOverview: (any DownloadsOverviewServing)? = nil,
+        downloadsThumbnails: any DownloadsThumbnailServing = UnavailableDownloadsThumbnails()
     ) {
         self.settings = settings
         self.tracking = tracking ?? .unavailable()
@@ -93,6 +97,8 @@ struct PreparedApplicationDependencies {
         self.pluginCookies = pluginCookies
         self.pluginTrust = pluginTrust
         self.offlineReading = offlineReading
+        self.downloadsOverview = downloadsOverview
+        self.downloadsThumbnails = downloadsThumbnails
     }
 
     static func production(
@@ -135,6 +141,7 @@ struct PreparedApplicationDependencies {
         let presentationLogger = OSLogPresentationEventLogger()
         // One pipeline for every reader, so both read the store's leases through the same cache.
         let offlinePipeline = downloads.map { OfflineImagePipeline.make(reader: $0.store) }
+        let covers = coverThumbnails ?? UnavailableLibraryCoverThumbnails()
         return Self(
             settings: PreparedSettingsDependencies(
                 settingsStore: settingsStore,
@@ -207,7 +214,7 @@ struct PreparedApplicationDependencies {
                 pluginManager: pluginManager,
                 repoManager: repoManager,
                 connectivity: connectivity ?? UnavailableConnectivity(),
-                coverThumbnails: coverThumbnails ?? UnavailableLibraryCoverThumbnails()
+                coverThumbnails: covers
             ),
             categoryHistory: .production(
                 libraryManager: libraryManager,
@@ -255,7 +262,9 @@ struct PreparedApplicationDependencies {
             ),
             pluginCookies: pluginManager.pluginSettingsStore.cookies,
             pluginTrust: pluginManager.pluginSettingsStore.trust,
-            offlineReading: downloads?.store ?? UnavailableOfflineChapterReading()
+            offlineReading: downloads?.store ?? UnavailableOfflineChapterReading(),
+            downloadsOverview: downloads.map { LiveDownloadsOverview(center: $0.center, store: $0.store) },
+            downloadsThumbnails: LibraryDownloadsThumbnails(covers: covers)
         )
     }
 }
@@ -345,7 +354,8 @@ final class RootModelStore {
         makeStorageSettingsViewModel = {
             StorageSettingsViewModel(
                 settingsStore: preparedDependencies.settings.settingsStore,
-                storageAccess: preparedDependencies.settings.storageAccess
+                storageAccess: preparedDependencies.settings.storageAccess,
+                downloads: preparedDependencies.downloadsOverview
             )
         }
         makeNetworkSettingsViewModel = {
@@ -559,7 +569,9 @@ final class AppScope {
             completionRecovery: preparedDependencies.completionRecovery,
             settingsDiagnostics: preparedDependencies.settingsDiagnostics,
             pluginCookies: preparedDependencies.pluginCookies,
-            pluginTrust: preparedDependencies.pluginTrust
+            pluginTrust: preparedDependencies.pluginTrust,
+            downloadsOverview: preparedDependencies.downloadsOverview,
+            downloadsThumbnails: preparedDependencies.downloadsThumbnails
         )
     }
 

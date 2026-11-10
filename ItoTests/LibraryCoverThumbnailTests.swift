@@ -327,6 +327,32 @@ struct LibraryCoverThumbnailTests {
         #expect(await service.thumbnail(for: "series-1")?.image.size.width == 150)
     }
 
+    @available(iOS 16, *)
+    @Test(.timeLimit(.minutes(1)))
+    func aReadThatBeganBeforeANewCaptureNeverRepopulatesTheCache() async throws {
+        let database = try await makeDatabase()
+        defer { database.cleanup() }
+        let store = LibraryCoverThumbnailStore(database: database.dbPool)
+        let first = try #require(LibraryCoverThumbnailEncoder.encode(image(width: 300, height: 450)))
+        #expect(try await store.store(first, itemID: "series-1", coverUrl: Self.coverA) == .stored)
+        let gate = FirstDecodeGate()
+        let service = LibraryCoverThumbnails(store: store, decode: { await gate.decode($0) })
+
+        let staleRead = Task { await service.thumbnail(for: "series-1") }
+        for await _ in gate.arrivals { break }
+        try await database.dbPool.write { db in
+            try db.execute(sql: "UPDATE libraryItem SET coverUrl = ? WHERE id = 'series-1'", arguments: [Self.coverB])
+        }
+        await service.record(itemID: "series-1", coverUrl: Self.coverB, image: image(width: 150, height: 225))
+        gate.open()
+
+        // The older read still answers its own caller, which checks the cover address it was given.
+        #expect(await staleRead.value?.coverURLSHA256 == LibraryCoverThumbnailStore.coverHash(Self.coverA))
+        let current = await service.thumbnail(for: "series-1")
+        #expect(current?.coverURLSHA256 == LibraryCoverThumbnailStore.coverHash(Self.coverB))
+        #expect(current?.image.size.width == 150)
+    }
+
     @Test func theUnavailableServiceKeepsAndReturnsNothing() async {
         let service = UnavailableLibraryCoverThumbnails()
 
@@ -369,4 +395,36 @@ private nonisolated final class EncodeCounter: @unchecked Sendable {
         value += 1
         lock.unlock()
     }
+}
+
+/// Holds the first decode until the test opens it, so a read can be overtaken deterministically.
+private nonisolated final class FirstDecodeGate: @unchecked Sendable {
+    let arrivals: AsyncStream<Void>
+    private let arrived: AsyncStream<Void>.Continuation
+    private let releases: AsyncStream<Void>
+    private let release: AsyncStream<Void>.Continuation
+    private let lock = NSLock()
+    private var calls = 0
+
+    init() {
+        (arrivals, arrived) = AsyncStream<Void>.makeStream()
+        (releases, release) = AsyncStream<Void>.makeStream()
+    }
+
+    private func isFirstCall() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        calls += 1
+        return calls == 1
+    }
+
+    func decode(_ stored: StoredCoverThumbnail) async -> LibraryDurableCover? {
+        if isFirstCall() {
+            arrived.yield(())
+            for await _ in releases { break }
+        }
+        return LibraryCoverThumbnails.decode(stored)
+    }
+
+    func open() { release.yield(()) }
 }

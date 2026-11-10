@@ -42,6 +42,8 @@ nonisolated struct DownloadTableSnapshot: Sendable {
 final class DownloadCenter: ObservableObject {
     /// The state of each chapter, by media and chapter key. A chapter absent here has no copy and no job.
     @Published private(set) var states: [MediaIdentity: [String: ChapterDownloadState]] = [:]
+    /// Volatile page progress keeps the persisted job identity, not merely its chapter edition.
+    @Published private(set) var jobProgress: [String: DownloadProgress] = [:]
 
     private let dbPool: DatabasePool
     private let store: OfflineChapterStore
@@ -234,6 +236,8 @@ final class DownloadCenter: ObservableObject {
     }
 
     private func republish(progress current: [String: DownloadProgress]) {
+        // A database change republishes the same progress; observers hear only real changes.
+        if jobProgress != current { jobProgress = current }
         states = Self.states(copies: snapshot.copies, jobs: snapshot.jobs, progress: current)
     }
 

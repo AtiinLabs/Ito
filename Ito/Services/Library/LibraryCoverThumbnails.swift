@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import GRDB
 import UIKit
@@ -159,6 +160,11 @@ protocol LibraryCoverThumbnailServing: AnyObject {
     func thumbnail(for itemID: String) async -> LibraryDurableCover?
     func capture(itemID: String, coverUrl: String, image: UIImage)
     func forget(itemIDs: Set<String>)
+    var thumbnailChanges: AnyPublisher<String, Never> { get }
+}
+
+extension LibraryCoverThumbnailServing {
+    var thumbnailChanges: AnyPublisher<String, Never> { Empty().eraseToAnyPublisher() }
 }
 
 @MainActor
@@ -170,19 +176,28 @@ final class LibraryCoverThumbnails: LibraryCoverThumbnailServing {
 
     private let store: LibraryCoverThumbnailStore
     private let encode: @Sendable (UIImage) -> EncodedCoverThumbnail?
+    private let decode: @Sendable (StoredCoverThumbnail) async -> LibraryDurableCover?
     private let cache = NSCache<NSString, CachedCover>()
     /// The cover address each item's thumbnail is known to hold, so a card that appears again does not
     /// touch the database.
     private var recordedHashes: [String: String] = [:]
     private var capturesInFlight: [String: String] = [:]
+    /// Bumped whenever an item's stored thumbnail is replaced or the item is forgotten. A read that began
+    /// before that is older than the store and must not repopulate the cache.
+    private var epochs: [String: UInt64] = [:]
+    private var epochClock: UInt64 = 0
+    private let changes = PassthroughSubject<String, Never>()
+    var thumbnailChanges: AnyPublisher<String, Never> { changes.eraseToAnyPublisher() }
 
     init(
         store: LibraryCoverThumbnailStore,
         cacheCostLimit: Int = 16 * 1024 * 1024,
-        encode: @escaping @Sendable (UIImage) -> EncodedCoverThumbnail? = { LibraryCoverThumbnailEncoder.encode($0) }
+        encode: @escaping @Sendable (UIImage) -> EncodedCoverThumbnail? = { LibraryCoverThumbnailEncoder.encode($0) },
+        decode: @escaping @Sendable (StoredCoverThumbnail) async -> LibraryDurableCover? = { LibraryCoverThumbnails.decode($0) }
     ) {
         self.store = store
         self.encode = encode
+        self.decode = decode
         cache.totalCostLimit = cacheCostLimit
     }
 
@@ -193,11 +208,15 @@ final class LibraryCoverThumbnails: LibraryCoverThumbnailServing {
     func thumbnail(for itemID: String) async -> LibraryDurableCover? {
         let key = itemID as NSString
         if let cached = cache.object(forKey: key) { return cached.cover }
+        let epoch = epochs[itemID]
         guard let stored = try? await store.storedThumbnail(for: itemID) else { return nil }
         // Decoding is explicitly off the main actor, whatever the module's isolation defaults are.
-        let decoded = await Task.detached(priority: .userInitiated) { Self.decode(stored) }.value
+        let decode = decode
+        let decoded = await Task.detached(priority: .userInitiated) { await decode(stored) }.value
         guard let decoded else { return nil }
-        cache.setObject(CachedCover(decoded), forKey: key, cost: decoded.cost)
+        // A capture or forget that finished while this read was suspended makes it stale: the caller still
+        // checks the cover address, but the cache must not take it back after the eviction.
+        if epochs[itemID] == epoch { cache.setObject(CachedCover(decoded), forKey: key, cost: decoded.cost) }
         return decoded
     }
 
@@ -207,10 +226,16 @@ final class LibraryCoverThumbnails: LibraryCoverThumbnailServing {
 
     func forget(itemIDs: Set<String>) {
         for itemID in itemIDs {
-            cache.removeObject(forKey: itemID as NSString)
+            evict(itemID)
             recordedHashes[itemID] = nil
             capturesInFlight[itemID] = nil
         }
+    }
+
+    private func evict(_ itemID: String) {
+        cache.removeObject(forKey: itemID as NSString)
+        epochClock &+= 1
+        epochs[itemID] = epochClock
     }
 
     /// `capture`, awaitable. Skips an image whose cover address is already stored or being stored, before
@@ -234,8 +259,9 @@ final class LibraryCoverThumbnails: LibraryCoverThumbnailServing {
         capturesInFlight[itemID] = nil
         switch outcome {
         case .stored:
-            cache.removeObject(forKey: itemID as NSString)
+            evict(itemID)
             recordedHashes[itemID] = coverHash
+            changes.send(itemID)
         case .alreadyCurrent:
             recordedHashes[itemID] = coverHash
         case .itemChanged, .rejected, nil:
@@ -243,7 +269,7 @@ final class LibraryCoverThumbnails: LibraryCoverThumbnailServing {
         }
     }
 
-    nonisolated private static func decode(_ stored: StoredCoverThumbnail) -> LibraryDurableCover? {
+    nonisolated static func decode(_ stored: StoredCoverThumbnail) -> LibraryDurableCover? {
         guard let image = UIImage(data: stored.data) else { return nil }
         return LibraryDurableCover(image: image.preparingForDisplay() ?? image, coverURLSHA256: stored.coverURLSHA256)
     }

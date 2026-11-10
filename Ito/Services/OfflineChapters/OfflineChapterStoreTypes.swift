@@ -141,6 +141,13 @@ nonisolated struct OfflineCollectionReport: Equatable, Sendable {
     var reclaimedVersions = 0
 }
 
+nonisolated struct OfflineInventorySummary: Equatable, Sendable {
+    let media: MediaIdentity
+    let state: DownloadedChapterState
+    let count: Int
+    let byteCount: Int64
+}
+
 /// `.deferred` is returned before any change when protected data is unavailable at entry. A
 /// filesystem denial later in the run stops the run; the changes already made in that run each
 /// had their precondition confirmed (an interrupted attempt requeued, a row whose directory is

@@ -304,4 +304,39 @@ extension OfflineChapterStore {
             return db.changesCount
         }
     }
+
+    // MARK: - Inventory totals
+
+    nonisolated private struct InventoryAggregate: Decodable, FetchableRecord {
+        let pluginId: String
+        let mediaKind: MediaKind
+        let canonicalMediaId: String
+        let state: DownloadedChapterState
+        let chapterCount: Int
+        let totalBytes: Int64
+    }
+
+    /// Inventory totals include damaged copies: they still occupy storage until explicitly deleted.
+    func inventorySummary() async throws -> [OfflineInventorySummary] {
+        try await database.read { db in
+            try InventoryAggregate.fetchAll(db, sql: """
+                SELECT pluginId, mediaKind, canonicalMediaId, state,
+                       COUNT(*) AS chapterCount, SUM(byteCount) AS totalBytes
+                FROM downloadedChapter
+                GROUP BY pluginId, mediaKind, canonicalMediaId, state
+                ORDER BY pluginId, mediaKind, canonicalMediaId, state
+                """).map { row in
+                OfflineInventorySummary(
+                    media: MediaIdentity(
+                        pluginId: row.pluginId,
+                        canonicalMediaId: row.canonicalMediaId,
+                        mediaKind: row.mediaKind
+                    ),
+                    state: row.state,
+                    count: row.chapterCount,
+                    byteCount: row.totalBytes
+                )
+            }
+        }
+    }
 }

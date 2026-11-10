@@ -3,13 +3,42 @@ import SwiftUI
 struct StorageSettingsView: View {
     @StateObject private var viewModel: StorageSettingsViewModel
     @State private var isConfirmingClearCache = false
+    @State private var isConfirmingClearDownloads = false
+    private let viewFactory: AppViewFactory?
 
-    init(viewModel: StorageSettingsViewModel) {
+    init(viewModel: StorageSettingsViewModel, viewFactory: AppViewFactory? = nil) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        self.viewFactory = viewFactory
     }
 
     var body: some View {
         Form {
+            if viewModel.hasDownloads {
+                Section {
+                    HStack {
+                        Text("Downloaded Chapters", comment: "Storage settings: offline chapters disk usage")
+                        Spacer()
+                        Text(viewModel.formattedDownloadUsage).foregroundColor(.secondary)
+                    }
+                    if let message = viewModel.measurementMessage {
+                        Text(message).font(.footnote).foregroundColor(.secondary)
+                    }
+                    if let viewFactory {
+                        NavigationLink(destination: viewFactory.makeDownloadsView()) {
+                            Text("Manage Downloads", comment: "Storage settings: open the downloads manager")
+                        }
+                    }
+                    Button(role: .destructive) { isConfirmingClearDownloads = true } label: {
+                        Text("Delete Downloaded Chapters", comment: "Storage settings: delete every stored chapter, separate from Clear Cache")
+                    }
+                    .disabled(viewModel.isClearingDownloads || viewModel.downloadBytes == nil || viewModel.downloadBytes == 0)
+                } header: {
+                    Text("Downloads", comment: "Storage settings offline downloads section")
+                } footer: {
+                    Text("Clearing the cache doesn't remove downloaded chapters.",
+                         comment: "Offline chapters are durable data, separate from the image and network cache")
+                }
+            }
             Section(
                 header: Text("Image & Network Cache"),
                 footer: Text("Set the maximum amount of disk space Ito is allowed to use for caching images and network responses.")
@@ -49,7 +78,10 @@ struct StorageSettingsView: View {
         }
         .navigationTitle("Storage")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await viewModel.refreshCacheUsage() }
+        .task {
+            await viewModel.refreshCacheUsage()
+            await viewModel.refreshDownloadsUsage()
+        }
         .confirmationDialog(
             "Clear Cache?",
             isPresented: $isConfirmingClearCache,
@@ -59,7 +91,8 @@ struct StorageSettingsView: View {
                 Task { await viewModel.clearCache() }
             }
         } message: {
-            Text("Cached images and pages are removed and downloaded again when needed.")
+            Text("Cached images and pages are removed and downloaded again when needed. Downloaded chapters are kept.",
+                 comment: "Clear Cache confirmation: offline chapters are not cache data")
         }
         .alert(item: Binding(
             get: { viewModel.alert },
@@ -77,5 +110,17 @@ struct StorageSettingsView: View {
                 }
             )
         }
+        .confirmationDialog(
+            Text("Delete Downloaded Chapters?", comment: "Storage settings confirm offline data deletion"),
+            isPresented: $isConfirmingClearDownloads, titleVisibility: .visible
+        ) {
+            Button(role: .destructive) { Task { await viewModel.clearDownloads() } } label: {
+                Text("Delete Downloaded Chapters", comment: "Confirm deleting offline chapters, not image cache")
+            }
+        } message: {
+            Text("All saved chapters are deleted and all queued downloads are cancelled. Chapters still held by an open reader are removed when the reader closes.",
+                 comment: "Storage settings warns that deleting downloads removes saved chapters, cancels the download queue, and waits for open readers")
+        }
+        .downloadsMessage($viewModel.downloadsMessage)
     }
 }

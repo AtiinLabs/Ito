@@ -679,6 +679,15 @@ final class AppScopeIdentityTests: XCTestCase {
         XCTAssertEqual(trust.pinnedFingerprint(pluginID: "plugin.tls", host: "server.local"), "BB22")
     }
 
+    /// Builds without an offline store (release today) must not show a Downloads entry point that
+    /// cannot work.
+    func testWithoutAnOfflineStoreNeitherDownloadsEntryPointIsShown() {
+        let scope = makeScope()
+        XCTAssertNil(scope.dependencies.downloadsOverview)
+        XCTAssertFalse(scope.viewFactory.hasDownloads)
+        XCTAssertFalse(scope.rootModels.storageSettingsViewModel.hasDownloads)
+    }
+
     private func makeScope() -> AppScope {
         AppScope(
             preparedDependencies: PreparedApplicationDependencies(
