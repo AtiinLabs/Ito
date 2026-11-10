@@ -3527,6 +3527,12 @@
     "The plugin file no longer exists." : {
 
     },
+    "The plugin package could not be checked because temporary storage failed. Try again." : {
+      "comment" : "Error shown when Ito cannot copy a plugin file to temporary storage in order to check it."
+    },
+    "The plugin package could not be read, so it was not installed." : {
+      "comment" : "Error shown when a downloaded or imported plugin file is damaged or is not an Ito plugin."
+    },
     "The plugin removal failed and the original file could not be restored." : {
 
     },

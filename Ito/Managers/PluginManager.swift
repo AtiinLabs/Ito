@@ -8,6 +8,16 @@ public struct InstalledPlugin: Identifiable {
     public let url: URL
     public let info: PluginInfo
     public let iconData: Data?
+    /// The module's interface, read without running it; nil when the module is unreadable. An
+    /// unreadable module keeps the plugin listed and its settings prepared.
+    public let binary: PluginBinaryInterface?
+
+    nonisolated public init(url: URL, info: PluginInfo, iconData: Data?, binary: PluginBinaryInterface? = nil) {
+        self.url = url
+        self.info = info
+        self.iconData = iconData
+        self.binary = binary
+    }
 }
 
 extension PluginInfo {
@@ -31,6 +41,9 @@ typealias DownloadRunnerLoader = @MainActor (
     _ settingsStore: PluginSettingsStore,
     _ modules: PluginRunnerHostModules
 ) async throws -> ItoRunner
+
+/// Reads one packaged file the way `PluginPackageReading.readInBackground(at:)` does. Tests inject their own.
+typealias PluginPackageReader = @Sendable (URL) async throws -> PluginPackageReading
 
 /// Thread-safe copy of the installed plugins' publication revision. Synchronous checks inside a
 /// database transaction read it here, because the main actor is not available there.
@@ -89,32 +102,37 @@ public class PluginManager: ObservableObject {
     private weak var completionCoordinator: PluginCompletionCoordinator?
     private let downloadRunnerLoader: DownloadRunnerLoader
     private let publicationMirror = PluginPublicationRevisionMirror()
+    /// Serializes plugin-directory changes and the scans that publish the installed plugins. See
+    /// `PluginDirectoryGate`.
+    let directoryGate: PluginDirectoryGate
+    private let packageReader: PluginPackageReader
 
     var configuredInstalledPluginsDirectory: URL? {
         pluginsDirectory
     }
 
-    public init(pluginSettingsStore: PluginSettingsStore, pluginsDirectory: URL? = nil) {
-        self.pluginSettingsStore = pluginSettingsStore
-        self.pluginsDirectory = pluginsDirectory
-        runnerLoader = Self.loadRunner
-        downloadRunnerLoader = Self.loadDownloadRunner
+    public convenience init(pluginSettingsStore: PluginSettingsStore, pluginsDirectory: URL? = nil) {
+        self.init(pluginSettingsStore: pluginSettingsStore, pluginsDirectory: pluginsDirectory, runnerLoader: nil)
     }
 
     init(
         pluginSettingsStore: PluginSettingsStore,
         pluginsDirectory: URL? = nil,
-        runnerLoader: @escaping @MainActor (
+        runnerLoader: (@MainActor (
             _ pluginID: String,
             _ pluginURL: URL,
             _ settingsStore: PluginSettingsStore
-        ) async throws -> ItoRunner,
-        downloadRunnerLoader: DownloadRunnerLoader? = nil
+        ) async throws -> ItoRunner)? = nil,
+        downloadRunnerLoader: DownloadRunnerLoader? = nil,
+        directoryGate: PluginDirectoryGate? = nil,
+        packageReader: PluginPackageReader? = nil
     ) {
         self.pluginSettingsStore = pluginSettingsStore
         self.pluginsDirectory = pluginsDirectory
-        self.runnerLoader = runnerLoader
+        self.runnerLoader = runnerLoader ?? Self.loadRunner
         self.downloadRunnerLoader = downloadRunnerLoader ?? Self.loadDownloadRunner
+        self.directoryGate = directoryGate ?? PluginDirectoryGate()
+        self.packageReader = packageReader ?? { url in try await PluginPackageReading.readInBackground(at: url) }
     }
 
     @MainActor
@@ -423,60 +441,96 @@ public class PluginManager: ObservableObject {
         }
     }
 
-    /// Scans the Application Support/Plugins directory and parses all manifests.
+    /// Scans the Application Support/Plugins directory and parses all manifests. Acquires the directory gate;
+    /// a failure is logged, not thrown.
     @MainActor
     public func reloadInstalledPlugins() async {
         do {
-            try await discoverAndPrepareInstalledPlugins(failOnInvalidPlugin: false)
+            try await withPluginDirectoryLease { lease in
+                await reloadInstalledPluginsLocked(lease)
+            }
         } catch {
             AppLogger.plugin.error("Failed to load installed plugins: \(error)")
         }
     }
 
-    /// Performs strict readiness discovery, registers every installed manifest/file
-    /// identity, and verifies all registered suites before publishing the cache.
+    /// Performs strict readiness discovery, registers every installed manifest/file identity, and verifies all
+    /// registered suites before publishing the cache. Acquires the directory gate.
     @MainActor
     public func discoverAndPrepareInstalledPlugins() async throws {
         try await discoverAndPrepareInstalledPlugins(failOnInvalidPlugin: true)
     }
 
-    /// Performs discovery with explicit invalid-file handling.
+    /// Performs discovery with explicit invalid-file handling. Acquires the directory gate; gate-held code calls
+    /// `discoverAndPrepareInstalledPluginsLocked` instead.
     @MainActor
-    public func discoverAndPrepareInstalledPlugins(
-        failOnInvalidPlugin: Bool
-    ) async throws {
-        let installedPlugins = try prepareInstalledPluginsPublication(
-            failOnInvalidPlugin: failOnInvalidPlugin
-        )
-        publishPreparedInstalledPlugins(installedPlugins)
+    public func discoverAndPrepareInstalledPlugins(failOnInvalidPlugin: Bool) async throws {
+        try await withPluginDirectoryLease { lease in
+            try await discoverAndPrepareInstalledPluginsLocked(failOnInvalidPlugin: failOnInvalidPlugin, lease)
+        }
     }
 
+    /// Runs `operation` holding the plugin directory gate. Gate-held functions take the lease it passes.
     @MainActor
-    func prepareInstalledPluginsPublication(
-        failOnInvalidPlugin: Bool = true
-    ) throws -> [String: InstalledPlugin] {
-        let scan = try scanInstalledPlugins(failOnInvalidPlugin: failOnInvalidPlugin)
+    func withPluginDirectoryLease<Value>(
+        _ operation: (PluginDirectoryLease) async throws -> Value
+    ) async throws -> Value {
+        try await directoryGate.withLease(operation)
+    }
+
+    /// Gate-held. Scans, prepares the settings identities, then publishes. Requires the directory gate.
+    @MainActor
+    func discoverAndPrepareInstalledPluginsLocked(
+        failOnInvalidPlugin: Bool,
+        _ lease: PluginDirectoryLease
+    ) async throws {
+        let installedPlugins = try await prepareInstalledPluginsPublicationLocked(
+            failOnInvalidPlugin: failOnInvalidPlugin,
+            lease
+        )
+        publishPreparedInstalledPluginsLocked(installedPlugins, lease)
+    }
+
+    /// Gate-held. Non-strict scan and publish that logs a failure. Used after a directory change has already
+    /// happened, so the published state matches the disk. Requires the directory gate.
+    @MainActor
+    func reloadInstalledPluginsLocked(_ lease: PluginDirectoryLease) async {
+        do {
+            try await discoverAndPrepareInstalledPluginsLocked(failOnInvalidPlugin: false, lease)
+        } catch {
+            AppLogger.plugin.error("Failed to load installed plugins: \(error)")
+        }
+    }
+
+    /// Gate-held. Scans and prepares settings identities without publishing. Requires the directory gate.
+    @MainActor
+    func prepareInstalledPluginsPublicationLocked(
+        failOnInvalidPlugin: Bool,
+        _ lease: PluginDirectoryLease
+    ) async throws -> [String: InstalledPlugin] {
+        let scan = try await scanInstalledPluginsLocked(failOnInvalidPlugin: failOnInvalidPlugin, lease)
         try pluginSettingsStore.prepareForDurableSnapshot(scan.discoveries)
         return scan.plugins
     }
 
-    @MainActor
-    func publishPreparedInstalledPlugins(_ installedPlugins: [String: InstalledPlugin]) {
-        publishInstalledPlugins(installedPlugins)
-    }
-
-    /// Restore-only scan. This reads bundle metadata and republishes the in-memory
-    /// cache without registering identities, migrating suites, or creating runners.
+    /// Restore-only scan. This reads bundle metadata and republishes the in-memory cache without registering
+    /// identities, migrating suites, or creating runners. Acquires the directory gate.
     @MainActor
     public func reloadAfterRestore() async throws {
-        let scan = try scanInstalledPlugins(failOnInvalidPlugin: true)
-        publishInstalledPlugins(scan.plugins)
+        try await withPluginDirectoryLease { lease in
+            let scan = try await scanInstalledPluginsLocked(failOnInvalidPlugin: true, lease)
+            publishPreparedInstalledPluginsLocked(scan.plugins, lease)
+        }
     }
 
+    /// Gate-held. Lists the plugin files and reads each once. A file that is gone by the time it is read counts as
+    /// absent, in strict and non-strict discovery alike: whoever removed it publishes its own state. Requires the
+    /// directory gate.
     @MainActor
-    private func scanInstalledPlugins(
-        failOnInvalidPlugin: Bool
-    ) throws -> (
+    private func scanInstalledPluginsLocked(
+        failOnInvalidPlugin: Bool,
+        _ lease: PluginDirectoryLease
+    ) async throws -> (
         plugins: [String: InstalledPlugin],
         discoveries: [PluginSettingsDiscovery]
     ) {
@@ -507,24 +561,12 @@ public class PluginManager: ObservableObject {
         var newCache: [String: InstalledPlugin] = [:]
         var discoveries: [PluginSettingsDiscovery] = []
 
-        // We use static extraction to avoid loading WASM into memory just to read metadata
         for url in itoFiles {
+            let reading: PluginPackageReading
             do {
-                let extracted = try ItoRunner.extractPluginInfo(from: url)
-                let filenameId = url.deletingPathExtension().lastPathComponent
-                discoveries.append(
-                    PluginSettingsDiscovery(
-                        pluginId: extracted.manifest.info.id,
-                        manifestId: extracted.manifest.info.id,
-                        filenameId: filenameId,
-                        source: "installedFileScan"
-                    )
-                )
-                newCache[extracted.manifest.info.id] = InstalledPlugin(
-                    url: url,
-                    info: extracted.manifest.info,
-                    iconData: extracted.icon
-                )
+                reading = try await packageReader(url)
+            } catch where !fileManager.fileExists(atPath: url.path) {
+                continue
             } catch {
                 if failOnInvalidPlugin {
                     throw error
@@ -532,14 +574,35 @@ public class PluginManager: ObservableObject {
                 AppLogger.plugin.error(
                     "Failed to extract plugin info for \(url.lastPathComponent): \(error)"
                 )
+                continue
             }
+            let filenameId = url.deletingPathExtension().lastPathComponent
+            discoveries.append(
+                PluginSettingsDiscovery(
+                    pluginId: reading.manifest.info.id,
+                    manifestId: reading.manifest.info.id,
+                    filenameId: filenameId,
+                    source: "installedFileScan"
+                )
+            )
+            newCache[reading.manifest.info.id] = InstalledPlugin(
+                url: url,
+                info: reading.manifest.info,
+                iconData: reading.icon,
+                binary: reading.binary
+            )
         }
 
         return (newCache, discoveries)
     }
 
+    /// Gate-held. Publishes a prepared set of installed plugins, evicts the runners it invalidates, and activates
+    /// trust for the plugins it lists. Requires the directory gate.
     @MainActor
-    private func publishInstalledPlugins(_ newCache: [String: InstalledPlugin]) {
+    func publishPreparedInstalledPluginsLocked(
+        _ newCache: [String: InstalledPlugin],
+        _ lease: PluginDirectoryLease
+    ) {
         installedPlugins = newCache
 
         // Evict any cached runners whose plugin was removed or updated,

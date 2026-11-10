@@ -402,32 +402,41 @@ final class SourceViewModel: ObservableObject {
 
         var transaction: (any PluginFileDeletionTransaction)?
         do {
-            let currentIdentity = pluginStatePublisher.currentSourcePlugin(for: plugin.id).map {
-                SourcePluginDeletionIdentity(plugin: $0)
+            // The gate covers staging through commit or rollback. A scan queued before this point runs first and
+            // can't publish the source after its trust is revoked; a scan queued after it sees the file gone.
+            try await pluginStatePublisher.withPluginDirectoryLease { lease in
+                do {
+                    let currentIdentity = pluginStatePublisher.currentSourcePlugin(for: plugin.id).map {
+                        SourcePluginDeletionIdentity(plugin: $0)
+                    }
+                    guard currentIdentity == archivedPluginFileSnapshot.identity else {
+                        throw SourcePluginFileError.stalePluginIdentity
+                    }
+                    try await pluginStatePublisher.holdCompletionDelivery(for: plugin.id)
+                    try pluginStatePublisher.revokeTrust(for: plugin.id)
+                    transaction = try fileDeletion.stagePluginFileDeletion(
+                        from: archivedPluginFileSnapshot,
+                        lease
+                    )
+                    let publication = try await pluginStatePublisher.prepareSourcePluginStatePublicationLocked(lease)
+                    try publication.validateCurrentState()
+                    try transaction?.commit()
+                    publication.publish(lease)
+                } catch {
+                    throw restoreAfterFailedDeletion(transaction: transaction, primaryError: error)
+                }
             }
-            guard currentIdentity == archivedPluginFileSnapshot.identity else {
-                throw SourcePluginFileError.stalePluginIdentity
-            }
-            try await pluginStatePublisher.holdCompletionDelivery(for: plugin.id)
-            try pluginStatePublisher.revokeTrust(for: plugin.id)
-            transaction = try fileDeletion.stagePluginFileDeletion(
-                from: archivedPluginFileSnapshot
-            )
-            let publication = try await pluginStatePublisher.prepareSourcePluginStatePublication()
-            try publication.validateCurrentState()
-            try transaction?.commit()
-            publication.publish()
             pluginStatePublisher.removeSecrets(for: plugin.id)
             shouldDismiss = true
             finishDeletion(operationID)
             await pluginStatePublisher.purgeCompletionDelivery(for: plugin.id)
         } catch {
-            let failure = restoreAfterFailedDeletion(
-                transaction: transaction,
-                primaryError: error
-            )
             guard deleteOperationID == operationID else { return }
-            publishArchivedPluginDeletionFailure(failure)
+            // Cancellation stops the deletion and is not a failure to report. Any file change made before it was
+            // rolled back inside the gate.
+            if !(error is CancellationError) {
+                publishArchivedPluginDeletionFailure(error)
+            }
             finishDeletion(operationID)
         }
     }

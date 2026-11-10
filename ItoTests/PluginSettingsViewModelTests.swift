@@ -766,13 +766,13 @@ final class PluginSettingsViewModelTests: XCTestCase {
         )
         try makePluginArchive(id: plugin.id, archived: true).write(to: pluginURL)
         let rollbackSnapshot = try operations.snapshotPluginFile(for: plugin)
-        let rollbackTransaction = try operations.stagePluginFileDeletion(from: rollbackSnapshot)
+        let rollbackTransaction = try operations.stagePluginFileDeletion(from: rollbackSnapshot, PluginDirectoryLease())
         XCTAssertFalse(FileManager.default.fileExists(atPath: pluginURL.path))
         try rollbackTransaction.rollback()
         XCTAssertTrue(FileManager.default.fileExists(atPath: pluginURL.path))
 
         let commitSnapshot = try operations.snapshotPluginFile(for: plugin)
-        let commitTransaction = try operations.stagePluginFileDeletion(from: commitSnapshot)
+        let commitTransaction = try operations.stagePluginFileDeletion(from: commitSnapshot, PluginDirectoryLease())
         try commitTransaction.commit()
         XCTAssertFalse(FileManager.default.fileExists(atPath: pluginURL.path))
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
@@ -807,7 +807,7 @@ final class PluginSettingsViewModelTests: XCTestCase {
             options: .atomic
         )
 
-        XCTAssertThrowsError(try operations.stagePluginFileDeletion(from: snapshot)) { error in
+        XCTAssertThrowsError(try operations.stagePluginFileDeletion(from: snapshot, PluginDirectoryLease())) { error in
             XCTAssertEqual(
                 error as? SourcePluginFileError,
                 .stalePluginIdentity

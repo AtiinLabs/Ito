@@ -688,13 +688,13 @@ private enum TestWasm {
             PluginErrorPayload.self,
             from: Data(#"{"category":\#(raw),"message":"SENTINEL"}"#.utf8)
         )
-        let payload = try ItoPostcardEncoder().encode(report)
+        let payload = try ItoPostcardEncoder(abiVersion: ItoRunner.supportedABIVersions.upperBound).encode(report)
         return Fixture(chapter: [0x41, 0x00], lastError: (1_024, payload.count), data: [(1_024, payload)])
     }
 
     /// A source that sends `request` through the host's network module, then acknowledges.
     static func sending(_ request: NetRequest) throws -> Fixture {
-        let payload = try ItoPostcardEncoder().encode(request)
+        let payload = try ItoPostcardEncoder(abiVersion: ItoRunner.supportedABIVersions.upperBound).encode(request)
         return Fixture(
             chapter: callingHost(import: 0, pointer: 256, length: payload.count),
             imports: [Import(module: "ito:core/net", name: "fetch", type: 4)],
@@ -704,7 +704,7 @@ private enum TestWasm {
 
     /// A source that asks the host to load a page, then acknowledges.
     static func openingWebView(_ request: WebviewRequest) throws -> Fixture {
-        let payload = try ItoPostcardEncoder().encode(request)
+        let payload = try ItoPostcardEncoder(abiVersion: ItoRunner.supportedABIVersions.upperBound).encode(request)
         return Fixture(
             chapter: callingHost(import: 0, pointer: 256, length: payload.count),
             imports: [Import(module: "ito:core/webview", name: "webview_load_url", type: 4)],

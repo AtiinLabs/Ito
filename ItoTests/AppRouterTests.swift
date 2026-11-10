@@ -248,7 +248,10 @@ private final class RouterPluginManager: BrowsePluginManaging {
         Just(installedPlugins).eraseToAnyPublisher()
     }
 
-    func reloadInstalledPlugins() async {}
+    func reloadInstalledPluginsLocked(_ lease: PluginDirectoryLease) async {}
+    func withPluginDirectoryLease<Value>(_ operation: (PluginDirectoryLease) async throws -> Value) async throws -> Value {
+        try await operation(PluginDirectoryLease())
+    }
     func holdCompletionDelivery(for pluginID: String) async throws {}
     func purgeCompletionDelivery(for pluginID: String) async {}
     func revokeTrust(for pluginID: String) throws {}
@@ -258,6 +261,6 @@ private final class RouterPluginManager: BrowsePluginManaging {
 @MainActor
 private final class RouterFileOperations: BrowsePluginFileOperating {
     func supportsPluginFile(at url: URL) -> Bool { _ = url; return false }
-    func installPluginFile(from url: URL) throws { _ = url }
-    func deletePluginFile(at url: URL) throws { _ = url }
+    func installPluginFile(from url: URL, _ lease: PluginDirectoryLease) throws { _ = (url, lease) }
+    func deletePluginFile(at url: URL, _ lease: PluginDirectoryLease) throws { _ = (url, lease) }
 }

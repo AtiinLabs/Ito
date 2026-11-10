@@ -30,12 +30,16 @@ struct PreparedRepositoryManagementDependencies {
 
 @MainActor
 protocol RepositoryPluginStatePublishing: AnyObject {
-    func publishInstalledPluginState() async throws
+    /// Strict: scans, registers and publishes, and throws when an installed plugin can't be prepared. Requires
+    /// the plugin directory gate, passed as `lease`.
+    func publishInstalledPluginStateLocked(_ lease: PluginDirectoryLease) async throws
+    /// Non-strict: republishes what the disk holds and logs a failure. Requires the plugin directory gate.
+    func reloadInstalledPluginsLocked(_ lease: PluginDirectoryLease) async
 }
 
 extension PluginManager: RepositoryPluginStatePublishing {
-    func publishInstalledPluginState() async throws {
-        try await discoverAndPrepareInstalledPlugins()
+    func publishInstalledPluginStateLocked(_ lease: PluginDirectoryLease) async throws {
+        try await discoverAndPrepareInstalledPluginsLocked(failOnInvalidPlugin: true, lease)
     }
 }
 

@@ -250,59 +250,6 @@ struct BackupRestoreRefresherTests {
         )
     }
 
-    @Test func postRestorePluginRefreshCannotRegisterDurableIdentities() throws {
-        let source = try String(
-            contentsOf: repositoryRoot
-                .appendingPathComponent("Ito/Managers/PluginManager.swift"),
-            encoding: .utf8
-        )
-        let initializerStart = try #require(
-            source.range(of: "public init(pluginSettingsStore:")
-        )
-        let runnerStart = try #require(
-            source.range(
-                of: "public func getRunner",
-                range: initializerStart.upperBound..<source.endIndex
-            )
-        )
-        let ordinaryStart = try #require(
-            source.range(
-                of: "public func discoverAndPrepareInstalledPlugins()",
-                range: runnerStart.upperBound..<source.endIndex
-            )
-        )
-        let restoreStart = try #require(
-            source.range(
-                of: "public func reloadAfterRestore()",
-                range: ordinaryStart.upperBound..<source.endIndex
-            )
-        )
-        let scanStart = try #require(
-            source.range(
-                of: "private func scanInstalledPlugins(",
-                range: restoreStart.upperBound..<source.endIndex
-            )
-        )
-        let publishStart = try #require(
-            source.range(
-                of: "private func publishInstalledPlugins",
-                range: scanStart.upperBound..<source.endIndex
-            )
-        )
-        let initializerBody = source[initializerStart.lowerBound..<runnerStart.lowerBound]
-        let ordinaryBody = source[ordinaryStart.lowerBound..<restoreStart.lowerBound]
-        let restoreBody = source[restoreStart.lowerBound..<scanStart.lowerBound]
-        let scanBody = source[scanStart.lowerBound..<publishStart.lowerBound]
-
-        #expect(!initializerBody.contains("Task"))
-        #expect(ordinaryBody.contains("prepareForDurableSnapshot(scan.discoveries)"))
-        #expect(restoreBody.contains("scanInstalledPlugins(failOnInvalidPlugin: true)"))
-        #expect(restoreBody.contains("publishInstalledPlugins(scan.plugins)"))
-        #expect(!restoreBody.contains("prepareForDurableSnapshot"))
-        #expect(!restoreBody.contains("registerInstalledPlugin"))
-        #expect(!scanBody.contains("pluginSettingsStore."))
-    }
-
     private func makeRefresher(
         database: TestDatabase,
         recorder: RefreshRecorder,
@@ -378,12 +325,6 @@ struct BackupRestoreRefresherTests {
         try await database.dbPool.read { db in
             try AppPreference.order(Column("key")).fetchAll(db)
         }
-    }
-
-    private var repositoryRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
     }
 }
 

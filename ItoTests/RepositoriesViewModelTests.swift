@@ -747,7 +747,10 @@ private final class RepositoryPluginManagerSpy: BrowsePluginManaging {
         $installedPlugins.eraseToAnyPublisher()
     }
 
-    func reloadInstalledPlugins() async {}
+    func reloadInstalledPluginsLocked(_ lease: PluginDirectoryLease) async {}
+    func withPluginDirectoryLease<Value>(_ operation: (PluginDirectoryLease) async throws -> Value) async throws -> Value {
+        try await operation(PluginDirectoryLease())
+    }
     func holdCompletionDelivery(for pluginID: String) async throws {}
     func purgeCompletionDelivery(for pluginID: String) async {}
     func revokeTrust(for pluginID: String) throws {}

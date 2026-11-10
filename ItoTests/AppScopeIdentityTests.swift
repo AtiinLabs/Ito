@@ -357,7 +357,7 @@ final class AppScopeIdentityTests: XCTestCase {
         )
     }
 
-    func testPreparedDependenciesUseInjectedDefaultsAndPluginDirectory() throws {
+    func testPreparedDependenciesUseInjectedDefaultsAndPluginDirectory() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
 
@@ -531,8 +531,8 @@ final class AppScopeIdentityTests: XCTestCase {
             at: fixtureRoot,
             withIntermediateDirectories: true
         )
-        try makeTestPluginArchiveData(id: "fixture", version: "1.0").write(to: sourceURL)
-        try fileOperations.installPluginFile(from: sourceURL)
+        try makeTestPluginArchiveData(id: "fixture", version: "1.0", wasm: makeTestPluginWasm(abi: 2)).write(to: sourceURL)
+        try await fileOperations.installPluginFile(from: sourceURL, PluginDirectoryLease())
         XCTAssertTrue(
             FileManager.default.fileExists(
                 atPath: pluginsDirectory.appendingPathComponent("fixture.ito").path
@@ -760,7 +760,10 @@ private final class AppScopeBrowsePluginManager: BrowsePluginManaging {
         Just(installedPlugins).eraseToAnyPublisher()
     }
 
-    func reloadInstalledPlugins() async {}
+    func reloadInstalledPluginsLocked(_ lease: PluginDirectoryLease) async {}
+    func withPluginDirectoryLease<Value>(_ operation: (PluginDirectoryLease) async throws -> Value) async throws -> Value {
+        try await operation(PluginDirectoryLease())
+    }
     func holdCompletionDelivery(for pluginID: String) async throws {}
     func purgeCompletionDelivery(for pluginID: String) async {}
     func revokeTrust(for pluginID: String) throws {}
@@ -794,12 +797,12 @@ private final class AppScopeBrowseFileOperations: BrowsePluginFileOperating {
         url.pathExtension == "ito"
     }
 
-    func installPluginFile(from url: URL) throws {
-        _ = url
+    func installPluginFile(from url: URL, _ lease: PluginDirectoryLease) throws {
+        _ = (url, lease)
     }
 
-    func deletePluginFile(at url: URL) throws {
-        _ = url
+    func deletePluginFile(at url: URL, _ lease: PluginDirectoryLease) throws {
+        _ = (url, lease)
     }
 }
 

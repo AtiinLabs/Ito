@@ -494,7 +494,7 @@ private func makeScope(service: DiscoverServiceFake = DiscoverServiceFake(), cac
 @MainActor private final class DiscoverTestSearchExecutor: SearchPluginExecuting { var plugins: [SearchPluginDescriptor] = []; func search(plugin: SearchPluginDescriptor, kind: MediaKind?, query: String, limit: Int) async throws -> [PluginSearchResult] { [] }; func evictRunner(for pluginID: String) {} }
 @MainActor private struct DiscoverTestRecentStore: RecentSearchPersisting { func load() -> [String] { [] }; func save(_ searches: [String]) {}; func clear() {} }
 private final class DiscoverTestLogger: PresentationEventLogging { func log(_ event: PresentationLogEvent) {} }
-@MainActor private final class DiscoverTestPluginManager: BrowsePluginManaging { var installedPlugins: [String: InstalledPlugin] = [:]; var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> { Just([:]).eraseToAnyPublisher() }; func reloadInstalledPlugins() async {}; func holdCompletionDelivery(for pluginID: String) async throws {}; func purgeCompletionDelivery(for pluginID: String) async {}; func revokeTrust(for pluginID: String) throws {}; func removeSecrets(for pluginID: String) {} }
+@MainActor private final class DiscoverTestPluginManager: BrowsePluginManaging { var installedPlugins: [String: InstalledPlugin] = [:]; var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> { Just([:]).eraseToAnyPublisher() }; func reloadInstalledPluginsLocked(_ lease: PluginDirectoryLease) async {}; func withPluginDirectoryLease<Value>(_ operation: (PluginDirectoryLease) async throws -> Value) async throws -> Value { try await operation(PluginDirectoryLease()) }; func holdCompletionDelivery(for pluginID: String) async throws {}; func purgeCompletionDelivery(for pluginID: String) async {}; func revokeTrust(for pluginID: String) throws {}; func removeSecrets(for pluginID: String) {} }
 @MainActor private final class DiscoverTestRepositoryManager: BrowseRepositoryManaging {
     var repositories: [Repository] = []
     var repositoriesPublisher: AnyPublisher<[Repository], Never> {
@@ -510,4 +510,4 @@ private final class DiscoverTestLogger: PresentationEventLogging { func log(_ ev
     }
     func refreshAll() async {}
 }
-@MainActor private final class DiscoverTestFileOperations: BrowsePluginFileOperating { func supportsPluginFile(at url: URL) -> Bool { false }; func installPluginFile(from url: URL) throws {}; func deletePluginFile(at url: URL) throws {} }
+@MainActor private final class DiscoverTestFileOperations: BrowsePluginFileOperating { func supportsPluginFile(at url: URL) -> Bool { false }; func installPluginFile(from url: URL, _ lease: PluginDirectoryLease) throws {}; func deletePluginFile(at url: URL, _ lease: PluginDirectoryLease) throws {} }
