@@ -9,7 +9,7 @@ struct DownloadNetModuleTests {
     }
 
     @Test func aRequestOnAnAdmittedPathReachesTheTransport() async throws {
-        let inner = ScriptedInnerNet()
+        let inner = ScriptedInnerNet(contexts: NetworkContextRecorder())
         let path = ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied))
         let recorder = DownloadPolicyRecorder()
         let net = DownloadNetModule(
@@ -18,7 +18,7 @@ struct DownloadNetModuleTests {
             recorder: recorder
         )
 
-        let response = try await net.fetch(request: Self.request())
+        let response = try await net.fetch(request: Self.request(), context: makeTestNetworkContext())
 
         #expect(response.status == 200)
         #expect(inner.calls.count == 1)
@@ -26,7 +26,7 @@ struct DownloadNetModuleTests {
     }
 
     @Test func aRefusedPathNeverReachesTheTransportAndLaterRequestsShortCircuit() async throws {
-        let inner = ScriptedInnerNet()
+        let inner = ScriptedInnerNet(contexts: NetworkContextRecorder())
         let path = ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied, isExpensive: true))
         let recorder = DownloadPolicyRecorder()
         let net = DownloadNetModule(
@@ -36,11 +36,11 @@ struct DownloadNetModuleTests {
         )
 
         await #expect(throws: DownloadTransportDenied.self) {
-            try await net.fetch(request: Self.request())
+            try await net.fetch(request: Self.request(), context: makeTestNetworkContext())
         }
         path.set(NetworkPathSnapshot(status: .satisfied))
         await #expect(throws: DownloadTransportDenied.self) {
-            try await net.fetch(request: Self.request("https://api.test/pages"))
+            try await net.fetch(request: Self.request("https://api.test/pages"), context: makeTestNetworkContext())
         }
 
         #expect(inner.calls.count == 0)
@@ -90,7 +90,7 @@ struct DownloadNetModuleTests {
         let webview = DownloadWebviewModule(recorder: recorder)
 
         await #expect(throws: ItoError.self) {
-            try await webview.loadUrl(request: WebviewRequest(url: "https://source.test/", script: nil))
+            try await webview.loadUrl(request: WebviewRequest(url: "https://source.test/", script: nil), context: makeTestNetworkContext())
         }
         #expect(recorder.firstDenial == .requiresInteractiveSource)
     }
@@ -100,7 +100,7 @@ struct DownloadNetModuleTests {
         let webview = DownloadWebviewModule(recorder: recorder)
 
         await #expect(throws: ItoError.self) {
-            try await webview.executeJs(script: "document.title")
+            try await webview.executeJs(script: "document.title", context: makeTestNetworkContext())
         }
         #expect(recorder.firstDenial == .requiresInteractiveSource)
     }

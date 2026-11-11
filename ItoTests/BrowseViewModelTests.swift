@@ -1152,7 +1152,8 @@ private final class BrowseSearchExecutor: SearchPluginExecuting {
         plugin: SearchPluginDescriptor,
         kind: MediaKind?,
         query: String,
-        limit: Int
+        limit: Int,
+        operation: PluginNetworkOperation
     ) async throws -> [PluginSearchResult] {
         _ = plugin
         _ = kind

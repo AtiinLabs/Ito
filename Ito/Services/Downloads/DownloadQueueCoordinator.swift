@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import ito_runner
 
 /// The attempt in flight, as the coordinator sees it. It exists from the start of a pass over one job, before
 /// any await, so a cancel that arrives during setup is recorded and honoured instead of lost. Cancelling it
@@ -64,6 +65,7 @@ final class DownloadQueueCoordinator {
     private let path: any NetworkPathObserving
     private let protectedData: any ProtectedDataAvailability
     private let fetcher: any DirectAssetFetching
+    private let contexts: PluginNetworkContexts
     private let progress: DownloadProgressBoard
 
     private var reconciled = false
@@ -92,6 +94,7 @@ final class DownloadQueueCoordinator {
         protectedData: any ProtectedDataAvailability,
         protectedDataBecameAvailable: AnyPublisher<Void, Never>,
         fetcher: any DirectAssetFetching,
+        contexts: PluginNetworkContexts,
         progress: DownloadProgressBoard,
         predecessor: Task<Void, Never>? = nil
     ) {
@@ -101,6 +104,7 @@ final class DownloadQueueCoordinator {
         self.path = path
         self.protectedData = protectedData
         self.fetcher = fetcher
+        self.contexts = contexts
         self.progress = progress
         retiringLoop = predecessor
 
@@ -316,11 +320,19 @@ final class DownloadQueueCoordinator {
             return .blocked
         }
 
+        // One operation per attempt: the runner loads and every export of the attempt share its ID and batch.
+        let operation = PluginNetworkOperation(
+            purpose: .manualBulkDownload,
+            operationID: UUID(),
+            batchID: UUID(uuidString: job.batchId)
+        )
         let runtime: DownloadPluginRuntime
         do {
             runtime = try await runtimes.makeDownloadRuntime(
                 for: job.pluginId,
-                modules: makeModules(job.pluginId, gate, recorder)
+                modules: makeModules(job.pluginId, gate, recorder),
+                operation: operation,
+                frozenScope: frozenEpoch
             )
         } catch PluginRunnerAuthorityError.changedDuringLoad {
             // The plugins were republished while this one loaded. The job is still queued, and the next
@@ -356,6 +368,8 @@ final class DownloadQueueCoordinator {
             fetcher: fetcher,
             recorder: recorder,
             admission: gate,
+            contexts: contexts,
+            operation: operation,
             progress: { report in board.update(report) }
         )
         let task = Task { try await attempt.run() }

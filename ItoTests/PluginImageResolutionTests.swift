@@ -57,7 +57,7 @@ struct PluginImageResolutionTests {
             origins: ["https://images.example"]
         )
 
-        let result = try await PluginImageResolution.resolve(locator, runner: runner)
+        let result = try await PluginImageResolution.resolve(locator, runner: runner, context: { makeTestNetworkContext(purpose: .coverImage) })
 
         #expect(result == .fetch(target, headers: ["X-API-Key": "fixture-private-key"], allowedOrigins: ["https://images.example"]))
         let handled = await runner.handleImageCalls
@@ -68,7 +68,7 @@ struct PluginImageResolutionTests {
         let target = try #require(URL(string: "https://images.example/cover"))
         let runner = ResolutionImageRunner(request: PluginImageRequest(url: target.absoluteString))
 
-        let result = try await PluginImageResolution.resolve(locator, runner: runner)
+        let result = try await PluginImageResolution.resolve(locator, runner: runner, context: { makeTestNetworkContext(purpose: .coverImage) })
 
         #expect(result == .fetch(target, headers: nil, allowedOrigins: []))
     }
@@ -77,14 +77,14 @@ struct PluginImageResolutionTests {
         let runner = ResolutionImageRunner(request: PluginImageRequest(url: ""), origins: [])
 
         await #expect(throws: URLError.self) {
-            try await PluginImageResolution.resolve(locator, runner: runner)
+            try await PluginImageResolution.resolve(locator, runner: runner, context: { makeTestNetworkContext(purpose: .coverImage) })
         }
     }
 
     @Test func pluginBytesAreReturnedWhenNoRequestIsResolved() async throws {
         let runner = ResolutionImageRunner(bytes: Data([1, 2, 3]))
 
-        let result = try await PluginImageResolution.resolve(locator, runner: runner)
+        let result = try await PluginImageResolution.resolve(locator, runner: runner, context: { makeTestNetworkContext(purpose: .coverImage) })
 
         #expect(result == .bytes(Data([1, 2, 3])))
     }
@@ -93,7 +93,7 @@ struct PluginImageResolutionTests {
         let direct = try #require(URL(string: "https://images.example/cover"))
         let runner = ResolutionImageRunner()
 
-        let result = try await PluginImageResolution.resolve(locator, runner: runner)
+        let result = try await PluginImageResolution.resolve(locator, runner: runner, context: { makeTestNetworkContext(purpose: .coverImage) })
 
         #expect(result == .direct(direct))
     }
@@ -103,7 +103,7 @@ struct PluginImageResolutionTests {
         let runner = ResolutionImageRunner()
 
         await #expect(throws: URLError.self) {
-            try await PluginImageResolution.resolve(ftpLocator, runner: runner)
+            try await PluginImageResolution.resolve(ftpLocator, runner: runner, context: { makeTestNetworkContext(purpose: .coverImage) })
         }
     }
 
@@ -112,7 +112,7 @@ struct PluginImageResolutionTests {
         let runner = ResolutionImageRunner(requestRefusal: refusal)
 
         do {
-            _ = try await PluginImageResolution.resolve(locator, runner: runner)
+            _ = try await PluginImageResolution.resolve(locator, runner: runner, context: { makeTestNetworkContext(purpose: .coverImage) })
             Issue.record("A refused resolution must not produce an image")
         } catch {
             #expect(error as? PluginCallError == refusal)
@@ -126,7 +126,7 @@ struct PluginImageResolutionTests {
         let runner = ResolutionImageRunner(bytesRefusal: refusal)
 
         do {
-            _ = try await PluginImageResolution.resolve(locator, runner: runner)
+            _ = try await PluginImageResolution.resolve(locator, runner: runner, context: { makeTestNetworkContext(purpose: .coverImage) })
             Issue.record("A refused image must not fall back to a direct fetch")
         } catch {
             #expect(error as? PluginCallError == refusal)
@@ -136,7 +136,7 @@ struct PluginImageResolutionTests {
     @Test func cancellationWhileTheByteHandlerRunsStopsTheResolution() async throws {
         let runner = SuspendedImageRunner()
         let resolving = Task {
-            try await PluginImageResolution.resolve(locator, runner: runner)
+            try await PluginImageResolution.resolve(locator, runner: runner, context: { makeTestNetworkContext(purpose: .coverImage) })
         }
 
         await runner.waitUntilHandlerEnters()
@@ -174,14 +174,14 @@ private actor ResolutionImageRunner: PluginImageRunner {
         self.bytesRefusal = bytesRefusal
     }
 
-    func getImageRequest(_ locator: String) async throws -> PluginImageRequest? {
+    func getImageRequest(_ locator: String, context: NetworkOperationContext) async throws -> PluginImageRequest? {
         if let requestRefusal { throw requestRefusal }
         return request
     }
 
-    func getImageOrigins() async throws -> [String]? { origins }
+    func getImageOrigins(context: NetworkOperationContext) async throws -> [String]? { origins }
 
-    func handleImage(_ locator: String) async throws -> Data? {
+    func handleImage(_ locator: String, context: NetworkOperationContext) async throws -> Data? {
         handleImageCalls += 1
         if let bytesRefusal { throw bytesRefusal }
         return bytes
@@ -195,11 +195,11 @@ private actor SuspendedImageRunner: PluginImageRunner {
     private var enterWaiter: CheckedContinuation<Void, Never>?
     private var release: CheckedContinuation<Data?, Never>?
 
-    func getImageRequest(_ locator: String) async throws -> PluginImageRequest? { nil }
+    func getImageRequest(_ locator: String, context: NetworkOperationContext) async throws -> PluginImageRequest? { nil }
 
-    func getImageOrigins() async throws -> [String]? { nil }
+    func getImageOrigins(context: NetworkOperationContext) async throws -> [String]? { nil }
 
-    func handleImage(_ locator: String) async throws -> Data? {
+    func handleImage(_ locator: String, context: NetworkOperationContext) async throws -> Data? {
         hasEntered = true
         enterWaiter?.resume()
         enterWaiter = nil

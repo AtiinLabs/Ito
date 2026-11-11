@@ -315,7 +315,7 @@ final class NovelReaderViewModel: ObservableObject {
               prefetchChapters,
               let last = loadedChapters.last,
               boundaryAfter(last.chapter).chapter != nil else { return }
-        loadNextChapter()
+        loadNextChapter(trigger: .seamless)
     }
 
     func continuousChapterTitleAppeared(_ loadedChapter: NovelLoadedChapter) {
@@ -420,11 +420,12 @@ final class NovelReaderViewModel: ObservableObject {
         mainLoadOperationID = operationID
         loadPhase = .loading
         logStarted(kind: .remoteLoad, operationID: operationID)
+        let operation = PluginNetworkOperation(purpose: .foregroundReading, operationID: operationID)
 
         let task = Task { @MainActor [weak self, loader, entry] in
             defer { self?.finishTestingOperation(operationID) }
             do {
-                let pages = try await loader.content(for: entry, chapter: chapter)
+                let pages = try await loader.content(for: entry, chapter: chapter, operation: operation)
                 self?.completeMainLoad(
                     pages,
                     chapter: chapter,
@@ -546,7 +547,7 @@ final class NovelReaderViewModel: ObservableObject {
               let last = loadedChapters.last,
               last.id == chapterID,
               pageIndex >= last.pages.count - 5 else { return }
-        loadNextChapter()
+        loadNextChapter(trigger: .seamless)
     }
 
     func continuousPageDisappeared(chapterID: UUID, pageIndex: Int) {
@@ -571,10 +572,16 @@ final class NovelReaderViewModel: ObservableObject {
     func retryNextChapter() {
         guard appendFailed else { return }
         appendFailed = false
-        loadNextChapter()
+        loadNextChapter(trigger: .reader)
     }
 
-    func loadNextChapter() {
+    /// Why the next chapter loads: the reader asked for it, or seamless reading prefetches it.
+    enum NextChapterTrigger: Equatable {
+        case reader
+        case seamless
+    }
+
+    func loadNextChapter(trigger: NextChapterTrigger) {
         guard isActive,
               appendOperationID == nil,
               !isLoadingNext,
@@ -601,11 +608,15 @@ final class NovelReaderViewModel: ObservableObject {
         appendOperationID = operationID
         isLoadingNext = true
         logStarted(kind: .chapterAppend, operationID: operationID)
+        let operation = PluginNetworkOperation(
+            purpose: trigger == .seamless ? .prefetch : .foregroundReading,
+            operationID: operationID
+        )
 
         let task = Task { @MainActor [weak self, loader, entry] in
             defer { self?.finishTestingOperation(operationID) }
             do {
-                let pages = try await loader.content(for: entry, chapter: next)
+                let pages = try await loader.content(for: entry, chapter: next, operation: operation)
                 self?.completeAppend(
                     pages,
                     chapter: next,

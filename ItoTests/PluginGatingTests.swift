@@ -249,7 +249,7 @@ struct PluginGatingTests {
                 loads += 1
                 return ItoRunner()
             },
-            downloadRunnerLoader: { _, _, _, _ in
+            downloadRunnerLoader: { _, _, _, _, _, _ in
                 loads += 1
                 return ItoRunner()
             }
@@ -272,7 +272,7 @@ struct PluginGatingTests {
         manager.publishPreparedInstalledPlugins(Dictionary(uniqueKeysWithValues: plugins.map { ($0.id, $0) }))
         let modules = PluginRunnerHostModules(
             net: DownloadNetModule(
-                inner: ScriptedInnerNet(),
+                inner: ScriptedInnerNet(contexts: NetworkContextRecorder()),
                 gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver()),
                 recorder: DownloadPolicyRecorder()
             ),
@@ -287,7 +287,7 @@ struct PluginGatingTests {
                 try await manager.getImageRunner(for: plugin.id)
             }
             await #expect(throws: PluginIncompatibility.unsupportedFile) {
-                _ = try await manager.makeDownloadRuntime(for: plugin.id, modules: modules)
+                _ = try await manager.makeDownloadRuntime(for: plugin.id, modules: modules, operation: makeTestNetworkOperation(.manualBulkDownload), frozenScope: nil)
             }
         }
         #expect(loads == 0)

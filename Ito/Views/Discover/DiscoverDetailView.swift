@@ -501,17 +501,21 @@ struct SourceDestinationHost: View {
                 runner: route.runner,
                 media: manga,
                 pluginID: route.pluginID
-            ) { updated in
-                try await pluginCall { try await route.runner.getMediaUpdate(.manga(updated)).expecting(\.manga) }
+            ) { updated, operation in
+                let context = viewFactory.networkContext(pluginID: route.pluginID, operation)
+                return try await pluginCall {
+                    try await route.runner.getMediaUpdate(.manga(updated), context: context).expecting(\.manga)
+                }
             }
         case .anime(let anime):
             viewFactory.makeAnimeDetailView(
                 runner: route.runner,
                 media: anime,
                 pluginID: route.pluginID
-            ) { updated in
-                try await pluginCall {
-                    try await route.runner.getMediaUpdate(.anime(updated)).expecting(\.anime)
+            ) { updated, operation in
+                let context = viewFactory.networkContext(pluginID: route.pluginID, operation)
+                return try await pluginCall {
+                    try await route.runner.getMediaUpdate(.anime(updated), context: context).expecting(\.anime)
                 }
             }
         case .novel(let novel):
@@ -519,9 +523,10 @@ struct SourceDestinationHost: View {
                 runner: route.runner,
                 media: novel,
                 pluginID: route.pluginID
-            ) { updated in
-                try await pluginCall {
-                    try await route.runner.getMediaUpdate(.novel(updated)).expecting(\.novel)
+            ) { updated, operation in
+                let context = viewFactory.networkContext(pluginID: route.pluginID, operation)
+                return try await pluginCall {
+                    try await route.runner.getMediaUpdate(.novel(updated), context: context).expecting(\.novel)
                 }
             }
         }

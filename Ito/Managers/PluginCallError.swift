@@ -50,6 +50,15 @@ struct PluginCallError: LocalizedError, Equatable {
             // for completeness, in the same direction.
             let refusal = PluginIncompatibility.loading(error) ?? .requiresNewerApp(minimumAppVersion: nil)
             self.init(kind: .incompatible, message: refusal.message)
+        case .networkPolicy(.deferred(.offline)), .networkPolicy(.deferred(.unknownPath)):
+            self.init(kind: .host, message: String(localized: "Check your internet connection or try again later."))
+        case .networkPolicy(.sourceAuthorizationFailure):
+            self.init(
+                kind: .needsSettings,
+                message: String(localized: "The server or account settings changed, or are incomplete.")
+            )
+        case .networkPolicy, .reloadDuringActiveExport, .pluginReloaded:
+            self.init(kind: .host, message: String(localized: "The source couldn't complete this request."))
         case .hostModuleError(let domain, let message):
             self.init(kind: .host, message: domain == "webview" ? String(localized: "The source's web page failed: \(message)") : message)
         }

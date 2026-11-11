@@ -158,7 +158,8 @@ final class ListingViewModel: ObservableObject {
         do {
             let result = try await destination.context.loadListing(
                 listing: destination.listing,
-                page: page
+                page: page,
+                operationID: destination.operationID
             )
             try Task.checkCancellation()
             guard isCurrent(sessionID: sessionID, requestID: requestID) else { return }

@@ -53,11 +53,11 @@ nonisolated struct PluginCompletionWebviewModule: WebviewModule {
         message: String(localized: "A web view is not available while syncing read progress.")
     )
 
-    func loadUrl(request: WebviewRequest) async throws -> WebviewResponse {
+    func loadUrl(request: WebviewRequest, context: NetworkOperationContext) async throws -> WebviewResponse {
         throw Self.unavailable
     }
 
-    func executeJs(script: String) async throws -> String {
+    func executeJs(script: String, context: NetworkOperationContext) async throws -> String {
         throw Self.unavailable
     }
 }

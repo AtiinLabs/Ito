@@ -5,12 +5,13 @@ import WebKit
 import ito_runner
 
 actor AppWebviewModule: WebviewModule {
-    func loadUrl(request: WebviewRequest) async throws -> WebviewResponse {
+    // The host context is accepted for the runner's contract and is not read yet.
+    func loadUrl(request: WebviewRequest, context: NetworkOperationContext) async throws -> WebviewResponse {
         AppLogger.network.debug("AppWebviewModule: loadUrl called for \(request.url)")
         return try await WebviewManager.shared.loadUrl(request: request)
     }
 
-    func executeJs(script: String) async throws -> String {
+    func executeJs(script: String, context: NetworkOperationContext) async throws -> String {
         AppLogger.network.debug("AppWebviewModule: executeJs called")
         return try await WebviewManager.shared.executeJs(script: script)
     }

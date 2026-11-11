@@ -26,7 +26,7 @@ struct PluginCompletionNetModuleTests {
             method: "PATCH",
             headers: ["Content-Type": "application/json", "X-API-Key": "secret", "Cookie": "plugin=explicit"],
             body: Array(#"{"completed":true}"#.utf8)
-        ))
+        ), context: makeTestNetworkContext())
 
         #expect(response.status == 204)
         #expect(response.body.isEmpty)
@@ -53,7 +53,7 @@ struct PluginCompletionNetModuleTests {
         defer { HTTPCookieStorage.shared.deleteCookie(ambient) }
 
         let module = PluginCompletionNetModule(configuration: CompletionTransportProtocol.configuration())
-        _ = try await module.fetch(request: NetRequest(url: url.absoluteString, method: "GET", headers: [:], body: nil))
+        _ = try await module.fetch(request: NetRequest(url: url.absoluteString, method: "GET", headers: [:], body: nil), context: makeTestNetworkContext())
 
         let seen = try #require(CompletionTransportProtocol.requests(to: host).first)
         #expect(seen.headers["cookie"] == nil)
@@ -73,7 +73,7 @@ struct PluginCompletionNetModuleTests {
             method: "PATCH",
             headers: ["Authorization": "Bearer SENTINEL_CREDENTIAL"],
             body: Array("{}".utf8)
-        ))
+        ), context: makeTestNetworkContext())
 
         // The plugin sees the redirect itself, not what it points at.
         #expect(response.status == Int32(status))
@@ -90,7 +90,7 @@ struct PluginCompletionNetModuleTests {
         let module = PluginCompletionNetModule(configuration: CompletionTransportProtocol.configuration())
         let request = NetRequest(url: "https://\(host)/slow", method: "PATCH", headers: [:], body: nil)
 
-        let call = Task { try await module.fetch(request: request) }
+        let call = Task { try await module.fetch(request: request, context: makeTestNetworkContext()) }
         await signals.started.wait()
         call.cancel()
 
@@ -111,7 +111,7 @@ struct PluginCompletionNetModuleTests {
         )
 
         let call = Task {
-            try await module.fetch(request: NetRequest(url: "https://\(slow)/slow", method: "PATCH", headers: [:], body: nil))
+            try await module.fetch(request: NetRequest(url: "https://\(slow)/slow", method: "PATCH", headers: [:], body: nil), context: makeTestNetworkContext())
         }
         await signals.started.wait()
         if change == "replaced" {
@@ -124,7 +124,7 @@ struct PluginCompletionNetModuleTests {
         await #expect(throws: PluginCompletionExecutionFailure.configurationChanged) { try await call.value }
         await signals.stopped.wait()
         await #expect(throws: PluginCompletionExecutionFailure.configurationChanged) {
-            try await module.fetch(request: NetRequest(url: "https://\(later)/ping", method: "PATCH", headers: [:], body: nil))
+            try await module.fetch(request: NetRequest(url: "https://\(later)/ping", method: "PATCH", headers: [:], body: nil), context: makeTestNetworkContext())
         }
         #expect(CompletionTransportProtocol.requests(to: later).isEmpty)
     }
@@ -140,9 +140,7 @@ struct PluginCompletionNetModuleTests {
         )
         try trust.trust(fingerprint: "AA11", host: "server.local", pluginID: "plugin.other")
 
-        let response = try await module.fetch(
-            request: NetRequest(url: "https://\(host)/ping", method: "PATCH", headers: [:], body: nil)
-        )
+        let response = try await module.fetch(request: NetRequest(url: "https://\(host)/ping", method: "PATCH", headers: [:], body: nil), context: makeTestNetworkContext())
         #expect(response.status == 204)
     }
 
@@ -152,7 +150,7 @@ struct PluginCompletionNetModuleTests {
     func onlyHttpAndHttpsAreEverFetched(url: String) async throws {
         let module = PluginCompletionNetModule(configuration: CompletionTransportProtocol.configuration())
 
-        let error = await captured { try await module.fetch(request: NetRequest(url: url, method: "GET", headers: [:], body: nil)) }
+        let error = await captured { try await module.fetch(request: NetRequest(url: url, method: "GET", headers: [:], body: nil), context: makeTestNetworkContext()) }
 
         #expect((error as? URLError)?.code == .unsupportedURL)
     }
@@ -170,7 +168,7 @@ struct PluginCompletionNetModuleTests {
         let module = PluginCompletionNetModule(configuration: CompletionTransportProtocol.configuration())
 
         let error = await captured {
-            try await module.fetch(request: NetRequest(url: "https://\(host)/x", method: method, headers: headers, body: nil))
+            try await module.fetch(request: NetRequest(url: "https://\(host)/x", method: method, headers: headers, body: nil), context: makeTestNetworkContext())
         }
 
         #expect((error as? URLError)?.code == .badURL)
@@ -196,13 +194,11 @@ struct PluginCompletionNetModuleTests {
 
         for host in [announced, unannounced] {
             let error = await captured {
-                try await module.fetch(request: NetRequest(url: "https://\(host)/", method: "GET", headers: [:], body: nil))
+                try await module.fetch(request: NetRequest(url: "https://\(host)/", method: "GET", headers: [:], body: nil), context: makeTestNetworkContext())
             }
             #expect((error as? URLError)?.code == .dataLengthExceedsMaximum)
         }
-        let allowed = try await module.fetch(
-            request: NetRequest(url: "https://\(atLimit)/", method: "GET", headers: [:], body: nil)
-        )
+        let allowed = try await module.fetch(request: NetRequest(url: "https://\(atLimit)/", method: "GET", headers: [:], body: nil), context: makeTestNetworkContext())
         #expect(allowed.body == Array(repeating: 0x42, count: 16))
     }
 
@@ -212,7 +208,7 @@ struct PluginCompletionNetModuleTests {
         let module = PluginCompletionNetModule(configuration: CompletionTransportProtocol.configuration())
 
         let error = await captured {
-            try await module.fetch(request: NetRequest(url: "https://\(host)/", method: "GET", headers: [:], body: nil))
+            try await module.fetch(request: NetRequest(url: "https://\(host)/", method: "GET", headers: [:], body: nil), context: makeTestNetworkContext())
         }
 
         #expect((error as? URLError)?.code == .notConnectedToInternet)
@@ -262,9 +258,9 @@ struct PluginCompletionSandboxTests {
         let module = PluginCompletionWebviewModule()
 
         let load = await captured {
-            try await module.loadUrl(request: WebviewRequest(url: "https://SENTINEL.example/login", script: "SENTINEL_SCRIPT"))
+            try await module.loadUrl(request: WebviewRequest(url: "https://SENTINEL.example/login", script: "SENTINEL_SCRIPT"), context: makeTestNetworkContext())
         }
-        let script = await captured { try await module.executeJs(script: "SENTINEL_SCRIPT") }
+        let script = await captured { try await module.executeJs(script: "SENTINEL_SCRIPT", context: makeTestNetworkContext()) }
 
         for error in [load, script] {
             #expect(error as? ItoError == PluginCompletionWebviewModule.unavailable)
@@ -302,6 +298,56 @@ struct PluginCompletionOutcomeMappingTests {
             name: "newerHost",
             error: ItoError.requiresNewerHost(missingImports: ["a.b"]),
             expected: "paused(incompatible,incompatible)"
+        ),
+        .init(
+            name: "policyOffline",
+            error: ItoError.networkPolicy(.deferred(.offline)),
+            expected: "retryable(network)"
+        ),
+        .init(
+            name: "policyUnknownPath",
+            error: ItoError.networkPolicy(.deferred(.unknownPath)),
+            expected: "retryable(network)"
+        ),
+        .init(
+            name: "policyExpensivePath",
+            error: ItoError.networkPolicy(.deferred(.expensivePath)),
+            expected: "retryable(network)"
+        ),
+        .init(
+            name: "policyConstrainedPath",
+            error: ItoError.networkPolicy(.deferred(.constrainedPath)),
+            expected: "retryable(network)"
+        ),
+        .init(
+            name: "policyChanged",
+            error: ItoError.networkPolicy(.deferred(.policyChanged)),
+            expected: "retryable(network)"
+        ),
+        .init(
+            name: "policyAuthorization",
+            error: ItoError.networkPolicy(.sourceAuthorizationFailure),
+            expected: "paused(configurationChanged,configurationChanged)"
+        ),
+        .init(
+            name: "policyForegroundPermission",
+            error: ItoError.networkPolicy(.foregroundPermissionRequired),
+            expected: "paused(sourceError,sourceError)"
+        ),
+        .init(
+            name: "policyHardBlocked",
+            error: ItoError.networkPolicy(.hardUserBlocked),
+            expected: "paused(sourceError,sourceError)"
+        ),
+        .init(
+            name: "reloadDuringExport",
+            error: ItoError.reloadDuringActiveExport,
+            expected: "paused(sourceError,sourceError)"
+        ),
+        .init(
+            name: "pluginReloaded",
+            error: ItoError.pluginReloaded,
+            expected: "paused(sourceError,sourceError)"
         ),
         .init(
             name: "abi",
@@ -677,6 +723,7 @@ private struct ExecutorHarness {
         }
         executor = PluginCompletionExecutor(
             store: store,
+            contexts: PluginNetworkContexts(),
             locatePlugin: locator,
             makeNetModule: { pluginID in
                 onNetworkCreated?()
@@ -697,170 +744,6 @@ private struct ExecutorHarness {
     func cleanup() {
         try? FileManager.default.removeItem(at: archiveURL)
         database.cleanup()
-    }
-}
-
-/// Builds the smallest WebAssembly modules a completion can run: they export what the runner
-/// needs (`memory`, `alloc`, `dealloc`) and whichever completion exports, failure report and host
-/// imports a test wants.
-private enum TestWasm {
-    struct Import {
-        let module: String
-        let name: String
-        /// Index into `types`.
-        let type: Int
-    }
-
-    struct Fixture {
-        /// The body of `mark_chapter_read(i32, i32, i32, i32) -> i32`, or nil to leave it unexported.
-        var chapter: [UInt8]? = [0x41, 0x01]
-        /// The body of `mark_episode_watched`, or nil to leave it unexported.
-        var episode: [UInt8]?
-        /// What `ito_last_error` returns: a pointer and length into `data`.
-        var lastError: (pointer: Int, length: Int)?
-        var imports: [Import] = []
-        var data: [(offset: Int, bytes: [UInt8])] = []
-    }
-
-    static let i32: UInt8 = 0x7F
-    static let i64: UInt8 = 0x7E
-
-    /// The function types every fixture declares.
-    static let types: [([UInt8], [UInt8])] = [
-        ([i32, i32, i32, i32], [i32]), // 0: mark_chapter_read, mark_episode_watched
-        ([i32], [i32]),                // 1: alloc
-        ([i32, i32], []),              // 2: dealloc
-        ([], [i64]),                   // 3: ito_last_error
-        ([i32, i32], [i32]),           // 4: net fetch, webview load
-        ([i32], [])                    // 5: net fetch_read
-    ]
-
-    /// A source whose completion reports a failure of `category` through `ito_last_error`.
-    static func failing(with category: String) throws -> Fixture {
-        let raw = try rawValue(of: category)
-        let report = try JSONDecoder().decode(
-            PluginErrorPayload.self,
-            from: Data(#"{"category":\#(raw),"message":"SENTINEL"}"#.utf8)
-        )
-        let payload = try ItoPostcardEncoder(abiVersion: ItoRunner.supportedABIVersions.upperBound).encode(report)
-        return Fixture(chapter: [0x41, 0x00], lastError: (1_024, payload.count), data: [(1_024, payload)])
-    }
-
-    /// A source that sends `request` through the host's network module, then acknowledges.
-    static func sending(_ request: NetRequest) throws -> Fixture {
-        let payload = try ItoPostcardEncoder(abiVersion: ItoRunner.supportedABIVersions.upperBound).encode(request)
-        return Fixture(
-            chapter: callingHost(import: 0, pointer: 256, length: payload.count),
-            imports: [Import(module: "ito:core/net", name: "fetch", type: 4)],
-            data: [(256, payload)]
-        )
-    }
-
-    /// A source that asks the host to load a page, then acknowledges.
-    static func openingWebView(_ request: WebviewRequest) throws -> Fixture {
-        let payload = try ItoPostcardEncoder(abiVersion: ItoRunner.supportedABIVersions.upperBound).encode(request)
-        return Fixture(
-            chapter: callingHost(import: 0, pointer: 256, length: payload.count),
-            imports: [Import(module: "ito:core/webview", name: "webview_load_url", type: 4)],
-            data: [(256, payload)]
-        )
-    }
-
-    /// `import(pointer, length)`, its result discarded, then `i32.const 1`.
-    private static func callingHost(import index: Int, pointer: Int, length: Int) -> [UInt8] {
-        var body: [UInt8] = [0x41]
-        body += signed(Int64(pointer))
-        body += [0x41]
-        body += signed(Int64(length))
-        body += [0x10]
-        body += unsigned(UInt64(index))
-        body += [0x1A, 0x41, 0x01]
-        return body
-    }
-
-    private static func rawValue(of category: String) throws -> Int {
-        let categories: [String: PluginErrorCategory] = [
-            "needsSetup": .needsSetup, "unauthorized": .unauthorized, "network": .network, "server": .server,
-            "notFound": .notFound, "other": .other, "unsupported": .unsupported
-        ]
-        return Int(try #require(categories[category]).rawValue)
-    }
-
-    static func build(_ fixture: Fixture) -> [UInt8] {
-        var defined: [(name: String, type: Int, body: [UInt8])] = [
-            ("alloc", 1, [0x41] + signed(4_096)),
-            ("dealloc", 2, [])
-        ]
-        if let chapter = fixture.chapter { defined.append(("mark_chapter_read", 0, chapter)) }
-        if let episode = fixture.episode { defined.append(("mark_episode_watched", 0, episode)) }
-        if let error = fixture.lastError {
-            let packed = (Int64(error.pointer) << 32) | Int64(error.length)
-            defined.append(("ito_last_error", 3, [0x42] + signed(packed)))
-        }
-
-        var exports: [[UInt8]] = [name("memory") + [0x02, 0x00]]
-        for (index, function) in defined.enumerated() {
-            exports.append(name(function.name) + [0x00] + unsigned(UInt64(fixture.imports.count + index)))
-        }
-
-        var module: [UInt8] = [0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00]
-        module += section(1, vector(types.map { [0x60] + vector($0.0.map { [$0] }) + vector($0.1.map { [$0] }) }))
-        if !fixture.imports.isEmpty {
-            module += section(2, vector(fixture.imports.map {
-                name($0.module) + name($0.name) + [0x00] + unsigned(UInt64($0.type))
-            }))
-        }
-        module += section(3, vector(defined.map { unsigned(UInt64($0.type)) }))
-        module += section(5, vector([[0x00, 0x01]]))
-        module += section(7, vector(exports))
-        module += section(10, vector(defined.map { function in
-            let body = [0x00] + function.body + [0x0B]
-            return unsigned(UInt64(body.count)) + body
-        }))
-        if !fixture.data.isEmpty {
-            module += section(11, vector(fixture.data.map {
-                [0x00, 0x41] + signed(Int64($0.offset)) + [0x0B] + unsigned(UInt64($0.bytes.count)) + $0.bytes
-            }))
-        }
-        return module
-    }
-
-    private static func unsigned(_ value: UInt64) -> [UInt8] {
-        var bytes: [UInt8] = []
-        var remaining = value
-        repeat {
-            var byte = UInt8(remaining & 0x7F)
-            remaining >>= 7
-            if remaining != 0 { byte |= 0x80 }
-            bytes.append(byte)
-        } while remaining != 0
-        return bytes
-    }
-
-    private static func signed(_ value: Int64) -> [UInt8] {
-        var bytes: [UInt8] = []
-        var remaining = value
-        while true {
-            var byte = UInt8(truncatingIfNeeded: remaining & 0x7F)
-            remaining >>= 7
-            let signBitSet: Bool = (byte & 0x40) != 0
-            let finished: Bool = remaining == 0 ? !signBitSet : (remaining == -1 && signBitSet)
-            if !finished { byte |= 0x80 }
-            bytes.append(byte)
-            if finished { return bytes }
-        }
-    }
-
-    private static func name(_ text: String) -> [UInt8] {
-        unsigned(UInt64(text.utf8.count)) + Array(text.utf8)
-    }
-
-    private static func vector(_ items: [[UInt8]]) -> [UInt8] {
-        unsigned(UInt64(items.count)) + items.flatMap { $0 }
-    }
-
-    private static func section(_ id: UInt8, _ content: [UInt8]) -> [UInt8] {
-        [id] + unsigned(UInt64(content.count)) + content
     }
 }
 

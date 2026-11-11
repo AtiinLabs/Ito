@@ -22,7 +22,7 @@ final class SearchRouteFactoryTests: XCTestCase {
         XCTAssertEqual(pluginID, "plugin.manga")
         XCTAssertTrue(routeRunner === runner)
         XCTAssertEqual(routeMedia.key, media.key)
-        _ = try await loader(routeMedia)
+        _ = try await loader(routeMedia, makeTestNetworkOperation(.seriesMetadata))
         XCTAssertEqual(context.mangaLoadCount, 1)
         XCTAssertEqual(context.animeLoadCount, 0)
         XCTAssertEqual(context.novelLoadCount, 0)
@@ -46,7 +46,7 @@ final class SearchRouteFactoryTests: XCTestCase {
         XCTAssertEqual(pluginID, "plugin.anime")
         XCTAssertTrue(routeRunner === runner)
         XCTAssertEqual(routeMedia.key, media.key)
-        _ = try await loader(routeMedia)
+        _ = try await loader(routeMedia, makeTestNetworkOperation(.seriesMetadata))
         XCTAssertEqual(context.mangaLoadCount, 0)
         XCTAssertEqual(context.animeLoadCount, 1)
         XCTAssertEqual(context.novelLoadCount, 0)
@@ -70,7 +70,7 @@ final class SearchRouteFactoryTests: XCTestCase {
         XCTAssertEqual(pluginID, "plugin.novel")
         XCTAssertTrue(routeRunner === runner)
         XCTAssertEqual(routeMedia.key, media.key)
-        _ = try await loader(routeMedia)
+        _ = try await loader(routeMedia, makeTestNetworkOperation(.seriesMetadata))
         XCTAssertEqual(context.mangaLoadCount, 0)
         XCTAssertEqual(context.animeLoadCount, 0)
         XCTAssertEqual(context.novelLoadCount, 1)
@@ -92,7 +92,7 @@ final class SearchRouteFactoryTests: XCTestCase {
 
     func testSourceRouteFactoryPreservesTypedPayloadRunnerAndCanonicalID() {
         let runner = ItoRunner()
-        let context = ItoRunnerSourceContext(runner: runner)
+        let context = ItoRunnerSourceContext(runner: runner, pluginID: "plugin.test", contexts: PluginNetworkContexts())
         let media = ResolvedPluginMedia.manga(
             Manga(key: "source-key", title: "Source")
         )
@@ -160,17 +160,17 @@ private final class SearchDetailLoadingSpy: SearchDetailLoading {
         self.runner = runner
     }
 
-    func loadManga(_ manga: Manga) async throws -> Manga {
+    func loadManga(_ manga: Manga, operation: PluginNetworkOperation) async throws -> Manga {
         mangaLoadCount += 1
         return manga
     }
 
-    func loadAnime(_ anime: Anime) async throws -> Anime {
+    func loadAnime(_ anime: Anime, operation: PluginNetworkOperation) async throws -> Anime {
         animeLoadCount += 1
         return anime
     }
 
-    func loadNovel(_ novel: Novel) async throws -> Novel {
+    func loadNovel(_ novel: Novel, operation: PluginNetworkOperation) async throws -> Novel {
         novelLoadCount += 1
         return novel
     }

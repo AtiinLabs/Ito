@@ -57,11 +57,14 @@ final class NovelChapterLoaderFake: NovelChapterLoading {
     private var pending: [Pending] = []
     private var pendingWaiters: [PendingWaiter] = []
 
+    /// The operation of each chapter request, in order.
+    private(set) var operations: [PluginNetworkOperation] = []
     func enqueue(_ response: Response, for chapterKey: String) {
         responses[chapterKey, default: []].append(response)
     }
 
-    func content(for entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
+    func content(for entry: MediaEntry, chapter: Chapter, operation: PluginNetworkOperation) async throws -> [Page] {
+        operations.append(operation)
         requests.append(Request(entry: entry, chapter: chapter))
         let response = responses[chapter.key]?.isEmpty == false
             ? responses[chapter.key]?.removeFirst()

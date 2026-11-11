@@ -39,6 +39,8 @@ actor DownloadAttempt {
     private let runtime: DownloadPluginRuntime
     private let fetcher: any DirectAssetFetching
     private let recorder: DownloadPolicyRecorder
+    private let contexts: PluginNetworkContexts
+    private let operation: PluginNetworkOperation
     private let admission: any DownloadAdmissionGate
     private let progress: DownloadProgressSink
     private var imageRunner: (any PluginImageRunner)?
@@ -51,6 +53,8 @@ actor DownloadAttempt {
         fetcher: any DirectAssetFetching,
         recorder: DownloadPolicyRecorder,
         admission: any DownloadAdmissionGate,
+        contexts: PluginNetworkContexts,
+        operation: PluginNetworkOperation,
         progress: @escaping DownloadProgressSink
     ) {
         self.work = work
@@ -60,7 +64,15 @@ actor DownloadAttempt {
         self.fetcher = fetcher
         self.recorder = recorder
         self.admission = admission
+        self.contexts = contexts
+        self.operation = operation
         self.progress = progress
+    }
+
+    /// The host context of one export of this attempt. Every export shares the attempt's operation and the
+    /// job's frozen source epoch; each call gets its own generation.
+    private func networkContext() -> NetworkOperationContext {
+        contexts.context(pluginID: job.pluginId, operation, frozenScope: job.sourceEpoch)
     }
 
     /// Runs the attempt through its final checks and returns what the publish needs. The caller abandons
@@ -91,8 +103,9 @@ actor DownloadAttempt {
 
         try await admit()
         let pages = runtime.pages
+        let context = networkContext()
         let listed = try await pluginCall {
-            try await pages.getChapterPages(entry: entry, chapter: chapter)
+            try await pages.getChapterPages(entry: entry, chapter: chapter, context: context)
         }
         try throwIfDenied()
 
@@ -200,7 +213,7 @@ actor DownloadAttempt {
                 throw DownloadAttemptFailure(outcome: .failed(.unsupportedPageLocator))
             }
             let resolver = try await imageRunnerForAttempt()
-            switch try await PluginImageResolution.resolve(locator, runner: resolver) {
+            switch try await PluginImageResolution.resolve(locator, runner: resolver, context: { networkContext() }) {
             case .fetch(let target, let targetHeaders, let allowedOrigins):
                 return try await transfer {
                     try await fetcher.fetchPluginImage(

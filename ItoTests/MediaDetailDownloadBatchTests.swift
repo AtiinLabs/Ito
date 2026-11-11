@@ -1027,7 +1027,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
     func testAnAnimeSeriesNeverOffersBatchDownloads() async {
         let anime = Anime(key: "anime-1", title: "Anime", episodes: [Anime.Episode(key: "e1", title: "e1", episode: 1)])
         let context = MediaDetailRouteContext<Anime>(
-            loadDetails: { $0 },
+            loadDetails: { media, _ in media },
             searchForRelink: nil,
             makeReaderDestination: { _, _ in
                 .pages(
@@ -1226,13 +1226,13 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         let context = MediaDetailRouteContext<Manga>(
             // The series itself answers with the current catalog; a relink target is already hydrated.
             loadDetails: runnerRoute
-                ? { requested in
+                ? { requested, _ in
                     requested.key == "series-1"
                         ? Manga(key: "series-1", title: "Series", chapters: catalog.chapters)
                         : requested
                 }
                 : nil,
-            searchForRelink: relinkTargets.isEmpty ? nil : { _ in relinkTargets },
+            searchForRelink: relinkTargets.isEmpty ? nil : { _, _ in relinkTargets },
             makeReaderDestination: { media, chapter in
                 .pages(
                     id: UUID(),

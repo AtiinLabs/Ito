@@ -9,6 +9,7 @@ struct AppViewFactory {
     private let pluginManager: any BrowsePluginManaging
     private let repositoryMessagePresenter: any RepositoryManagementMessagePresenting
     private let sourceDependencies: PreparedSourceDependencies
+    private let networkContexts: PluginNetworkContexts
     private let sourceMessagePresenter: any SourceMessagePresenting
     private let discoverDetailDependencies: PreparedDiscoverDetailDependencies
     private let discoverDetailMessagePresenter: any DiscoverDetailMessagePresenting
@@ -65,6 +66,7 @@ struct AppViewFactory {
         self.pluginManager = pluginManager
         self.repositoryMessagePresenter = repositoryMessagePresenter
         self.sourceDependencies = sourceDependencies
+        self.networkContexts = sourceDependencies.networkContexts
         self.sourceMessagePresenter = sourceMessagePresenter
         self.discoverDetailDependencies = discoverDetailDependencies
         self.discoverDetailMessagePresenter = discoverDetailMessagePresenter
@@ -101,7 +103,8 @@ struct AppViewFactory {
                 messagePresenter: mediaDetailMessagePresenter,
                 presentationLogger: presentationLogger,
                 trackingViewFactory: trackingViewFactory,
-                categoryHistoryViewFactory: categoryHistoryViewFactory
+                categoryHistoryViewFactory: categoryHistoryViewFactory,
+                networkContexts: sourceDependencies.networkContexts
             )
         }
         self.mediaDetailViewFactory = mediaDetailViewFactory
@@ -189,7 +192,7 @@ struct AppViewFactory {
                 media: media,
                 pluginID: pluginID,
                 openIntent: openIntent,
-                loader: runner.map(Self.mangaUpdateLoader)
+                loader: runner.map { mangaUpdateLoader($0, pluginID: pluginID) }
             )
         case .anime(let pluginID, let runner, let media):
             makeAnimeDetailView(
@@ -197,8 +200,11 @@ struct AppViewFactory {
                 media: media,
                 pluginID: pluginID,
                 openIntent: openIntent
-            ) { anime in
-                try await pluginCall { try await runner.getMediaUpdate(.anime(anime)).expecting(\.anime) }
+            ) { anime, operation in
+                let context = networkContexts.context(pluginID: pluginID, operation)
+                return try await pluginCall {
+                    try await runner.getMediaUpdate(.anime(anime), context: context).expecting(\.anime)
+                }
             }
         case .novel(let pluginID, let runner, let media):
             makeNovelDetailView(
@@ -206,22 +212,41 @@ struct AppViewFactory {
                 media: media,
                 pluginID: pluginID,
                 openIntent: openIntent,
-                loader: runner.map(Self.novelUpdateLoader)
+                loader: runner.map { novelUpdateLoader($0, pluginID: pluginID) }
             )
         }
     }
 
+    /// The host context of one detail export of a source a route holds, under the caller's operation.
+    func networkContext(pluginID: String, _ operation: PluginNetworkOperation) -> NetworkOperationContext {
+        networkContexts.context(pluginID: pluginID, operation)
+    }
+
     /// Refreshes a series through its installed source. A saved-only destination has no runner, so it
     /// passes no loader and nothing is refreshed.
-    private static func mangaUpdateLoader(_ runner: ItoRunner) -> (Manga) async throws -> Manga {
-        { manga in
-            try await pluginCall { try await runner.getMediaUpdate(.manga(manga)).expecting(\.manga) }
+    private func mangaUpdateLoader(
+        _ runner: ItoRunner,
+        pluginID: String
+    ) -> (Manga, PluginNetworkOperation) async throws -> Manga {
+        let contexts = networkContexts
+        return { manga, operation in
+            let context = contexts.context(pluginID: pluginID, operation)
+            return try await pluginCall {
+                try await runner.getMediaUpdate(.manga(manga), context: context).expecting(\.manga)
+            }
         }
     }
 
-    private static func novelUpdateLoader(_ runner: ItoRunner) -> (Novel) async throws -> Novel {
-        { novel in
-            try await pluginCall { try await runner.getMediaUpdate(.novel(novel)).expecting(\.novel) }
+    private func novelUpdateLoader(
+        _ runner: ItoRunner,
+        pluginID: String
+    ) -> (Novel, PluginNetworkOperation) async throws -> Novel {
+        let contexts = networkContexts
+        return { novel, operation in
+            let context = contexts.context(pluginID: pluginID, operation)
+            return try await pluginCall {
+                try await runner.getMediaUpdate(.novel(novel), context: context).expecting(\.novel)
+            }
         }
     }
 
@@ -398,7 +423,7 @@ struct AppViewFactory {
         media: Manga,
         pluginID: String,
         openIntent: MediaDetailOpenIntent? = nil,
-        loader: ((Manga) async throws -> Manga)?
+        loader: ((Manga, PluginNetworkOperation) async throws -> Manga)?
     ) -> some View {
         if let mediaDetailViewFactory {
             mediaDetailViewFactory.makeMangaView(
@@ -419,7 +444,7 @@ struct AppViewFactory {
         media: Anime,
         pluginID: String,
         openIntent: MediaDetailOpenIntent? = nil,
-        loader: @escaping (Anime) async throws -> Anime
+        loader: @escaping (Anime, PluginNetworkOperation) async throws -> Anime
     ) -> some View {
         if let mediaDetailViewFactory {
             mediaDetailViewFactory.makeAnimeView(
@@ -440,7 +465,7 @@ struct AppViewFactory {
         media: Novel,
         pluginID: String,
         openIntent: MediaDetailOpenIntent? = nil,
-        loader: ((Novel) async throws -> Novel)?
+        loader: ((Novel, PluginNetworkOperation) async throws -> Novel)?
     ) -> some View {
         if let mediaDetailViewFactory {
             mediaDetailViewFactory.makeNovelView(
@@ -578,19 +603,19 @@ enum SearchDetailRoute {
         pluginID: String,
         runner: ItoRunner,
         media: Manga,
-        loader: (Manga) async throws -> Manga
+        loader: (Manga, PluginNetworkOperation) async throws -> Manga
     )
     case anime(
         pluginID: String,
         runner: ItoRunner,
         media: Anime,
-        loader: (Anime) async throws -> Anime
+        loader: (Anime, PluginNetworkOperation) async throws -> Anime
     )
     case novel(
         pluginID: String,
         runner: ItoRunner,
         media: Novel,
-        loader: (Novel) async throws -> Novel
+        loader: (Novel, PluginNetworkOperation) async throws -> Novel
     )
 }
 

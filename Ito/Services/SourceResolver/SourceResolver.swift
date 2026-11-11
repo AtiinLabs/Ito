@@ -28,7 +28,7 @@ public protocol PluginSearching: Sendable {
     var pluginVersion: String? { get async }
     var mediaType: PluginMediaType { get async }
 
-    func search(query: String) async throws -> [ResolvedPluginMedia]
+    func search(query: String, operation: PluginNetworkOperation) async throws -> [ResolvedPluginMedia]
 }
 
 public struct MatchedSource: Sendable, Equatable {
@@ -77,6 +77,8 @@ public actor SourceResolver {
         var pluginsSkipped = Set<String>()
         var pluginFailures = [String: String]()
         var isCancelled = false
+        // One operation per resolver run: the primary and fallback queries of every source share its ID.
+        let operation = PluginNetworkOperation(purpose: .interactiveSearch, operationID: UUID())
 
         let input = CanonicalTitleInput(
             preferredTitle: request.preferredTitle,
@@ -104,7 +106,10 @@ public actor SourceResolver {
                     if await plugin.mediaType != request.mediaType {
                         return .skipped(pID)
                     }
-                    return await self.searchPlugin(plugin: plugin, primaryQuery: primaryQuery, fallbackQuery: fallbackQuery, input: input, isRejected: isRejected)
+                    return await self.searchPlugin(
+                        plugin: plugin, primaryQuery: primaryQuery, fallbackQuery: fallbackQuery, input: input,
+                        isRejected: isRejected, operation: operation
+                    )
                 }
                 activeCount += 1
             }
@@ -146,7 +151,10 @@ public actor SourceResolver {
                             if await plugin.mediaType != request.mediaType {
                                 return .skipped(pID)
                             }
-                            return await self.searchPlugin(plugin: plugin, primaryQuery: primaryQuery, fallbackQuery: fallbackQuery, input: input, isRejected: isRejected)
+                            return await self.searchPlugin(
+                                plugin: plugin, primaryQuery: primaryQuery, fallbackQuery: fallbackQuery, input: input,
+                                isRejected: isRejected, operation: operation
+                            )
                         }
                         activeCount += 1
                     }
@@ -168,7 +176,8 @@ public actor SourceResolver {
         primaryQuery: String,
         fallbackQuery: String?,
         input: CanonicalTitleInput,
-        isRejected: RejectedMappingProvider
+        isRejected: RejectedMappingProvider,
+        operation: PluginNetworkOperation
     ) async -> PluginTaskResult {
         if Task.isCancelled { return .cancelled }
 
@@ -179,7 +188,7 @@ public actor SourceResolver {
         var primaryResults: [ResolvedPluginMedia] = []
         var primaryFailed = false
         do {
-            primaryResults = try await plugin.search(query: primaryQuery)
+            primaryResults = try await plugin.search(query: primaryQuery, operation: operation)
             allCandidates.append(contentsOf: primaryResults)
         } catch is CancellationError {
             return .cancelled
@@ -192,7 +201,7 @@ public actor SourceResolver {
             if let fallback = fallbackQuery, fallback != primaryQuery {
                 if !Task.isCancelled {
                     do {
-                        let fallbackResults = try await plugin.search(query: fallback)
+                        let fallbackResults = try await plugin.search(query: fallback, operation: operation)
                         allCandidates.append(contentsOf: fallbackResults)
                         if !fallbackResults.isEmpty || !primaryFailed {
                             errorString = nil

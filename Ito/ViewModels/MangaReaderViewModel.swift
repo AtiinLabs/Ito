@@ -483,10 +483,11 @@ final class MangaReaderViewModel: ObservableObject {
         mainLoadOperationID = operationID
         loadPhase = .loading
         logStarted(kind: .remoteLoad, operationID: operationID)
+        let operation = PluginNetworkOperation(purpose: .foregroundReading, operationID: operationID)
 
         mainLoadTask = Task { @MainActor [weak self, loader, entry] in
             do {
-                let result = try await loader.pages(for: entry, chapter: chapter)
+                let result = try await loader.pages(for: entry, chapter: chapter, operation: operation)
                 self?.completeMainLoad(
                     result,
                     chapter: chapter,
@@ -627,6 +628,7 @@ final class MangaReaderViewModel: ObservableObject {
         let entry = entry
         adjacentPrefetchOperationID = operationID
         logStarted(kind: .chapterPrefetch, operationID: operationID)
+        let operation = PluginNetworkOperation(purpose: .prefetch, operationID: operationID)
 
         adjacentPrefetchTask = Task { @MainActor [weak self, loader, entry] in
             var hadFailure = false
@@ -645,7 +647,7 @@ final class MangaReaderViewModel: ObservableObject {
                     return
                 }
                 do {
-                    let pages = try await loader.pages(for: entry, chapter: chapter)
+                    let pages = try await loader.pages(for: entry, chapter: chapter, operation: operation)
                     guard self?.isCurrentAdjacentPrefetch(
                         reference: referenceToken,
                         operationID: operationID,
@@ -721,10 +723,11 @@ final class MangaReaderViewModel: ObservableObject {
         let entry = entry
         appendOperationID = operationID
         logStarted(kind: .chapterAppend, operationID: operationID)
+        let operation = PluginNetworkOperation(purpose: .foregroundReading, operationID: operationID)
 
         appendTask = Task { @MainActor [weak self, loader, entry] in
             do {
-                let pages = try await loader.pages(for: entry, chapter: chapter)
+                let pages = try await loader.pages(for: entry, chapter: chapter, operation: operation)
                 self?.completeAppend(
                     pages,
                     chapter: chapter,
@@ -831,10 +834,11 @@ final class MangaReaderViewModel: ObservableObject {
         let entry = entry
         prependOperationID = operationID
         logStarted(kind: .chapterPrepend, operationID: operationID)
+        let operation = PluginNetworkOperation(purpose: .foregroundReading, operationID: operationID)
 
         prependTask = Task { @MainActor [weak self, loader, entry] in
             do {
-                let pages = try await loader.pages(for: entry, chapter: chapter)
+                let pages = try await loader.pages(for: entry, chapter: chapter, operation: operation)
                 self?.completePrepend(
                     pages,
                     chapter: chapter,

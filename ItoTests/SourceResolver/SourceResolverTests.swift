@@ -128,7 +128,7 @@ private actor FakePlugin: PluginSearching {
         self.useGate = use
     }
 
-    func search(query: String) async throws -> [ResolvedPluginMedia] {
+    func search(query: String, operation: PluginNetworkOperation) async throws -> [ResolvedPluginMedia] {
         await probe?.enter()
         do {
             searchCount += 1

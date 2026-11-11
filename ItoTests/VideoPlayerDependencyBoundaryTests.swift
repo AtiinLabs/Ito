@@ -65,7 +65,8 @@ final class VideoPlayerDependencyBoundaryTests: XCTestCase {
         let factory = MediaDetailReaderViewFactory(
             mangaReaderDependencies: .unavailable(),
             novelReaderDependencies: .unavailable(),
-            videoPlayerDependencies: dependencies
+            videoPlayerDependencies: dependencies,
+            networkContexts: PluginNetworkContexts()
         )
         let runner = ItoRunner()
         let anime = Anime(key: "anime", title: "Anime")
@@ -96,7 +97,6 @@ final class VideoPlayerDependencyBoundaryTests: XCTestCase {
     func testReaderFactoryHasNoSecondRunnerLookupAndKeepsAllRoutesTyped() throws {
         let factory = try source("Ito/Views/Browse/MediaDetailViewFactory.swift")
 
-        XCTAssertTrue(factory.contains("ItoRunnerVideoStreamLoader(runner: runner)"))
         XCTAssertFalse(factory.contains("getRunner"))
         XCTAssertFalse(factory.contains("PluginManager"))
         XCTAssertTrue(factory.contains("ReaderView("))

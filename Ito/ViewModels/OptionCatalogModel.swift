@@ -146,7 +146,8 @@ final class OptionCatalogModel: ObservableObject {
                 }
                 guard !missing.isEmpty else { continue }
                 let response = try await context.loadOptionPage(
-                    OptionRequest(catalog: catalog.id, query: .values(missing), limit: UInt32(missing.count))
+                    OptionRequest(catalog: catalog.id, query: .values(missing), limit: UInt32(missing.count)),
+                    operationID: UUID()
                 )
                 guard isCurrent() else { return LabelResolution(labels: [:], unavailable: [], error: nil) }
                 guard let page = response else { throw CatalogUnavailableError.unavailable }

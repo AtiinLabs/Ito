@@ -137,7 +137,7 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
     private(set) var animeDetailLoadCount = 0
     private(set) var novelDetailLoadCount = 0
 
-    func loadHome() async throws -> HomeLayout {
+    func loadHome(operationID: UUID) async throws -> HomeLayout {
         homeLoadCount += 1
         loadEvents.append("home")
         if suspendsHome {
@@ -146,7 +146,7 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
         return try homeResult.get()
     }
 
-    func loadSettingsSurface() async throws -> SettingsSurface? {
+    func loadSettingsSurface(operationID: UUID) async throws -> SettingsSurface? {
         settingsLoadCount += 1
         loadEvents.append("settings")
         return try settingsResult.get().map { .legacy($0, formFailure: nil) }
@@ -159,16 +159,16 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
     var suggestionsHandler: ((String, MediaKind?) async throws -> [SearchSuggestion]?)?
     var searchHandler: ((MediaKind?, String, Int32, [String: ControlValue]) async throws -> MediaPageResult)?
 
-    func loadSearchCapabilities(kind: MediaKind?) async throws -> SearchCapabilities? {
+    func loadSearchCapabilities(kind: MediaKind?, operationID: UUID) async throws -> SearchCapabilities? {
         if let capabilitiesHandler { return try await capabilitiesHandler(kind) }
         return try capabilitiesResult.get()
     }
 
-    func loadOptionPage(_ request: OptionRequest) async throws -> OptionPage? {
+    func loadOptionPage(_ request: OptionRequest, operationID: UUID) async throws -> OptionPage? {
         try optionPageResult.get()
     }
 
-    func loadSearchSuggestions(query: String, kind: MediaKind?) async throws -> [SearchSuggestion]? {
+    func loadSearchSuggestions(query: String, kind: MediaKind?, operationID: UUID) async throws -> [SearchSuggestion]? {
         if let suggestionsHandler { return try await suggestionsHandler(query, kind) }
         return try suggestionsResult.get()
     }
@@ -177,7 +177,8 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
         kind pluginType: MediaKind?,
         query: String,
         page: Int32,
-        filterValues: [String: ControlValue]
+        filterValues: [String: ControlValue],
+        operationID: UUID
     ) async throws -> MediaPageResult {
         searchInvocations.append(
             .init(pluginType: pluginType, query: query, page: page, filterCount: filterValues.count)
@@ -193,7 +194,8 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
 
     func loadListing(
         listing: Listing,
-        page: Int32
+        page: Int32,
+        operationID: UUID
     ) async throws -> MediaPageResult {
         listingInvocations.append(
             .init(listingID: listing.id, page: page)
@@ -206,17 +208,17 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
         return try listingResults[page, default: .success(MediaPageResult(entries: [], hasNextPage: false))].get()
     }
 
-    func loadManga(_ manga: Manga) async throws -> Manga {
+    func loadManga(_ manga: Manga, operation: PluginNetworkOperation) async throws -> Manga {
         mangaDetailLoadCount += 1
         return manga
     }
 
-    func loadAnime(_ anime: Anime) async throws -> Anime {
+    func loadAnime(_ anime: Anime, operation: PluginNetworkOperation) async throws -> Anime {
         animeDetailLoadCount += 1
         return anime
     }
 
-    func loadNovel(_ novel: Novel) async throws -> Novel {
+    func loadNovel(_ novel: Novel, operation: PluginNetworkOperation) async throws -> Novel {
         novelDetailLoadCount += 1
         return novel
     }

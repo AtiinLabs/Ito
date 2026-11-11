@@ -213,11 +213,12 @@ final class VideoPlayerViewModel: ObservableObject {
         streamLoadOperationID = operationID
         loadPhase = .loading
         logStarted(kind: .streamLoad, operationID: operationID)
+        let operation = PluginNetworkOperation(purpose: .foregroundReading, operationID: operationID)
 
         let task = Task { @MainActor [weak self, loader, anime, episode] in
             defer { self?.finishTestingOperation(operationID) }
             do {
-                let videos = try await loader.videos(for: anime, episode: episode)
+                let videos = try await loader.videos(for: anime, episode: episode, operation: operation)
                 self?.completeStreamLoad(
                     videos,
                     operationID: operationID,

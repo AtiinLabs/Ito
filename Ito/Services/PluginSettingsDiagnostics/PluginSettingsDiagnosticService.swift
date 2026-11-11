@@ -3,7 +3,7 @@ import ito_runner
 
 /// Rejects all network requests immediately during diagnostic inspection (schema discovery/validation).
 nonisolated struct PluginDiagnosticDenyingNetModule: NetModule, Sendable {
-    func fetch(request: NetRequest) async throws -> NetResponse {
+    func fetch(request: NetRequest, context: NetworkOperationContext) async throws -> NetResponse {
         throw URLError(.notConnectedToInternet)
     }
 }
@@ -15,11 +15,11 @@ nonisolated struct PluginDiagnosticWebviewModule: WebviewModule {
         message: String(localized: "A web view is not available during settings diagnostics.")
     )
 
-    func loadUrl(request: WebviewRequest) async throws -> WebviewResponse {
+    func loadUrl(request: WebviewRequest, context: NetworkOperationContext) async throws -> WebviewResponse {
         throw Self.unavailable
     }
 
-    func executeJs(script: String) async throws -> String {
+    func executeJs(script: String, context: NetworkOperationContext) async throws -> String {
         throw Self.unavailable
     }
 }
@@ -49,18 +49,23 @@ final class PluginSettingsDiagnosticService: PluginSettingsDiagnosing {
         let defaults = try await captureDefaults(pluginID: pluginID, surface: surface, secretDrafts: secretDrafts)
         try Task.checkCancellation()
 
+        let context = networkContext(pluginID: pluginID, PluginNetworkOperation(purpose: .sourceSetup, operationID: UUID()))
         let runner = try await loadRunner(
-            pluginURL: pluginURL, defaults: defaults, surface: surface, netModule: PluginDiagnosticDenyingNetModule()
+            pluginURL: pluginURL,
+            defaults: defaults,
+            surface: surface,
+            netModule: PluginDiagnosticDenyingNetModule(),
+            context: context
         )
         try Task.checkCancellation()
 
         let actions = try await pluginCall {
-            try await runner.getSettingsActions()
+            try await runner.getSettingsActions(context: context())
         } ?? []
         try Task.checkCancellation()
 
         let issues = try await pluginCall {
-            try await runner.validateSettings()
+            try await runner.validateSettings(context: context())
         }
         try Task.checkCancellation()
 
@@ -87,11 +92,14 @@ final class PluginSettingsDiagnosticService: PluginSettingsDiagnosing {
         )
         defer { netModule.invalidate() }
 
-        let runner = try await loadRunner(pluginURL: pluginURL, defaults: defaults, surface: surface, netModule: netModule)
+        let context = networkContext(pluginID: pluginID, PluginNetworkOperation(purpose: .sourceSetup, operationID: UUID()))
+        let runner = try await loadRunner(
+            pluginURL: pluginURL, defaults: defaults, surface: surface, netModule: netModule, context: context
+        )
         try Task.checkCancellation()
 
         let result = try await pluginCall {
-            try await runner.runSettingsAction(actionID)
+            try await runner.runSettingsAction(actionID, context: context())
         }
         try Task.checkCancellation()
 
@@ -129,11 +137,21 @@ final class PluginSettingsDiagnosticService: PluginSettingsDiagnosing {
         return defaults
     }
 
+    /// The host context of one export of a diagnostic call. Every export of that call shares its operation.
+    private func networkContext(
+        pluginID: String,
+        _ operation: PluginNetworkOperation
+    ) -> () -> NetworkOperationContext {
+        let contexts = settingsStore.networkContexts
+        return { contexts.context(pluginID: pluginID, operation) }
+    }
+
     private func loadRunner(
         pluginURL: URL,
         defaults: PluginCompletionDefaults,
         surface: SettingsSurface,
-        netModule: any NetModule
+        netModule: any NetModule,
+        context: () -> NetworkOperationContext
     ) async throws -> ItoRunner {
         let runner = ItoRunner()
         await runner.setNetModule(netModule)
@@ -144,7 +162,7 @@ final class PluginSettingsDiagnosticService: PluginSettingsDiagnosing {
         _ = try await runner.loadBundle(from: pluginURL)
         if case .form = surface {
             // The isolated instance must negotiate the same surface before interpreting saved values.
-            _ = try await pluginCall { try await runner.getSettingsSurface() }
+            _ = try await pluginCall { try await runner.getSettingsSurface(context: context()) }
         }
         return runner
     }

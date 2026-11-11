@@ -80,7 +80,7 @@ final class PluginDataLoaderNativeTests: XCTestCase {
         )
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [PluginImageTransportTestURLProtocol.self]
-        let loader = PluginDataLoader(configuration: config, runnerProvider: { _ in runner })
+        let loader = PluginDataLoader(configuration: config, contexts: PluginNetworkContexts(), runnerProvider: { _ in runner })
         let completed = expectation(description: "Both loaders finish cancellation")
         completed.expectedFulfillmentCount = 2
         let capture = NativeImageCapture()
@@ -109,7 +109,7 @@ final class PluginDataLoaderNativeTests: XCTestCase {
             let started = expectation(description: "Legacy handler entered")
             let done = expectation(description: "Cancelled image completed")
             let runner = DelayedLegacyImageRunner(didStart: { started.fulfill() })
-            let loader = PluginDataLoader(configuration: .ephemeral, runnerProvider: { _ in runner })
+            let loader = PluginDataLoader(configuration: .ephemeral, contexts: PluginNetworkContexts(), runnerProvider: { _ in runner })
             let capture = NativeImageCapture()
             let request = URLRequest(url: URL(string: "ito://fixture.plugin/https://images.example/cover")!)
             let subscription = loader.loadData(with: request, didReceiveData: { data, _ in
@@ -144,6 +144,7 @@ final class PluginDataLoaderNativeTests: XCTestCase {
         let cache = TestImageRunnerCache(initialRunner: crashedRunner)
         let loader = PluginDataLoader(
             configuration: .ephemeral,
+            contexts: PluginNetworkContexts(),
             runnerProvider: { pluginId in
                 await cache.runner(for: pluginId)
             },
@@ -200,13 +201,13 @@ final class PluginDataLoaderNativeTests: XCTestCase {
         XCTAssertEqual(legacyCalls, 1)
     }
 
-
     func testReportedRefusalRemainsFailClosedAndDoesNotEvictRunner() async {
         let refusal = PluginCallError(kind: .reported, message: "Explicit refusal")
         let runner = NativeImageRunner(refusal: refusal)
         let cache = TestImageRunnerCache(initialRunner: runner)
         let loader = PluginDataLoader(
             configuration: .ephemeral,
+            contexts: PluginNetworkContexts(),
             runnerProvider: { pluginId in
                 await cache.runner(for: pluginId)
             },
@@ -244,6 +245,7 @@ final class PluginDataLoaderNativeTests: XCTestCase {
         let cache = TestImageRunnerCache(initialRunner: runner)
         let loader = PluginDataLoader(
             configuration: .ephemeral,
+            contexts: PluginNetworkContexts(),
             runnerProvider: { pluginId in
                 await cache.runner(for: pluginId)
             },
@@ -280,7 +282,7 @@ final class PluginDataLoaderNativeTests: XCTestCase {
     private func load(_ runner: NativeImageRunner) async -> NativeImageCapture {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [PluginImageTransportTestURLProtocol.self]
-        let loader = PluginDataLoader(configuration: config, runnerProvider: { _ in runner })
+        let loader = PluginDataLoader(configuration: config, contexts: PluginNetworkContexts(), runnerProvider: { _ in runner })
         let capture = NativeImageCapture()
         let done = expectation(description: "Image load completed")
         let request = URLRequest(url: URL(string: "ito://fixture.plugin/api/v1/cover")!)
@@ -340,16 +342,16 @@ private actor CrashingImageRunner: PluginImageRunner {
         self.crashOnLegacy = crashOnLegacy
     }
 
-    func getImageRequest(_ locator: String) async throws -> PluginImageRequest? {
+    func getImageRequest(_ locator: String, context: NetworkOperationContext) async throws -> PluginImageRequest? {
         if crashOnDescriptor {
             throw ItoError.wasmTrap("Synthetic image trap")
         }
         return nil
     }
 
-    func getImageOrigins() async throws -> [String]? { nil }
+    func getImageOrigins(context: NetworkOperationContext) async throws -> [String]? { nil }
 
-    func handleImage(_ locator: String) async throws -> Data? {
+    func handleImage(_ locator: String, context: NetworkOperationContext) async throws -> Data? {
         if crashOnLegacy {
             throw ItoError.wasmTrap("Synthetic image trap")
         }
@@ -369,12 +371,12 @@ private actor NativeImageRunner: PluginImageRunner {
         self.refusal = refusal
     }
 
-    func getImageRequest(_ locator: String) async throws -> PluginImageRequest? {
+    func getImageRequest(_ locator: String, context: NetworkOperationContext) async throws -> PluginImageRequest? {
         if let refusal { throw refusal }
         return request
     }
-    func getImageOrigins() async throws -> [String]? { origins }
-    func handleImage(_ locator: String) async throws -> Data? {
+    func getImageOrigins(context: NetworkOperationContext) async throws -> [String]? { origins }
+    func handleImage(_ locator: String, context: NetworkOperationContext) async throws -> Data? {
         legacyCalls += 1
         return Data([9, 8])
     }
@@ -385,9 +387,9 @@ private actor DelayedLegacyImageRunner: PluginImageRunner {
     private var continuation: CheckedContinuation<Data?, Never>?
 
     init(didStart: @escaping @Sendable () -> Void) { self.didStart = didStart }
-    func getImageRequest(_ locator: String) async throws -> PluginImageRequest? { nil }
-    func getImageOrigins() async throws -> [String]? { nil }
-    func handleImage(_ locator: String) async throws -> Data? {
+    func getImageRequest(_ locator: String, context: NetworkOperationContext) async throws -> PluginImageRequest? { nil }
+    func getImageOrigins(context: NetworkOperationContext) async throws -> [String]? { nil }
+    func handleImage(_ locator: String, context: NetworkOperationContext) async throws -> Data? {
         await withCheckedContinuation {
             continuation = $0
             didStart()

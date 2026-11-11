@@ -60,6 +60,7 @@ final class AppMessageDiscoverDetailPresenter: DiscoverDetailMessagePresenting {
 protocol SourceResolverPluginProviding: SourceRunnerProviding {
     var installedPlugins: [String: InstalledPlugin] { get }
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> { get }
+    var networkContexts: PluginNetworkContexts { get }
 
     func sourceSearchAdapter(
         for pluginID: String,
@@ -80,12 +81,15 @@ extension SourceResolverPluginProviding {
             pluginID: plugin.id,
             pluginVersion: plugin.info.version,
             mediaType: mediaType,
-            runner: context.runner
+            runner: context.runner,
+            contexts: networkContexts
         )
     }
 }
 
-extension PluginManager: SourceResolverPluginProviding {}
+extension PluginManager: SourceResolverPluginProviding {
+    var networkContexts: PluginNetworkContexts { pluginSettingsStore.networkContexts }
+}
 
 @MainActor
 protocol SourceResolverLibraryObserving: AnyObject {
@@ -175,6 +179,7 @@ final class UnavailableDiscoverDetailDependency: DiscoverDetailServing,
     @unchecked Sendable {
     let installedPlugins: [String: InstalledPlugin] = [:]
     let libraryItems: [LibraryItem] = []
+    let networkContexts = PluginNetworkContexts()
 
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> {
         Just(installedPlugins).eraseToAnyPublisher()

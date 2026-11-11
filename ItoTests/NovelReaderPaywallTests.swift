@@ -143,7 +143,7 @@ final class NovelReaderPaywallTests: XCTestCase {
         XCTAssertEqual(subject.loader.callCount(for: "c1"), 1)
 
         // Attempt append
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
         await subject.viewModel.waitForAllOperationsForTesting()
 
         XCTAssertEqual(subject.loader.callCount(for: "c2"), 0)

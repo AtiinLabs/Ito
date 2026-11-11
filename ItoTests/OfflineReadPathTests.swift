@@ -19,7 +19,7 @@ struct OfflineReadPathTests {
         let remote = RecordingMangaPageLoader()
         let loader = ResolvingMangaPageLoader(pluginID: "plugin.test", local: store, remote: remote)
 
-        let pages = try await loader.pages(for: Self.entry, chapter: Self.chapter)
+        let pages = try await loader.pages(for: Self.entry, chapter: Self.chapter, operation: makeTestNetworkOperation())
 
         #expect(remote.callCount == 0)
         #expect(pages.map(\.index) == [0, 1, 2])
@@ -39,7 +39,7 @@ struct OfflineReadPathTests {
         let loader = ResolvingMangaPageLoader(pluginID: "plugin.test", local: store, remote: nil)
 
         await #expect(throws: OfflineReadError.notDownloaded) {
-            try await loader.pages(for: Self.entry, chapter: Self.chapter)
+            try await loader.pages(for: Self.entry, chapter: Self.chapter, operation: makeTestNetworkOperation())
         }
     }
 
@@ -49,9 +49,9 @@ struct OfflineReadPathTests {
         let remote = RecordingMangaPageLoader()
         let loader = ResolvingMangaPageLoader(pluginID: "plugin.test", local: store, remote: remote)
 
-        _ = try await loader.pages(for: Self.entry, chapter: Self.chapter)
+        _ = try await loader.pages(for: Self.entry, chapter: Self.chapter, operation: makeTestNetworkOperation())
         _ = try await fixture.publishedEdition(store)
-        _ = try await loader.pages(for: Self.entry, chapter: Self.chapter)
+        _ = try await loader.pages(for: Self.entry, chapter: Self.chapter, operation: makeTestNetworkOperation())
 
         #expect(remote.callCount == 2)
     }
@@ -61,10 +61,10 @@ struct OfflineReadPathTests {
         let store = fixture.makeStore()
         _ = try await fixture.publishedEdition(store)
         let loader = ResolvingMangaPageLoader(pluginID: "plugin.test", local: store, remote: nil)
-        _ = try await loader.pages(for: Self.entry, chapter: Self.chapter)
+        _ = try await loader.pages(for: Self.entry, chapter: Self.chapter, operation: makeTestNetworkOperation())
 
         try await store.delete(OfflineStoreFixture.mangaEdition)
-        let pages = try await loader.pages(for: Self.entry, chapter: Self.chapter)
+        let pages = try await loader.pages(for: Self.entry, chapter: Self.chapter, operation: makeTestNetworkOperation())
 
         #expect(pages.count == 3)
         #expect(try await store.verifiedEdition(for: OfflineStoreFixture.mangaEdition) == nil)
@@ -166,7 +166,7 @@ struct OfflineReadPathTests {
         )
         let loader = ResolvingNovelChapterLoader(pluginID: "plugin.test", local: store, remote: nil)
 
-        let pages = try await loader.content(for: Self.entry, chapter: Self.chapter)
+        let pages = try await loader.content(for: Self.entry, chapter: Self.chapter, operation: makeTestNetworkOperation())
 
         guard case .text(let text)? = pages.first?.content else {
             Issue.record("A text page is returned as text")
@@ -186,7 +186,7 @@ struct OfflineReadPathTests {
             pages: [OfflinePageInput(content: .image(Self.pngData()), sourceIndex: 0)]
         )
         let loader = ResolvingMangaPageLoader(pluginID: "plugin.test", local: store, remote: nil)
-        let pages = try await loader.pages(for: Self.entry, chapter: pngChapter)
+        let pages = try await loader.pages(for: Self.entry, chapter: pngChapter, operation: makeTestNetworkOperation())
         guard case .url(let locator)? = pages.first?.content else {
             Issue.record("An image page is addressed by its offline locator")
             return
@@ -248,8 +248,8 @@ struct OfflineReadPathTests {
         let remote = RecordingNovelChapterLoader()
         let loader = ResolvingNovelChapterLoader(pluginID: "plugin.test", local: store, remote: remote)
 
-        _ = try await loader.content(for: Self.entry, chapter: Self.chapter)
-        _ = try await loader.content(for: Self.entry, chapter: Self.chapter)
+        _ = try await loader.content(for: Self.entry, chapter: Self.chapter, operation: makeTestNetworkOperation())
+        _ = try await loader.content(for: Self.entry, chapter: Self.chapter, operation: makeTestNetworkOperation())
 
         #expect(remote.callCount == 2)
     }
@@ -269,7 +269,7 @@ struct OfflineReadPathTests {
         let loader = ResolvingNovelChapterLoader(pluginID: "plugin.test", local: store, remote: nil)
 
         await #expect(throws: OfflineStoreError.damaged(.pageMismatch)) {
-            try await loader.content(for: Self.entry, chapter: Self.chapter)
+            try await loader.content(for: Self.entry, chapter: Self.chapter, operation: makeTestNetworkOperation())
         }
     }
 
@@ -302,7 +302,7 @@ struct OfflineReadPathTests {
 private final class RecordingMangaPageLoader: MangaPageLoading {
     private(set) var callCount = 0
 
-    func pages(for entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
+    func pages(for entry: MediaEntry, chapter: Chapter, operation: PluginNetworkOperation) async throws -> [Page] {
         _ = (entry, chapter)
         callCount += 1
         return [Page(index: 0, content: .url("https://remote.example.test/p0000.jpg"))]
@@ -313,7 +313,7 @@ private final class RecordingMangaPageLoader: MangaPageLoading {
 private final class RecordingNovelChapterLoader: NovelChapterLoading {
     private(set) var callCount = 0
 
-    func content(for entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
+    func content(for entry: MediaEntry, chapter: Chapter, operation: PluginNetworkOperation) async throws -> [Page] {
         _ = (entry, chapter)
         callCount += 1
         return [Page(index: 0, content: .text("Remote page."))]

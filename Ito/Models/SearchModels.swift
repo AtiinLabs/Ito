@@ -4,9 +4,9 @@ import ito_runner
 public protocol SearchDetailLoading: AnyObject {
     var runner: ItoRunner { get }
 
-    func loadManga(_ manga: Manga) async throws -> Manga
-    func loadAnime(_ anime: Anime) async throws -> Anime
-    func loadNovel(_ novel: Novel) async throws -> Novel
+    func loadManga(_ manga: Manga, operation: PluginNetworkOperation) async throws -> Manga
+    func loadAnime(_ anime: Anime, operation: PluginNetworkOperation) async throws -> Anime
+    func loadNovel(_ novel: Novel, operation: PluginNetworkOperation) async throws -> Novel
 }
 
 public enum SearchDestination {

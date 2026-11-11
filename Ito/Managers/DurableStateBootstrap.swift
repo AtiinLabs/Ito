@@ -334,7 +334,12 @@ public final class DurableStateBootstrap: ObservableObject {
         let updates = UpdateManager(dbPool: dbPool, updateSource: PluginLibraryUpdateSource(pluginManager: plugins))
         let progress = ReadProgressManager(dbPool: dbPool)
         let completionStore = pluginSettings.completionStore
-        let completionExecutor = PluginCompletionExecutor(store: completionStore, cookies: pluginCookies, trust: pluginTrust) { pluginID in
+        let completionExecutor = PluginCompletionExecutor(
+            store: completionStore,
+            cookies: pluginCookies,
+            trust: pluginTrust,
+            contexts: pluginSettings.networkContexts
+        ) { pluginID in
             guard let plugin = plugins.installedPlugins[pluginID] else { throw URLError(.fileDoesNotExist) }
             if let refusal = plugin.compatibilityRefusal(supported: plugins.supportedABI) { throw refusal }
             return plugin.url

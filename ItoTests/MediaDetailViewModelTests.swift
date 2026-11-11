@@ -1026,8 +1026,8 @@ final class MediaDetailViewModelTests: XCTestCase {
         let route = MediaRouteHarness<Manga>()
         let runner = ItoRunner()
         let context = MediaDetailRouteContext<Manga>(
-            loadDetails: { try await route.load($0) },
-            searchForRelink: { try await route.search($0) },
+            loadDetails: { try await route.load($0, operation: $1) },
+            searchForRelink: { try await route.search($0, operationID: $1) },
             makeReaderDestination: { parent, selected in
                 .pages(
                     id: UUID(),
@@ -1096,8 +1096,8 @@ final class MediaDetailViewModelTests: XCTestCase {
             media: media,
             pluginID: Self.pluginID,
             routeContext: MediaDetailRouteContext(
-                loadDetails: { _ in hydrated ?? media },
-                searchForRelink: { _ in [] },
+                loadDetails: { _, _ in hydrated ?? media },
+                searchForRelink: { _, _ in [] },
                 makeReaderDestination: { parent, selected in
                     .anime(
                         id: UUID(),
@@ -1129,8 +1129,8 @@ final class MediaDetailViewModelTests: XCTestCase {
             media: media,
             pluginID: Self.pluginID,
             routeContext: MediaDetailRouteContext(
-                loadDetails: { $0 },
-                searchForRelink: { _ in [] },
+                loadDetails: { media, _ in media },
+                searchForRelink: { _, _ in [] },
                 makeReaderDestination: { parent, selected in
                     .text(
                         id: UUID(),

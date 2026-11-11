@@ -81,14 +81,14 @@ nonisolated final class DownloadNetModule: NetModule, Sendable {
         self.recorder = recorder
     }
 
-    func fetch(request: NetRequest) async throws -> NetResponse {
+    func fetch(request: NetRequest, context: NetworkOperationContext) async throws -> NetResponse {
         guard recorder.firstDenial == nil else { throw DownloadTransportDenied() }
         if case .wait(let reason) = gate.admission() {
             recorder.record(.waiting(reason))
             throw DownloadTransportDenied()
         }
         do {
-            return try await inner.fetch(request: request)
+            return try await inner.fetch(request: request, context: context)
         } catch let error as URLError {
             guard let denial = Self.denial(for: error) else { throw error }
             recorder.record(denial)
@@ -132,12 +132,12 @@ nonisolated struct RefusingCloudflareHandler: AppNetCloudflareHandling {
 nonisolated struct DownloadWebviewModule: WebviewModule {
     let recorder: DownloadPolicyRecorder
 
-    func loadUrl(request: WebviewRequest) async throws -> WebviewResponse {
+    func loadUrl(request: WebviewRequest, context: NetworkOperationContext) async throws -> WebviewResponse {
         recorder.record(.requiresInteractiveSource)
         throw ItoError.hostModuleError(domain: "webview", message: "Downloads do not use a web view.")
     }
 
-    func executeJs(script: String) async throws -> String {
+    func executeJs(script: String, context: NetworkOperationContext) async throws -> String {
         recorder.record(.requiresInteractiveSource)
         throw ItoError.hostModuleError(domain: "webview", message: "Downloads do not use a web view.")
     }

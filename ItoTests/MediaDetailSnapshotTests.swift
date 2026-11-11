@@ -54,16 +54,16 @@ final class MediaDetailSnapshotTests: XCTestCase {
         route.loadResponses = loads
         let connectivity = ConnectivityFake(isOffline: isOffline)
         let relink = MediaDetailRelinkFake()
-        var loader: ((Manga) async throws -> Manga)?
+        var loader: ((Manga, PluginNetworkOperation) async throws -> Manga)?
         if !savedOnly {
-            loader = { media in
+            loader = { media, operation in
                 log.events.append("load")
-                return try await route.load(media)
+                return try await route.load(media, operation: operation)
             }
         }
         let context = MediaDetailRouteContext<Manga>(
             loadDetails: loader,
-            searchForRelink: { try await route.search($0) },
+            searchForRelink: { try await route.search($0, operationID: $1) },
             makeReaderDestination: { parent, selected in
                 .pages(
                     id: UUID(),

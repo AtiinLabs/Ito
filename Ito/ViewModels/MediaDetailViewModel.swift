@@ -264,7 +264,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     func start() {
         if hasStarted {
             if detailLoadState == .idle {
-                _ = beginDetailLoad(advanceBaselineWhenFinished: true)
+                _ = beginDetailLoad(advanceBaselineWhenFinished: true, purpose: .seriesMetadata)
             }
             if theme == nil, themeTask == nil {
                 loadCachedTheme()
@@ -274,16 +274,16 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         hasStarted = true
         downloadBatch.reload()
         loadCachedTheme()
-        _ = beginDetailLoad(advanceBaselineWhenFinished: true)
+        _ = beginDetailLoad(advanceBaselineWhenFinished: true, purpose: .seriesMetadata)
     }
 
     func refresh() async {
-        let task = beginDetailLoad(advanceBaselineWhenFinished: false)
+        let task = beginDetailLoad(advanceBaselineWhenFinished: false, purpose: .manualCatalogRefresh)
         await task.value
     }
 
     func retryDetailLoad() {
-        _ = beginDetailLoad(advanceBaselineWhenFinished: true)
+        _ = beginDetailLoad(advanceBaselineWhenFinished: true, purpose: .seriesMetadata)
     }
 
     func heroImageLoaded(_ image: UIImage) {
@@ -514,7 +514,9 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         logStarted(kind: .relink, operationID: operationID)
 
         do {
-            let hydrated = try await loadDetails(selectedMedia)
+            let hydrated = try await loadDetails(
+                selectedMedia, PluginNetworkOperation(purpose: .seriesMetadata, operationID: operationID)
+            )
             let payload = try JSONEncoder().encode(hydrated)
             let cancelledDownloadCount = try await dependencies.relink.relink(
                 pluginID: pluginID,
@@ -572,7 +574,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         guard !isAppeared else { return }
         isAppeared = true
         if hasStarted, detailLoadState == .idle {
-            _ = beginDetailLoad(advanceBaselineWhenFinished: true)
+            _ = beginDetailLoad(advanceBaselineWhenFinished: true, purpose: .seriesMetadata)
         }
         if hasStarted, theme == nil, themeTask == nil {
             loadCachedTheme()
@@ -596,7 +598,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     private func beginDetailLoad(
-        advanceBaselineWhenFinished: Bool
+        advanceBaselineWhenFinished: Bool,
+        purpose: NetworkOperationContext.Purpose
     ) -> Task<Void, Never> {
         detailTask?.cancel()
         let operationID = UUID()
@@ -616,7 +619,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
                 // from. A token that cannot be read means no refresh, never a failed load.
                 var snapshotToken: LibrarySnapshotToken?
                 if let tokenIdentity { snapshotToken = await snapshots.token(for: tokenIdentity) }
-                let updated = try await loader(requestedMedia)
+                let updated = try await loader(requestedMedia, PluginNetworkOperation(purpose: purpose, operationID: operationID))
                 guard self?.isCurrentDetailOperation(operationID, mediaKey: requestedKey) == true else {
                     self?.logFinished(
                         kind: .detailLoad,
@@ -691,7 +694,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         logStarted(kind: .relinkSearch, operationID: operationID)
         relinkSearchTask = Task { [weak self] in
             do {
-                let results = try await search(query)
+                let results = try await search(query, operationID)
                 guard self?.isCurrentRelinkSearch(
                     operationID,
                     presentationID: presentationID,

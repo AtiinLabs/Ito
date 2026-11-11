@@ -31,7 +31,8 @@ protocol SearchPluginExecuting: AnyObject {
         plugin: SearchPluginDescriptor,
         kind: MediaKind?,
         query: String,
-        limit: Int
+        limit: Int,
+        operation: PluginNetworkOperation
     ) async throws -> [PluginSearchResult]
 
     func evictRunner(for pluginID: String)
@@ -75,21 +76,33 @@ struct UserDefaultsRecentSearchStore: RecentSearchPersisting {
 
 public final class ItoRunnerSearchContext: SearchDetailLoading {
     public let runner: ItoRunner
+    let pluginID: String
+    private let contexts: PluginNetworkContexts
 
-    public init(runner: ItoRunner) {
+    init(runner: ItoRunner, pluginID: String, contexts: PluginNetworkContexts) {
         self.runner = runner
+        self.pluginID = pluginID
+        self.contexts = contexts
     }
 
-    public func loadManga(_ manga: Manga) async throws -> Manga {
-        try await pluginCall { try await runner.getMediaUpdate(.manga(manga)).expecting(\.manga) }
+    /// The host context of one export of `operation` for this source. Each call is a new export.
+    func networkContext(_ operation: PluginNetworkOperation) -> NetworkOperationContext {
+        contexts.context(pluginID: pluginID, operation)
     }
 
-    public func loadAnime(_ anime: Anime) async throws -> Anime {
-        try await pluginCall { try await runner.getMediaUpdate(.anime(anime)).expecting(\.anime) }
+    public func loadManga(_ manga: Manga, operation: PluginNetworkOperation) async throws -> Manga {
+        let context = networkContext(operation)
+        return try await pluginCall { try await runner.getMediaUpdate(.manga(manga), context: context).expecting(\.manga) }
     }
 
-    public func loadNovel(_ novel: Novel) async throws -> Novel {
-        try await pluginCall { try await runner.getMediaUpdate(.novel(novel)).expecting(\.novel) }
+    public func loadAnime(_ anime: Anime, operation: PluginNetworkOperation) async throws -> Anime {
+        let context = networkContext(operation)
+        return try await pluginCall { try await runner.getMediaUpdate(.anime(anime), context: context).expecting(\.anime) }
+    }
+
+    public func loadNovel(_ novel: Novel, operation: PluginNetworkOperation) async throws -> Novel {
+        let context = networkContext(operation)
+        return try await pluginCall { try await runner.getMediaUpdate(.novel(novel), context: context).expecting(\.novel) }
     }
 }
 
@@ -116,7 +129,8 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
         plugin: SearchPluginDescriptor,
         kind: MediaKind?,
         query: String,
-        limit: Int
+        limit: Int,
+        operation: PluginNetworkOperation
     ) async throws -> [PluginSearchResult] {
         clearPendingTrust(for: plugin.id)
         let link = SearchLink(query: query)
@@ -131,16 +145,21 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
             throw Self.classify(error, fallback: .pluginUnavailable)
         }
         guard !Task.isCancelled else { throw CancellationError() }
-        let context = ItoRunnerSearchContext(runner: runner)
+        let context = ItoRunnerSearchContext(
+            runner: runner,
+            pluginID: plugin.id,
+            contexts: pluginManager.pluginSettingsStore.networkContexts
+        )
 
         if let link {
-            return try await open(link, plugin: plugin, kind: kind, runner: runner, context: context)
+            return try await open(link, plugin: plugin, kind: kind, runner: runner, context: context, operation: operation)
         }
 
+        let searchContext = context.networkContext(operation)
         do {
             return try await pluginCall {
                 if let kind, !plugin.kinds.contains(kind) { return [] }
-                let response = try await runner.search(query: query, page: 1, kind: kind)
+                let response = try await runner.search(query: query, page: 1, kind: kind, context: searchContext)
                 try Task.checkCancellation()
                 // Other kinds cannot leak into a scoped search or consume its result limit.
                 return Array(response.entries.lazy.filter { kind == nil || $0.kind == kind }.prefix(limit).map { entry in
@@ -162,16 +181,19 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
         plugin: SearchPluginDescriptor,
         kind: MediaKind?,
         runner: ItoRunner,
-        context: ItoRunnerSearchContext
+        context: ItoRunnerSearchContext,
+        operation: PluginNetworkOperation
     ) async throws -> [PluginSearchResult] {
         do {
             return try await pluginCall {
-                guard let value = try await runner.handleUrl(link.url) else { return [] }
+                guard let value = try await runner.handleUrl(link.url, context: context.networkContext(operation)) else { return [] }
                 try Task.checkCancellation()
                 switch value {
                 case .manga(let linked):
                     guard kind == nil || kind == .manga, plugin.kinds.contains(.manga) else { return [] }
-                    let manga = try await runner.getMediaUpdate(.manga(linked), needsUnits: false).expecting(\.manga)
+                    let manga = try await runner.getMediaUpdate(
+                        .manga(linked), needsUnits: false, context: context.networkContext(operation)
+                    ).expecting(\.manga)
                     try Task.checkCancellation()
                     return [PluginSearchResult(
                         id: manga.key, title: manga.title, cover: manga.cover, subtitle: manga.displayStatus,
@@ -180,7 +202,9 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
                     )]
                 case .anime(let linked):
                     guard kind == nil || kind == .anime, plugin.kinds.contains(.anime) else { return [] }
-                    let anime = try await runner.getMediaUpdate(.anime(linked), needsUnits: false).expecting(\.anime)
+                    let anime = try await runner.getMediaUpdate(
+                        .anime(linked), needsUnits: false, context: context.networkContext(operation)
+                    ).expecting(\.anime)
                     try Task.checkCancellation()
                     return [PluginSearchResult(
                         id: anime.key, title: anime.title, cover: anime.cover, subtitle: anime.displayStatus,
@@ -189,7 +213,9 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
                     )]
                 case .novel(let linked):
                     guard kind == nil || kind == .novel, plugin.kinds.contains(.novel) else { return [] }
-                    let novel = try await runner.getMediaUpdate(.novel(linked), needsUnits: false).expecting(\.novel)
+                    let novel = try await runner.getMediaUpdate(
+                        .novel(linked), needsUnits: false, context: context.networkContext(operation)
+                    ).expecting(\.novel)
                     try Task.checkCancellation()
                     return [PluginSearchResult(
                         id: novel.key, title: novel.title, cover: novel.cover, subtitle: novel.displayStatus,

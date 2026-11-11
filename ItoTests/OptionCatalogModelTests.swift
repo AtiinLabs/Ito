@@ -331,8 +331,7 @@ final class OptionCatalogModelTests: XCTestCase {
     private func assertItems(_ model: OptionCatalogModel, _ values: [String], file: StaticString = #filePath, line: UInt = #line) {
         if case let .loaded(items, _, _, _, _, _, _) = model.state {
             XCTAssertEqual(items.map(\.identity), values.map { Data($0.utf8) }, file: file, line: line)
-        }
-        else { XCTFail("Expected loaded list", file: file, line: line) }
+        } else { XCTFail("Expected loaded list", file: file, line: line) }
     }
     private func makeModel(_ context: CatalogContext) -> OptionCatalogModel { makeModel(provider: CatalogRunnerProvider(context: context)) }
     private func makeModel(provider: CatalogRunnerProvider) -> OptionCatalogModel {
@@ -376,24 +375,25 @@ private final class CatalogContext: @MainActor SourceRunnerContext {
         await withCheckedContinuation { pendingWaiters.append($0) }
     }
 
-    func loadOptionPage(_ request: OptionRequest) async throws -> OptionPage? {
+    func loadOptionPage(_ request: OptionRequest, operationID: UUID) async throws -> OptionPage? {
         requests.append(request)
         let ready = requestWaiters.filter { requests.count >= $0.0 }
         requestWaiters.removeAll { requests.count >= $0.0 }
         ready.forEach { $0.1.resume() }
         return try await pageHandler?(request)
     }
+
     func waitForRequests(_ count: Int) async {
         if requests.count >= count { return }
         await withCheckedContinuation { requestWaiters.append((count, $0)) }
     }
-    func loadHome() async throws -> HomeLayout { throw CancellationError() }
-    func loadSettingsSurface() async throws -> SettingsSurface? { nil }
-    func loadSearchCapabilities(kind: MediaKind?) async throws -> SearchCapabilities? { nil }
-    func loadSearchSuggestions(query: String, kind: MediaKind?) async throws -> [SearchSuggestion]? { nil }
-    func search(kind: MediaKind?, query: String, page: Int32, filterValues: [String: ControlValue]) async throws -> MediaPageResult { MediaPageResult(entries: [], hasNextPage: false) }
-    func loadListing(listing: Listing, page: Int32) async throws -> MediaPageResult { MediaPageResult(entries: [], hasNextPage: false) }
-    func loadManga(_ manga: Manga) async throws -> Manga { throw CancellationError() }
-    func loadAnime(_ anime: Anime) async throws -> Anime { throw CancellationError() }
-    func loadNovel(_ novel: Novel) async throws -> Novel { throw CancellationError() }
+    func loadHome(operationID: UUID) async throws -> HomeLayout { throw CancellationError() }
+    func loadSettingsSurface(operationID: UUID) async throws -> SettingsSurface? { nil }
+    func loadSearchCapabilities(kind: MediaKind?, operationID: UUID) async throws -> SearchCapabilities? { nil }
+    func loadSearchSuggestions(query: String, kind: MediaKind?, operationID: UUID) async throws -> [SearchSuggestion]? { nil }
+    func search(kind: MediaKind?, query: String, page: Int32, filterValues: [String: ControlValue], operationID: UUID) async throws -> MediaPageResult { MediaPageResult(entries: [], hasNextPage: false) }
+    func loadListing(listing: Listing, page: Int32, operationID: UUID) async throws -> MediaPageResult { MediaPageResult(entries: [], hasNextPage: false) }
+    func loadManga(_ manga: Manga, operation: PluginNetworkOperation) async throws -> Manga { throw CancellationError() }
+    func loadAnime(_ anime: Anime, operation: PluginNetworkOperation) async throws -> Anime { throw CancellationError() }
+    func loadNovel(_ novel: Novel, operation: PluginNetworkOperation) async throws -> Novel { throw CancellationError() }
 }

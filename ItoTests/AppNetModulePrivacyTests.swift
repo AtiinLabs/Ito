@@ -32,7 +32,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
             ]
         )
 
-        let response = try await fixture.module.fetch(request: fixture.request)
+        let response = try await fixture.module.fetch(request: fixture.request, context: makeTestNetworkContext())
         let requests = fixture.boundary.requests
 
         XCTAssertEqual(requests.count, 2)
@@ -146,7 +146,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
             ]
         )
 
-        let response = try await fixture.module.fetch(request: fixture.request)
+        let response = try await fixture.module.fetch(request: fixture.request, context: makeTestNetworkContext())
 
         XCTAssertEqual(response.status, 403)
         XCTAssertEqual(response.body, [UInt8]("origin-forbidden".utf8))
@@ -171,7 +171,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
             ]
         )
 
-        let response = try await fixture.module.fetch(request: fixture.request)
+        let response = try await fixture.module.fetch(request: fixture.request, context: makeTestNetworkContext())
 
         XCTAssertEqual(response.status, 403)
         XCTAssertEqual(response.body, [UInt8]("Sorry, you have been blocked".utf8))
@@ -200,7 +200,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
             ]
         )
 
-        let response = try await fixture.module.fetch(request: fixture.request)
+        let response = try await fixture.module.fetch(request: fixture.request, context: makeTestNetworkContext())
 
         XCTAssertEqual(response.status, 503)
         XCTAssertEqual(response.body, [UInt8]("retry-challenge".utf8))
@@ -227,7 +227,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
         )
 
         do {
-            _ = try await fixture.module.fetch(request: fixture.request)
+            _ = try await fixture.module.fetch(request: fixture.request, context: makeTestNetworkContext())
             XCTFail("Expected challenge resolution failure")
         } catch let error as TestFailure {
             XCTAssertEqual(error, .challengeResolution)
@@ -253,7 +253,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
         )
 
         do {
-            _ = try await fixture.module.fetch(request: fixture.request)
+            _ = try await fixture.module.fetch(request: fixture.request, context: makeTestNetworkContext())
             XCTFail("Expected cancellation")
         } catch let error as URLError {
             XCTAssertEqual(error.code, .cancelled)
@@ -279,7 +279,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
         )
 
         do {
-            _ = try await fixture.module.fetch(request: fixture.request)
+            _ = try await fixture.module.fetch(request: fixture.request, context: makeTestNetworkContext())
             XCTFail("Expected retry transport failure")
         } catch let error as URLError {
             XCTAssertEqual(error.code, .notConnectedToInternet)
@@ -316,9 +316,9 @@ final class AppNetModulePrivacyTests: XCTestCase {
         let request = NetRequest(url: url.absoluteString, method: "GET", headers: [:], body: nil)
         let signedIn = module("plugin.a")
 
-        _ = try await signedIn.fetch(request: request)
-        _ = try await signedIn.fetch(request: request)
-        _ = try await module("plugin.b").fetch(request: request)
+        _ = try await signedIn.fetch(request: request, context: makeTestNetworkContext())
+        _ = try await signedIn.fetch(request: request, context: makeTestNetworkContext())
+        _ = try await module("plugin.b").fetch(request: request, context: makeTestNetworkContext())
 
         let cookies = boundary.requests.map { $0.value(forHTTPHeaderField: "Cookie") }
         XCTAssertEqual(cookies, [nil, "session=abc", nil])
@@ -345,7 +345,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
 
         _ = try await module.fetch(request: NetRequest(
             url: url.absoluteString, method: "GET", headers: ["Cookie": "session=explicit"], body: nil
-        ))
+        ), context: makeTestNetworkContext())
 
         XCTAssertEqual(boundary.requests.first?.value(forHTTPHeaderField: "Cookie"), "session=explicit")
     }
@@ -382,7 +382,7 @@ final class AppNetModulePrivacyTests: XCTestCase {
 
         let response = try await module.fetch(request: NetRequest(
             url: siteURL.absoluteString, method: "GET", headers: ["Cookie": "explicit=1"], body: nil
-        ))
+        ), context: makeTestNetworkContext())
 
         XCTAssertEqual(response.status, 200)
         let sent = boundary.requests.map { $0.value(forHTTPHeaderField: "Cookie") }

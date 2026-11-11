@@ -5,82 +5,106 @@ import ito_runner
 
 protocol SourceRunnerContext: SearchDetailLoading {
     var runnerIdentity: ObjectIdentifier { get }
-    func loadHome() async throws -> HomeLayout
-    func loadSettingsSurface() async throws -> SettingsSurface?
-    func loadSearchCapabilities(kind: MediaKind?) async throws -> SearchCapabilities?
-    func loadOptionPage(_ request: OptionRequest) async throws -> OptionPage?
-    func loadSearchSuggestions(query: String, kind: MediaKind?) async throws -> [SearchSuggestion]?
+    func loadHome(operationID: UUID) async throws -> HomeLayout
+    func loadSettingsSurface(operationID: UUID) async throws -> SettingsSurface?
+    func loadSearchCapabilities(kind: MediaKind?, operationID: UUID) async throws -> SearchCapabilities?
+    func loadOptionPage(_ request: OptionRequest, operationID: UUID) async throws -> OptionPage?
+    func loadSearchSuggestions(query: String, kind: MediaKind?, operationID: UUID) async throws -> [SearchSuggestion]?
     func search(
         kind: MediaKind?,
         query: String,
         page: Int32,
-        filterValues: [String: ControlValue]
+        filterValues: [String: ControlValue],
+        operationID: UUID
     ) async throws -> MediaPageResult
     func loadListing(
         listing: Listing,
-        page: Int32
+        page: Int32,
+        operationID: UUID
     ) async throws -> MediaPageResult
 }
 
+/// Runs source exports for one installed source. Each method fixes the purpose its export serves; the
+/// caller supplies the operation ID that its related exports share.
 final class ItoRunnerSourceContext: SourceRunnerContext {
     let runner: ItoRunner
+    private let pluginID: String
+    private let contexts: PluginNetworkContexts
 
     var runnerIdentity: ObjectIdentifier { ObjectIdentifier(runner) }
 
-    init(runner: ItoRunner) {
+    init(runner: ItoRunner, pluginID: String, contexts: PluginNetworkContexts) {
         self.runner = runner
+        self.pluginID = pluginID
+        self.contexts = contexts
     }
 
-    func loadHome() async throws -> HomeLayout {
-        try await pluginCall { try await runner.getHome() }
+    private func hostContext(_ purpose: NetworkOperationContext.Purpose, _ operationID: UUID) -> NetworkOperationContext {
+        contexts.context(pluginID: pluginID, PluginNetworkOperation(purpose: purpose, operationID: operationID))
     }
 
-    func loadSettingsSurface() async throws -> SettingsSurface? {
-        try await pluginCall { try await runner.getSettingsSurface() }
+    func loadHome(operationID: UUID) async throws -> HomeLayout {
+        let context = hostContext(.interactiveSearch, operationID)
+        return try await pluginCall { try await runner.getHome(context: context) }
     }
 
-    func loadSearchCapabilities(kind: MediaKind?) async throws -> SearchCapabilities? {
-        try await pluginCall { try await runner.getSearchCapabilities(kind: kind) }
+    func loadSettingsSurface(operationID: UUID) async throws -> SettingsSurface? {
+        let context = hostContext(.sourceSetup, operationID)
+        return try await pluginCall { try await runner.getSettingsSurface(context: context) }
     }
 
-    func loadOptionPage(_ request: OptionRequest) async throws -> OptionPage? {
-        try await pluginCall { try await runner.getOptionPage(request) }
+    func loadSearchCapabilities(kind: MediaKind?, operationID: UUID) async throws -> SearchCapabilities? {
+        let context = hostContext(.interactiveSearch, operationID)
+        return try await pluginCall { try await runner.getSearchCapabilities(kind: kind, context: context) }
     }
 
-    func loadSearchSuggestions(query: String, kind: MediaKind?) async throws -> [SearchSuggestion]? {
-        try await pluginCall { try await runner.getSearchSuggestions(query: query, kind: kind) }
+    func loadOptionPage(_ request: OptionRequest, operationID: UUID) async throws -> OptionPage? {
+        let context = hostContext(.interactiveSearch, operationID)
+        return try await pluginCall { try await runner.getOptionPage(request, context: context) }
+    }
+
+    func loadSearchSuggestions(query: String, kind: MediaKind?, operationID: UUID) async throws -> [SearchSuggestion]? {
+        let context = hostContext(.interactiveSearch, operationID)
+        return try await pluginCall { try await runner.getSearchSuggestions(query: query, kind: kind, context: context) }
     }
 
     func search(
         kind: MediaKind?,
         query: String,
         page: Int32,
-        filterValues: [String: ControlValue]
+        filterValues: [String: ControlValue],
+        operationID: UUID
     ) async throws -> MediaPageResult {
-        try await pluginCall {
-            try await runner.search(query: query, page: page, kind: kind, filterValues: filterValues)
+        let context = hostContext(.interactiveSearch, operationID)
+        return try await pluginCall {
+            try await runner.search(query: query, page: page, kind: kind, filterValues: filterValues, context: context)
         }
     }
 
     func loadListing(
         listing: Listing,
-        page: Int32
+        page: Int32,
+        operationID: UUID
     ) async throws -> MediaPageResult {
-        try await pluginCall {
-            try await runner.getListing(listing, page: page)
+        let context = hostContext(.interactiveSearch, operationID)
+        return try await pluginCall {
+            try await runner.getListing(listing, page: page, context: context)
         }
     }
 
-    func loadManga(_ manga: Manga) async throws -> Manga {
-        try await pluginCall { try await runner.getMediaUpdate(.manga(manga)).expecting(\.manga) }
+    func loadManga(_ manga: Manga, operation: PluginNetworkOperation) async throws -> Manga {
+        let context = contexts.context(pluginID: pluginID, operation)
+        return try await pluginCall { try await runner.getMediaUpdate(.manga(manga), context: context).expecting(\.manga) }
     }
 
-    func loadAnime(_ anime: Anime) async throws -> Anime {
-        try await pluginCall { try await runner.getMediaUpdate(.anime(anime)).expecting(\.anime) }
+    func loadAnime(_ anime: Anime, operation: PluginNetworkOperation) async throws -> Anime {
+        let context = contexts.context(pluginID: pluginID, operation)
+        return try await pluginCall { try await runner.getMediaUpdate(.anime(anime), context: context).expecting(\.anime) }
     }
 
-    func loadNovel(_ novel: Novel) async throws -> Novel {
-        try await pluginCall { try await runner.getMediaUpdate(.novel(novel)).expecting(\.novel) }
+    func loadNovel(_ novel: Novel, operation: PluginNetworkOperation) async throws -> Novel {
+        let context = contexts.context(pluginID: pluginID, operation)
+        return try await pluginCall { try await runner.getMediaUpdate(.novel(novel), context: context).expecting(\.novel) }
     }
 }
 
@@ -99,7 +123,11 @@ extension SourceRunnerProviding {
 
 extension PluginManager: SourceRunnerProviding {
     func sourceRunnerContext(for pluginID: String) async throws -> any SourceRunnerContext {
-        ItoRunnerSourceContext(runner: try await getRunner(for: pluginID))
+        ItoRunnerSourceContext(
+            runner: try await getRunner(for: pluginID),
+            pluginID: pluginID,
+            contexts: pluginSettingsStore.networkContexts
+        )
     }
 
     func evictSourceRunner(for pluginID: String) {
@@ -431,6 +459,8 @@ struct PreparedSourceDependencies {
     let settingsStore: any PluginSettingsPersisting
     let pluginStatePublisher: any SourcePluginStatePublishing
     let fileDeletion: any SourcePluginFileDeleting
+    /// The host contexts of the installed sources, for exports a view makes on a route's runner.
+    let networkContexts: PluginNetworkContexts
 
     static func unavailable() -> Self {
         let dependency = UnavailableSourceDependency()
@@ -438,7 +468,8 @@ struct PreparedSourceDependencies {
             runnerProvider: dependency,
             settingsStore: dependency,
             pluginStatePublisher: dependency,
-            fileDeletion: dependency
+            fileDeletion: dependency,
+            networkContexts: PluginNetworkContexts()
         )
     }
 }

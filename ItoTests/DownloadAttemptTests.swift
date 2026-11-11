@@ -37,6 +37,44 @@ struct DownloadAttemptTests {
         #expect(fixture.fetcher.requestedURLs.isEmpty)
     }
 
+    @available(iOS 16, *)
+    @Test(.timeLimit(.minutes(1)))
+    func everyExportOfAnAttemptRunsUnderTheJobsBatchAndItsFrozenEpoch() async throws {
+        let pages = [
+            Page(index: 0, content: .text("First line")),
+            Page(index: 1, content: .url("ito://plugin.test/https://img.test/2.jpg"))
+        ]
+        let fixture = try DownloadWorkerFixture(pages: pages)
+        _ = await fixture.enqueue()
+        let queued = try #require(try await fixture.job())
+        let batch = try #require(UUID(uuidString: queued.batchId))
+        let epoch = try #require(queued.sourceEpoch)
+
+        await fixture.startWorker()
+        await fixture.coordinator.untilIdle()
+
+        let operations = fixture.runtimes.operations
+        let operation = try #require(operations.first)
+        #expect(operations.count == 1)
+        #expect(operation.purpose == .manualBulkDownload)
+        #expect(operation.batchID == batch)
+        #expect(fixture.runtimes.frozenScopes == [epoch])
+
+        // One page listing, then the image runner's request and bytes exports (origins are read only when a request resolves).
+        let contexts = fixture.source.contexts.snapshot
+        #expect(contexts.count == 3)
+        let scope = try #require(PluginNetworkScopeID.uuid(epoch: epoch))
+        for context in contexts {
+            #expect(context.operationID == operation.operationID)
+            #expect(context.batchID == batch)
+            #expect(context.purpose == .manualBulkDownload)
+            #expect(context.sourceID == DownloadWorkerFixture.plugin)
+            #expect(context.authorizationScope == scope)
+        }
+        #expect(Set(contexts.map(\.generation)).count == contexts.count)
+        #expect(try await fixture.copy() != nil)
+    }
+
     @Test func aChapterWithoutImageLocatorsNeverCreatesAnImageRunner() async throws {
         let fixture = try DownloadWorkerFixture()
         _ = await fixture.enqueue()
@@ -124,7 +162,7 @@ struct DownloadAttemptTests {
     @Test func aPluginThatSwallowsAWebViewRefusalStillFailsTheChapter() async throws {
         let fixture = try DownloadWorkerFixture()
         fixture.source.setListingHook { modules in
-            _ = try? await modules.webview.loadUrl(request: WebviewRequest(url: "https://source.test/login", script: nil))
+            _ = try? await modules.webview.loadUrl(request: WebviewRequest(url: "https://source.test/login", script: nil), context: makeTestNetworkContext())
         }
         _ = await fixture.enqueue()
 
@@ -145,10 +183,10 @@ struct DownloadAttemptTests {
             path.set(NetworkPathSnapshot(status: .satisfied, isExpensive: true))
             _ = try? await modules.net.fetch(request: NetRequest(
                 url: "https://api.test/chapters", method: "GET", headers: [:], body: nil
-            ))
+            ), context: makeTestNetworkContext())
             _ = try? await modules.net.fetch(request: NetRequest(
                 url: "https://api.test/pages", method: "GET", headers: [:], body: nil
-            ))
+            ), context: makeTestNetworkContext())
         }
         _ = await fixture.enqueue()
 

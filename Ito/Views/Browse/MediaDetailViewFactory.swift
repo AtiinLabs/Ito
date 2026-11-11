@@ -9,6 +9,7 @@ struct MediaDetailReaderViewFactory {
     private let offlineReading: any OfflineChapterReading
     private let downloads: any MediaDetailDownloadServing
     private let connectivity: any ConnectivityServing
+    private let networkContexts: PluginNetworkContexts
 
     init(
         mangaReaderDependencies: PreparedMangaReaderDependencies,
@@ -16,7 +17,8 @@ struct MediaDetailReaderViewFactory {
         videoPlayerDependencies: PreparedVideoPlayerDependencies = .unavailable(),
         offlineReading: any OfflineChapterReading = UnavailableOfflineChapterReading(),
         downloads: any MediaDetailDownloadServing = UnavailableMediaDetailDownloads(),
-        connectivity: any ConnectivityServing = UnavailableConnectivity()
+        connectivity: any ConnectivityServing = UnavailableConnectivity(),
+        networkContexts: PluginNetworkContexts
     ) {
         self.mangaReaderDependencies = mangaReaderDependencies
         self.novelReaderDependencies = novelReaderDependencies
@@ -24,6 +26,7 @@ struct MediaDetailReaderViewFactory {
         self.offlineReading = offlineReading
         self.downloads = downloads
         self.connectivity = connectivity
+        self.networkContexts = networkContexts
     }
 
     @ViewBuilder
@@ -68,7 +71,9 @@ struct MediaDetailReaderViewFactory {
         let loader = ResolvingMangaPageLoader(
             pluginID: pluginID,
             local: offlineReading,
-            remote: content.remote.map { ItoRunnerMangaPageLoader(runner: $0) as any MangaPageLoading },
+            remote: content.remote.map {
+                ItoRunnerMangaPageLoader(runner: $0, pluginID: pluginID, contexts: networkContexts) as any MangaPageLoading
+            },
             preference: content.preference
         )
         return MangaReaderViewModel(
@@ -90,7 +95,9 @@ struct MediaDetailReaderViewFactory {
         let loader = ResolvingNovelChapterLoader(
             pluginID: pluginID,
             local: offlineReading,
-            remote: content.remote.map { ItoRunnerNovelChapterLoader(runner: $0) as any NovelChapterLoading },
+            remote: content.remote.map {
+                ItoRunnerNovelChapterLoader(runner: $0, pluginID: pluginID, contexts: networkContexts) as any NovelChapterLoading
+            },
             preference: content.preference
         )
         return NovelReaderViewModel(
@@ -130,7 +137,7 @@ struct MediaDetailReaderViewFactory {
         episode: Anime.Episode
     ) -> VideoPlayerViewModel {
         VideoPlayerViewModel(
-            streamLoader: ItoRunnerVideoStreamLoader(runner: runner),
+            streamLoader: ItoRunnerVideoStreamLoader(runner: runner, pluginID: pluginID, contexts: networkContexts),
             pluginID: pluginID,
             anime: anime,
             episode: episode,
@@ -148,6 +155,7 @@ struct MediaDetailViewFactory {
     private let offlineReading: any OfflineChapterReading
     let trackingViewFactory: TrackingViewFactory
     let readerViewFactory: MediaDetailReaderViewFactory
+    private let networkContexts: PluginNetworkContexts
 
     init(
         dependencies: PreparedMediaDetailDependencies,
@@ -158,7 +166,8 @@ struct MediaDetailViewFactory {
         messagePresenter: any MediaDetailMessagePresenting,
         presentationLogger: any PresentationEventLogging,
         trackingViewFactory: TrackingViewFactory,
-        categoryHistoryViewFactory: CategoryHistoryViewFactory
+        categoryHistoryViewFactory: CategoryHistoryViewFactory,
+        networkContexts: PluginNetworkContexts
     ) {
         self.dependencies = dependencies
         self.messagePresenter = messagePresenter
@@ -166,13 +175,15 @@ struct MediaDetailViewFactory {
         self.trackingViewFactory = trackingViewFactory
         self.categoryHistoryViewFactory = categoryHistoryViewFactory
         self.offlineReading = offlineReading
+        self.networkContexts = networkContexts
         readerViewFactory = MediaDetailReaderViewFactory(
             mangaReaderDependencies: mangaReaderDependencies,
             novelReaderDependencies: novelReaderDependencies,
             videoPlayerDependencies: videoPlayerDependencies,
             offlineReading: offlineReading,
             downloads: dependencies.downloads,
-            connectivity: dependencies.connectivity
+            connectivity: dependencies.connectivity,
+            networkContexts: networkContexts
         )
     }
 
@@ -181,12 +192,12 @@ struct MediaDetailViewFactory {
         runner: ItoRunner?,
         media: Manga,
         pluginID: String,
-        loader: ((Manga) async throws -> Manga)?,
+        loader: ((Manga, PluginNetworkOperation) async throws -> Manga)?,
         openIntent: MediaDetailOpenIntent? = nil
     ) -> MediaDetailView<Manga> {
         let context = MediaDetailRouteContext<Manga>(
             loadDetails: loader,
-            searchForRelink: runner.map(Self.mangaRelinkSearch),
+            searchForRelink: runner.map { mangaRelinkSearch($0, pluginID: pluginID) },
             makeReaderDestination: { media, chapter in
                 .reading(
                     chapter,
@@ -209,14 +220,20 @@ struct MediaDetailViewFactory {
         runner: ItoRunner,
         media: Anime,
         pluginID: String,
-        loader: @escaping (Anime) async throws -> Anime,
+        loader: @escaping (Anime, PluginNetworkOperation) async throws -> Anime,
         openIntent: MediaDetailOpenIntent? = nil
     ) -> MediaDetailView<Anime> {
+        let contexts = networkContexts
         let context = MediaDetailRouteContext<Anime>(
             loadDetails: loader,
-            searchForRelink: { query in
-                try await pluginCall {
-                    try await runner.search(query: query, page: 1, kind: .anime).entries.compactMap(\.anime)
+            searchForRelink: { query, operationID in
+                let searchContext = contexts.context(
+                    pluginID: pluginID,
+                    PluginNetworkOperation(purpose: .interactiveSearch, operationID: operationID)
+                )
+                return try await pluginCall {
+                    try await runner.search(query: query, page: 1, kind: .anime, context: searchContext)
+                        .entries.compactMap(\.anime)
                 }
             },
             makeReaderDestination: { media, episode in
@@ -237,12 +254,12 @@ struct MediaDetailViewFactory {
         runner: ItoRunner?,
         media: Novel,
         pluginID: String,
-        loader: ((Novel) async throws -> Novel)?,
+        loader: ((Novel, PluginNetworkOperation) async throws -> Novel)?,
         openIntent: MediaDetailOpenIntent? = nil
     ) -> MediaDetailView<Novel> {
         let context = MediaDetailRouteContext<Novel>(
             loadDetails: loader,
-            searchForRelink: runner.map(Self.novelRelinkSearch),
+            searchForRelink: runner.map { novelRelinkSearch($0, pluginID: pluginID) },
             makeReaderDestination: { media, chapter in
                 .reading(
                     chapter,
@@ -261,18 +278,34 @@ struct MediaDetailViewFactory {
         return makeView(media: media, pluginID: pluginID, context: context, openIntent: openIntent)
     }
 
-    private static func mangaRelinkSearch(_ runner: ItoRunner) -> (String) async throws -> [Manga] {
-        { query in
-            try await pluginCall {
-                try await runner.search(query: query, page: 1, kind: .manga).entries.compactMap(\.manga)
+    private func mangaRelinkSearch(
+        _ runner: ItoRunner,
+        pluginID: String
+    ) -> (String, UUID) async throws -> [Manga] {
+        let contexts = networkContexts
+        return { query, operationID in
+            let context = contexts.context(
+                pluginID: pluginID,
+                PluginNetworkOperation(purpose: .interactiveSearch, operationID: operationID)
+            )
+            return try await pluginCall {
+                try await runner.search(query: query, page: 1, kind: .manga, context: context).entries.compactMap(\.manga)
             }
         }
     }
 
-    private static func novelRelinkSearch(_ runner: ItoRunner) -> (String) async throws -> [Novel] {
-        { query in
-            try await pluginCall {
-                try await runner.search(query: query, page: 1, kind: .novel).entries.compactMap(\.novel)
+    private func novelRelinkSearch(
+        _ runner: ItoRunner,
+        pluginID: String
+    ) -> (String, UUID) async throws -> [Novel] {
+        let contexts = networkContexts
+        return { query, operationID in
+            let context = contexts.context(
+                pluginID: pluginID,
+                PluginNetworkOperation(purpose: .interactiveSearch, operationID: operationID)
+            )
+            return try await pluginCall {
+                try await runner.search(query: query, page: 1, kind: .novel, context: context).entries.compactMap(\.novel)
             }
         }
     }

@@ -4,19 +4,26 @@ import ito_runner
 
 @MainActor
 protocol VideoStreamLoading: AnyObject {
-    func videos(for anime: Anime, episode: Anime.Episode) async throws -> [Anime.Video]
+    func videos(for anime: Anime, episode: Anime.Episode, operation: PluginNetworkOperation) async throws -> [Anime.Video]
 }
 
 @MainActor
 final class ItoRunnerVideoStreamLoader: VideoStreamLoading {
     let runner: ItoRunner
+    private let pluginID: String
+    private let contexts: PluginNetworkContexts
 
-    init(runner: ItoRunner) {
+    init(runner: ItoRunner, pluginID: String, contexts: PluginNetworkContexts) {
         self.runner = runner
+        self.pluginID = pluginID
+        self.contexts = contexts
     }
 
-    func videos(for anime: Anime, episode: Anime.Episode) async throws -> [Anime.Video] {
-        try await pluginCall { try await runner.getEpisodeVideos(anime: anime, episode: episode) }
+    func videos(for anime: Anime, episode: Anime.Episode, operation: PluginNetworkOperation) async throws -> [Anime.Video] {
+        let context = contexts.context(pluginID: pluginID, operation)
+        return try await pluginCall {
+            try await runner.getEpisodeVideos(anime: anime, episode: episode, context: context)
+        }
     }
 }
 
