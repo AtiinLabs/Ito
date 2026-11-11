@@ -531,7 +531,9 @@ final class AppScopeIdentityTests: XCTestCase {
             at: fixtureRoot,
             withIntermediateDirectories: true
         )
-        try makeTestPluginArchiveData(id: "fixture", version: "1.0", wasm: makeTestPluginWasm(abi: 2)).write(to: sourceURL)
+        try makeTestPluginArchiveData(
+            id: "fixture", version: "1.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
+        ).write(to: sourceURL)
         try await fileOperations.installPluginFile(from: sourceURL, PluginDirectoryLease())
         XCTAssertTrue(
             FileManager.default.fileExists(

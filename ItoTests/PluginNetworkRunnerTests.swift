@@ -93,11 +93,11 @@ private final class SuspendedFetchNet: NetModule, @unchecked Sendable {
     }
 }
 
-/// Exports from a real runner with a real ABI 2 module, so the host context crosses the guest boundary.
+/// Exports from a real runner with a real module at the host's ABI, so the host context crosses the guest boundary.
 struct PluginNetworkRunnerTests {
     private static let request = NetRequest(url: "https://api.example/ack", method: "GET", headers: [:], body: nil)
 
-    /// A runner that loads an ABI 2 module built from `fixture`, with `net` and `webview` as its host modules.
+    /// A runner that loads a module built from `fixture` at the host's ABI, with `net` and `webview` as its host modules.
     private static func runner(
         _ fixture: TestWasm.Fixture,
         net: any NetModule,
@@ -106,7 +106,7 @@ struct PluginNetworkRunnerTests {
         let runner = ItoRunner()
         await runner.setNetModule(net)
         await runner.setWebviewModule(webview)
-        try await runner.loadPlugin(fromBytes: TestWasm.build(TestWasm.Fixture.abi2(fixture)))
+        try await runner.loadPlugin(fromBytes: TestWasm.build(fixture))
         return runner
     }
 
@@ -248,7 +248,7 @@ struct PluginNetworkRunnerTests {
     }
 
     private static func installedPlugin() throws -> InstalledPlugin {
-        let fixture = TestWasm.Fixture.abi2(try TestWasm.sending(request))
+        let fixture = try TestWasm.sending(request)
         return InstalledPlugin(
             url: URL(fileURLWithPath: "/test/publication-during-export.ito"),
             info: PluginInfo(
@@ -257,7 +257,7 @@ struct PluginNetworkRunnerTests {
                 version: "1.0",
                 minAppVersion: "1.0",
                 type: .manga,
-                abi: 2
+                abi: ItoRunner.supportedABIVersions.upperBound
             ),
             iconData: nil,
             binary: try ItoRunner.inspectBinary(TestWasm.build(fixture))

@@ -211,7 +211,7 @@ struct DownloadAttemptTests {
     @Test(.timeLimit(.minutes(1)))
     func aWebViewDenialRecordedDuringAnExportFailsTheAttemptEvenThoughItCancelsIt() async throws {
         let page = WebviewRequest(url: "https://source.test/login", script: nil)
-        let wasm = TestWasm.build(TestWasm.Fixture.abi2(try TestWasm.openingWebView(page)))
+        let wasm = TestWasm.build(try TestWasm.openingWebView(page))
         let fixture = try DownloadWorkerFixture()
         let listingHooks = DownloadCallCounter()
         fixture.source.setListingHook { modules in

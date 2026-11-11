@@ -678,7 +678,7 @@ final class RepositoriesViewModelTests: XCTestCase {
         )
     }
 
-    private func makeInstalledPlugin(id: String, version: String, abi: Int = 2) -> InstalledPlugin {
+    private func makeInstalledPlugin(id: String, version: String, abi: Int = ItoRunner.supportedABIVersions.upperBound) -> InstalledPlugin {
         InstalledPlugin(
             url: URL(fileURLWithPath: "/plugins/\(id).ito"),
             info: PluginInfo(

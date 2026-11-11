@@ -475,7 +475,9 @@ final class BrowseViewModelTests: XCTestCase {
         let fixture = try BrowseFileFixture()
         defer { fixture.cleanup() }
         let sourceURL = fixture.root.appendingPathComponent("plugin.ito")
-        let pluginData = try makeTestPluginArchiveData(id: "plugin", version: "1.0", wasm: makeTestPluginWasm(abi: 2))
+        let pluginData = try makeTestPluginArchiveData(
+            id: "plugin", version: "1.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
+        )
         try pluginData.write(to: sourceURL)
         let files = LocalBrowsePluginFileOperations(
             applicationSupportDirectory: fixture.applicationSupport
@@ -488,7 +490,9 @@ final class BrowseViewModelTests: XCTestCase {
             .appendingPathComponent("plugin.ito")
         XCTAssertEqual(try Data(contentsOf: installedURL), pluginData)
 
-        let updatedData = try makeTestPluginArchiveData(id: "plugin", version: "2.0", wasm: makeTestPluginWasm(abi: 2))
+        let updatedData = try makeTestPluginArchiveData(
+            id: "plugin", version: "2.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
+        )
         try updatedData.write(to: sourceURL)
         try await files.installPluginFile(from: sourceURL, PluginDirectoryLease())
         XCTAssertEqual(try Data(contentsOf: installedURL), updatedData)
@@ -877,7 +881,7 @@ final class BrowseViewModelTests: XCTestCase {
         version: String = "1.0",
         type: MediaKind = .manga,
         kinds: [MediaKind]? = nil,
-        abi: Int = 2
+        abi: Int = ItoRunner.supportedABIVersions.upperBound
     ) -> InstalledPlugin {
         InstalledPlugin(
             url: URL(fileURLWithPath: "/plugins/\(id).ito"),

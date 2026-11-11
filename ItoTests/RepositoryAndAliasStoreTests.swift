@@ -250,7 +250,7 @@ struct RepositoryAndAliasStoreTests {
             .appendingPathComponent("RepositoryInstallQueue-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
         let successfulData = try makeTestPluginArchiveData(
-            id: "plugin.queue", version: "1.0", wasm: makeTestPluginWasm(abi: 2)
+            id: "plugin.queue", version: "1.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
         )
         let fetchGate = RepositoryPackageFetchGate(successfulData: successfulData)
         let manager = RepoManager(
@@ -432,7 +432,9 @@ struct RepositoryAndAliasStoreTests {
             .appendingPathComponent("RepositoryInstallPublication-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
         let packageID = "plugin.authoritative"
-        let archiveData = try makeTestPluginArchiveData(id: packageID, version: "2.0", wasm: makeTestPluginWasm(abi: 2))
+        let archiveData = try makeTestPluginArchiveData(
+            id: packageID, version: "2.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
+        )
         let pluginManager = PluginManager(
             pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
             pluginsDirectory: pluginsDirectory
@@ -462,7 +464,7 @@ struct RepositoryAndAliasStoreTests {
             .appendingPathComponent("RepositoryInstallRollback-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
         let archiveData = try makeTestPluginArchiveData(
-            id: "plugin.rollback", version: "1.0", wasm: makeTestPluginWasm(abi: 2)
+            id: "plugin.rollback", version: "1.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
         )
         let pluginManager = PluginManager(
             pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
@@ -506,7 +508,9 @@ struct RepositoryAndAliasStoreTests {
         // which the rollback's republish uses, skips it.
         try Data("not an Ito archive".utf8).write(to: pluginsDirectory.appendingPathComponent("damaged.ito"))
         let installedFile = pluginsDirectory.appendingPathComponent("plugin.restored.ito")
-        try makeTestPluginArchiveData(id: "plugin.restored", version: "1.0", wasm: makeTestPluginWasm(abi: 2))
+        try makeTestPluginArchiveData(
+            id: "plugin.restored", version: "1.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
+        )
             .write(to: installedFile)
         let pluginManager = PluginManager(
             pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
@@ -516,11 +520,11 @@ struct RepositoryAndAliasStoreTests {
         // The file is replaced outside the install path after version 1.0 was published, so the published state
         // is stale until something publishes again.
         let restoredArchive = try makeTestPluginArchiveData(
-            id: "plugin.restored", version: "2.0", wasm: makeTestPluginWasm(abi: 2)
+            id: "plugin.restored", version: "2.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
         )
         try restoredArchive.write(to: installedFile)
         let downloaded = try makeTestPluginArchiveData(
-            id: "plugin.restored", version: "3.0", wasm: makeTestPluginWasm(abi: 2)
+            id: "plugin.restored", version: "3.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
         )
         let manager = RepoManager(
             dbPool: database.dbPool,
@@ -546,7 +550,9 @@ struct RepositoryAndAliasStoreTests {
         defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
         try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
         let installedFile = pluginsDirectory.appendingPathComponent("plugin.listed.ito")
-        try makeTestPluginArchiveData(id: "plugin.listed", version: "1.0", wasm: makeTestPluginWasm(abi: 2))
+        try makeTestPluginArchiveData(
+            id: "plugin.listed", version: "1.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
+        )
             .write(to: installedFile)
         // A regular file where the scratch directory should be, so nothing can be written under it.
         let scratch = FileManager.default.temporaryDirectory
@@ -554,7 +560,7 @@ struct RepositoryAndAliasStoreTests {
         defer { try? FileManager.default.removeItem(at: scratch) }
         try Data("not a directory".utf8).write(to: scratch)
         let downloaded = try makeTestPluginArchiveData(
-            id: "plugin.listed", version: "2.0", wasm: makeTestPluginWasm(abi: 2)
+            id: "plugin.listed", version: "2.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
         )
         let pluginManager = PluginManager(
             pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
@@ -589,13 +595,13 @@ struct RepositoryAndAliasStoreTests {
         try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
         let installedFile = pluginsDirectory.appendingPathComponent("plugin.refused.ito")
         let installedArchive = try makeTestPluginArchiveData(
-            id: "plugin.refused", version: "1.0", wasm: makeTestPluginWasm(abi: 2)
+            id: "plugin.refused", version: "1.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
         )
         try installedArchive.write(to: installedFile)
         let downloaded = try makeTestPluginArchiveData(
             id: "plugin.refused",
             version: "2.0",
-            wasm: malformedModule ? Data("not a module".utf8) : makeTestPluginWasm(abi: 3)
+            wasm: malformedModule ? Data("not a module".utf8) : makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound + 1)
         )
         let pluginManager = PluginManager(
             pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
@@ -859,7 +865,7 @@ struct RepositoryAndAliasStoreTests {
             .appendingPathComponent("RepositoryInstallRemovedVersion-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
         let currentData = try makeTestPluginArchiveData(
-            id: "plugin.moved", version: "1.1", wasm: makeTestPluginWasm(abi: 2)
+            id: "plugin.moved", version: "1.1", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
         )
         let stale = makePackage(
             id: "plugin.moved",

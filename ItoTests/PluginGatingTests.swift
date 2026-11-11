@@ -67,7 +67,7 @@ struct PluginGatingTests {
     }
 
     @Test func anIncompatibleManualImportLeavesTheInstalledFileAndPluginsDirectoryUnchanged() async throws {
-        let fixture = try ManualImportFixture(incoming: makeTestPluginWasm(abi: 3))
+        let fixture = try ManualImportFixture(incoming: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound + 1))
         defer { fixture.cleanup() }
         let operations = LocalBrowsePluginFileOperations(pluginsDirectory: fixture.pluginsDirectory)
 
@@ -107,7 +107,7 @@ struct PluginGatingTests {
     }
 
     @Test func aCompatibleManualImportReplacesTheInstalledFile() async throws {
-        let incoming = makeTestPluginWasm(abi: 2)
+        let incoming = makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
         let fixture = try ManualImportFixture(incoming: incoming)
         defer { fixture.cleanup() }
         let operations = LocalBrowsePluginFileOperations(pluginsDirectory: fixture.pluginsDirectory)
@@ -129,7 +129,9 @@ struct PluginGatingTests {
         try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
         try makeTestPluginArchiveData(id: "malformed", version: "1.0", wasm: Data("not a module".utf8))
             .write(to: pluginsDirectory.appendingPathComponent("malformed.ito"))
-        try makeTestPluginArchiveData(id: "newer-abi", version: "1.0", wasm: makeTestPluginWasm(abi: 3))
+        try makeTestPluginArchiveData(
+            id: "newer-abi", version: "1.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound + 1)
+        )
             .write(to: pluginsDirectory.appendingPathComponent("newer-abi.ito"))
         let manager = PluginManager(
             pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
@@ -139,7 +141,7 @@ struct PluginGatingTests {
         try await manager.discoverAndPrepareInstalledPlugins(failOnInvalidPlugin: true)
 
         #expect(manager.installedPlugins["malformed"]?.binary == nil)
-        #expect(manager.installedPlugins["newer-abi"]?.binary?.abiVersion == 3)
+        #expect(manager.installedPlugins["newer-abi"]?.binary?.abiVersion == ItoRunner.supportedABIVersions.upperBound + 1)
         let registered = try await database.dbPool.read { db in
             try String.fetchAll(db, sql: "SELECT pluginId FROM pluginIdentityRegistry ORDER BY pluginId")
         }
@@ -167,9 +169,12 @@ struct PluginGatingTests {
             ),
             InstalledPlugin(
                 url: URL(fileURLWithPath: "/test/newer-abi.ito"),
-                info: PluginInfo(id: "newer-abi", name: "Newer", version: "1.0", minAppVersion: "1.0", type: .manga, abi: 3),
+                info: PluginInfo(
+                    id: "newer-abi", name: "Newer", version: "1.0", minAppVersion: "1.0", type: .manga,
+                    abi: ItoRunner.supportedABIVersions.upperBound + 1
+                ),
                 iconData: nil,
-                binary: makeRunnableBinary(abi: 3)
+                binary: makeRunnableBinary(abi: ItoRunner.supportedABIVersions.upperBound + 1)
             )
         ]
         manager.publishPreparedInstalledPlugins(Dictionary(uniqueKeysWithValues: plugins.map { ($0.id, $0) }))
@@ -215,10 +220,11 @@ struct PluginGatingTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let pluginsDirectory = database.databaseURL.deletingLastPathComponent()
-        // A module importing ito:core/net.fetch_v9 (no host has it); its manifest records nothing.
-        let wasm = Data([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
-                         0x02, 0x19, 0x01, 0x0c] + Array("ito:core/net".utf8) + [0x08] + Array("fetch_v9".utf8)
-                        + [0x00, 0x00])
+        // A module built for this host that imports ito:core/net.fetch_v9, which no host has; its manifest records nothing.
+        let wasm = Data(TestWasm.build(TestWasm.Fixture(
+            completed: nil,
+            imports: [TestWasm.Import(module: "ito:core/net", name: "fetch_v9", type: 3)]
+        )))
         let url = pluginsDirectory.appendingPathComponent("future.ito")
         try makeTestPluginArchiveData(id: "future", version: "1.0", wasm: wasm).write(to: url)
         let manager = PluginManager(
@@ -341,7 +347,7 @@ struct PluginGatingTests {
             RepoPackage(
                 id: "newer-abi", name: "Newer", version: "1.0", minAppVersion: "1.0",
                 downloadUrl: "newer.ito", iconUrl: nil, sha256: "unused", pluginType: "manga",
-                archived: nil, archivedReason: nil, archivedDate: nil, abi: 3
+                archived: nil, archivedReason: nil, archivedDate: nil, abi: ItoRunner.supportedABIVersions.upperBound + 1
             )
         ]
 
@@ -388,11 +394,12 @@ struct PluginGatingTests {
             )
         }
         let refused = PluginIncompatibility.requiresNewerApp(minimumAppVersion: nil)
+        let current = ItoRunner.supportedABIVersions.upperBound
 
-        #expect(package(abi: 3, imports: nil).compatibilityRefusal() == refused)
-        #expect(package(abi: 1, imports: ["ito:core/net.fetch_v9"]).compatibilityRefusal() == refused)
-        #expect(package(abi: 1, imports: ["ito:core/net.fetch_v2", "ito:core/std.print"]).compatibilityRefusal() == nil)
-        #expect(package(abi: 2, imports: ["ito:core/std.print"]).compatibilityRefusal() == nil)
+        #expect(package(abi: current + 1, imports: nil).compatibilityRefusal() == refused)
+        #expect(package(abi: current, imports: ["ito:core/net.fetch_v9"]).compatibilityRefusal() == refused)
+        #expect(package(abi: current, imports: ["ito:core/net.fetch_v2", "ito:core/std.print"]).compatibilityRefusal() == nil)
+        #expect(package(abi: current, imports: ["ito:core/std.print"]).compatibilityRefusal() == nil)
         #expect(package(abi: nil, imports: nil).compatibilityRefusal() == nil)
         #expect(refused.localizedDescription == "This source needs a newer version of Ito. Update Ito to use it.")
     }
@@ -459,7 +466,7 @@ private actor Counter {
     func increment() { value += 1 }
 }
 
-/// A plugins directory holding an installed ABI 2 `plugin.ito`, and a source file of the same name
+/// A plugins directory holding an installed `plugin.ito` at the host's ABI, and a source file of the same name
 /// outside it whose module is `incoming`.
 private struct ManualImportFixture {
     let root: URL
@@ -475,7 +482,7 @@ private struct ManualImportFixture {
         try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
         installedFile = pluginsDirectory.appendingPathComponent("plugin.ito")
         installedArchive = try makeTestPluginArchiveData(
-            id: "plugin", version: "1.0", wasm: makeTestPluginWasm(abi: 2)
+            id: "plugin", version: "1.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
         )
         try installedArchive.write(to: installedFile)
         source = root.appendingPathComponent("plugin.ito")

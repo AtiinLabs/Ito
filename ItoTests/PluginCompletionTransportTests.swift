@@ -405,7 +405,7 @@ struct PluginCompletionOutcomeMappingTests {
     ]
 
     private static func failure(_ category: PluginErrorCategory) -> ItoError {
-        .pluginFailed(function: "mark_chapter_read", reason: "SENTINEL", category: category)
+        .pluginFailed(function: "mark_completed", reason: "SENTINEL", category: category)
     }
 
     @Test(arguments: PluginCompletionOutcomeMappingTests.cases)
@@ -437,16 +437,16 @@ struct PluginCompletionExecutorTests {
     }
 
     @Test func aSourceWithoutTheExportIsUnsupportedAndNeverCountedAsDelivered() async throws {
-        let harness = try await ExecutorHarness(wasm: TestWasm.build(.init(chapter: nil)))
+        let harness = try await ExecutorHarness(wasm: TestWasm.build(.init(completed: nil)))
         defer { harness.cleanup() }
 
         let outcome = await harness.outcome()
         #expect(outcome == "unsupported")
     }
 
-    @Test func eachKindOfProgressCallsItsOwnExport() async throws {
-        // Acknowledges only an episode, so a chapter reaching it would be unsupported-by-zero.
-        let wasm = TestWasm.build(.init(chapter: [0x41, 0x00], episode: [0x41, 0x01]))
+    @Test func markCompletedReceivesTheEntryKind() async throws {
+        // Acknowledges only anime, whose wire value is 1: the export returns whether its kind argument is 1.
+        let wasm = TestWasm.build(.init(completed: [0x20, 0x00, 0x41, 0x01, 0x46]))
         let anime = try await ExecutorHarness(wasm: wasm, kind: .anime)
         let manga = try await ExecutorHarness(wasm: wasm, kind: .manga)
         let novel = try await ExecutorHarness(wasm: wasm, kind: .novel)
@@ -463,6 +463,7 @@ struct PluginCompletionExecutorTests {
     @Test(arguments: [
         ("needsSetup", "paused(configurationChanged,configurationChanged)"),
         ("unauthorized", "paused(credentials,credentials)"),
+        ("needsLogin", "paused(credentials,credentials)"),
         ("network", "retryable(network)"),
         ("server", "retryable(server)"),
         ("notFound", "paused(missingRemote,missingRemote)"),
@@ -478,7 +479,7 @@ struct PluginCompletionExecutorTests {
     }
 
     @Test func aPluginThatTrapsPausesAsASourceError() async throws {
-        let harness = try await ExecutorHarness(wasm: TestWasm.build(.init(chapter: [0x00])))
+        let harness = try await ExecutorHarness(wasm: TestWasm.build(.init(completed: [0x00])))
         defer { harness.cleanup() }
 
         let outcome = await harness.outcome()
