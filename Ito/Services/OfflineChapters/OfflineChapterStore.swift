@@ -526,6 +526,24 @@ actor OfflineChapterStore {
         }
     }
 
+    /// Marks every queued job waiting for `reason`, in one transaction, as a network condition does. Waiting jobs
+    /// (including those that need a Retry) and jobs in an attempt are left alone, so one condition costs one write
+    /// however long the queue is.
+    func setWaitingForQueuedJobs(reason: DownloadWaitingReason) async throws {
+        let now = clock()
+        try await database.write { db in
+            let queued = try DownloadJobRecord
+                .filter(Column("state") == DownloadJobState.queued.rawValue)
+                .fetchAll(db)
+            for var job in queued {
+                job.state = .waiting
+                job.waitingReason = reason
+                job.updatedAt = now
+                try job.update(db)
+            }
+        }
+    }
+
     /// Re-queues waiting jobs whose reason has cleared. Reasons that need a user Retry are never
     /// cleared here, even when listed.
     func readmitWaiting(_ reasons: Set<DownloadWaitingReason>) async throws {

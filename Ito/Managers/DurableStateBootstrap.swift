@@ -52,7 +52,7 @@ public final class DurableStateBootstrap: ObservableObject {
         case failed(String)
     }
 
-    public static let shared = production()
+    public static let shared = production(resolveOfflineRoot: { try OfflineChaptersLocation.rootURL() })
 
     @Published public private(set) var state: State = .idle
     @Published public private(set) var settingsStore: AppSettingsStore?
@@ -87,10 +87,12 @@ public final class DurableStateBootstrap: ObservableObject {
     private let pluginCookies: PluginCookieJar
     private let pluginTokens: PluginSecretStore
     private let pluginTrust: PluginTrustStore
-    private let offlineChapterStore: OfflineChapterStore?
+    let offlineChapterStore: OfflineChapterStore?
     /// The one network path monitor of the process, shared by the download queue and the screens that
     /// say when the device is offline.
     private let networkPath: any NetworkPathObserving
+    /// Grants the time an in-flight download attempt needs when the app leaves the foreground.
+    private let backgroundGranting: any BackgroundExecutionGranting
     private var preparationTask: Task<Bool, Never>?
     private var sourcesPrepared = false
     private var runtime: Runtime?
@@ -144,7 +146,8 @@ public final class DurableStateBootstrap: ObservableObject {
         ),
         pluginTrust: PluginTrustStore = PluginTrustStore(),
         offlineChaptersRoot: URL? = nil,
-        networkPath: any NetworkPathObserving = NWPathNetworkObserver()
+        networkPath: any NetworkPathObserving = NWPathNetworkObserver(),
+        backgroundGranting: any BackgroundExecutionGranting = UIKitBackgroundExecutionGranting()
     ) {
         self.dbPool = dbPool
         self.migration = migration
@@ -161,6 +164,7 @@ public final class DurableStateBootstrap: ObservableObject {
         self.pluginTokens = pluginTokens
         self.pluginTrust = pluginTrust
         self.networkPath = networkPath
+        self.backgroundGranting = backgroundGranting
         // One store per installation directory for the whole process: a rebuilt runtime reuses it, so
         // its leases, live attempts and once-only reconciliation are never split across two actors.
         offlineChapterStore = offlineChaptersRoot.map { root in
@@ -624,21 +628,27 @@ public final class DurableStateBootstrap: ObservableObject {
 
     func setCompletionForeground(_ active: Bool) {
         completionForeground = active
-        refreshCompletionActivity()
+        refreshCompletionActivity(finishingInFlightDownload: !active)
     }
 
-    private func refreshCompletionActivity() {
+    /// - Parameter finishingInFlightDownload: true when the app is leaving the foreground. The attempt in flight then
+    ///   finishes under a background grant; any other suspension cancels it at once.
+    private func refreshCompletionActivity(finishingInFlightDownload: Bool = false) {
         guard let completionCoordinator else { return }
         if state == .ready, completionForeground, !completionRestoreBlocked {
             completionCoordinator.start()
             downloadCoordinator?.start()
         } else {
             completionCoordinator.suspend()
-            downloadCoordinator?.suspend()
+            if finishingInFlightDownload {
+                downloadCoordinator?.suspend(allowingInFlightCompletion: backgroundGranting)
+            } else {
+                downloadCoordinator?.suspend()
+            }
         }
     }
 
-    private static func production() -> DurableStateBootstrap {
+    static func production(resolveOfflineRoot: () throws -> URL) -> DurableStateBootstrap {
         let domainName: String
         let defaults: UserDefaults
         let launchDefaultsSuiteName: String?
@@ -735,13 +745,15 @@ public final class DurableStateBootstrap: ObservableObject {
         ]
         #endif
         let dbPool = AppDatabase.shared.dbPool
-        // Offline chapters stay debug-only until their acceptance pass: without a root, release builds
-        // compose no store, worker, offline reader or saved-only route.
-        #if DEBUG
-        let offlineRoot = try? OfflineChaptersLocation.rootURL()
-        #else
-        let offlineRoot: URL? = nil
-        #endif
+        // Offline chapters are composed in every build. Without a resolved root, nothing is composed: no store,
+        // worker, offline reader or saved-only route.
+        let offlineRoot: URL?
+        do {
+            offlineRoot = try resolveOfflineRoot()
+        } catch {
+            AppLogger.database.error("Offline chapters directory unavailable")
+            offlineRoot = nil
+        }
         let domain = UserDefaultsLegacyDomain(defaults: defaults, domainName: domainName)
         let migrator = LegacyDefaultsMigrator(dbPool: dbPool, domain: domain)
         return DurableStateBootstrap(
