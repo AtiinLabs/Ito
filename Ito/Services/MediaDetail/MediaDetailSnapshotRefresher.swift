@@ -47,7 +47,7 @@ struct MediaDetailSnapshotRefresher {
                 payload: payload,
                 coverURL: updated.cover,
                 chapterRowCount: chapters.count,
-                // No source reports a catalog scope yet.
+                // The catalog's scope is not recorded yet; `.unknown` makes no claim about the series.
                 catalog: .unknown,
                 refreshedAt: refreshedAt
             )

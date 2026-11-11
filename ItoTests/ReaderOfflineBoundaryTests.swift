@@ -44,7 +44,7 @@ func boundaryLabel(_ boundary: ReaderChapterBoundary<Chapter>) -> String {
     }
 }
 
-func readerChapter(_ key: String, _ number: Float32, text: Bool = false, locked: Bool = false) -> Chapter {
+func readerChapter(_ key: String, _ number: Double, text: Bool = false, locked: Bool = false) -> Chapter {
     var chapter = text
         ? Chapter(key: key, chapter: number, kind: .text)
         : Chapter(key: key, chapter: number, kind: .images)
@@ -53,7 +53,7 @@ func readerChapter(_ key: String, _ number: Float32, text: Bool = false, locked:
 }
 
 private func label(_ boundary: ReaderChapterBoundary<Chapter>) -> String { boundaryLabel(boundary) }
-private func chapter(_ key: String, _ number: Float32, text: Bool = false, locked: Bool = false) -> Chapter {
+private func chapter(_ key: String, _ number: Double, text: Bool = false, locked: Bool = false) -> Chapter {
     readerChapter(key, number, text: text, locked: locked)
 }
 

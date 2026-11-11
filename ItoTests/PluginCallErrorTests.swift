@@ -84,6 +84,25 @@ struct PluginCallErrorTests {
         #expect(PluginCallError(invalidControls).kind == .incompatible)
     }
 
+    @Test func aCatalogContractViolationIsAnIncompatibilityThatNeverShowsTheRule() {
+        let error = PluginCallError(.catalogContractViolation(function: "get_manga_list", violation: .init(.duplicateKey)))
+
+        #expect(error == PluginCallError(
+            kind: .incompatible, message: "The source sent something this version of Ito can't read. Update the source or Ito."
+        ))
+    }
+
+    @Test func aPluginReportedContractViolationIsAnIncompatibilityWhateverItsReason() {
+        let error = PluginCallError(.pluginFailed(
+            function: "get_manga_list", reason: "duplicate.key", category: .contractViolation
+        ))
+
+        #expect(error == PluginCallError(
+            kind: .incompatible, message: "The source sent something this version of Ito can't read. Update the source or Ito."
+        ))
+        #expect(!error.message.contains("duplicate.key"))
+    }
+
     @Test func aWebViewFailureSaysSo() {
         let error = PluginCallError(.hostModuleError(domain: "webview", message: "Timed out"))
 

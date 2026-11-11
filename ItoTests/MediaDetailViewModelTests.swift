@@ -1188,13 +1188,13 @@ final class MediaDetailViewModelTests: XCTestCase {
         Novel(key: key, title: title, chapters: chapters)
     }
 
-    func chapter(_ key: String, _ number: Float?, date: Double? = nil) -> Manga.Chapter {
+    func chapter(_ key: String, _ number: Double?, date: Double? = nil) -> Manga.Chapter {
         Manga.Chapter(key: key, title: key, chapter: number, dateUpdated: date)
     }
 
     private func episode(_ key: String, _ number: Float?) -> Anime.Episode {
         Anime.Episode(key: key, title: key, episode: number) }
 
-    private func novelChapter(_ key: String, _ number: Float?) -> Novel.Chapter {
+    private func novelChapter(_ key: String, _ number: Double?) -> Novel.Chapter {
         Novel.Chapter(key: key, title: key, chapter: number) }
 }

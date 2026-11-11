@@ -87,7 +87,8 @@ enum TestWasm {
     private static func rawValue(of category: String) throws -> Int {
         let categories: [String: PluginErrorCategory] = [
             "needsSetup": .needsSetup, "unauthorized": .unauthorized, "network": .network, "server": .server,
-            "notFound": .notFound, "other": .other, "unsupported": .unsupported, "needsLogin": .needsLogin
+            "notFound": .notFound, "other": .other, "unsupported": .unsupported, "needsLogin": .needsLogin,
+            "contractViolation": .contractViolation
         ]
         return Int(try #require(categories[category]).rawValue)
     }

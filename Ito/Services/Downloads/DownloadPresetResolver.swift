@@ -103,7 +103,7 @@ struct DownloadPresetInput<C: ChapterDisplayable> {
     let stored: (String) -> StoredEditionState
     /// Manga and novel chapters; never anime.
     let isStorable: (C) -> Bool
-    /// The source's group identifier for a row; nil under ABI 2.
+    /// The source's group identifier for a row. Ito does not record it, so it is nil.
     let scanlatorID: (C) -> String?
     let largeBatchThreshold: Int
 

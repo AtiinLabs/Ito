@@ -34,6 +34,21 @@ struct PersistedReadStateTests {
         try #require(chapters.first { $0.key == key })
     }
 
+    /// The manga payload with each `Float` number widened to a `Double` literal, as an older Foundation wrote it.
+    /// Decoded as `PersistedLibraryPayloadTests` decodes it: the model keeps the stored widened value.
+    private static func widenedChapters() async throws -> [Chapter] {
+        let item = Ito.LibraryItem(
+            id: "manga-abi2", title: "Tower of Dusk", coverUrl: nil, pluginId: PersistedLibraryFixture.pluginId,
+            isAnime: false, pluginType: .manga,
+            rawPayload: try PersistedDataFixtures.data("persisted-library-manga-widened-literals.json"),
+            anilistId: nil
+        )
+        guard case .manga(let manga) = try await JSONDeferredPluginPayloadDecoder().decode(item) else {
+            throw PersistedFixtureError.missing("widened manga payload")
+        }
+        return manga.chapters ?? []
+    }
+
     private static func storedNumbers(_ database: TestDatabase) async throws -> [Double] {
         try await database.dbPool.read { db in
             try Double.fetchAll(db, sql: """
@@ -94,6 +109,39 @@ struct PersistedReadStateTests {
         for number in [one, ten, 1, 5, 10] {
             #expect(progress.isRead(media: Self.media, chapterId: "unlisted", chapterNum: number), "\(number)")
         }
+    }
+
+    @Test func aNewModelChapterWithTheSameDecimalReusesTheStoredMarkAndAddsNoSecondRow() async throws {
+        let (database, _) = try await Self.restored()
+        defer { database.cleanup() }
+        let stored = try Self.chapter("ch-004-decimal", in: try await Self.widenedChapters())
+        // The exact Double a current model holds, where the stored chapter holds the widened Float.
+        let fresh = Chapter(key: "ch-004-decimal", chapter: 1.1)
+        #expect(stored.chapter == Double(Float(1.1)), "The widened legacy chapter must hold the widened Float")
+        #expect(stored.chapter != fresh.chapter, "The two Doubles must differ, or the test proves nothing")
+        let number = try #require(fresh.chapterNumber)
+        #expect(number == stored.chapterNumber)
+        let progress = ReadProgressManager(dbPool: database.dbPool)
+        try await progress.reload()
+        let before = try await Self.storedNumbers(database)
+
+        // markAsRead needs a PluginCompletionContext, which this suite does not build, so the write goes through
+        // markReadUpTo: the same path the existing parity test uses.
+        try await progress.markReadUpTo(media: Self.media, maxChapterNum: number, availableChapterNumbers: [number])
+
+        let after = try await Self.storedNumbers(database)
+        #expect(Set(before).isSubset(of: Set(after)))
+        #expect(after.filter { abs($0 - 1.1) < 0.01 } == [Double(Float(1.1))], "Both Doubles must share one stored row")
+        try await progress.reload()
+        #expect(progress.isRead(media: Self.media, chapterId: "unlisted", chapterNum: fresh.chapterNumber))
+    }
+
+    @Test func theExactAndWidenedDecimalsCountAsOneChapterAsUnderTheFloatModel() async throws {
+        let stored = try Self.chapter("ch-004-decimal", in: try await Self.widenedChapters())
+        let fresh = Chapter(key: "exact", chapter: 1.1)
+        #expect(stored.chapter != fresh.chapter, "The two Doubles must differ, or the test proves nothing")
+
+        #expect([fresh, stored].distinctChapterCount == 1)
     }
 
     // MARK: - History

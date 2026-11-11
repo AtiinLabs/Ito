@@ -17,7 +17,7 @@ struct LibrarySnapshotBasisTests {
             key: "series-1",
             title: "Series",
             chapters: keys.enumerated().map { index, key in
-                Chapter(key: key, volume: nil, chapter: Float(index + 1), scanlator: "A", paywalled: index == 2 ? true : nil)
+                Chapter(key: key, volume: nil, chapter: Double(index + 1), scanlator: "A", paywalled: index == 2 ? true : nil)
             }
         ))
     }

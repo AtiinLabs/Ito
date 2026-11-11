@@ -1,7 +1,7 @@
 import Foundation
 
-/// How much of a series' catalog the source said it returned. Under ABI 2 it is always `.unknown`; a
-/// later ABI supplies the other cases.
+/// How much of a series' catalog the source said it returned. Ito does not record the source's scope, so it is
+/// always `.unknown`. The other cases describe a recorded scope.
 nonisolated enum SeriesCatalogScope: Equatable, Sendable {
     case unknown
     case visible

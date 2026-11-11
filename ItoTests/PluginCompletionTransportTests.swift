@@ -300,6 +300,12 @@ struct PluginCompletionOutcomeMappingTests {
             expected: "paused(incompatible,incompatible)"
         ),
         .init(
+            name: "contractViolation",
+            error: ItoError.catalogContractViolation(function: "mark_completed", violation: .init(.duplicateKey)),
+            expected: "paused(incompatible,incompatible)"
+        ),
+        .init(name: "pluginReportedContractViolation", error: failure(.contractViolation), expected: "paused(incompatible,incompatible)"),
+        .init(
             name: "policyOffline",
             error: ItoError.networkPolicy(.deferred(.offline)),
             expected: "retryable(network)"
@@ -468,7 +474,8 @@ struct PluginCompletionExecutorTests {
         ("server", "retryable(server)"),
         ("notFound", "paused(missingRemote,missingRemote)"),
         ("other", "paused(sourceError,sourceError)"),
-        ("unsupported", "unsupported")
+        ("unsupported", "unsupported"),
+        ("contractViolation", "paused(incompatible,incompatible)")
     ])
     func aTypedFailureTheSourceReportsIsRecordedByItsCategory(category: String, expected: String) async throws {
         let harness = try await ExecutorHarness(wasm: TestWasm.build(try TestWasm.failing(with: category)))

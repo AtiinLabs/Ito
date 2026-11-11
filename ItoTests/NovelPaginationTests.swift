@@ -341,8 +341,8 @@ final class NovelPaginationTests: XCTestCase {
     private struct NovelChapterFixtureSnapshot: Equatable {
         let key: String
         let title: String?
-        let volume: Float32?
-        let chapter: Float32?
+        let volume: Double?
+        let chapter: Double?
         let dateUpdated: Double?
         let scanlator: String?
         let url: String?
@@ -496,7 +496,7 @@ final class NovelPaginationTests: XCTestCase {
     }
 
     private func formattedTitle(_ chapter: Novel.Chapter) -> String {
-        if let number = chapter.chapter {
+        if let number = chapter.chapterNumber {
             if let title = chapter.title, !title.isEmpty {
                 return "Chapter \(number.formatted()) - \(title)"
             }
@@ -507,7 +507,7 @@ final class NovelPaginationTests: XCTestCase {
 
     private func loadedChapter(
         key: String,
-        number: Float32?,
+        number: Double?,
         title: String? = "Title",
         body: String
     ) -> NovelLoadedChapter {

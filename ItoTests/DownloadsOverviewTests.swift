@@ -16,7 +16,7 @@ struct DownloadsOverviewTests {
         _ = try await fixture.enqueueBatch(store, chapterKeys: ["q2", "q1"], canonicalMediaId: "z")
         _ = try await fixture.enqueue(store, chapterKey: "q3", canonicalMediaId: "y")
         try await fixture.database.dbPool.write { db in
-            for (key, number) in [("a1", Float(1)), ("a2", Float(2)), ("b1", Float(1))] {
+            for (key, number) in [("a1", Double(1)), ("a2", Double(2)), ("b1", Double(1))] {
                 var chapter = OfflineStoreFixture.chapter(key)
                 chapter.chapter = number
                 let data = try JSONEncoder().encode(chapter)

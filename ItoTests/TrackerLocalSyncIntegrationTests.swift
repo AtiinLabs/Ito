@@ -89,7 +89,7 @@ final class TrackerLocalSyncIntegrationTests: XCTestCase {
         Manga(key: key, title: title, chapters: chapters)
     }
 
-    private func chapter(_ number: Float?, key: String? = nil, title: String? = nil) -> Manga.Chapter {
+    private func chapter(_ number: Double?, key: String? = nil, title: String? = nil) -> Manga.Chapter {
         let resolvedKey = key ?? (number.map { "ch-\($0.formatted())" } ?? "ch-unnumbered")
         let resolvedTitle = title ?? (number.map { "Chapter \($0)" } ?? "Unnumbered Chapter")
         return Chapter(key: resolvedKey, title: resolvedTitle, chapter: number)
@@ -130,7 +130,7 @@ final class TrackerLocalSyncIntegrationTests: XCTestCase {
                 "Chapter \(number) should be marked read"
             )
             XCTAssertTrue(
-                harness.viewModel.isRead(chapter(number)),
+                harness.viewModel.isRead(chapter(Double(number))),
                 "ViewModel should report chapter \(number) as read"
             )
         }

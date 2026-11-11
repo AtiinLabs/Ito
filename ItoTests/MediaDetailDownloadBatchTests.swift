@@ -503,7 +503,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
     // MARK: - Titles and names
 
     func testPreviewRowsAreNamedLikeTheReaderNamesChapters() async throws {
-        let chapters = (1...12).map { Chapter(key: "c\($0)", title: $0 == 1 ? "Opening" : nil, chapter: Float($0) + ($0 == 2 ? 0.5 : 0)) }
+        let chapters = (1...12).map { Chapter(key: "c\($0)", title: $0 == 1 ? "Opening" : nil, chapter: Double($0) + ($0 == 2 ? 0.5 : 0)) }
         let subject = await makeSubject(chapters: chapters)
 
         await subject.viewModel.downloadBatch.startDownload(.all).value
@@ -1100,13 +1100,13 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
     // MARK: - Subjects
 
     private static func numbered(_ range: ClosedRange<Int>, scanlator: String? = nil) -> [Chapter] {
-        range.map { Chapter(key: "c\($0)", chapter: Float($0), scanlator: scanlator) }
+        range.map { Chapter(key: "c\($0)", chapter: Double($0), scanlator: scanlator) }
     }
 
     /// A1–A3 and B1–B5 under one source: positions 4 and 5 exist only as B uploads.
     private static func twoScanlators() -> [Chapter] {
-        (1...3).map { Chapter(key: "a\($0)", chapter: Float($0), scanlator: "A") }
-            + (1...5).map { Chapter(key: "b\($0)", chapter: Float($0), scanlator: "B") }
+        (1...3).map { Chapter(key: "a\($0)", chapter: Double($0), scanlator: "A") }
+            + (1...5).map { Chapter(key: "b\($0)", chapter: Double($0), scanlator: "B") }
     }
 
     private static func preview(of viewModel: MediaDetailViewModel<Manga>) -> DownloadPreview? {
@@ -1147,7 +1147,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         range.map { ChapterFacts(key: "c\($0)", number: Float($0)) }
     }
 
-    private static func inventoryRow(_ key: String, number: Float, series: String = "series-1") throws -> DownloadedChapterRecord {
+    private static func inventoryRow(_ key: String, number: Double, series: String = "series-1") throws -> DownloadedChapterRecord {
         DownloadedChapterRecord(
             pluginId: pluginID,
             mediaKind: .manga,

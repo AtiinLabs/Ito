@@ -319,7 +319,7 @@ final class ReaderChapterOrderingTests: XCTestCase {
         number: Float32?,
         scanlator: String? = nil
     ) -> Manga.Chapter {
-        Manga.Chapter(key: key, chapter: number, scanlator: scanlator)
+        Manga.Chapter(key: key, chapter: number.map(Double.init), scanlator: scanlator)
     }
 
     private func novelChapter(
@@ -327,7 +327,7 @@ final class ReaderChapterOrderingTests: XCTestCase {
         number: Float32?,
         scanlator: String? = nil
     ) -> Novel.Chapter {
-        Novel.Chapter(key: key, chapter: number, scanlator: scanlator)
+        Novel.Chapter(key: key, chapter: number.map(Double.init), scanlator: scanlator)
     }
 
     private func pageContents(_ pages: [Page]) -> [String] {

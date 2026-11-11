@@ -244,7 +244,7 @@ final class NovelReaderPaywallTests: XCTestCase {
 
     private func makeChapter(
         _ key: String,
-        number: Float32?,
+        number: Double?,
         title: String? = nil,
         scanlator: String? = nil,
         paywalled: Bool? = nil
