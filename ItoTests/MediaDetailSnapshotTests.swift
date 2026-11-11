@@ -38,7 +38,8 @@ final class MediaDetailSnapshotTests: XCTestCase {
         saved: Bool = true,
         isOffline: Bool = false,
         savedOnly: Bool = false,
-        loads: [MediaRouteHarness<Manga>.LoadResponse] = []
+        loads: [MediaRouteHarness<Manga>.LoadResponse] = [],
+        snapshotEncoder: any MediaDetailSnapshotEncoding = JSONMediaDetailSnapshotEncoder()
     ) -> Subject {
         let library = MediaDetailLibraryFake(
             state: MediaDetailLibraryState(
@@ -92,7 +93,8 @@ final class MediaDetailSnapshotTests: XCTestCase {
             routeContext: context,
             dependencies: dependencies,
             messagePresenter: MediaDetailMessageSpy(),
-            presentationLogger: PresentationEventCaptureSpy()
+            presentationLogger: PresentationEventCaptureSpy(),
+            snapshotEncoder: snapshotEncoder
         )
         return Subject(
             viewModel: viewModel,
@@ -128,7 +130,7 @@ final class MediaDetailSnapshotTests: XCTestCase {
         XCTAssertEqual(request.token, Self.token)
         XCTAssertEqual(request.coverURL, "https://example.com/cover.jpg")
         XCTAssertEqual(request.chapterRowCount, 2)
-        // No source reports a catalog scope yet.
+        // This series reports no catalog, so the refresh claims nothing about it.
         XCTAssertEqual(request.catalog, .unknown)
         let payload = try JSONDecoder().decode(Manga.self, from: request.payload)
         XCTAssertEqual(payload.key, "series-1")
@@ -212,6 +214,42 @@ final class MediaDetailSnapshotTests: XCTestCase {
         // Only the newer load wrote; the older one returned later and was ignored.
         XCTAssertEqual(subject.library.replaceRequests.count, 1)
         XCTAssertEqual(subject.viewModel.media.chapterList?.map(\.key), ["new"])
+    }
+
+    func testSupersededSnapshotEncodingCannotClearTheNewerTaskOrPublishEitherSnapshot() async {
+        let olderStarted = expectation(description: "older snapshot encoder starts")
+        let newerStarted = expectation(description: "newer snapshot encoder starts")
+        let encoder = SuspendedSnapshotEncoder { request in
+            (request == 1 ? olderStarted : newerStarted).fulfill()
+        }
+        defer { Task { await encoder.releaseAll() } }
+        let subject = makeSubject(
+            loads: [
+                .value(series(chapters: [Chapter(key: "older", chapter: 1)])),
+                .value(series(chapters: [Chapter(key: "newer", chapter: 2)]))
+            ],
+            snapshotEncoder: encoder
+        )
+        subject.library.tokenToReturn = Self.token
+        let older = Task { await subject.viewModel.refresh() }
+        await fulfillment(of: [olderStarted], timeout: 5)
+
+        let newer = Task { await subject.viewModel.refresh() }
+        await fulfillment(of: [newerStarted], timeout: 5)
+        await encoder.release(request: 1)
+        await older.value
+
+        // The newer refresh is still in encoding; cancellation must reach its still-owned task handle.
+        subject.viewModel.cancelScreenOperations()
+        await encoder.release(request: 2)
+        await newer.value
+
+        let olderWasCancelled = await encoder.observedCancellationState(for: 1)
+        let newerWasCancelled = await encoder.observedCancellationState(for: 2)
+        XCTAssertEqual(olderWasCancelled, true)
+        XCTAssertEqual(newerWasCancelled, true)
+        XCTAssertTrue(subject.library.replaceRequests.isEmpty)
+        XCTAssertNil(subject.viewModel.snapshotRefreshedAt)
     }
 
     func testAFailedLoadNeverWrites() async {

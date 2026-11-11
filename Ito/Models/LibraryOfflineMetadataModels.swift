@@ -3,8 +3,7 @@ import GRDB
 import ito_runner
 
 /// Which chapters a source's catalog covers. The cases and their order match the runner's catalog scope, so
-/// a source that reports it maps case for case. Until then it is `unknown`, and so is any value this build
-/// does not recognise.
+/// a source that reports it maps case for case. A value this build does not recognise is `unknown`.
 nonisolated enum LibraryCatalogScope: String, Codable, CaseIterable, Sendable {
     case unknown
     /// What the source shows by default: it may leave out hidden, filtered or collapsed uploads.
@@ -41,6 +40,34 @@ nonisolated struct LibraryCatalogDescription: Equatable, Sendable {
     /// says it returned all of them.
     var coversEntireSeries: Bool {
         scope == .allEligible && completeness == .complete
+    }
+}
+
+extension LibraryCatalogDescription {
+    /// Maps the runner's catalog case for case, with no default, so a runner case this build does not know
+    /// breaks the build here instead of being guessed. A missing catalog says nothing: it is `unknown`.
+    init(_ catalog: ChapterCatalog?) {
+        guard let catalog else {
+            self = .unknown
+            return
+        }
+        self.init(scope: Self.libraryScope(catalog.scope), completeness: Self.libraryCompleteness(catalog.completeness))
+    }
+
+    private static func libraryScope(_ scope: CatalogScope) -> LibraryCatalogScope {
+        switch scope {
+        case .unknown: return .unknown
+        case .visible: return .visible
+        case .allEligible: return .allEligible
+        }
+    }
+
+    private static func libraryCompleteness(_ completeness: CatalogCompleteness) -> LibraryCatalogCompleteness {
+        switch completeness {
+        case .unknown: return .unknown
+        case .partial: return .partial
+        case .complete: return .complete
+        }
     }
 }
 
@@ -140,7 +167,6 @@ nonisolated enum LibrarySnapshotReplaceOutcome: Equatable, Sendable {
     case replaced
     /// The item was removed, relinked, restored, saved again or replaced since the token was read.
     case stale
-    /// The new catalog cannot stand for the saved one: it has no chapters, or it is narrower than a
-    /// complete catalog already saved.
+    /// The refreshed list has no chapters, so it is not evidence about the series and nothing is saved.
     case rejectedIncomplete
 }
