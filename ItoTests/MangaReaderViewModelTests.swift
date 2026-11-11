@@ -549,7 +549,7 @@ final class MangaReaderViewModelTests: XCTestCase {
     }
 
     func testContinuousDropsChaptersFarBehindTheReader() async {
-        let chapters = (1...5).map { makeChapter("c\($0)", number: Float($0)) }
+        let chapters = (1...5).map { makeChapter("c\($0)", number: Double($0)) }
         let subject = makeSubject(chapters: chapters, initial: chapters[0], viewer: .Vertical)
         for chapter in chapters {
             subject.loader.enqueue(.pages([page(0), page(1)]), for: chapter.key)
@@ -1034,7 +1034,7 @@ final class MangaReaderViewModelTests: XCTestCase {
 
     func makeChapter(
         _ key: String,
-        number: Float32?,
+        number: Double?,
         title: String? = nil,
         scanlator: String? = nil,
         paywalled: Bool? = nil

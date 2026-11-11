@@ -92,6 +92,35 @@ struct PluginGatingTests {
         try fixture.expectInstalledFileUntouched()
     }
 
+    @Test func aManualImportOfABI2IsRefusedAsASourceUpdateAtTheProductionRange() async throws {
+        let fixture = try ManualImportFixture(incoming: makeTestPluginWasm(abi: 2))
+        defer { fixture.cleanup() }
+        let operations = LocalBrowsePluginFileOperations(pluginsDirectory: fixture.pluginsDirectory)
+
+        await #expect(throws: PluginIncompatibility.requiresSourceUpdate) {
+            try await operations.installPluginFile(from: fixture.source, PluginDirectoryLease())
+        }
+        try fixture.expectInstalledFileUntouched()
+    }
+
+    @Test(arguments: [
+        makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound, errorVersion: nil),
+        makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound, kindsMask: 0)
+    ])
+    func aManualImportTheStaticGateRefusesIsUnreadableAndLeavesTheInstalledFileUntouched(incoming: Data) async throws {
+        let fixture = try ManualImportFixture(incoming: incoming)
+        defer { fixture.cleanup() }
+        let operations = LocalBrowsePluginFileOperations(pluginsDirectory: fixture.pluginsDirectory)
+
+        await #expect {
+            try await operations.installPluginFile(from: fixture.source, PluginDirectoryLease())
+        } throws: { error in
+            if case BrowsePluginFileError.unsupportedPluginFile = error { return true }
+            return false
+        }
+        try fixture.expectInstalledFileUntouched()
+    }
+
     @Test func aMalformedModuleManualImportLeavesTheInstalledFileAndPluginsDirectoryUnchanged() async throws {
         let fixture = try ManualImportFixture(incoming: Data("not a module".utf8))
         defer { fixture.cleanup() }
@@ -295,6 +324,54 @@ struct PluginGatingTests {
             await #expect(throws: PluginIncompatibility.unsupportedFile) {
                 _ = try await manager.makeDownloadRuntime(for: plugin.id, modules: modules, operation: makeTestNetworkOperation(.manualBulkDownload), frozenScope: nil)
             }
+        }
+        #expect(loads == 0)
+    }
+
+    @Test(arguments: [
+        makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound, errorVersion: nil),
+        makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound, kindsMask: 0)
+    ])
+    func aModuleTheStaticGateRefusesIsUnsupportedOnEveryRouteAndNeverLoads(wasm: Data) async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        var loads = 0
+        let manager = PluginManager(
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
+            runnerLoader: { _, _, _ in
+                loads += 1
+                return ItoRunner()
+            },
+            downloadRunnerLoader: { _, _, _, _, _, _ in
+                loads += 1
+                return ItoRunner()
+            }
+        )
+        let plugin = InstalledPlugin(
+            url: URL(fileURLWithPath: "/test/static-gate.ito"),
+            info: PluginInfo(id: "static-gate", name: "Static Gate", version: "1.0", minAppVersion: "1.0", type: .manga),
+            iconData: nil,
+            binary: try ItoRunner.inspectBinary([UInt8](wasm))
+        )
+        manager.publishPreparedInstalledPlugins([plugin.id: plugin])
+        let modules = PluginRunnerHostModules(
+            net: DownloadNetModule(
+                inner: ScriptedInnerNet(contexts: NetworkContextRecorder()),
+                gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver()),
+                recorder: DownloadPolicyRecorder()
+            ),
+            webview: DownloadWebviewModule(recorder: DownloadPolicyRecorder())
+        )
+
+        await #expect(throws: PluginIncompatibility.unsupportedFile) {
+            try await manager.getRunner(for: plugin.id)
+        }
+        await #expect(throws: PluginIncompatibility.unsupportedFile) {
+            try await manager.getImageRunner(for: plugin.id)
+        }
+        await #expect(throws: PluginIncompatibility.unsupportedFile) {
+            _ = try await manager.makeDownloadRuntime(for: plugin.id, modules: modules, operation: makeTestNetworkOperation(.manualBulkDownload), frozenScope: nil)
         }
         #expect(loads == 0)
     }

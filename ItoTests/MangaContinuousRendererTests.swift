@@ -66,7 +66,7 @@ final class MangaContinuousRendererTests: XCTestCase {
     }
 
     func testDeepOffsetSurvivesPrependAppendAndEviction() async throws {
-        let chapters = (1...5).map { chapter("c\($0)", Float32($0)) }
+        let chapters = (1...5).map { chapter("c\($0)", Double($0)) }
         let reader = try await openReader(chapters: chapters, initial: "c3", pageCount: 2)
         reader.subject.viewModel.imageSession.setPrefetch([try reader.descriptor("c3#1")])
         try await reader.respond("c3#1", width: 400, height: 8_000)
@@ -282,7 +282,7 @@ final class MangaContinuousRendererTests: XCTestCase {
     }
 
     func testZoomedDeepPositionAndHorizontalPanSurviveChapterWindowEviction() async throws {
-        let chapters = (1...5).map { chapter("c\($0)", Float32($0)) }
+        let chapters = (1...5).map { chapter("c\($0)", Double($0)) }
         let reader = try await openReader(chapters: chapters, initial: "c3", pageCount: 2)
         reader.controller.scrollView.setZoomScale(2.5, animated: false)
         reader.subject.viewModel.imageSession.setPrefetch([try reader.descriptor("c3#1")])
@@ -423,7 +423,7 @@ final class MangaContinuousRendererTests: XCTestCase {
     }
 
     func testDeferredProgressCannotMakeThePhysicalChapterEvictable() async throws {
-        let chapters = (1...7).map { chapter("c\($0)", Float32($0)) }
+        let chapters = (1...7).map { chapter("c\($0)", Double($0)) }
         let reader = try await openReader(chapters: chapters, initial: "c1", pageCount: 2)
         for key in ["c2", "c3", "c4"] {
             reader.subject.loader.enqueue(.pages(pages(key, count: 2)), for: key)
@@ -463,7 +463,7 @@ final class MangaContinuousRendererTests: XCTestCase {
     }
 
     func testChaptersAboveAreDroppedOnlyOnceTheUserStopsScrolling() async throws {
-        let chapters = (1...6).map { chapter("c\($0)", Float32($0)) }
+        let chapters = (1...6).map { chapter("c\($0)", Double($0)) }
         let reader = try await openReader(chapters: chapters, initial: "c1", pageCount: 2)
         for key in ["c2", "c3", "c4"] {
             reader.subject.loader.enqueue(.pages(pages(key, count: 2)), for: key)
@@ -493,7 +493,7 @@ final class MangaContinuousRendererTests: XCTestCase {
     }
 
     func testAChapterJumpThatEndsAFlingAlsoDropsHeldChapters() async throws {
-        let chapters = (1...6).map { chapter("c\($0)", Float32($0)) }
+        let chapters = (1...6).map { chapter("c\($0)", Double($0)) }
         let reader = try await openReader(chapters: chapters, initial: "c1", pageCount: 2)
         for key in ["c2", "c3", "c4"] {
             reader.subject.loader.enqueue(.pages(pages(key, count: 2)), for: key)
@@ -740,7 +740,7 @@ final class MangaContinuousRendererTests: XCTestCase {
         return RendererFixture(test: self, subject: subject, controller: controller, images: images)
     }
 
-    private func chapter(_ key: String, _ number: Float32) -> Manga.Chapter {
+    private func chapter(_ key: String, _ number: Double) -> Manga.Chapter {
         Manga.Chapter(key: key, title: nil, chapter: number, scanlator: nil, paywalled: nil)
     }
 

@@ -1107,11 +1107,12 @@ private enum NovelReaderSettingKind: Hashable, CaseIterable {
     case prefetchChapters
 }
 
-private struct NovelChapterToken: Equatable {
+struct NovelChapterToken: Equatable {
     let key: String
     let title: String?
-    let volume: Float32?
-    let chapter: Float32?
+    /// Raw runner numbers, not the Float boundary: request identity must stay exact.
+    let volume: Double?
+    let chapter: Double?
     let dateUpdated: Double?
     let scanlator: String?
     let url: String?
@@ -1121,8 +1122,8 @@ private struct NovelChapterToken: Equatable {
     init(_ chapter: Novel.Chapter) {
         key = chapter.key
         title = chapter.title
-        volume = chapter.volumeNumber
-        self.chapter = chapter.chapterNumber
+        volume = chapter.volume
+        self.chapter = chapter.chapter
         dateUpdated = chapter.dateUpdated
         scanlator = chapter.scanlator
         url = chapter.url

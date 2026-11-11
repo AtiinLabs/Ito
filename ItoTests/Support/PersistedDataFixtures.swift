@@ -146,6 +146,11 @@ struct ExpectedChapter {
         #expect(actual.lang == lang, sourceLocation: sourceLocation)
         #expect(actual.paywalled == paywalled, sourceLocation: sourceLocation)
         #expect(actual.kind == kind, sourceLocation: sourceLocation)
+        // ABI 3 fields are absent from every fixture captured before ABI 3.
+        #expect(actual.scanlatorID == nil, sourceLocation: sourceLocation)
+        #expect(actual.logicalUnitID == nil, sourceLocation: sourceLocation)
+        #expect(actual.readingOrder == nil, sourceLocation: sourceLocation)
+        #expect(actual.revision == nil, sourceLocation: sourceLocation)
     }
 
     static func check(
@@ -253,6 +258,7 @@ enum PersistedExpectations {
             #expect(manga.nsfw == 0, sourceLocation: sourceLocation)
             #expect(manga.viewer == (fixture == .mangaABI1 ? .Rtl : .Webtoon), sourceLocation: sourceLocation)
             ExpectedChapter.check(manga.chapters, chapters(of: fixture), sourceLocation: sourceLocation)
+            #expect(manga.catalog == nil, sourceLocation: sourceLocation)
         case (.novel(let novel), .novel):
             #expect(novel.key == fixture.id, sourceLocation: sourceLocation)
             #expect(novel.title == fixture.title, sourceLocation: sourceLocation)
@@ -266,6 +272,7 @@ enum PersistedExpectations {
             #expect(novel.contentRating == .Safe, sourceLocation: sourceLocation)
             #expect(novel.nsfw == 0, sourceLocation: sourceLocation)
             ExpectedChapter.check(novel.chapters, chapters(of: fixture), sourceLocation: sourceLocation)
+            #expect(novel.catalog == nil, sourceLocation: sourceLocation)
         case (.anime(let anime), .anime):
             #expect(anime.key == fixture.id, sourceLocation: sourceLocation)
             #expect(anime.title == fixture.title, sourceLocation: sourceLocation)

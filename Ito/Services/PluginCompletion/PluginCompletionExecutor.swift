@@ -245,8 +245,10 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
             case .network: return .retryable(.network)
             case .server: return .retryable(.server)
             case .other: return .paused(.sourceError, .sourceError)
+            case .contractViolation: return .paused(.incompatible, .incompatible)
             }
-        case .requiresNewerHost, .unsupportedABI, .postcardDecodingError, .postcardEncodingError, .controlContractViolation:
+        case .requiresNewerHost, .unsupportedABI, .postcardDecodingError, .postcardEncodingError,
+             .controlContractViolation, .catalogContractViolation:
             return .paused(.incompatible, .incompatible)
         case .hostModuleError(let domain, _):
             // The plugin needs a capability a headless completion deliberately lacks.

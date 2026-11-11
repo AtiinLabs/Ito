@@ -49,11 +49,10 @@ struct PersistedLibraryPayloadTests {
     }
 
     /// A payload an older Foundation may have written, with each `Float` number widened to a `Double` literal.
-    /// This is a tripwire for the move to `Double` numbers. Through the `Float` boundary the readers see the
-    /// stored `Float`, so read marks and history keyed by that number keep matching; the model-typed checks
-    /// below hold for a `Float` model and fail for a `Double` one, which would hold `1.100000023841858`. The
-    /// change must then either normalise widened legacy numbers on decode or change those expectations
-    /// deliberately.
+    /// This is a tripwire for the move to `Double` numbers. The model holds the stored widened `Double`, which is
+    /// not the decimal the series was built from. Readers take the decimal through the `Float` boundary
+    /// (`chapterNumber`, `volumeNumber`), so read marks and history keyed by that number keep matching. Legacy
+    /// widened values are never normalised on decode: that would rewrite a value Ito did not write.
     @Test func widenedFloatLiteralsStillReadAsTheSameLegacyNumbers() async throws {
         let item = Ito.LibraryItem(
             id: "manga-abi2", title: "Tower of Dusk", coverUrl: nil, pluginId: PersistedLibraryFixture.pluginId,
@@ -73,12 +72,13 @@ struct PersistedLibraryPayloadTests {
 
         let decimal = try #require(manga.chapters?.first { $0.key == "ch-004-decimal" })
         let other = try #require(manga.chapters?.first { $0.key == "ch-005-decimal" })
-        #expect(legacyFloat(decimal.chapter) == 1.1)
-        #expect(legacyFloat(decimal.volume) == 0.1)
-        #expect(legacyFloat(other.chapter) == 10.3)
-        #expect(sameNumber(decimal.chapter, 1.1))
-        #expect(sameNumber(decimal.volume, 0.1))
-        #expect(sameNumber(other.chapter, 10.3))
+        // The deliberate change: the model holds what was stored, and the Float boundary reads the decimal.
+        #expect(decimal.chapter == Double(Float(1.1)))
+        #expect(decimal.volume == Double(Float(0.1)))
+        #expect(other.chapter == Double(Float(10.3)))
+        #expect(decimal.chapterNumber == 1.1)
+        #expect(decimal.volumeNumber == 0.1)
+        #expect(other.chapterNumber == 10.3)
         // Everything else is as in the narrow payload.
         #expect(manga.chapters?.map(\.key) == PersistedExpectations.chapters(of: .mangaABI2).map(\.key))
         #expect(manga.title == "Tower of Dusk")

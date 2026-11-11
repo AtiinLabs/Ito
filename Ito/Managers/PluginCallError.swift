@@ -38,12 +38,14 @@ struct PluginCallError: LocalizedError, Equatable {
         case .pluginFailed(_, let reason, .needsLogin):
             let message = reason?.isEmpty == false ? Self.pluginMessage(reason) : String(localized: "Sign in to this source to continue.")
             self.init(kind: .needsLogin, message: message)
+        case .pluginFailed(_, _, .contractViolation):
+            self.init(kind: .incompatible, message: Self.incompatibleMessage)
         case .pluginFailed(_, let reason, let category):
             let kind: Kind = category == .needsSetup || category == .unauthorized ? .needsSettings : .reported
             self.init(kind: kind, message: Self.pluginMessage(reason))
         case .wasmTrap, .memoryOutOfBounds:
             self.init(kind: .crashed, message: String(localized: "The source stopped unexpectedly. Try again."))
-        case .postcardDecodingError, .postcardEncodingError, .controlContractViolation:
+        case .postcardDecodingError, .postcardEncodingError, .controlContractViolation, .catalogContractViolation:
             self.init(kind: .incompatible, message: Self.incompatibleMessage)
         case .requiresNewerHost, .unsupportedABI:
             // Only raised while loading, where PluginManager turns them into a PluginIncompatibility; mapped here
