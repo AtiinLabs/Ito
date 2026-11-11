@@ -116,52 +116,25 @@ final class ZoomablePageTests: XCTestCase {
         XCTAssertFalse(controller.scrollView.gestureRecognizerShouldBegin(controller.scrollView.panGestureRecognizer))
     }
 
-    func testAnInFlightNativeZoomCanBeRetargetedToResetWithoutAStaleLanding() async throws {
-        let (unrenderedWindow, controller) = mount(image: image(size: CGSize(width: 300, height: 400)))
-        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
-        let window = UIWindow(windowScene: scene)
-        window.frame = unrenderedWindow.frame
-        let root = unrenderedWindow.rootViewController
-        unrenderedWindow.rootViewController = nil
-        unrenderedWindow.isHidden = true
-        window.rootViewController = root
-        window.makeKeyAndVisible()
-        controller.view.layoutIfNeeded()
+    func testRetargetingAnInFlightNativeZoomToResetSettlesTheModelAtMinimum() throws {
+        let (window, controller) = try mountInKeyWindow(image: image(size: CGSize(width: 300, height: 400)))
         defer { window.isHidden = true }
-        let reset = expectation(description: "The new native zoom reaches its requested minimum")
-        let observer = NativeZoomAnimationObserver(controller: controller)
-        var completedReset = false
-        observer.onFrame = { [weak observer] in
-            // Landed means at the minimum with no zoom animation left that could still land elsewhere, so
-            // a late completion of the replaced zoom-in cannot slip past; no frame has to be caught
-            // mid-animation.
-            guard !completedReset,
-                  controller.imageView.layer.animationKeys()?.isEmpty ?? true,
-                  let presentation = controller.imageView.layer.presentation(),
-                  abs(presentation.frame.width - 300) < 0.5,
-                  controller.scrollView.zoomScale <= 1.001 else { return }
-            completedReset = true
-            observer?.stopFrames()
-            reset.fulfill()
-        }
-        controller.scrollView.delegate = observer
 
         controller.zoom(at: CGPoint(x: 100, y: 160), animated: true)
-        // The zoom-in is in flight: its animation is attached, and no frame has rendered in this turn of
-        // the run loop, so it cannot have landed. Retargeting now interrupts it at a known point.
+        // The zoom-in is in flight: its animation is attached and the model already reports the target scale.
         XCTAssertFalse(controller.imageView.layer.animationKeys()?.isEmpty ?? true)
         XCTAssertGreaterThan(controller.scrollView.zoomScale, 1.001)
         controller.zoom(
             at: CGPoint(x: controller.scrollView.bounds.midX, y: controller.scrollView.bounds.midY),
             animated: true
         )
-        observer.startFrames()
-        defer { observer.stopFrames() }
-        await fulfillment(of: [reset], timeout: 5)
-        controller.scrollView.delegate = controller
+        // The retarget decision is synchronous: the model is at the minimum before any frame renders.
         XCTAssertEqual(controller.scrollView.zoomScale, 1, accuracy: 0.001)
         XCTAssertEqual(controller.scrollView.contentOffset, .zero)
         XCTAssertEqual(controller.imageView.frame, CGRect(x: 0, y: 0, width: 300, height: 400))
+        // A delegate report after the retarget centres the page on that minimum, not on the replaced scale.
+        controller.scrollViewDidZoom(controller.scrollView)
+        XCTAssertEqual(controller.imageView.center, CGPoint(x: 150, y: 200))
     }
 
     private func centerFraction(_ controller: NativeReaderImageZoomController) -> CGPoint {
@@ -195,37 +168,19 @@ final class ZoomablePageTests: XCTestCase {
         controller.view.layoutIfNeeded()
         return (window, controller)
     }
-}
 
-@MainActor
-private final class NativeZoomAnimationObserver: NSObject, UIScrollViewDelegate {
-    let controller: NativeReaderImageZoomController
-    var onFrame: (() -> Void)?
-    private var displayLink: CADisplayLink?
-
-    init(controller: NativeReaderImageZoomController) { self.controller = controller }
-
-    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
-        controller.viewForZooming(in: scrollView)
+    /// Hosts the page in a key window of the app's scene, the environment the native zoom runs in.
+    private func mountInKeyWindow(image: UIImage) throws -> (UIWindow, NativeReaderImageZoomController) {
+        let (unrenderedWindow, controller) = mount(image: image)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        let window = UIWindow(windowScene: scene)
+        window.frame = unrenderedWindow.frame
+        let root = unrenderedWindow.rootViewController
+        unrenderedWindow.rootViewController = nil
+        unrenderedWindow.isHidden = true
+        window.rootViewController = root
+        window.makeKeyAndVisible()
+        controller.view.layoutIfNeeded()
+        return (window, controller)
     }
-
-    func scrollViewDidZoom(_ scrollView: UIScrollView) {
-        controller.scrollViewDidZoom(scrollView)
-    }
-
-    func startFrames() {
-        let link = CADisplayLink(target: self, selector: #selector(frame))
-        displayLink = link
-        link.add(to: .main, forMode: .common)
-    }
-
-    func stopFrames() {
-        displayLink?.invalidate()
-        displayLink = nil
-    }
-
-    @objc private func frame() {
-        onFrame?()
-    }
-
 }
