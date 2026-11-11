@@ -44,26 +44,29 @@ func makeTestPluginArchiveData(
 }
 
 /// A minimal module the host reads without running it: `ito_abi_version` returns `abi`,
-/// `ito_supported_kinds` returns `kindsMask` (one bit per `MediaKind.wireValue`), and `memory` is
-/// exported. It has no imports and no start section.
-func makeTestPluginWasm(abi: Int, kindsMask: Int = 1) -> Data {
+/// `ito_supported_kinds` returns `kindsMask` (one bit per `MediaKind.wireValue`), `ito_error_version` returns
+/// `errorVersion` unless it is nil (which omits the export), and `memory` is exported. It has no imports and no
+/// start section.
+func makeTestPluginWasm(abi: Int, kindsMask: Int = 1, errorVersion: Int? = 2) -> Data {
     var module: [UInt8] = [0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00]
     // Type section: one `() -> i32`.
     module += [0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7F]
-    // Function section: two functions of that type.
-    module += [0x03, 0x03, 0x02, 0x00, 0x00]
+    var constants: [(name: String, value: Int)] = [("ito_abi_version", abi), ("ito_supported_kinds", kindsMask)]
+    if let errorVersion {
+        constants.append(("ito_error_version", errorVersion))
+    }
+    // Function section: one function of that type per constant.
+    module += [0x03] + wasmSized(wasmVector(constants.map { _ in [0x00] }))
     // Memory section: one memory, one page minimum.
     module += [0x05, 0x03, 0x01, 0x00, 0x01]
-    // Export section.
-    let exports = [
-        wasmExport("ito_abi_version", kind: 0x00, index: 0),
-        wasmExport("ito_supported_kinds", kind: 0x00, index: 1),
-        wasmExport("memory", kind: 0x02, index: 0)
-    ]
+    // Export section: each constant, then the memory.
+    let exports = constants.enumerated().map { index, constant in
+        wasmExport(constant.name, kind: 0x00, index: UInt8(index))
+    } + [wasmExport("memory", kind: 0x02, index: 0)]
     module += [0x07] + wasmSized(wasmVector(exports))
     // Code section: each function returns its constant.
-    let bodies = [abi, kindsMask].map { value -> [UInt8] in
-        wasmSized([0x00, 0x41] + wasmSignedLEB(Int64(value)) + [0x0B])
+    let bodies = constants.map { constant -> [UInt8] in
+        wasmSized([0x00, 0x41] + wasmSignedLEB(Int64(constant.value)) + [0x0B])
     }
     module += [0x0A] + wasmSized(wasmVector(bodies))
     return Data(module)

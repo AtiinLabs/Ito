@@ -287,7 +287,7 @@ struct DownloadNetModuleTests {
         let runner = ItoRunner()
         await runner.setNetModule(module)
         await runner.setWebviewModule(DownloadWebviewModule(recorder: recorder))
-        try await runner.loadPlugin(fromBytes: TestWasm.build(TestWasm.Fixture.abi2(try TestWasm.sending(Self.request(), times: 2))))
+        try await runner.loadPlugin(fromBytes: TestWasm.build(try TestWasm.sending(Self.request(), times: 2)))
 
         await #expect(throws: ItoError.networkPolicy(.deferred(.expensivePath))) {
             try await runner.markCompleted(
@@ -316,7 +316,7 @@ struct DownloadNetModuleTests {
             recorder: recorder
         ))
         await runner.setWebviewModule(DownloadWebviewModule(recorder: recorder))
-        try await runner.loadPlugin(fromBytes: TestWasm.build(TestWasm.Fixture.abi2(try TestWasm.sending(Self.request(), times: 2))))
+        try await runner.loadPlugin(fromBytes: TestWasm.build(try TestWasm.sending(Self.request(), times: 2)))
 
         let export = Task {
             try await runner.markCompleted(
