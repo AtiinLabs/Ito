@@ -1,18 +1,26 @@
 import Foundation
 import ito_runner
 
-/// Why a download attempt's transport refused to continue. The first denial an attempt records is its
-/// outcome, whatever the plugin reports afterwards.
-nonisolated enum DownloadHostDenial: Equatable, Sendable {
-    case waiting(DownloadWaitingReason)
-    case requiresInteractiveSource
-
-    var outcome: DownloadAttemptOutcome {
-        switch self {
-        case .waiting(let reason):
-            return .waiting(reason)
-        case .requiresInteractiveSource:
-            return .failed(.requiresInteractiveSource)
+/// The attempt outcome a host policy outcome ends a download with. Total: every outcome maps to one.
+nonisolated extension DownloadAttemptOutcome {
+    init(policy: HostNetworkPolicyOutcome) {
+        switch policy {
+        case .deferred(.unknownPath):
+            self = .waiting(.networkUnknown)
+        case .deferred(.offline):
+            self = .waiting(.noConnection)
+        case .deferred(.expensivePath):
+            self = .waiting(.meteredNetwork)
+        case .deferred(.constrainedPath):
+            self = .waiting(.lowDataMode)
+        case .foregroundPermissionRequired:
+            self = .failed(.requiresInteractiveSource)
+        case .deferred(.policyChanged):
+            self = .queued
+        case .sourceAuthorizationFailure:
+            self = .waiting(.sourceConfigurationChanged)
+        case .hardUserBlocked:
+            self = .failed(.sourceError)
         }
     }
 }
@@ -31,28 +39,34 @@ nonisolated struct NetworkPathAdmissionGate: DownloadAdmissionGate {
     }
 }
 
-/// What a refused transport call throws. The plugin only sees a host error; the recorder holds the reason.
-nonisolated struct DownloadTransportDenied: Error, Sendable {}
-
-/// Lock-protected, first-write-wins record of the denial that ended one attempt's transport. A denial
-/// also runs its handler once, which cancels the attempt in flight.
+/// Lock-protected, first-write-wins record of the host policy outcome that ended one attempt's transport.
+/// A denial also runs its handler once, which cancels the attempt in flight.
 nonisolated final class DownloadPolicyRecorder: @unchecked Sendable {
     private let lock = NSLock()
-    private var denial: DownloadHostDenial?
+    private var denial: HostNetworkPolicyOutcome?
     private var handler: (@Sendable () -> Void)?
 
-    var firstDenial: DownloadHostDenial? {
+    var firstDenial: HostNetworkPolicyOutcome? {
         lock.withLock { denial }
     }
 
-    /// Records the denial when none was recorded yet. Later denials are ignored.
-    func record(_ newDenial: DownloadHostDenial) {
-        let handlerToRun: (@Sendable () -> Void)? = lock.withLock {
-            guard denial == nil else { return nil }
-            denial = newDenial
-            return handler
+    /// The one way a download module refuses a call: records `outcome`, then throws what the recorder holds.
+    /// That is the first outcome recorded, so the runner never sees an outcome the recorder lacks.
+    func deny(_ outcome: HostNetworkPolicyOutcome) throws -> Never {
+        throw record(outcome)
+    }
+
+    /// Stores `newOutcome` when no outcome was recorded yet, then runs the handler once. Returns the recorded
+    /// outcome. The store happens under the lock before the handler runs, so a handler always sees it.
+    @discardableResult
+    func record(_ newOutcome: HostNetworkPolicyOutcome) -> HostNetworkPolicyOutcome {
+        let (recorded, handlerToRun): (HostNetworkPolicyOutcome, (@Sendable () -> Void)?) = lock.withLock {
+            if let denial { return (denial, nil) }
+            denial = newOutcome
+            return (newOutcome, handler)
         }
         handlerToRun?()
+        return recorded
     }
 
     /// Runs `action` once a denial is recorded, or now when one already was.
@@ -82,28 +96,26 @@ nonisolated final class DownloadNetModule: NetModule, Sendable {
     }
 
     func fetch(request: NetRequest, context: NetworkOperationContext) async throws -> NetResponse {
-        guard recorder.firstDenial == nil else { throw DownloadTransportDenied() }
-        if case .wait(let reason) = gate.admission() {
-            recorder.record(.waiting(reason))
-            throw DownloadTransportDenied()
+        if let denial = recorder.firstDenial { throw denial }
+        if case .wait(let wait) = gate.admission() {
+            try recorder.deny(wait.policyOutcome)
         }
         do {
             return try await inner.fetch(request: request, context: context)
         } catch let error as URLError {
-            guard let denial = Self.denial(for: error) else { throw error }
-            recorder.record(denial)
-            throw DownloadTransportDenied()
+            guard let outcome = Self.denial(for: error) else { throw error }
+            try recorder.deny(outcome)
         }
     }
 
-    /// The denial the system reports for a path that bulk downloads wait out. Other URL errors keep
+    /// The outcome the system reports for a path that bulk downloads wait out. Other URL errors keep
     /// their own meaning.
-    static func denial(for error: URLError) -> DownloadHostDenial? {
+    static func denial(for error: URLError) -> HostNetworkPolicyOutcome? {
         switch error.networkUnavailableReason {
         case .expensive?:
-            return .waiting(.meteredNetwork)
+            return .deferred(.expensivePath)
         case .constrained?:
-            return .waiting(.lowDataMode)
+            return .deferred(.constrainedPath)
         default:
             return nil
         }
@@ -123,8 +135,7 @@ nonisolated struct RefusingCloudflareHandler: AppNetCloudflareHandling {
     }
 
     nonisolated func resolveChallenge(for url: URL) async throws -> AppNetCloudflareResolution {
-        recorder.record(.requiresInteractiveSource)
-        throw DownloadTransportDenied()
+        try recorder.deny(.foregroundPermissionRequired)
     }
 }
 
@@ -133,13 +144,11 @@ nonisolated struct DownloadWebviewModule: WebviewModule {
     let recorder: DownloadPolicyRecorder
 
     func loadUrl(request: WebviewRequest, context: NetworkOperationContext) async throws -> WebviewResponse {
-        recorder.record(.requiresInteractiveSource)
-        throw ItoError.hostModuleError(domain: "webview", message: "Downloads do not use a web view.")
+        try recorder.deny(.foregroundPermissionRequired)
     }
 
     func executeJs(script: String, context: NetworkOperationContext) async throws -> String {
-        recorder.record(.requiresInteractiveSource)
-        throw ItoError.hostModuleError(domain: "webview", message: "Downloads do not use a web view.")
+        try recorder.deny(.foregroundPermissionRequired)
     }
 }
 

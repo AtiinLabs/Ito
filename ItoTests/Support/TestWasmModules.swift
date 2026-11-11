@@ -67,11 +67,13 @@ enum TestWasm {
         return Fixture(chapter: [0x41, 0x00], lastError: (1_024, payload.count), data: [(1_024, payload)])
     }
 
-    /// A source that sends `request` through the host's network module, then acknowledges.
-    static func sending(_ request: NetRequest) throws -> Fixture {
+    /// A source that sends `request` through the host's network module `times` times in one export, then acknowledges.
+    static func sending(_ request: NetRequest, times: Int = 1) throws -> Fixture {
+        precondition(times > 0, "An export must make at least one call")
         let payload = try ItoPostcardEncoder(abiVersion: ItoRunner.supportedABIVersions.upperBound).encode(request)
+        let call = callingHost(import: 0, pointer: 256, length: payload.count)
         return Fixture(
-            chapter: callingHost(import: 0, pointer: 256, length: payload.count),
+            chapter: Array(Array(repeating: call, count: times).joined(separator: [0x1A])),
             imports: [Import(module: "ito:core/net", name: "fetch", type: 4)],
             data: [(256, payload)]
         )

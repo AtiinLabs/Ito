@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import ito_runner
 import Testing
 @testable import Ito
 
@@ -90,5 +91,10 @@ struct BulkDownloadPolicyTests {
 
         #expect(admissions == [.allow, .wait(.meteredNetwork), .allow])
         #expect(BulkDownloadPolicy.admit(observer.current) == .allow)
+    }
+
+    @Test(arguments: BulkDownloadWait.allCases)
+    func everyWaitEndsAnAttemptWithTheWaitingReasonTheAdmissionRuleNames(_ wait: BulkDownloadWait) {
+        #expect(DownloadAttemptOutcome(policy: wait.policyOutcome) == .waiting(wait.waitingReason))
     }
 }

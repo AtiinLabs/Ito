@@ -84,7 +84,7 @@ actor DownloadAttempt {
             return try await execute()
         } catch {
             if let denial = recorder.firstDenial {
-                throw DownloadAttemptFailure(outcome: denial.outcome)
+                throw DownloadAttemptFailure(outcome: DownloadAttemptOutcome(policy: denial))
             }
             if Task.isCancelled {
                 throw CancellationError()
@@ -147,15 +147,15 @@ actor DownloadAttempt {
         try Task.checkCancellation()
         try throwIfDenied()
         try requirePluginCurrent()
-        if case .wait(let reason) = admission.admission() {
-            throw DownloadAttemptFailure(outcome: .waiting(reason))
+        if case .wait(let wait) = admission.admission() {
+            throw DownloadAttemptFailure(outcome: .waiting(wait.waitingReason))
         }
         try await store.ensureCapacityForNextAsset()
     }
 
     private func throwIfDenied() throws {
         if let denial = recorder.firstDenial {
-            throw DownloadAttemptFailure(outcome: denial.outcome)
+            throw DownloadAttemptFailure(outcome: DownloadAttemptOutcome(policy: denial))
         }
     }
 
@@ -244,8 +244,8 @@ actor DownloadAttempt {
             if error is CancellationError || error is DownloadAttemptFailure {
                 throw error
             }
-            if case .wait(let reason) = admission.admission() {
-                throw DownloadAttemptFailure(outcome: .waiting(reason))
+            if case .wait(let wait) = admission.admission() {
+                throw DownloadAttemptFailure(outcome: .waiting(wait.waitingReason))
             }
             if let transportError = error as? PluginImageTransportError {
                 throw DownloadAttemptFailure(outcome: Self.outcome(for: transportError))

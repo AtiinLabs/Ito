@@ -246,8 +246,8 @@ final class DownloadQueueCoordinator {
     /// A path that stops admitting bulk work cancels the attempt. The path is read now, not taken from the
     /// delivered snapshot, because updates reach the main actor through separate tasks and may reorder.
     private func pathChanged() {
-        if case .wait(let reason) = BulkDownloadPolicy.admit(path.current) {
-            running?.cancel(.waiting(reason))
+        if case .wait(let wait) = BulkDownloadPolicy.admit(path.current) {
+            running?.cancel(.waiting(wait.waitingReason))
         }
         wake()
     }
@@ -276,7 +276,7 @@ final class DownloadQueueCoordinator {
     private func readmitClearedWaits() async {
         var cleared: Set<DownloadWaitingReason> = [.appInBackground]
         if case .allow = BulkDownloadPolicy.admit(path.current) {
-            cleared.formUnion([.networkUnknown, .noConnection, .meteredNetwork, .lowDataMode])
+            cleared.formUnion(BulkDownloadWait.allCases.map(\.waitingReason))
         }
         if await protectedData.isProtectedDataAvailable() {
             cleared.insert(.protectedDataUnavailable)
@@ -315,8 +315,8 @@ final class DownloadQueueCoordinator {
             return await setWaiting(job.id, .sourceConfigurationChanged) ? .proceeded : .blocked
         }
 
-        if case .wait(let reason) = gate.admission() {
-            _ = await setWaiting(job.id, reason)
+        if case .wait(let wait) = gate.admission() {
+            _ = await setWaiting(job.id, wait.waitingReason)
             return .blocked
         }
 
