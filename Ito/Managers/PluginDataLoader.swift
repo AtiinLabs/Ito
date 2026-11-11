@@ -57,8 +57,8 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
 
     public func loadData(with request: URLRequest, didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void, completion: @escaping @Sendable (Error?) -> Void) -> Cancellable {
         guard let url = request.url, url.scheme == "ito" else {
-            // Pass-through to default URLSession loader
-            return defaultLoader.loadData(with: request, didReceiveData: didReceiveData, completion: completion)
+            // Pass-through to default URLSession loader. The reader's purpose mark stays on this side.
+            return defaultLoader.loadData(with: ImageRequestPurpose.unmarked(request), didReceiveData: didReceiveData, completion: completion)
         }
 
         let cancellationLatch = CancellationLatch()
@@ -75,7 +75,9 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                 try Task.checkCancellation()
 
                 // One `ito://` load is one operation: every export of its resolution shares the ID and scope.
-                let operation = PluginNetworkOperation(purpose: .coverImage, operationID: UUID())
+                // The reader marks its page requests; an unmarked request is a cover image.
+                let purpose = ImageRequestPurpose.marked(on: request)?.networkPurpose ?? .coverImage
+                let operation = PluginNetworkOperation(purpose: purpose, operationID: UUID())
                 let contexts = networkContexts
                 switch try await PluginImageResolution.resolve(locator, runner: runner, context: {
                     contexts.context(pluginID: pluginId, operation)
@@ -100,7 +102,7 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                     didReceiveData(data, response)
                     completion(nil)
                 case .direct(let realUrl):
-                    var realRequest = request
+                    var realRequest = ImageRequestPurpose.unmarked(request)
                     realRequest.url = realUrl
                     guard !cancellationLatch.isCancelled && !Task.isCancelled else { throw CancellationError() }
                     let sub = defaultLoader.loadData(with: realRequest, didReceiveData: didReceiveData, completion: completion)

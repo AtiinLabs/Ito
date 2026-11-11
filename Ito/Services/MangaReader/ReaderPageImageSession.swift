@@ -271,7 +271,11 @@ final class ReaderPageImageSession {
             publish(key)
             return
         }
-        let imageRequest = ImageRequest(urlRequest: request)
+        // The request starts for the consumers present now: a visible lease makes it a foreground read, and
+        // otherwise it is a prefetch. The mark is in memory only; it never changes the key or the cache identity.
+        let countsAsPrefetch = !entry.leases.values.contains(where: { $0 == .visible })
+        let purpose: ImageRequestPurpose = countsAsPrefetch ? .prefetch : .foregroundReading
+        let imageRequest = ImageRequest(urlRequest: purpose.applied(to: request))
         // An image still in memory needs no request: a page shown again appears at once, and a
         // prefetch that precedes the page's view does not turn that into a spinner.
         if let image = pipeline.cache.cachedImage(for: imageRequest, caches: [.memory])?.image {
@@ -285,7 +289,6 @@ final class ReaderPageImageSession {
         entry.generation = lastTaskGeneration
         let generation = lastTaskGeneration
         entry.phase = .loading
-        let countsAsPrefetch = !entry.leases.values.contains(where: { $0 == .visible })
         if countsAsPrefetch { runningPrefetches += 1 }
         entry.taskIsPrefetch = countsAsPrefetch
         entries[key] = entry
