@@ -506,13 +506,17 @@ final class SourceViewModel: ObservableObject {
             homeLayout = layout
             phase = layout.components.isEmpty ? .empty : .content
             finishLoad(operationID)
-        } catch is CancellationError {
-            guard isCurrentLoad(operationID) else { return }
-            phase = .cancelled
-            finishLoad(operationID)
         } catch {
-            guard isCurrentLoad(operationID), !Task.isCancelled else { return }
+            guard isCurrentLoad(operationID) else { return }
+            // A load its caller cancelled can end in a host error rather than CancellationError, such as
+            // URLError(.cancelled). That is still a cancellation: it is never shown as a failure.
+            // A crashed runner is evicted even when the load was cancelled, so the next load starts a new one.
             discardRunnerIfCrashed(error)
+            if error is CancellationError || Task.isCancelled {
+                phase = .cancelled
+                finishLoad(operationID)
+                return
+            }
             let reason = error.localizedDescription
             failureNeedsSettings = (error as? PluginCallError)?.kind == .needsSettings
             failureNeedsLogin = (error as? PluginCallError)?.kind == .needsLogin
