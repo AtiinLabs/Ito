@@ -135,6 +135,14 @@ struct ExpectedChapter {
         return copy
     }
 
+    /// The same chapter as a Float-widened literal stores it: each number is the `Double` a `Float` round-trip gives.
+    func floatWidened() -> ExpectedChapter {
+        var copy = self
+        copy.volume = volume.map { Double(Float($0)) }
+        copy.chapter = chapter.map { Double(Float($0)) }
+        return copy
+    }
+
     func check(_ actual: Chapter, sourceLocation: SourceLocation = #_sourceLocation) {
         #expect(actual.key == key, sourceLocation: sourceLocation)
         #expect(actual.title == title, sourceLocation: sourceLocation)
@@ -325,6 +333,8 @@ enum PersistedExpectations {
 enum PersistedOfflineFixture: String, CaseIterable, Sendable {
     case mangaABI1 = "manga-abi1"
     case mangaABI2 = "manga-abi2"
+    /// The ABI 2 series with every fractional number written as its Float-widened literal.
+    case mangaABI2Widened = "manga-abi2-widened"
     case novelABI2 = "novel-abi2"
 
     /// The series key and canonical media id the rows were written under.
@@ -332,6 +342,7 @@ enum PersistedOfflineFixture: String, CaseIterable, Sendable {
         switch self {
         case .mangaABI1: return "m-abi1"
         case .mangaABI2: return "m-abi2"
+        case .mangaABI2Widened: return "m-abi2"
         case .novelABI2: return "n-abi2"
         }
     }
@@ -342,6 +353,7 @@ enum PersistedOfflineFixture: String, CaseIterable, Sendable {
         switch self {
         case .mangaABI1: return nil
         case .mangaABI2: return .images
+        case .mangaABI2Widened: return .images
         case .novelABI2: return .text
         }
     }
@@ -350,15 +362,18 @@ enum PersistedOfflineFixture: String, CaseIterable, Sendable {
         switch self {
         case .mangaABI1: return "Tower of Dawn 夜明けの塔"
         case .mangaABI2: return "Tower of Dusk"
+        case .mangaABI2Widened: return "Tower of Dusk"
         case .novelABI2: return "The Loud Archive"
         }
     }
 
-    /// The chapters of the frozen entry, as the source listed them.
+    /// The chapters of the frozen entry, as the source listed them. A widened fixture holds each number as the
+    /// `Double` that a `Float` writer stored, which is the value the model must keep.
     var listedChapters: [ExpectedChapter] {
-        kind == .novel
+        let chapters = kind == .novel
             ? PersistedExpectations.novelChapters(seriesKey: seriesKey, kind: chapterKind)
             : PersistedExpectations.mangaChapters(seriesKey: seriesKey, kind: chapterKind)
+        return self == .mangaABI2Widened ? chapters.map { $0.floatWidened() } : chapters
     }
 
     /// The chapters that were queued, in reading order: every listed chapter except the locked one.

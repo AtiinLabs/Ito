@@ -42,8 +42,10 @@ private final class RunningAttempt {
 /// Downloads queued chapters: one worker, first in first out by creation time.
 ///
 /// The worker is event-driven. It wakes for an enqueue or retry, a network path change, a protected-data
-/// change, a reconciliation, and a foreground start. Nothing polls. The worker runs only in the foreground:
-/// `suspend` cancels the attempt in flight, which the store records as waiting for the foreground.
+/// change, a reconciliation, and a foreground start. Nothing polls. The worker runs in the foreground. When the app
+/// backgrounds, `suspend(allowingInFlightCompletion:)` lets the attempt in flight finish under a background grant.
+/// If the grant expires or is refused, that attempt is cancelled and recorded as waiting for the foreground.
+/// `suspend()` cancels it at once.
 @MainActor
 final class DownloadQueueCoordinator {
     typealias ModulesFactory = @MainActor @Sendable (
@@ -52,8 +54,8 @@ final class DownloadQueueCoordinator {
         _ recorder: DownloadPolicyRecorder
     ) -> PluginRunnerHostModules
 
-    /// What one pass over the queue head did. `blocked` stops the pass until the next wake, because a
-    /// condition that blocks one chapter blocks the rest too.
+    /// What one pass over the queue head did. `blocked` stops the pass until the next wake: the worker was stopped,
+    /// a store write failed, or a network condition marked the queue. A cleared path wakes the worker again.
     private enum Step: Equatable {
         case proceeded
         case blocked
@@ -168,6 +170,40 @@ final class DownloadQueueCoordinator {
     /// The loop itself is not cancelled: the attempt's store writes run in it, and a cancelled task's database
     /// writes fail, which would leave the chapter marked as downloading.
     func suspend() {
+        stopLoop()
+        running?.cancel(.waiting(.appInBackground))
+        settleIfIdle()
+    }
+
+    private static let inFlightCompletionGrantName = "moe.itoapp.offline-chapters.finish-in-flight"
+
+    /// Stops the worker for a background transition and lets the attempt in flight finish under a background grant.
+    /// No new attempt starts. The grant covers the stopped loop until it settles, which is when that attempt has been
+    /// published or abandoned. With no attempt in flight there is nothing to finish, so no grant is asked for. If the
+    /// system refuses the grant or reclaims its time, the attempt is cancelled as waiting for the foreground, and the
+    /// grant ends at once, because UIKit requires that inside the handler.
+    func suspend(allowingInFlightCompletion granting: any BackgroundExecutionGranting) {
+        guard let retired = loopTask else { return }
+        guard running != nil else {
+            suspend()
+            return
+        }
+        // The loop is stopped before the grant is asked for, so an expiration the grant delivers at once finds it gone.
+        stopLoop()
+        let grant = granting.beginGrant(named: Self.inFlightCompletionGrantName) { [weak self] in
+            // A foreground start after the suspension owns the queue, so nothing is cancelled for it.
+            guard let self, self.loopTask == nil else { return }
+            self.running?.cancel(.waiting(.appInBackground))
+        }
+        settleIfIdle()
+        Task { @MainActor in
+            await retired.value
+            grant.end()
+        }
+    }
+
+    /// Ends the loop that takes work and keeps it as the retiring loop, so the next start waits for it.
+    private func stopLoop() {
         if let loopTask {
             retiringLoop = loopTask
         }
@@ -175,8 +211,6 @@ final class DownloadQueueCoordinator {
         wakeContinuation?.finish()
         wakeContinuation = nil
         wakePending = false
-        running?.cancel(.waiting(.appInBackground))
-        settleIfIdle()
     }
 
     /// Suspends this worker for good, as a runtime that is being replaced does, and returns the work it
@@ -315,8 +349,10 @@ final class DownloadQueueCoordinator {
             return await setWaiting(job.id, .sourceConfigurationChanged) ? .proceeded : .blocked
         }
 
+        // A network condition holds every queued chapter. One write marks them all and the pass stops. A path that
+        // clears wakes the worker, and the next pass readmits the chapters in queue order.
         if case .wait(let wait) = gate.admission() {
-            _ = await setWaiting(job.id, wait.waitingReason)
+            _ = try? await store.setWaitingForQueuedJobs(reason: wait.waitingReason)
             return .blocked
         }
 
