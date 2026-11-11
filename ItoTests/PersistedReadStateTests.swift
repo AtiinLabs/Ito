@@ -60,7 +60,7 @@ struct PersistedReadStateTests {
         try await progress.reload()
 
         for key in Self.decimalKeys {
-            let number = try Self.chapter(key, in: chapters).chapter
+            let number = try Self.chapter(key, in: chapters).chapterNumber
             #expect(number != nil)
             // Matched by number alone: the chapter key is one this series never stored.
             #expect(progress.isRead(media: Self.media, chapterId: "another-edition-of-\(key)", chapterNum: number), "\(key)")
@@ -68,7 +68,7 @@ struct PersistedReadStateTests {
             #expect(progress.isRead(media: Self.media, chapterId: key, chapterNum: nil))
         }
         // Numbers that were never marked stay unread.
-        #expect(!progress.isRead(media: Self.media, chapterId: "unread", chapterNum: try Self.chapter("ch-002", in: chapters).chapter))
+        #expect(!progress.isRead(media: Self.media, chapterId: "unread", chapterNum: try Self.chapter("ch-002", in: chapters).chapterNumber))
         #expect(!progress.isRead(media: Self.media, chapterId: "unread", chapterNum: 1.2))
         #expect(!progress.isRead(media: Self.media, chapterId: "unread", chapterNum: 10.4))
     }
@@ -79,8 +79,8 @@ struct PersistedReadStateTests {
         let progress = ReadProgressManager(dbPool: database.dbPool)
         try await progress.reload()
         let stored = try await Self.storedNumbers(database)
-        let one = try #require(try Self.chapter("ch-004-decimal", in: chapters).chapter)
-        let ten = try #require(try Self.chapter("ch-005-decimal", in: chapters).chapter)
+        let one = try #require(try Self.chapter("ch-004-decimal", in: chapters).chapterNumber)
+        let ten = try #require(try Self.chapter("ch-005-decimal", in: chapters).chapterNumber)
 
         try await progress.markReadUpTo(media: Self.media, maxChapterNum: ten, availableChapterNumbers: [one, ten])
 
@@ -145,8 +145,7 @@ struct PersistedReadStateTests {
 
         await history.recordManga(
             manga,
-            chapter: HistoryChapter(key: decimal.key, title: decimal.title, number: decimal.chapter,
-                                    volume: decimal.volume, scanlator: decimal.scanlator, format: .pages),
+            chapter: HistoryChapter(decimal, format: .pages),
             pluginId: PersistedLibraryFixture.pluginId
         )?.value
 

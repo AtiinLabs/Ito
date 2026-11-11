@@ -63,8 +63,8 @@ extension HistoryChapter {
     /// A manga or novel chapter, opened in the reader for `format`.
     init(_ chapter: Chapter, format: HistoryReaderFormat, textLength: Int? = nil) {
         self.init(
-            key: chapter.key, title: chapter.title, number: chapter.chapter,
-            volume: chapter.volume, scanlator: chapter.scanlator, format: format,
+            key: chapter.key, title: chapter.title, number: chapter.chapterNumber,
+            volume: chapter.volumeNumber, scanlator: chapter.scanlator, format: format,
             textLength: textLength
         )
     }

@@ -45,16 +45,16 @@ nonisolated struct DownloadsSnapshot: Sendable {
         for job in try DownloadJobRecord.order(DownloadJobRecord.queueOrder).fetchAll(db) {
             let chapter = try? decoder.decode(Chapter.self, from: job.chapterSnapshot)
             append(DownloadListRow(
-                edition: job.edition, title: chapter?.title, number: chapter?.chapter,
-                volume: chapter?.volume, scanlator: chapter?.scanlator,
+                edition: job.edition, title: chapter?.title, number: chapter?.chapterNumber,
+                volume: chapter?.volumeNumber, scanlator: chapter?.scanlator,
                 state: DownloadCenter.state(of: job, progress: nil), byteCount: 0, jobID: job.id
             ), title: job.seriesTitle, to: &queue)
         }
         for copy in try DownloadedChapterRecord.order(Column("verifiedAt"), Column("chapterKey")).fetchAll(db) {
             let chapter = try? decoder.decode(Chapter.self, from: copy.chapterSnapshot)
             append(DownloadListRow(
-                edition: copy.edition, title: chapter?.title, number: chapter?.chapter,
-                volume: chapter?.volume, scanlator: chapter?.scanlator,
+                edition: copy.edition, title: chapter?.title, number: chapter?.chapterNumber,
+                volume: chapter?.volumeNumber, scanlator: chapter?.scanlator,
                 state: copy.state == .verified ? .downloaded : .damaged,
                 byteCount: copy.byteCount, jobID: nil
             ), title: copy.seriesTitle, to: &saved)

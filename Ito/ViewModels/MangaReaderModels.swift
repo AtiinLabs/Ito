@@ -182,7 +182,7 @@ extension MangaReaderViewModel {
     ) -> MangaReaderPresence {
         MangaReaderPresence(
             details: entry.title,
-            state: String(localized: "Reading \(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))", comment: "Discord status: the chapter being read"),
+            state: String(localized: "Reading \(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapterNumber))", comment: "Discord status: the chapter being read"),
             activityType: 3,
             detailsURL: anilistID.map { "https://anilist.co/manga/\($0)" },
             largeImageText: String(
@@ -210,8 +210,8 @@ struct ChapterToken: Equatable {
     init(_ chapter: Manga.Chapter) {
         key = chapter.key
         title = chapter.title
-        volume = chapter.volume
-        self.chapter = chapter.chapter
+        volume = chapter.volumeNumber
+        self.chapter = chapter.chapterNumber
         dateUpdated = chapter.dateUpdated
         scanlator = chapter.scanlator
         url = chapter.url

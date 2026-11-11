@@ -443,7 +443,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             DownloadPlanRow(
                 facts: ChapterFacts(chapter),
                 isRead: identity.map {
-                    progress.isRead(media: $0, chapterID: chapter.key, chapterNumber: chapter.chapter)
+                    progress.isRead(media: $0, chapterID: chapter.key, chapterNumber: chapter.chapterNumber)
                 } ?? false,
                 stored: storedEditionState(chapter.key)
             )
@@ -511,7 +511,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
                 let chapter = planned.chapters[index]
                 return DownloadPreviewRow(
                     key: chapter.key,
-                    title: ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter),
+                    title: ReaderChapterTitle.text(title: chapter.title, number: chapter.chapterNumber),
                     scanlator: chapter.scanlator,
                     stored: storedEditionState(chapter.key),
                     isFailed: isFailed(chapter.key)

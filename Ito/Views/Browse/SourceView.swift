@@ -276,7 +276,7 @@ struct SourceView: View {
                                 mediaDestination(entry.manga)
                             }
                             HStack {
-                                Text(entry.chapter.title ?? String(localized: "Chapter \(entry.chapter.chapter.map { String(Int($0)) } ?? "—")"))
+                                Text(entry.chapter.title ?? String(localized: "Chapter \(entry.chapter.chapterNumber.map { String(Int($0)) } ?? "—")"))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
@@ -370,7 +370,7 @@ struct SourceView: View {
                                 mediaDestination(entry.novel)
                             }
                             HStack {
-                                Text(entry.chapter.title ?? String(localized: "Chapter \(entry.chapter.chapter.map { String(Int($0)) } ?? "—")"))
+                                Text(entry.chapter.title ?? String(localized: "Chapter \(entry.chapter.chapterNumber.map { String(Int($0)) } ?? "—")"))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)

@@ -969,7 +969,7 @@ private struct MangaContinuousChapterDivider: View {
                     .font(.caption2.weight(.medium))
                     .foregroundColor(.white.opacity(0.35))
                     .textCase(.uppercase)
-                Text(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))
+                Text(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapterNumber))
                     .font(.headline)
                     .foregroundColor(.white.opacity(0.75))
                     .multilineTextAlignment(.center)
@@ -1037,7 +1037,7 @@ private struct MangaContinuousChapterPrompt: View {
                 .font(.headline)
                 .multilineTextAlignment(.center)
             if let chapter {
-                Text(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))
+                Text(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapterNumber))
                     .foregroundColor(.gray)
                     .font(.subheadline)
             }
@@ -1048,7 +1048,7 @@ private struct MangaContinuousChapterPrompt: View {
 
     /// Identifies everything that affects this prompt's height.
     var measurementKey: String {
-        "prompt|\(isNext)|\(phase)|\(notice?.text ?? "")|\(chapter.map { ReaderChapterTitle.text(title: $0.title, number: $0.chapter) } ?? "")"
+        "prompt|\(isNext)|\(phase)|\(notice?.text ?? "")|\(chapter.map { ReaderChapterTitle.text(title: $0.title, number: $0.chapterNumber) } ?? "")"
     }
 
     private var prompt: String {
