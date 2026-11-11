@@ -243,6 +243,7 @@ private final class RouterRepositoryManager: BrowseRepositoryManaging {
 
 @MainActor
 private final class RouterPluginManager: BrowsePluginManaging {
+    var supportedABI: ClosedRange<Int> = ItoRunner.supportedABIVersions
     let installedPlugins: [String: InstalledPlugin] = [:]
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> {
         Just(installedPlugins).eraseToAnyPublisher()

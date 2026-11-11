@@ -4,21 +4,13 @@ import ito_runner
 
 @MainActor
 final class RepoDetailViewModel: ObservableObject {
-    enum InstallState: Equatable {
-        /// The package can't run here; the refusal says which side has to change.
-        case incompatible(PluginIncompatibility)
-        case archived
-        case updateAvailable
-        case installed
-        case notInstalled
-    }
-
     let repositoryURL: String
 
     @Published var searchQuery = ""
     @Published private(set) var repository: Repository?
     @Published private(set) var installingPackageIDs: Set<String> = []
     @Published private(set) var installationFailureMessage: String?
+    @Published private(set) var isRefreshingSources = false
     @Published private var installedPlugins: [String: InstalledPlugin]
 
     private let repositoryManager: any RepositoryDetailManaging
@@ -63,20 +55,28 @@ final class RepoDetailViewModel: ObservableObject {
         }
     }
 
-    func installState(for package: RepoPackage) -> InstallState {
-        if package.isArchived {
-            return .archived
+    func installState(for package: RepoPackage) -> PackageInstallStatus {
+        PackageInstallStatus.resolve(
+            for: package,
+            feedRefusal: repositoryManager.compatibilityRefusal(for: package),
+            installed: installedPlugins[package.id],
+            supported: pluginManager.supportedABI
+        )
+    }
+
+    /// Refreshes every repository index because the user asked. Install states never fetch on their own, so a
+    /// refresh that fails, or an offline device, changes nothing until this is called again. A second request while
+    /// one runs is ignored, so the running refresh is the only one.
+    func refreshSources() async {
+        guard !isRefreshingSources else { return }
+        isRefreshingSources = true
+        defer { isRefreshingSources = false }
+        do {
+            try await repositoryManager.refreshAllReportingFailures()
+            messagePresenter.present(.sourcesRefreshed)
+        } catch {
+            messagePresenter.present(.refreshFailed(reason: error.localizedDescription))
         }
-        if let refusal = repositoryManager.compatibilityRefusal(for: package) {
-            return .incompatible(refusal)
-        }
-        guard let installedPlugin = installedPlugins[package.id] else {
-            return .notInstalled
-        }
-        if installedPlugin.info.version.compare(package.version, options: .numeric) == .orderedAscending {
-            return .updateAvailable
-        }
-        return .installed
     }
 
     func isInstalling(packageID: String) -> Bool {

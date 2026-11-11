@@ -5,6 +5,8 @@ import ito_runner
 
 @MainActor
 protocol BrowsePluginManaging: AnyObject {
+    /// The ABI range installed files are judged against: `ItoRunner.supportedABIVersions` in production.
+    var supportedABI: ClosedRange<Int> { get }
     var installedPlugins: [String: InstalledPlugin] { get }
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> { get }
 

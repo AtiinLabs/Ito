@@ -245,9 +245,18 @@ private struct UpdateRowView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(updateItem.pkg.name)
                     .font(.headline)
-                Text("v\(updateItem.pkg.version) available")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                if updateItem.isSourceUpdate {
+                    Text(
+                        "Compatible build v\(updateItem.pkg.version) available",
+                        comment: "Subtitle of an update row for a compatible build of a source this version of Ito can't run. Installing it replaces the installed file. The version is substituted."
+                    )
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("v\(updateItem.pkg.version) available")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer()
@@ -257,9 +266,20 @@ private struct UpdateRowView: View {
                     .progressViewStyle(.circular)
                     .frame(width: 70)
             } else {
-                Button("Update", action: onUpdate)
+                if updateItem.isSourceUpdate {
+                    Button(action: onUpdate) {
+                        Text(
+                            "Update Source",
+                            comment: "Button that installs a compatible build of a source this version of Ito can't run, replacing the installed file."
+                        )
+                    }
                     .itoProminentButtonStyle()
                     .controlSize(.small)
+                } else {
+                    Button("Update", action: onUpdate)
+                        .itoProminentButtonStyle()
+                        .controlSize(.small)
+                }
             }
         }
         .padding(.vertical, 2)

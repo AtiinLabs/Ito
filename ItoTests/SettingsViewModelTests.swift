@@ -1112,6 +1112,7 @@ private final class SettingsTestRepositoryManager: BrowseRepositoryManaging {
 
 @MainActor
 private final class SettingsTestPluginManager: BrowsePluginManaging {
+    var supportedABI: ClosedRange<Int> = ItoRunner.supportedABIVersions
     let installedPlugins: [String: InstalledPlugin] = [:]
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> {
         Just(installedPlugins).eraseToAnyPublisher()

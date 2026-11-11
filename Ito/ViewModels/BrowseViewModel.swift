@@ -14,6 +14,8 @@ public final class BrowseViewModel: ObservableObject {
         public var id: String { pkg.id }
         public let pkg: RepoPackage
         public let repoURL: String
+        /// True when the installed source can't run here, so this build replaces it even at the same version.
+        public let isSourceUpdate: Bool
     }
 
     public struct PluginGroup: Identifiable {
@@ -98,32 +100,39 @@ public final class BrowseViewModel: ObservableObject {
     }
 
     public var availableUpdates: [UpdateItem] {
-        var updates: [String: UpdateItem] = [:]
+        // Listings that are offered as updates, per package, in repository order. A listing whose compatibility is
+        // unknown is offered only as a newer version; an unknown same-version repair is never counted.
+        var offered: [String: [UpdateItem]] = [:]
         for repository in repositories {
             guard let packages = repository.index?.packages else { continue }
             for package in packages {
-                // Archived or incompatible packages aren't offered for download.
-                guard !package.isArchived,
-                      let installed = installedPlugins[package.id],
-                      installed.info.version.compare(
-                        package.version,
-                        options: .numeric
-                      ) == .orderedAscending,
-                      package.compatibilityRefusal() == nil else {
+                let status = PackageInstallStatus.resolve(
+                    for: package,
+                    feedRefusal: package.compatibilityRefusal(supported: pluginManager.supportedABI),
+                    installed: installedPlugins[package.id],
+                    supported: pluginManager.supportedABI
+                )
+                switch status {
+                case .updateAvailable, .sourceUpdateRequired:
+                    let item = UpdateItem(
+                        pkg: package,
+                        repoURL: repository.url,
+                        isSourceUpdate: status == .sourceUpdateRequired
+                    )
+                    offered[package.id, default: []].append(item)
+                default:
                     continue
                 }
-
-                if let existing = updates[package.id],
-                   existing.pkg.version.compare(
-                    package.version,
-                    options: .numeric
-                   ) != .orderedAscending {
-                    continue
-                }
-                updates[package.id] = UpdateItem(pkg: package, repoURL: repository.url)
             }
         }
-        return updates.values.sorted { $0.pkg.name < $1.pkg.name }
+        var updates: [UpdateItem] = []
+        for listings in offered.values {
+            guard let index = RepositoryListingRanking.preferredIndex(
+                among: listings.map { (package: $0.pkg, refusal: nil) }
+            ) else { continue }
+            updates.append(listings[index])
+        }
+        return updates.sorted { ($0.pkg.name, $0.pkg.id) < ($1.pkg.name, $1.pkg.id) }
     }
 
     public func openRepositories() {

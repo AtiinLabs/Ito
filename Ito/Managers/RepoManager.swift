@@ -102,7 +102,7 @@ nonisolated public struct RepoPackage: Codable, Identifiable, Hashable, Sendable
 }
 
 extension RepoPackage {
-    public var isArchived: Bool { archived ?? false }
+    nonisolated public var isArchived: Bool { archived ?? false }
 
     /// Why this package can't run in an Ito at `currentAppVersion` reading `supported` ABIs, or nil when it can.
     /// The index entry's ABI and imports are all a package not yet downloaded can be judged by.
@@ -254,13 +254,14 @@ public class RepoManager: ObservableObject {
         packageFetcher: (@Sendable (URLRequest) async throws -> Data)? = nil,
         indexFetcher: (@Sendable (URL) async throws -> Data)? = nil,
         scratchDirectory: URL? = nil,
-        supportedABI: ClosedRange<Int> = ItoRunner.supportedABIVersions
+        supportedABI: ClosedRange<Int>? = nil
     ) {
         self.dbPool = dbPool
         self.pluginStatePublisher = pluginManager
         self.directoryGate = pluginManager?.directoryGate ?? PluginDirectoryGate()
         self.scratchDirectory = scratchDirectory ?? FileManager.default.temporaryDirectory
-        self.supportedABI = supportedABI
+        // The same range the plugin manager judges installed files by, so a feed and its installed file never disagree.
+        self.supportedABI = supportedABI ?? pluginManager?.supportedABI ?? ItoRunner.supportedABIVersions
         self.configuredPluginsDirectory = pluginsDirectory ?? pluginManager?.configuredInstalledPluginsDirectory
         if let packageFetcher {
             self.packageFetcher = packageFetcher

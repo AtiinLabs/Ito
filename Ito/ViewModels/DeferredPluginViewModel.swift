@@ -225,12 +225,14 @@ final class DeferredPluginViewModel: ObservableObject {
     func installMissingPlugin() {
         guard isPresentationActive else { return }
         switch phase {
-        case .pluginMissing, .packageUnavailable, .failure(.packageLookup),
+        case .pluginMissing, .packageUnavailable, .incompatible, .failure(.packageLookup),
              .failure(.pluginTypeMismatch), .failure(.install):
             break
-        case .idle, .decoding, .loadingRunner, .checkingPackage, .incompatible,
-             .installing, .ready, .failure(.runnerLoad), .failure(.payloadDecode),
-             .cancelled, .loadingSavedDetails:
+        case .failure(.runnerLoad) where runnerRefusal?.needsSourceUpdate == true:
+            // The installed file is too old or unusable, so a compatible build from a repository replaces it.
+            break
+        case .idle, .decoding, .loadingRunner, .checkingPackage, .installing, .ready,
+             .failure(.runnerLoad), .failure(.payloadDecode), .cancelled, .loadingSavedDetails:
             return
         }
 

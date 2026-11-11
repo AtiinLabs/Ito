@@ -18,6 +18,8 @@ protocol RepositoryDetailManaging: AnyObject {
 
     func installPackage(_ package: RepoPackage, repositoryURL: String) async throws
     func compatibilityRefusal(for package: RepoPackage) -> PluginIncompatibility?
+    /// Fetches every repository's index now. Runs only when the user asks; install states never fetch.
+    func refreshAllReportingFailures() async throws
 }
 
 extension RepoManager: RepositoryListManaging, RepositoryDetailManaging {}
@@ -47,6 +49,7 @@ enum RepositoryManagementMessage: Equatable {
     case alreadyAdded
     case removeFailed(reason: String)
     case refreshFailed(reason: String)
+    case sourcesRefreshed
     case installFailed(packageName: String, reason: String)
 }
 
@@ -77,6 +80,8 @@ private extension RepositoryManagementMessage {
             return .repositoryRemoveFailed
         case .refreshFailed:
             return .repositoryRefreshFailed
+        case .sourcesRefreshed:
+            return .repositorySourcesRefreshed
         case .installFailed:
             return .repositoryInstallFailed
         }

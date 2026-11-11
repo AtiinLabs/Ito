@@ -660,6 +660,102 @@ struct RepositoryAndAliasStoreTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path) == ["plugin.start.ito"])
     }
 
+    @Test func aSameVersionRebuildReplacesAnIncompatibleInstalledFileAndTheSourceRunsAfterwards() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let host = 3...3
+        let pluginsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RepositoryInstallRebuild-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
+        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+        let installedFile = pluginsDirectory.appendingPathComponent("plugin.rebuilt.ito")
+        try makeTestPluginArchiveData(id: "plugin.rebuilt", version: "1.0", wasm: makeTestPluginWasm(abi: 2))
+            .write(to: installedFile)
+        let pluginManager = PluginManager(
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginsDirectory: pluginsDirectory,
+            supportedABI: host
+        )
+        await pluginManager.reloadInstalledPlugins()
+        let installed = try #require(pluginManager.installedPlugins["plugin.rebuilt"])
+        let rebuilt = try makeTestPluginArchiveData(
+            id: "plugin.rebuilt", version: "1.0", wasm: makeTestPluginWasm(abi: 3)
+        )
+        let package = makePackage(id: "plugin.rebuilt", version: "1.0", sha256: sha256(rebuilt))
+        #expect(installed.compatibilityRefusal(supported: host) == .requiresSourceUpdate)
+        #expect(
+            PackageInstallStatus.resolve(
+                for: package,
+                feedRefusal: package.compatibilityRefusal(supported: host),
+                installed: installed,
+                supported: host
+            ) == .repairUnverified
+        )
+        let manager = RepoManager(
+            dbPool: database.dbPool,
+            pluginManager: pluginManager,
+            pluginsDirectory: nil,
+            packageFetcher: { _ in rebuilt },
+            supportedABI: host
+        )
+
+        try await manager.installPackage(package, repositoryUrl: "https://example.com")
+
+        #expect(try Data(contentsOf: installedFile) == rebuilt)
+        #expect(pluginManager.installedPlugins["plugin.rebuilt"]?.compatibilityRefusal(supported: host) == nil)
+    }
+
+    @Test func aFailedRebuildPublicationLeavesTheIncompatibleInstalledFileAndItsListingUntouched() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let host = 3...3
+        let pluginsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RepositoryInstallRebuildRollback-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
+        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+        let installedFile = pluginsDirectory.appendingPathComponent("plugin.rebuilt.ito")
+        let installedArchive = try makeTestPluginArchiveData(
+            id: "plugin.rebuilt", version: "1.0", wasm: makeTestPluginWasm(abi: 2)
+        )
+        try installedArchive.write(to: installedFile)
+        let settings = PluginSettingsStore(dbPool: database.dbPool)
+        let pluginManager = PluginManager(
+            pluginSettingsStore: settings,
+            pluginsDirectory: pluginsDirectory,
+            supportedABI: host
+        )
+        #expect(settings.set(pluginId: "plugin.rebuilt", key: "endpoint", value: "kept"))
+        await pluginManager.reloadInstalledPlugins()
+        let rebuilt = try makeTestPluginArchiveData(
+            id: "plugin.rebuilt", version: "1.0", wasm: makeTestPluginWasm(abi: 3)
+        )
+        let manager = RepoManager(
+            dbPool: database.dbPool,
+            pluginManager: pluginManager,
+            pluginsDirectory: nil,
+            packageFetcher: { _ in rebuilt },
+            supportedABI: host
+        )
+        let package = makePackage(id: "plugin.rebuilt", version: "1.0", sha256: sha256(rebuilt), abi: 3)
+        // The rebuilt module is valid, so only publication fails: its identity registry is gone.
+        try await database.dbPool.write { db in
+            try db.execute(sql: "DROP TABLE pluginIdentityRegistry")
+        }
+
+        await #expect(throws: DatabaseError.self) {
+            try await manager.installPackage(package, repositoryUrl: "https://example.com")
+        }
+
+        #expect(try Data(contentsOf: installedFile) == installedArchive)
+        #expect(pluginManager.installedPlugins["plugin.rebuilt"]?.info.version == "1.0")
+        // The settings read goes through the identity registry this test removed, so the stored row is read directly.
+        let storedEndpoint = try await database.dbPool.read { db in
+            try PluginSettingRecord.fetchOne(db, key: ["pluginId": "plugin.rebuilt", "key": "endpoint"])
+        }
+        #expect(storedEndpoint.flatMap { String(data: $0.value, encoding: .utf8) } == "kept")
+        #expect(pluginManager.installedPlugins["plugin.rebuilt"]?.compatibilityRefusal(supported: host) == .requiresSourceUpdate)
+    }
+
     @Test func aDownloadedOlderModuleIsRefusedAsASourceUpdateWhenTheFeedDeclaresNoABI() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
@@ -869,7 +965,8 @@ struct RepositoryAndAliasStoreTests {
         version: String = "1.0",
         sha256: String,
         downloadUrl: String = "package.ito",
-        archived: Bool? = nil
+        archived: Bool? = nil,
+        abi: Int? = nil
     ) -> RepoPackage {
         RepoPackage(
             id: id,
@@ -882,7 +979,8 @@ struct RepositoryAndAliasStoreTests {
             pluginType: "manga",
             archived: archived,
             archivedReason: nil,
-            archivedDate: nil
+            archivedDate: nil,
+            abi: abi
         )
     }
 
