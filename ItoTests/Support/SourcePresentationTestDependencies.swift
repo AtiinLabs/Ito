@@ -30,7 +30,8 @@ func pr7bPlugin(
             kinds: kinds,
             archived: archived
         ),
-        iconData: nil
+        iconData: nil,
+        binary: makeRunnableBinary()
     )
 }
 

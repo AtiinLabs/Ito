@@ -8,15 +8,31 @@ public struct InstalledPlugin: Identifiable {
     public let url: URL
     public let info: PluginInfo
     public let iconData: Data?
-    /// The module's interface, read without running it; nil when the module is unreadable. An
-    /// unreadable module keeps the plugin listed and its settings prepared.
+    /// The module's interface, read without running it; nil when the module is unreadable. A plugin with no
+    /// readable module stays listed and its settings stay prepared, but no gate lets it run.
     public let binary: PluginBinaryInterface?
 
-    nonisolated public init(url: URL, info: PluginInfo, iconData: Data?, binary: PluginBinaryInterface? = nil) {
+    nonisolated public init(url: URL, info: PluginInfo, iconData: Data?, binary: PluginBinaryInterface?) {
         self.url = url
         self.info = info
         self.iconData = iconData
         self.binary = binary
+    }
+}
+
+extension InstalledPlugin {
+    /// Why this installed plugin can't run here, or nil when it can. The manifest's `min_app_version` comes first, so
+    /// it names its version. The module is decisive after that: a module that can't be read is refused as an
+    /// unsupported file, and the manifest's own `abi`/`imports` never make an unreadable module runnable. Nil means
+    /// unreadable until the next scan; the archive's manifest was readable, so the plugin stays listed.
+    nonisolated func compatibilityRefusal(
+        supported: ClosedRange<Int> = ItoRunner.supportedABIVersions
+    ) -> PluginIncompatibility? {
+        if let refusal = PluginIncompatibility.appVersion(required: info.minAppVersion) {
+            return refusal
+        }
+        guard let binary else { return .unsupportedFile }
+        return PluginIncompatibility.binary(ItoRunner.compatibility(of: binary, supported: supported))
     }
 }
 
@@ -106,6 +122,8 @@ public class PluginManager: ObservableObject {
     /// `PluginDirectoryGate`.
     let directoryGate: PluginDirectoryGate
     private let packageReader: PluginPackageReader
+    /// The ABI range this manager's compatibility checks accept: `ItoRunner.supportedABIVersions` in production.
+    let supportedABI: ClosedRange<Int>
 
     var configuredInstalledPluginsDirectory: URL? {
         pluginsDirectory
@@ -125,14 +143,18 @@ public class PluginManager: ObservableObject {
         ) async throws -> ItoRunner)? = nil,
         downloadRunnerLoader: DownloadRunnerLoader? = nil,
         directoryGate: PluginDirectoryGate? = nil,
-        packageReader: PluginPackageReader? = nil
+        packageReader: PluginPackageReader? = nil,
+        supportedABI: ClosedRange<Int> = ItoRunner.supportedABIVersions
     ) {
         self.pluginSettingsStore = pluginSettingsStore
         self.pluginsDirectory = pluginsDirectory
         self.runnerLoader = runnerLoader ?? Self.loadRunner
         self.downloadRunnerLoader = downloadRunnerLoader ?? Self.loadDownloadRunner
         self.directoryGate = directoryGate ?? PluginDirectoryGate()
-        self.packageReader = packageReader ?? { url in try await PluginPackageReading.readInBackground(at: url) }
+        self.supportedABI = supportedABI
+        self.packageReader = packageReader ?? { url in
+            try await PluginPackageReading.readInBackground(at: url, supported: supportedABI)
+        }
     }
 
     @MainActor
@@ -169,8 +191,8 @@ public class PluginManager: ObservableObject {
             AppLogger.plugin.debug("🔌 [PluginManager] Plugin not found: \(pluginId)")
             throw URLError(.fileDoesNotExist) // Plugin not installed
         }
-        // A plugin built for a newer Ito may call what this version doesn't provide.
-        if let refusal = plugin.info.compatibilityRefusal {
+        // A plugin this Ito can't run is refused before loading, whichever side has to change.
+        if let refusal = plugin.compatibilityRefusal(supported: supportedABI) {
             throw refusal
         }
         let authority = runnerAuthority(for: plugin)
@@ -202,8 +224,8 @@ public class PluginManager: ObservableObject {
             AppLogger.plugin.debug("🔌 [PluginManager] Plugin not found: \(pluginId)")
             throw URLError(.fileDoesNotExist) // Plugin not installed
         }
-        // A plugin built for a newer Ito may call what this version doesn't provide.
-        if let refusal = plugin.info.compatibilityRefusal {
+        // A plugin this Ito can't run is refused before loading, whichever side has to change.
+        if let refusal = plugin.compatibilityRefusal(supported: supportedABI) {
             throw refusal
         }
         let authority = runnerAuthority(for: plugin)
@@ -279,7 +301,7 @@ public class PluginManager: ObservableObject {
         guard let plugin = installedPlugins[pluginId] else {
             throw URLError(.fileDoesNotExist)
         }
-        if let refusal = plugin.info.compatibilityRefusal {
+        if let refusal = plugin.compatibilityRefusal(supported: supportedABI) {
             throw refusal
         }
         let authority = runnerAuthority(for: plugin)
@@ -384,9 +406,13 @@ public class PluginManager: ObservableObject {
         AppLogger.plugin.debug("\("🔌 [PluginManager] Loading bundle for \(pluginID)")...")
         do {
             _ = try await runner.loadBundle(from: pluginURL)
-        } catch ItoError.requiresNewerHost, ItoError.unsupportedABI {
-            // Plugins whose manifest predates `abi`/`imports` are only found out here.
-            throw PluginRequiresNewerAppError(minimumAppVersion: nil)
+        } catch let error as ItoError {
+            // A module built for another ABI, or needing a host function this Ito lacks, is refused here, once the
+            // runner has read its ABI. The direction comes from the error.
+            if let refusal = PluginIncompatibility.loading(error) {
+                throw refusal
+            }
+            throw error
         }
         return (runner, defaults)
     }

@@ -322,7 +322,7 @@ final class RepositoriesViewModelTests: XCTestCase {
 
         XCTAssertEqual(
             viewModel.installState(for: package),
-            .incompatible(minVersion: "2.0")
+            .incompatible(.requiresNewerApp(minimumAppVersion: "2.0"))
         )
 
         manager.compatibility["2.0"] = true
@@ -575,7 +575,8 @@ final class RepositoriesViewModelTests: XCTestCase {
                 minAppVersion: "1.0",
                 type: .manga
             ),
-            iconData: nil
+            iconData: nil,
+            binary: makeRunnableBinary()
         )
     }
 
@@ -713,8 +714,8 @@ private final class RepositoryManagerSpy: RepositoryListManaging, RepositoryDeta
         onRefresh?()
     }
 
-    func compatibilityRefusal(for package: RepoPackage) -> PluginRequiresNewerAppError? {
-        (compatibility[package.minAppVersion] ?? true) ? nil : PluginRequiresNewerAppError(minimumAppVersion: package.minAppVersion)
+    func compatibilityRefusal(for package: RepoPackage) -> PluginIncompatibility? {
+        (compatibility[package.minAppVersion] ?? true) ? nil : .requiresNewerApp(minimumAppVersion: package.minAppVersion)
     }
 
     func resumeAdd(url: String) {

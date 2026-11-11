@@ -104,14 +104,14 @@ nonisolated public struct RepoPackage: Codable, Identifiable, Hashable, Sendable
 extension RepoPackage {
     public var isArchived: Bool { archived ?? false }
 
-    /// Why this package can't run in an Ito at `currentAppVersion`, or nil when it can.
-    func compatibilityRefusal(currentAppVersion: String = AppVersion.marketing) -> PluginRequiresNewerAppError? {
-        PluginRequiresNewerAppError.refusal(
-            minAppVersion: minAppVersion,
-            abi: abi,
-            imports: imports,
-            currentAppVersion: currentAppVersion
-        )
+    /// Why this package can't run in an Ito at `currentAppVersion` reading `supported` ABIs, or nil when it can.
+    /// The index entry's ABI and imports are all a package not yet downloaded can be judged by.
+    func compatibilityRefusal(
+        currentAppVersion: String = AppVersion.marketing,
+        supported: ClosedRange<Int> = ItoRunner.supportedABIVersions
+    ) -> PluginIncompatibility? {
+        PluginIncompatibility.appVersion(required: minAppVersion, current: currentAppVersion)
+            ?? PluginIncompatibility.declared(abi: abi, imports: imports, supported: supported)
     }
 }
 
@@ -219,6 +219,8 @@ public class RepoManager: ObservableObject {
     /// Where a downloaded package is copied to be checked. The system temporary directory unless a caller points it
     /// elsewhere, as tests do to make it unwritable.
     private let scratchDirectory: URL
+    /// The ABI range package and install checks accept: `ItoRunner.supportedABIVersions` in production.
+    private let supportedABI: ClosedRange<Int>
     private var activeRefresh: (id: UUID, task: Task<Void, Error>)?
     private var activePackageInstallations: [
         String: (id: UUID, request: PackageInstallationRequest, task: Task<Void, Error>)
@@ -251,12 +253,14 @@ public class RepoManager: ObservableObject {
         pluginsDirectory: URL?,
         packageFetcher: (@Sendable (URLRequest) async throws -> Data)? = nil,
         indexFetcher: (@Sendable (URL) async throws -> Data)? = nil,
-        scratchDirectory: URL? = nil
+        scratchDirectory: URL? = nil,
+        supportedABI: ClosedRange<Int> = ItoRunner.supportedABIVersions
     ) {
         self.dbPool = dbPool
         self.pluginStatePublisher = pluginManager
         self.directoryGate = pluginManager?.directoryGate ?? PluginDirectoryGate()
         self.scratchDirectory = scratchDirectory ?? FileManager.default.temporaryDirectory
+        self.supportedABI = supportedABI
         self.configuredPluginsDirectory = pluginsDirectory ?? pluginManager?.configuredInstalledPluginsDirectory
         if let packageFetcher {
             self.packageFetcher = packageFetcher
@@ -481,8 +485,8 @@ public class RepoManager: ObservableObject {
     }
 
     /// Why `package` can't run in this app, or nil when it can.
-    func compatibilityRefusal(for package: RepoPackage) -> PluginRequiresNewerAppError? {
-        package.compatibilityRefusal(currentAppVersion: currentAppVersion)
+    func compatibilityRefusal(for package: RepoPackage) -> PluginIncompatibility? {
+        package.compatibilityRefusal(currentAppVersion: currentAppVersion, supported: supportedABI)
     }
 
     public func installPackage(_ pkg: RepoPackage, repositoryUrl: String) async throws {
@@ -584,7 +588,8 @@ public class RepoManager: ObservableObject {
         do {
             reading = try await PluginPackageReading.readInBackground(
                 downloaded: data,
-                scratchDirectory: scratchDirectory
+                scratchDirectory: scratchDirectory,
+                supported: supportedABI
             )
         } catch let error as PluginPackageInspectionError {
             AppLogger.database.error("Package install refused; the package could not be checked")
@@ -596,9 +601,9 @@ public class RepoManager: ObservableObject {
         switch reading.installRefusal {
         case nil:
             break
-        case .requiresNewerApp(let refusal)?:
-            AppLogger.database.error("Package install refused; the package needs a newer Ito")
-            throw refusal
+        case .incompatible(let incompatibility)?:
+            AppLogger.database.error("Package install refused; the package can't run in this version of Ito")
+            throw incompatibility
         case .unreadable?:
             AppLogger.database.error("Package install refused; downloaded module is damaged or unsupported")
             throw PluginPackageInspectionError.unreadablePackage

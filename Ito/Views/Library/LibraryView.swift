@@ -816,26 +816,17 @@ struct DeferredPluginView: View {
         case .packageUnavailable:
             failureView(
                 title: "Extension Not Found",
-                message: "This extension was not found in your configured repositories.",
+                message: Text("This extension was not found in your configured repositories."),
                 retryTitle: "Search Again",
                 retry: viewModel.installMissingPlugin
             )
-        case .incompatible(let minimumVersion):
-            if let minimumVersion {
-                failureView(
-                    title: "Extension Incompatible",
-                    message: "This extension requires Ito \(minimumVersion) or later.",
-                    retryTitle: nil,
-                    retry: nil
-                )
-            } else {
-                failureView(
-                    title: "Extension Incompatible",
-                    message: "This extension requires a newer version of Ito.",
-                    retryTitle: nil,
-                    retry: nil
-                )
-            }
+        case .incompatible(let incompatibility):
+            failureView(
+                title: "Extension Incompatible",
+                message: Self.incompatibilityMessage(incompatibility),
+                retryTitle: nil,
+                retry: nil
+            )
         case .failure(let failure):
             deferredFailureView(failure)
         case .ready(let route):
@@ -900,35 +891,37 @@ struct DeferredPluginView: View {
         case .packageLookup:
             failureView(
                 title: "Repository Search Failed",
-                message: "The configured repositories could not be refreshed. Please try again.",
+                message: Text("The configured repositories could not be refreshed. Please try again."),
                 retryTitle: "Search Again",
                 retry: viewModel.installMissingPlugin
             )
         case .pluginTypeMismatch:
             failureView(
                 title: "Extension Type Mismatch",
-                message: "The saved item and extension types do not match.",
+                message: Text("The saved item and extension types do not match."),
                 retryTitle: "Retry",
                 retry: viewModel.retry
             )
         case .install:
             failureView(
                 title: "Installation Failed",
-                message: "The extension could not be installed. Please try again.",
+                message: viewModel.installRefusal.map { Text(verbatim: $0.message) }
+                    ?? Text("The extension could not be installed. Please try again."),
                 retryTitle: "Retry Install",
                 retry: viewModel.installMissingPlugin
             )
         case .runnerLoad:
             failureView(
                 title: "Couldn't Load Plugin",
-                message: "The installed extension could not be loaded.",
+                message: viewModel.runnerRefusal.map { Text(verbatim: $0.message) }
+                    ?? Text("The installed extension could not be loaded."),
                 retryTitle: "Retry",
                 retry: viewModel.retry
             )
         case .payloadDecode:
             failureView(
                 title: "Couldn't Load Saved Item",
-                message: "The saved media data is invalid or incompatible.",
+                message: Text("The saved media data is invalid or incompatible."),
                 retryTitle: "Retry",
                 retry: viewModel.retry,
                 savedFields: viewModel.savedFieldsFallback
@@ -936,9 +929,28 @@ struct DeferredPluginView: View {
         }
     }
 
+    /// The explanation on a saved series' screen when its source is refused by the repositories' feed. Text that is
+    /// already localized is passed verbatim, so it is never looked up again as a key.
+    private static func incompatibilityMessage(_ incompatibility: PluginIncompatibility) -> Text {
+        switch incompatibility {
+        case .requiresNewerApp(let minimumVersion?):
+            return Text("This extension requires Ito \(minimumVersion) or later.")
+        case .requiresNewerApp(nil):
+            return Text("This extension requires a newer version of Ito.")
+        case .requiresSourceUpdate:
+            // Reached only from the feed lookup, which checks every repository for a compatible build first.
+            return Text(verbatim: String(
+                localized: "No compatible source update is available yet.",
+                comment: "Shown where a source was built for an older version of Ito and no repository offers a compatible version: a source package's status label, and a saved series' failure message. The source's publisher must release an update."
+            ))
+        case .unsupportedFile:
+            return Text(verbatim: incompatibility.message)
+        }
+    }
+
     private func failureView(
         title: LocalizedStringKey,
-        message: LocalizedStringKey,
+        message: Text,
         retryTitle: LocalizedStringKey?,
         retry: (() -> Void)?,
         savedFields: DeferredSavedFields? = nil
@@ -954,7 +966,7 @@ struct DeferredPluginView: View {
                         .font(.system(size: 42, weight: .thin))
                         .foregroundStyle(.red)
                     Text(title).font(.headline)
-                    Text(message)
+                    message
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

@@ -42,7 +42,7 @@ struct PluginGatingTests {
         try makeTestPluginArchiveData(id: "future", version: "1.0", minAppVersion: "999.0").write(to: source)
         let operations = LocalBrowsePluginFileOperations(pluginsDirectory: pluginsDirectory)
 
-        await #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: "999.0")) {
+        await #expect(throws: PluginIncompatibility.requiresNewerApp(minimumAppVersion: "999.0")) {
             try await operations.installPluginFile(from: source, PluginDirectoryLease())
         }
         #expect(try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path).isEmpty)
@@ -71,7 +71,22 @@ struct PluginGatingTests {
         defer { fixture.cleanup() }
         let operations = LocalBrowsePluginFileOperations(pluginsDirectory: fixture.pluginsDirectory)
 
-        await #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: nil)) {
+        await #expect(throws: PluginIncompatibility.requiresNewerApp(minimumAppVersion: nil)) {
+            try await operations.installPluginFile(from: fixture.source, PluginDirectoryLease())
+        }
+        try fixture.expectInstalledFileUntouched()
+    }
+
+    @Test func aManualImportOfAModuleOlderThanThisHostReadsIsRefusedAsASourceUpdate() async throws {
+        // The host here reads only ABI 3, so the ABI 2 module is too old for it: the source must be updated.
+        let fixture = try ManualImportFixture(incoming: makeTestPluginWasm(abi: 2))
+        defer { fixture.cleanup() }
+        let operations = LocalBrowsePluginFileOperations(
+            pluginsDirectory: fixture.pluginsDirectory,
+            supportedABI: 3...3
+        )
+
+        await #expect(throws: PluginIncompatibility.requiresSourceUpdate) {
             try await operations.installPluginFile(from: fixture.source, PluginDirectoryLease())
         }
         try fixture.expectInstalledFileUntouched()
@@ -147,21 +162,51 @@ struct PluginGatingTests {
             InstalledPlugin(
                 url: URL(fileURLWithPath: "/test/future.ito"),
                 info: PluginInfo(id: "future", name: "Future", version: "1.0", minAppVersion: "999.0", type: .manga),
-                iconData: nil
+                iconData: nil,
+                binary: makeRunnableBinary()
             ),
             InstalledPlugin(
                 url: URL(fileURLWithPath: "/test/newer-abi.ito"),
                 info: PluginInfo(id: "newer-abi", name: "Newer", version: "1.0", minAppVersion: "1.0", type: .manga, abi: 3),
-                iconData: nil
+                iconData: nil,
+                binary: makeRunnableBinary(abi: 3)
             )
         ]
         manager.publishPreparedInstalledPlugins(Dictionary(uniqueKeysWithValues: plugins.map { ($0.id, $0) }))
 
-        await #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: "999.0")) {
+        await #expect(throws: PluginIncompatibility.requiresNewerApp(minimumAppVersion: "999.0")) {
             try await manager.getRunner(for: "future")
         }
-        await #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: nil)) {
+        await #expect(throws: PluginIncompatibility.requiresNewerApp(minimumAppVersion: nil)) {
             try await manager.getRunner(for: "newer-abi")
+        }
+        #expect(loads == 0)
+    }
+
+    @Test func anInstalledSourceBuiltForAnOlderABIIsNotLoadedAndReportsASourceUpdate() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        var loads = 0
+        let manager = PluginManager(
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
+            runnerLoader: { _, _, _ in
+                loads += 1
+                return ItoRunner()
+            },
+            supportedABI: 3...3
+        )
+        // The manifest declares no ABI, so the module's own interface is what refuses it.
+        let plugin = InstalledPlugin(
+            url: URL(fileURLWithPath: "/test/old-abi.ito"),
+            info: PluginInfo(id: "old-abi", name: "Old", version: "1.0", minAppVersion: "1.0", type: .manga),
+            iconData: nil,
+            binary: try ItoRunner.inspectBinary([UInt8](makeTestPluginWasm(abi: 2)))
+        )
+        manager.publishPreparedInstalledPlugins([plugin.id: plugin])
+
+        await #expect(throws: PluginIncompatibility.requiresSourceUpdate) {
+            try await manager.getRunner(for: plugin.id)
         }
         #expect(loads == 0)
     }
@@ -183,13 +228,96 @@ struct PluginGatingTests {
         let plugin = InstalledPlugin(
             url: url,
             info: PluginInfo(id: "future", name: "Future", version: "1.0", minAppVersion: "1.0", type: .manga),
-            iconData: nil
+            iconData: nil,
+            binary: try ItoRunner.inspectBinary([UInt8](wasm))
         )
         manager.publishPreparedInstalledPlugins([plugin.id: plugin])
 
-        await #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: nil)) {
+        await #expect(throws: PluginIncompatibility.requiresNewerApp(minimumAppVersion: nil)) {
             try await manager.getRunner(for: plugin.id)
         }
+    }
+
+    @Test func aPluginWithoutAReadableModuleIsUnsupportedOnEveryRouteWhateverItsManifestSaysAndNeverLoads() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        var loads = 0
+        let manager = PluginManager(
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
+            runnerLoader: { _, _, _ in
+                loads += 1
+                return ItoRunner()
+            },
+            downloadRunnerLoader: { _, _, _, _ in
+                loads += 1
+                return ItoRunner()
+            }
+        )
+        // One manifest names an in-range ABI and one names none. The manifest never makes an unreadable module runnable.
+        let plugins = [
+            InstalledPlugin(
+                url: URL(fileURLWithPath: "/test/unreadable-in-range.ito"),
+                info: PluginInfo(id: "unreadable-in-range", name: "In Range", version: "1.0", minAppVersion: "1.0", type: .manga, abi: 2),
+                iconData: nil,
+                binary: nil
+            ),
+            InstalledPlugin(
+                url: URL(fileURLWithPath: "/test/unreadable-undeclared.ito"),
+                info: PluginInfo(id: "unreadable-undeclared", name: "Undeclared", version: "1.0", minAppVersion: "1.0", type: .manga),
+                iconData: nil,
+                binary: nil
+            )
+        ]
+        manager.publishPreparedInstalledPlugins(Dictionary(uniqueKeysWithValues: plugins.map { ($0.id, $0) }))
+        let modules = PluginRunnerHostModules(
+            net: DownloadNetModule(
+                inner: ScriptedInnerNet(),
+                gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver()),
+                recorder: DownloadPolicyRecorder()
+            ),
+            webview: DownloadWebviewModule(recorder: DownloadPolicyRecorder())
+        )
+
+        for plugin in plugins {
+            await #expect(throws: PluginIncompatibility.unsupportedFile) {
+                try await manager.getRunner(for: plugin.id)
+            }
+            await #expect(throws: PluginIncompatibility.unsupportedFile) {
+                try await manager.getImageRunner(for: plugin.id)
+            }
+            await #expect(throws: PluginIncompatibility.unsupportedFile) {
+                _ = try await manager.makeDownloadRuntime(for: plugin.id, modules: modules)
+            }
+        }
+        #expect(loads == 0)
+    }
+
+    @Test func anInstalledModuleWithAStartSectionIsUnsupportedWithANeutralMessageAndNeverLoads() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        var loads = 0
+        let manager = PluginManager(
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
+            runnerLoader: { _, _, _ in
+                loads += 1
+                return ItoRunner()
+            }
+        )
+        // Readable, and declaring an in-range ABI, but a start section means no host runs it.
+        let plugin = InstalledPlugin(
+            url: URL(fileURLWithPath: "/test/start-section.ito"),
+            info: PluginInfo(id: "start-section", name: "Start", version: "1.0", minAppVersion: "1.0", type: .manga, abi: 2),
+            iconData: nil,
+            binary: PluginBinaryInterface(abiVersion: 2, imports: [], kinds: [.manga], hasStartSection: true)
+        )
+        manager.publishPreparedInstalledPlugins([plugin.id: plugin])
+
+        await #expect(throws: PluginIncompatibility.unsupportedFile) {
+            try await manager.getRunner(for: plugin.id)
+        }
+        #expect(loads == 0)
     }
 
     @Test func aRepositoryPackageNeedingANewerItoIsNotDownloaded() async throws {
@@ -217,11 +345,36 @@ struct PluginGatingTests {
             )
         ]
 
-        await #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: "999.0")) {
+        await #expect(throws: PluginIncompatibility.requiresNewerApp(minimumAppVersion: "999.0")) {
             try await repositories.installPackage(packages[0], repositoryUrl: "https://repo.example")
         }
-        await #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: nil)) {
+        await #expect(throws: PluginIncompatibility.requiresNewerApp(minimumAppVersion: nil)) {
             try await repositories.installPackage(packages[1], repositoryUrl: "https://repo.example")
+        }
+        #expect(await downloads.value == 0)
+    }
+
+    @Test func aRepositoryPackageBuiltForAnOlderABIThanThisHostReadsIsNotDownloaded() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let downloads = Counter()
+        let repositories = RepoManager(
+            dbPool: database.dbPool,
+            pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
+            packageFetcher: { _ in
+                await downloads.increment()
+                return Data()
+            },
+            supportedABI: 3...3
+        )
+        let package = RepoPackage(
+            id: "old-abi", name: "Old", version: "1.0", minAppVersion: "1.0",
+            downloadUrl: "old.ito", iconUrl: nil, sha256: "unused", pluginType: "manga",
+            archived: nil, archivedReason: nil, archivedDate: nil, abi: 2
+        )
+
+        await #expect(throws: PluginIncompatibility.requiresSourceUpdate) {
+            try await repositories.installPackage(package, repositoryUrl: "https://repo.example")
         }
         #expect(await downloads.value == 0)
     }
@@ -234,7 +387,7 @@ struct PluginGatingTests {
                 archivedDate: nil, abi: abi, imports: imports
             )
         }
-        let refused = PluginRequiresNewerAppError(minimumAppVersion: nil)
+        let refused = PluginIncompatibility.requiresNewerApp(minimumAppVersion: nil)
 
         #expect(package(abi: 3, imports: nil).compatibilityRefusal() == refused)
         #expect(package(abi: 1, imports: ["ito:core/net.fetch_v9"]).compatibilityRefusal() == refused)

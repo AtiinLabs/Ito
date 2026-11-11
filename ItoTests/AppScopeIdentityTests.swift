@@ -649,7 +649,8 @@ final class AppScopeIdentityTests: XCTestCase {
         pluginManager.publishPreparedInstalledPlugins(["plugin.tls": InstalledPlugin(
             url: URL(fileURLWithPath: "/plugins/plugin.tls.ito"),
             info: PluginInfo(id: "plugin.tls", name: "TLS", version: "1.0", minAppVersion: "1.0", type: .manga),
-            iconData: nil
+            iconData: nil,
+            binary: makeRunnableBinary()
         )])
         let trust = pluginManager.pluginSettingsStore.trust
         let failureCertificate = PendingTrust(pluginID: "plugin.tls", host: "server.local", fingerprint: "AA11")

@@ -762,7 +762,8 @@ final class PluginSettingsViewModelTests: XCTestCase {
                 type: .manga,
                 archived: true
             ),
-            iconData: nil
+            iconData: nil,
+            binary: makeRunnableBinary()
         )
         try makePluginArchive(id: plugin.id, archived: true).write(to: pluginURL)
         let rollbackSnapshot = try operations.snapshotPluginFile(for: plugin)
@@ -795,7 +796,8 @@ final class PluginSettingsViewModelTests: XCTestCase {
                 type: .manga,
                 archived: true
             ),
-            iconData: nil
+            iconData: nil,
+            binary: makeRunnableBinary()
         )
         let operations = LocalBrowsePluginFileOperations(
             fileManager: .default,

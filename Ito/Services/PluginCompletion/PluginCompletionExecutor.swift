@@ -78,7 +78,7 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
     private func locate(_ pluginID: String) async throws -> URL {
         do {
             return try await locatePlugin(pluginID)
-        } catch let refusal as PluginRequiresNewerAppError {
+        } catch let refusal as PluginIncompatibility {
             throw refusal
         } catch {
             throw PluginCompletionExecutionFailure.sourceUnavailable
@@ -206,7 +206,7 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
             case .configurationChanged: return .paused(.configurationChanged, .configurationChanged)
             case .unverifiableConfiguration: return .paused(.unknownOrigin, .unknownOrigin)
             }
-        case is PluginRequiresNewerAppError:
+        case is PluginIncompatibility:
             return .paused(.incompatible, .incompatible)
         default:
             return .paused(.sourceError, .sourceError)

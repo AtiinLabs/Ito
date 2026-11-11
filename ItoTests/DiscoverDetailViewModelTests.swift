@@ -439,7 +439,8 @@ final class DiscoverDetailViewModelTests: XCTestCase {
                 minAppVersion: "1.0",
                 type: .manga
             ),
-            iconData: nil
+            iconData: nil,
+            binary: makeRunnableBinary()
         )
     }
 

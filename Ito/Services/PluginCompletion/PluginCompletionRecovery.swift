@@ -28,7 +28,11 @@ extension PluginCompletionPauseReason {
         case .sourceUnavailable:
             return String(localized: "The source is not installed or is unavailable.")
         case .incompatible:
-            return String(localized: "The source must be updated before it can sync progress.")
+            // The stored pause keeps no direction: the source may need an update, or Ito may. The text names neither.
+            return String(
+                localized: "This source can't sync progress with this version of Ito.",
+                comment: "Shown in source settings when read progress is paused because the source and this version of Ito don't match. The stored reason has no direction, so the text must not say which side to update."
+            )
         case .sourceError:
             return String(localized: "The source reported an error.")
         case .retryLimit:

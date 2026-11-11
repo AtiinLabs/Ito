@@ -257,7 +257,7 @@ struct PreparedApplicationDependencies {
                     guard let plugin = pluginManager.installedPlugins[pluginID] else {
                         throw URLError(.fileDoesNotExist)
                     }
-                    if let refusal = plugin.info.compatibilityRefusal { throw refusal }
+                    if let refusal = plugin.compatibilityRefusal(supported: pluginManager.supportedABI) { throw refusal }
                     return plugin.url
                 }
             ),
