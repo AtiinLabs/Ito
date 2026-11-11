@@ -86,11 +86,12 @@ final class MediaDetailOpenIntentTests: XCTestCase {
         await sameGroup.viewModel.refresh()
         XCTAssertEqual(openedChapter(sameGroup.viewModel), "b2")
 
+        // The recorded group no longer lists chapter 2: another group's upload is not opened instead.
         let goneGroup = makeSubject(openIntent: .chapter(reference(key: "old-key", number: 2, scanlator: "Group C")))
         goneGroup.route.loadResponses = [.value(manga(chapters: groupChapters))]
         await goneGroup.viewModel.refresh()
-        XCTAssertEqual(openedChapter(goneGroup.viewModel), "a2")
-        XCTAssertTrue(goneGroup.messages.messages.isEmpty)
+        XCTAssertNil(goneGroup.viewModel.readerDestination)
+        XCTAssertEqual(goneGroup.messages.messages, [.chapterUnavailable(isEpisode: false)])
     }
 
     func testAVolumeTellsApartChaptersThatRestartEachVolume() async {
@@ -122,6 +123,63 @@ final class MediaDetailOpenIntentTests: XCTestCase {
         XCTAssertNil(repeated.chapter(matching: absent))
         // Sources that omit all volumes can still replace a re-uploaded chapter.
         XCTAssertEqual([repeated[0]].chapter(matching: specific)?.key, "unknown")
+    }
+
+    func testAReplacementIsNeverAnotherGroupsUpload() {
+        let twoGroups = [
+            Manga.Chapter(key: "a1", chapter: 1, scanlator: "Group A"),
+            Manga.Chapter(key: "b1", chapter: 1, scanlator: "Group B")
+        ]
+        // The recorded chapter named no group; two groups now list the number, so either could be wrong.
+        let ungroupedRecord = MediaDetailChapterReference(key: "gone", number: 1, volume: nil, scanlator: nil)
+        XCTAssertNil(twoGroups.chapter(matching: ungroupedRecord))
+        // The source now names a group for every chapter and lists one upload: it started reporting groups.
+        XCTAssertEqual([twoGroups[1]].chapter(matching: ungroupedRecord)?.key, "b1")
+        // A record naming a group never lands on another named group.
+        let groupC = MediaDetailChapterReference(key: "gone", number: 1, volume: nil, scanlator: "Group C")
+        XCTAssertNil(twoGroups.chapter(matching: groupC))
+        XCTAssertNil([twoGroups[0]].chapter(matching: groupC))
+    }
+
+    func testAMovedSeriesStillOpensOnASourceThatNamesNoGroups() {
+        let recorded = MediaDetailChapterReference(key: "old-source-key", number: 4, volume: nil, scanlator: "Group A")
+        let ungrouped = [Manga.Chapter(key: "new-4", chapter: 4), Manga.Chapter(key: "new-5", chapter: 5)]
+        XCTAssertEqual(ungrouped.chapter(matching: recorded)?.key, "new-4")
+        // Two ungrouped uploads of the same number are ambiguous.
+        let duplicated = ungrouped + [Manga.Chapter(key: "new-4b", chapter: 4)]
+        XCTAssertNil(duplicated.chapter(matching: recorded))
+    }
+
+    func testAnUngroupedUploadIsNotAnotherGroupsReplacementOnASourceThatNamesGroups() {
+        // The source names groups, so an ungrouped upload is a different uploader's, not the moved series'.
+        let mixed = [
+            Manga.Chapter(key: "a3", chapter: 3, scanlator: "Group A"),
+            Manga.Chapter(key: "loose-4", chapter: 4)
+        ]
+        let groupA = MediaDetailChapterReference(key: "gone", number: 4, volume: nil, scanlator: "Group A")
+        XCTAssertNil(mixed.chapter(matching: groupA))
+
+        // A record of an ungrouped upload never lands on a group's upload while ungrouped ones exist.
+        let grouped = [
+            Manga.Chapter(key: "a4", chapter: 4, scanlator: "Group A"),
+            Manga.Chapter(key: "loose-5", chapter: 5)
+        ]
+        let ungroupedRecord = MediaDetailChapterReference(key: "gone", number: 4, volume: nil, scanlator: nil)
+        XCTAssertNil(grouped.chapter(matching: ungroupedRecord))
+
+        // Two ungrouped uploads of the record's number are ambiguous; with a group's upload beside one, it is not.
+        let twoLoose = [Manga.Chapter(key: "x4", chapter: 4), Manga.Chapter(key: "y4", chapter: 4)]
+        XCTAssertNil(twoLoose.chapter(matching: ungroupedRecord))
+        XCTAssertEqual([grouped[0], twoLoose[0]].chapter(matching: ungroupedRecord)?.key, "x4")
+    }
+
+    func testAnEmptyGroupNameCountsAsNoGroup() {
+        let blank = [Manga.Chapter(key: "b4", chapter: 4, scanlator: "")]
+        let moved = MediaDetailChapterReference(key: "gone", number: 4, volume: nil, scanlator: "Group A")
+        XCTAssertEqual(blank.chapter(matching: moved)?.key, "b4")
+        let ungroupedRecord = MediaDetailChapterReference(key: "gone", number: 4, volume: nil, scanlator: "")
+        XCTAssertEqual(blank.chapter(matching: ungroupedRecord)?.key, "b4")
+        XCTAssertNil((blank + [Manga.Chapter(key: "c4", chapter: 4, scanlator: "")]).chapter(matching: ungroupedRecord))
     }
 
     func testHistoryContinueDoesNotRestartACompletedSeriesDuringRereading() async {
