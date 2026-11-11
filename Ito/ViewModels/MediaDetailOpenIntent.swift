@@ -43,7 +43,8 @@ extension MediaDetailOpenIntent {
 }
 
 /// A chapter as history recorded it. The key is tried first; when the source no longer lists that
-/// key, the same number (and volume) from the same group is tried, then from any group.
+/// key, the same number (and volume) from the same group is tried. Another group's upload is never
+/// opened in its place; see `chapter(matching:)`.
 struct MediaDetailChapterReference: Equatable {
     let key: String
     let number: Float?
@@ -52,7 +53,15 @@ struct MediaDetailChapterReference: Equatable {
 }
 
 extension Collection where Element: ChapterDisplayable {
-    /// The chapter `reference` names in this list, by key, else by number and volume.
+    /// The chapter `reference` names in this list, by key, else by number and volume within the
+    /// recorded group. An empty group name counts as no group, as History stores it.
+    ///
+    /// Another upload is accepted only when it cannot be another group's:
+    /// - the record names a group the list no longer has, and the source names no groups at all, with
+    ///   one candidate (the series moved to a source without groups);
+    /// - the record names no group, the source now names a group for every chapter, and there is one
+    ///   candidate (the source started reporting groups).
+    /// A record without a group is ambiguous among several ungrouped uploads; anything else is too.
     func chapter(matching reference: MediaDetailChapterReference) -> Element? {
         if let exact = first(where: { $0.key == reference.key }) {
             return exact
@@ -80,7 +89,22 @@ extension Collection where Element: ChapterDisplayable {
             guard volumes.count <= 1, volumes.isEmpty || !hasUnknownVolume else { return nil }
             candidates = sameNumber
         }
-        return candidates.first { $0.scanlator == reference.scanlator } ?? candidates.first
+        let recorded = Self.group(reference.scanlator)
+        let sameGroup = candidates.filter { Self.group($0.scanlator) == recorded }
+        if recorded != nil {
+            if let match = sameGroup.first { return match }
+            guard allSatisfy({ Self.group($0.scanlator) == nil }), candidates.count == 1 else { return nil }
+            return candidates.first
+        }
+        // The record's chapter named no group.
+        if !sameGroup.isEmpty { return sameGroup.count == 1 ? sameGroup.first : nil }
+        guard !contains(where: { Self.group($0.scanlator) == nil }), candidates.count == 1 else { return nil }
+        return candidates.first
+    }
+
+    private static func group(_ scanlator: String?) -> String? {
+        guard let scanlator, !scanlator.isEmpty else { return nil }
+        return scanlator
     }
 }
 
