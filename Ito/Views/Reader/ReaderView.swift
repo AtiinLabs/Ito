@@ -90,7 +90,7 @@ struct ReaderView: View {
                         title: viewModel.entry.title,
                         chapterTitle: ReaderChapterTitle.text(
                             title: viewModel.currentChapter.title,
-                            number: viewModel.currentChapter.chapter
+                            number: viewModel.currentChapter.chapterNumber
                         ),
                         onDismiss: { dismiss() }
                     )
@@ -217,7 +217,7 @@ struct ReaderView: View {
                 .font(.headline)
                 .multilineTextAlignment(.center)
             if let chapter {
-                Text(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))
+                Text(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapterNumber))
                     .foregroundColor(.gray)
                     .font(.subheadline)
             }
@@ -236,7 +236,7 @@ struct ReaderView: View {
                 .foregroundColor(.white)
                 .font(.headline)
                 .multilineTextAlignment(.center)
-            Text(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))
+            Text(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapterNumber))
                 .foregroundColor(.gray)
                 .font(.subheadline)
         }

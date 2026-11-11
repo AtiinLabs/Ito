@@ -50,10 +50,11 @@ extension Sequence where Element: ChapterDisplayable {
     }
 }
 
-/// Manga and novel chapters (`Manga.Chapter`, `Novel.Chapter`).
+/// Manga and novel chapters (`Manga.Chapter`, `Novel.Chapter`). Readers take numbers from
+/// `chapterNumber` and `volumeNumber`, never from the runner's `chapter` or `volume`.
 nonisolated extension Chapter: ChapterDisplayable {
-    public var chapterNumber: Float? { chapter }
-    public var volumeNumber: Float? { volume }
+    public nonisolated var chapterNumber: Float? { chapter.map { Float($0) } }
+    public nonisolated var volumeNumber: Float? { volume.map { Float($0) } }
     public var dateUpload: String? {
         guard let ts = dateUpdated else { return nil }
         return Date(timeIntervalSince1970: TimeInterval(ts)).formatted(date: .abbreviated, time: .omitted)

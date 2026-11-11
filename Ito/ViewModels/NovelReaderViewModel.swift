@@ -761,7 +761,7 @@ final class NovelReaderViewModel: ObservableObject {
     func markChapterFinished(_ chapter: Novel.Chapter) {
         guard isActive else { return }
         let plan = ReaderSessionEffectPlan.chapterFinished(
-            chapterNumber: chapter.chapter,
+            chapterNumber: chapter.chapterNumber,
             titleOrKey: chapter.title ?? chapter.key,
             alreadyMarked: finishedChapterKeys.contains(chapter.key)
         )
@@ -785,7 +785,7 @@ final class NovelReaderViewModel: ObservableObject {
                         try await progress.markNovelChapterRead(
                             context: context,
                             chapterID: chapter.key,
-                            chapterNumber: chapter.chapter
+                            chapterNumber: chapter.chapterNumber
                         )
                     case .updateTracker(let progressValue):
                         guard let self,
@@ -1006,7 +1006,7 @@ final class NovelReaderViewModel: ObservableObject {
         dependencies.presence.presentNovelReaderPresence(
             NovelReaderPresence(
                 details: entry.title,
-                state: String(localized: "Reading \(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapter))", comment: "Discord status: the chapter being read"),
+                state: String(localized: "Reading \(ReaderChapterTitle.text(title: chapter.title, number: chapter.chapterNumber))", comment: "Discord status: the chapter being read"),
                 activityType: 3,
                 detailsURL: detailsURL,
                 largeImageText: String(localized: "Reading from \(scanlator) at \(pluginName)", comment: "Discord status: scanlation group, then source name"),
@@ -1121,8 +1121,8 @@ private struct NovelChapterToken: Equatable {
     init(_ chapter: Novel.Chapter) {
         key = chapter.key
         title = chapter.title
-        volume = chapter.volume
-        self.chapter = chapter.chapter
+        volume = chapter.volumeNumber
+        self.chapter = chapter.chapterNumber
         dateUpdated = chapter.dateUpdated
         scanlator = chapter.scanlator
         url = chapter.url

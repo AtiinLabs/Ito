@@ -1036,7 +1036,7 @@ final class MangaReaderViewModel: ObservableObject {
 
     func markChapterFinished(_ chapter: Manga.Chapter) {
         let plan = ReaderSessionEffectPlan.chapterFinished(
-            chapterNumber: chapter.chapter,
+            chapterNumber: chapter.chapterNumber,
             titleOrKey: chapter.title ?? chapter.key,
             alreadyMarked: markedChapterKeys.contains(chapter.key)
         )
@@ -1054,7 +1054,7 @@ final class MangaReaderViewModel: ObservableObject {
                 for effect in plan.effects {
                     switch effect {
                     case .markLocalProgress:
-                        try await progress.markChapterRead(context: context, chapterID: chapter.key, chapterNumber: chapter.chapter)
+                        try await progress.markChapterRead(context: context, chapterID: chapter.key, chapterNumber: chapter.chapterNumber)
                     case .updateTracker(let progressValue):
                         guard let self,
                               self.isActive,

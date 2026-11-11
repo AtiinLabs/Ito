@@ -75,11 +75,11 @@ nonisolated enum ReaderChapterOrdering {
         preferredScanlator: String?
     ) -> ReaderChapterBoundary<Manga.Chapter> {
         guard let chapters else { return .end }
-        guard let currentNumber = chapter.chapter else {
+        guard let currentNumber = chapter.chapterNumber else {
             return gated(listNeighbor(of: chapter.key, in: chapters, offset: -1, key: \.key))
         }
         // Unnumbered chapters are left out: their place among numbered ones is unknown.
-        guard let nextNumber = chapters.compactMap(\.chapter).filter({
+        guard let nextNumber = chapters.compactMap(\.chapterNumber).filter({
             $0 > currentNumber + chapterNumberEpsilon
         }).min() else {
             return .end
@@ -98,10 +98,10 @@ nonisolated enum ReaderChapterOrdering {
         preferredScanlator: String?
     ) -> ReaderChapterBoundary<Manga.Chapter> {
         guard let chapters else { return .end }
-        guard let currentNumber = chapter.chapter else {
+        guard let currentNumber = chapter.chapterNumber else {
             return gated(listNeighbor(of: chapter.key, in: chapters, offset: 1, key: \.key))
         }
-        guard let previousNumber = chapters.compactMap(\.chapter).filter({
+        guard let previousNumber = chapters.compactMap(\.chapterNumber).filter({
             $0 < currentNumber - chapterNumberEpsilon
         }).max() else {
             return .end
@@ -148,7 +148,7 @@ nonisolated enum ReaderChapterOrdering {
         in chapters: [Novel.Chapter]?
     ) -> ReaderChapterBoundary<Novel.Chapter> {
         guard let chapters else { return .end }
-        guard let currentNumber = chapter.chapter else {
+        guard let currentNumber = chapter.chapterNumber else {
             return gated(listNeighbor(of: chapter.key, in: chapters, offset: -1, key: \.key))
         }
         let candidate = numbered(chapters)
@@ -164,7 +164,7 @@ nonisolated enum ReaderChapterOrdering {
         in chapters: [Novel.Chapter]?
     ) -> ReaderChapterBoundary<Novel.Chapter> {
         guard let chapters else { return .end }
-        guard let currentNumber = chapter.chapter else {
+        guard let currentNumber = chapter.chapterNumber else {
             return gated(listNeighbor(of: chapter.key, in: chapters, offset: 1, key: \.key))
         }
         let candidate = numbered(chapters)
@@ -183,7 +183,7 @@ nonisolated enum ReaderChapterOrdering {
     private static func numbered(
         _ chapters: [Novel.Chapter]
     ) -> [(chapter: Novel.Chapter, number: Float32)] {
-        chapters.compactMap { chapter in chapter.chapter.map { (chapter, $0) } }
+        chapters.compactMap { chapter in chapter.chapterNumber.map { (chapter, $0) } }
     }
 
     private static func preferredMangaSource(
@@ -192,7 +192,7 @@ nonisolated enum ReaderChapterOrdering {
         preferredScanlator: String?
     ) -> Manga.Chapter? {
         let sources = chapters.filter {
-            $0.chapter.map { abs($0 - chapterNumber) < chapterNumberEpsilon } ?? false
+            $0.chapterNumber.map { abs($0 - chapterNumber) < chapterNumberEpsilon } ?? false
         }
         if let match = sources.first(where: {
             $0.scanlator == preferredScanlator

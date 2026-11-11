@@ -380,7 +380,7 @@ struct NovelReaderView: View {
     }
 
     private func chapterTitle(_ chapter: Novel.Chapter) -> String {
-        if let number = chapter.chapter {
+        if let number = chapter.chapterNumber {
             if let title = chapter.title, !title.isEmpty {
                 return String(localized: "Chapter \(number.formatted()) - \(title)", comment: "Novel chapter heading: number, then chapter title")
             }

@@ -442,8 +442,8 @@ public class LibraryManager: ObservableObject {
         return (chapters ?? []).map {
             ChapterFacts(
                 key: $0.key,
-                number: $0.chapter,
-                volume: $0.volume,
+                number: $0.chapterNumber,
+                volume: $0.volumeNumber,
                 scanlator: $0.scanlator,
                 isLocked: $0.paywalled ?? false
             )
