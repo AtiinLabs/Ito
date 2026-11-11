@@ -500,6 +500,7 @@ private final class DebugLogRepositoryManager: BrowseRepositoryManaging {
 
 @MainActor
 private final class DebugLogPluginManager: BrowsePluginManaging {
+    var supportedABI: ClosedRange<Int> = ItoRunner.supportedABIVersions
     let installedPlugins: [String: InstalledPlugin] = [:]
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> {
         Just(installedPlugins).eraseToAnyPublisher()

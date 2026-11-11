@@ -322,7 +322,7 @@ final class RepositoriesViewModelTests: XCTestCase {
 
         XCTAssertEqual(
             viewModel.installState(for: package),
-            .incompatible(.requiresNewerApp(minimumAppVersion: "2.0"))
+            .requiresNewerApp(minimumAppVersion: "2.0")
         )
 
         manager.compatibility["2.0"] = true
@@ -397,6 +397,117 @@ final class RepositoriesViewModelTests: XCTestCase {
             [.installFailed(packageName: "Fixture Package", reason: "fixture failure")]
         )
         XCTAssertTrue(viewModel.installingPackageIDs.isEmpty)
+    }
+
+    func testInstallStateCountsASameVersionRebuildThatReplacesAnIncompatibleInstalledSource() {
+        let package = makePackage(version: "1.0", abi: injectedHostABI.upperBound)
+        let manager = RepositoryManagerSpy(repositories: [makeRepository(packages: [package])])
+        let plugins = RepositoryPluginManagerSpy()
+        plugins.supportedABI = injectedHostABI
+        plugins.publish([package.id: makeInstalledPlugin(id: package.id, version: "1.0", abi: 2)])
+        let viewModel = makeRepoDetailViewModel(manager: manager, plugins: plugins)
+
+        XCTAssertEqual(viewModel.installState(for: package), .sourceUpdateRequired)
+    }
+
+    func testFeedBuildTooOldIsUnavailableWithoutAnInstalledSourceAndNoCompatibleUpdateWithAnIncompatibleOne() {
+        let package = makePackage(version: "2.0", abi: 2)
+        let manager = RepositoryManagerSpy(repositories: [makeRepository(packages: [package])])
+        manager.feedRefusals[package.id] = .requiresSourceUpdate
+        let plugins = RepositoryPluginManagerSpy()
+        plugins.supportedABI = injectedHostABI
+        let viewModel = makeRepoDetailViewModel(manager: manager, plugins: plugins)
+
+        XCTAssertEqual(viewModel.installState(for: package), .unavailableForThisIto)
+
+        plugins.publish([package.id: makeInstalledPlugin(id: package.id, version: "1.0", abi: 2)])
+        XCTAssertEqual(viewModel.installState(for: package), .noCompatibleUpdate)
+
+        plugins.publish([package.id: makeInstalledPlugin(id: package.id, version: "1.0", abi: 3)])
+        XCTAssertEqual(viewModel.installState(for: package), .installed)
+    }
+
+    func testArchivedPackageWinsOverAnIncompatibleInstalledSourceAndAFeedRefusal() {
+        let package = makePackage(version: "2.0", archived: true, archivedReason: "Retired")
+        let manager = RepositoryManagerSpy(repositories: [makeRepository(packages: [package])])
+        manager.feedRefusals[package.id] = .requiresNewerApp(minimumAppVersion: "99.0")
+        let plugins = RepositoryPluginManagerSpy()
+        plugins.supportedABI = injectedHostABI
+        plugins.publish([package.id: makeInstalledPlugin(id: package.id, version: "1.0", abi: 2)])
+        let viewModel = makeRepoDetailViewModel(manager: manager, plugins: plugins)
+
+        XCTAssertEqual(viewModel.installState(for: package), .archived)
+    }
+
+    func testStatesNeverFetchAndRefreshSourcesIsTheOnlyManualRefreshWithTruthfulFeedback() async {
+        let package = makePackage(version: "1.0")
+        let manager = RepositoryManagerSpy(repositories: [makeRepository(packages: [package])])
+        let messages = RepositoryMessagePresenterSpy()
+        let viewModel = makeRepoDetailViewModel(manager: manager, messages: messages)
+
+        XCTAssertEqual(viewModel.installState(for: package), .notInstalled)
+        XCTAssertEqual(manager.refreshCallCount, 0)
+
+        manager.refreshError = RepositoryTestFailure.failed
+        await viewModel.refreshSources()
+        XCTAssertEqual(manager.refreshCallCount, 1)
+        XCTAssertEqual(messages.messages, [.refreshFailed(reason: "fixture failure")])
+        XCTAssertFalse(viewModel.isRefreshingSources)
+
+        manager.refreshError = nil
+        await viewModel.refreshSources()
+        XCTAssertEqual(manager.refreshCallCount, 2)
+        XCTAssertEqual(messages.messages, [.refreshFailed(reason: "fixture failure"), .sourcesRefreshed])
+        XCTAssertFalse(viewModel.isRefreshingSources)
+    }
+
+    func testASecondRefreshWhileOneRunsJoinsItWithoutAnotherRequest() async {
+        let package = makePackage(version: "1.0")
+        let manager = RepositoryManagerSpy(repositories: [makeRepository(packages: [package])])
+        manager.suspendRefresh = true
+        let messages = RepositoryMessagePresenterSpy()
+        let viewModel = makeRepoDetailViewModel(manager: manager, messages: messages)
+
+        var first: Task<Void, Never>?
+        await withCheckedContinuation { started in
+            manager.onRefreshStarted = { started.resume() }
+            first = Task { await viewModel.refreshSources() }
+        }
+        XCTAssertTrue(viewModel.isRefreshingSources)
+        XCTAssertEqual(manager.refreshCallCount, 1)
+
+        // The second request returns at once: nothing is awaited that could finish after the first one.
+        await viewModel.refreshSources()
+        XCTAssertEqual(manager.refreshCallCount, 1)
+        XCTAssertTrue(viewModel.isRefreshingSources)
+
+        manager.resumeRefresh()
+        await first?.value
+        XCTAssertEqual(manager.refreshCallCount, 1)
+        XCTAssertEqual(messages.messages, [.sourcesRefreshed])
+        XCTAssertFalse(viewModel.isRefreshingSources)
+    }
+
+    func testRefreshingSourcesTurnsANoCompatibleBuildIntoASourceRepair() async throws {
+        let package = makePackage(version: "1.0", abi: 2)
+        let manager = RepositoryManagerSpy(repositories: [makeRepository(packages: [package])])
+        manager.feedRefusals[package.id] = .requiresSourceUpdate
+        let plugins = RepositoryPluginManagerSpy()
+        plugins.supportedABI = injectedHostABI
+        plugins.publish([package.id: makeInstalledPlugin(id: package.id, version: "1.0", abi: 2)])
+        let viewModel = makeRepoDetailViewModel(manager: manager, plugins: plugins)
+        XCTAssertEqual(viewModel.installState(for: package), .noCompatibleUpdate)
+
+        // The repository lists a declared build this Ito runs once it is refreshed.
+        manager.onRefresh = {
+            manager.feedRefusals[package.id] = nil
+            manager.publishRepositories([self.makeRepository(packages: [self.makePackage(version: "1.0", abi: 3)])])
+        }
+        await viewModel.refreshSources()
+
+        XCTAssertEqual(manager.refreshCallCount, 1)
+        let refreshed = try XCTUnwrap(viewModel.filteredPackages.first)
+        XCTAssertEqual(viewModel.installState(for: refreshed), .sourceUpdateRequired)
     }
 
     func testSamePackageRapidDuplicateInstallIsSuppressed() async {
@@ -548,7 +659,8 @@ final class RepositoriesViewModelTests: XCTestCase {
         minAppVersion: String = "1.0",
         pluginType: String = "manga",
         archived: Bool = false,
-        archivedReason: String? = nil
+        archivedReason: String? = nil,
+        abi: Int? = nil
     ) -> RepoPackage {
         RepoPackage(
             id: id,
@@ -561,11 +673,12 @@ final class RepositoriesViewModelTests: XCTestCase {
             pluginType: pluginType,
             archived: archived,
             archivedReason: archivedReason,
-            archivedDate: nil
+            archivedDate: nil,
+            abi: abi
         )
     }
 
-    private func makeInstalledPlugin(id: String, version: String) -> InstalledPlugin {
+    private func makeInstalledPlugin(id: String, version: String, abi: Int = 2) -> InstalledPlugin {
         InstalledPlugin(
             url: URL(fileURLWithPath: "/plugins/\(id).ito"),
             info: PluginInfo(
@@ -576,7 +689,7 @@ final class RepositoriesViewModelTests: XCTestCase {
                 type: .manga
             ),
             iconData: nil,
-            binary: makeRunnableBinary()
+            binary: makeRunnableBinary(abi: abi)
         )
     }
 
@@ -629,6 +742,8 @@ private struct SensitiveRepositoryTestFailure: LocalizedError {
     }
 }
 
+private let injectedHostABI: ClosedRange<Int> = 3...3
+
 @MainActor
 private final class RepositoryManagerSpy: RepositoryListManaging, RepositoryDetailManaging {
     struct InstallInvocation {
@@ -647,12 +762,16 @@ private final class RepositoryManagerSpy: RepositoryListManaging, RepositoryDeta
     var installErrors: [String: any Error] = [:]
     var refreshError: (any Error)?
     var compatibility: [String: Bool] = [:]
+    /// Feed refusals by package identifier, for builds whose ABI this spy does not model.
+    var feedRefusals: [String: PluginIncompatibility] = [:]
     var suspendedAdds: Set<String> = []
     var suspendedRemovals: Set<String> = []
     var suspendedInstalls: Set<String> = []
     var suspendRefresh = false
     var publishRemovalOnSuccess = false
     var onRefresh: (() -> Void)?
+    /// Called once when a refresh starts, before it can suspend, so a test can wait for the start without polling.
+    var onRefreshStarted: (() -> Void)?
     var onInstall: ((RepoPackage) -> Void)?
 
     private var addContinuations: [String: CheckedContinuation<Void, Never>] = [:]
@@ -707,6 +826,10 @@ private final class RepositoryManagerSpy: RepositoryListManaging, RepositoryDeta
 
     func refreshAllReportingFailures() async throws {
         refreshCallCount += 1
+        if let onRefreshStarted {
+            self.onRefreshStarted = nil
+            onRefreshStarted()
+        }
         if suspendRefresh {
             await withCheckedContinuation { refreshContinuation = $0 }
         }
@@ -715,7 +838,8 @@ private final class RepositoryManagerSpy: RepositoryListManaging, RepositoryDeta
     }
 
     func compatibilityRefusal(for package: RepoPackage) -> PluginIncompatibility? {
-        (compatibility[package.minAppVersion] ?? true) ? nil : .requiresNewerApp(minimumAppVersion: package.minAppVersion)
+        if let refusal = feedRefusals[package.id] { return refusal }
+        return (compatibility[package.minAppVersion] ?? true) ? nil : .requiresNewerApp(minimumAppVersion: package.minAppVersion)
     }
 
     func resumeAdd(url: String) {
@@ -742,6 +866,7 @@ private final class RepositoryManagerSpy: RepositoryListManaging, RepositoryDeta
 
 @MainActor
 private final class RepositoryPluginManagerSpy: BrowsePluginManaging {
+    var supportedABI: ClosedRange<Int> = ItoRunner.supportedABIVersions
     @Published private(set) var installedPlugins: [String: InstalledPlugin] = [:]
 
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> {

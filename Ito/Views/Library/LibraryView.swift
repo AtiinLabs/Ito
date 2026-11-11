@@ -785,6 +785,12 @@ struct OfflineBanner: View {
     }
 }
 
+/// A button on a deferred series' failure screen. Its title is a fixed localized key.
+private struct DeferredFailureAction {
+    let title: LocalizedStringKey
+    let perform: () -> Void
+}
+
 struct DeferredPluginView: View {
     @StateObject private var viewModel: DeferredPluginViewModel
     let viewFactory: AppViewFactory
@@ -817,15 +823,17 @@ struct DeferredPluginView: View {
             failureView(
                 title: "Extension Not Found",
                 message: Text("This extension was not found in your configured repositories."),
-                retryTitle: "Search Again",
-                retry: viewModel.installMissingPlugin
+                actions: [DeferredFailureAction(title: "Search Again", perform: viewModel.installMissingPlugin)]
             )
         case .incompatible(let incompatibility):
+            // Both actions run the lookup again, which refreshes every repository first, so a newer build can appear.
             failureView(
                 title: "Extension Incompatible",
                 message: Self.incompatibilityMessage(incompatibility),
-                retryTitle: nil,
-                retry: nil
+                actions: [
+                    DeferredFailureAction(title: "Refresh Sources", perform: viewModel.installMissingPlugin),
+                    DeferredFailureAction(title: "Retry", perform: viewModel.installMissingPlugin)
+                ]
             )
         case .failure(let failure):
             deferredFailureView(failure)
@@ -885,6 +893,17 @@ struct DeferredPluginView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    /// The buttons for an installed source that failed to load. A source built for an older ABI, or a damaged file, is
+    /// replaced by a compatible build from a repository, so that build is offered before a plain retry.
+    private var runnerLoadActions: [DeferredFailureAction] {
+        var actions: [DeferredFailureAction] = []
+        if viewModel.runnerRefusal?.needsSourceUpdate == true {
+            actions.append(DeferredFailureAction(title: "Update Source", perform: viewModel.installMissingPlugin))
+        }
+        actions.append(DeferredFailureAction(title: "Retry", perform: viewModel.retry))
+        return actions
+    }
+
     @ViewBuilder
     private func deferredFailureView(_ failure: DeferredPluginFailure) -> some View {
         switch failure {
@@ -892,38 +911,33 @@ struct DeferredPluginView: View {
             failureView(
                 title: "Repository Search Failed",
                 message: Text("The configured repositories could not be refreshed. Please try again."),
-                retryTitle: "Search Again",
-                retry: viewModel.installMissingPlugin
+                actions: [DeferredFailureAction(title: "Search Again", perform: viewModel.installMissingPlugin)]
             )
         case .pluginTypeMismatch:
             failureView(
                 title: "Extension Type Mismatch",
                 message: Text("The saved item and extension types do not match."),
-                retryTitle: "Retry",
-                retry: viewModel.retry
+                actions: [DeferredFailureAction(title: "Retry", perform: viewModel.retry)]
             )
         case .install:
             failureView(
                 title: "Installation Failed",
                 message: viewModel.installRefusal.map { Text(verbatim: $0.message) }
                     ?? Text("The extension could not be installed. Please try again."),
-                retryTitle: "Retry Install",
-                retry: viewModel.installMissingPlugin
+                actions: [DeferredFailureAction(title: "Retry Install", perform: viewModel.installMissingPlugin)]
             )
         case .runnerLoad:
             failureView(
                 title: "Couldn't Load Plugin",
                 message: viewModel.runnerRefusal.map { Text(verbatim: $0.message) }
                     ?? Text("The installed extension could not be loaded."),
-                retryTitle: "Retry",
-                retry: viewModel.retry
+                actions: runnerLoadActions
             )
         case .payloadDecode:
             failureView(
                 title: "Couldn't Load Saved Item",
                 message: Text("The saved media data is invalid or incompatible."),
-                retryTitle: "Retry",
-                retry: viewModel.retry,
+                actions: [DeferredFailureAction(title: "Retry", perform: viewModel.retry)],
                 savedFields: viewModel.savedFieldsFallback
             )
         }
@@ -951,8 +965,7 @@ struct DeferredPluginView: View {
     private func failureView(
         title: LocalizedStringKey,
         message: Text,
-        retryTitle: LocalizedStringKey?,
-        retry: (() -> Void)?,
+        actions: [DeferredFailureAction] = [],
         savedFields: DeferredSavedFields? = nil
     ) -> some View {
         // Scrolls, so Retry stays reachable at accessibility text sizes; short content stays centered.
@@ -971,8 +984,8 @@ struct DeferredPluginView: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
-                    if let retryTitle, let retry {
-                        Button(retryTitle, action: retry)
+                    ForEach(actions.indices, id: \.self) { index in
+                        Button(actions[index].title, action: actions[index].perform)
                             .itoProminentButtonStyle()
                     }
                     if viewModel.canOpenSavedDetails {

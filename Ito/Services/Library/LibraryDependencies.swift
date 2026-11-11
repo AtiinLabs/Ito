@@ -341,11 +341,14 @@ struct DeferredPluginPackageCandidate: Equatable {
 }
 
 extension DeferredPluginPackageCandidate {
-    /// The candidate to offer for a plugin that several repositories list: the first one this Ito can run, in
-    /// repository order, or else the first refused one. A refused candidate is only offered when no listing is
-    /// compatible, so the install screen never describes a source as incompatible when a compatible listing exists.
+    /// The candidate to offer for a plugin several repositories list, by the ranking every install surface shares:
+    /// declared-compatible listings first, then listings with an unknown ABI, then refused ones; within a tier the newer
+    /// version, then the earlier repository. A refused candidate is offered only when nothing else is listed, so the
+    /// screen never reports "no compatible update" while another listing could run.
     static func preferred(among candidates: [DeferredPluginPackageCandidate]) -> DeferredPluginPackageCandidate? {
-        candidates.first { $0.incompatibility == nil } ?? candidates.first
+        RepositoryListingRanking.preferredIndex(
+            among: candidates.map { (package: $0.package, refusal: $0.incompatibility) }
+        ).map { candidates[$0] }
     }
 }
 

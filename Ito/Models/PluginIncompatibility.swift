@@ -38,6 +38,12 @@ nonisolated enum PluginIncompatibility: LocalizedError, Equatable {
         }
     }
 
+    /// Whether installing a compatible build of the source resolves this refusal. True when the installed file is
+    /// built for an older ABI, or is damaged or unsupported; a newer Ito is the only fix for the other directions.
+    var needsSourceUpdate: Bool {
+        self == .requiresSourceUpdate || self == .unsupportedFile
+    }
+
     /// Why a plugin needing `minimum` (its manifest's or index's `min_app_version`) can't run in
     /// `current`, or nil when it can.
     static func appVersion(required minimum: String?, current: String = AppVersion.marketing) -> PluginIncompatibility? {

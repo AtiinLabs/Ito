@@ -1021,6 +1021,9 @@
     "Browsing at %@" : {
       "comment" : "Discord status: source name"
     },
+    "Built for an older Ito" : {
+      "comment" : "Label under a source that is offered only in a build for an older version of Ito, which this version can't run. It is a status, not a button."
+    },
     "Cache Limit" : {
 
     },
@@ -1170,6 +1173,12 @@
     },
     "Community" : {
 
+    },
+    "Compatibility unknown" : {
+      "comment" : "Status under a source that can't run here, when its repository listing does not state the ABI it was built for. The app cannot tell whether installing it helps, so it does not claim that it will."
+    },
+    "Compatible build v%@ available" : {
+      "comment" : "Subtitle of an update row for a compatible build of a source this version of Ito can't run. Installing it replaces the installed file. The version is substituted."
     },
     "Completed" : {
 
@@ -1879,7 +1888,7 @@
 
     },
     "Install" : {
-
+      "comment" : "Button that installs a source package."
     },
     "Install a source in Browse to check your library for updates." : {
 
@@ -2312,6 +2321,9 @@
     "No chapters in the current list" : {
       "comment" : "Scanlator choice: a remembered scanlator that the source's current list has no chapters from."
     },
+    "No compatible build in this repository yet." : {
+      "comment" : "Shown on a source's row when this repository lists no build this version of Ito can run, though the installed file cannot run. Other repositories may list one, so the text names this repository only. Refreshing the sources may bring a build."
+    },
     "No compatible source update is available yet." : {
       "comment" : "Shown where a source was built for an older version of Ito and no repository offers a compatible version: a source package's status label, and a saved series' failure message. The source's publisher must release an update."
     },
@@ -2727,6 +2739,12 @@
     },
     "Refresh Logs" : {
 
+    },
+    "Refresh Sources" : {
+      "comment" : "Button that refreshes every repository's source list, so a source can be checked against newer builds. Not the same as refreshing chapters."
+    },
+    "Refreshing sources" : {
+      "comment" : "VoiceOver label of the progress indicator shown while every repository's source list is being refreshed."
     },
     "Reject" : {
 
@@ -3307,6 +3325,9 @@
     },
     "Sources" : {
 
+    },
+    "Sources refreshed" : {
+      "comment" : "Toast title shown after the user refreshes every repository's source list and the refresh succeeds."
     },
     "South Korea" : {
       "comment" : "Country of origin"
@@ -3954,6 +3975,9 @@
     },
     "Update Frequency" : {
 
+    },
+    "Update Source" : {
+      "comment" : "Button that installs a compatible build of a source this version of Ito can't run, replacing the installed file."
     },
     "Update badges" : {
 

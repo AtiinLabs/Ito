@@ -116,6 +116,97 @@ final class BrowseViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.availableUpdates.map(\.pkg.version), ["1.5"])
     }
 
+    func testASourceThisItoCannotRunIsOfferedItsCompatibleBuildAtTheSameVersion() {
+        let plugins = BrowsePluginManagerSpy(installedPlugins: [
+            "rebuilt": makePlugin(id: "rebuilt", name: "Rebuilt", version: "1.0", abi: injectedHostABI.lowerBound - 1)
+        ])
+        plugins.supportedABI = injectedHostABI
+        let repositories = BrowseRepositoryManagerSpy(repositories: [
+            makeRepository(packages: [
+                makePackage(id: "rebuilt", name: "Rebuilt", version: "1.0", abi: injectedHostABI.lowerBound)
+            ])
+        ])
+        let viewModel = makeViewModel(plugins: plugins, repositories: repositories)
+
+        XCTAssertEqual(viewModel.availableUpdates.map(\.id), ["rebuilt"])
+        XCTAssertEqual(viewModel.availableUpdates.map(\.isSourceUpdate), [true])
+    }
+
+    func testAnIncompatibleSourceWithNoCompatibleBuildIsNotCountedAsAnUpdate() {
+        let plugins = BrowsePluginManagerSpy(installedPlugins: [
+            "stuck": makePlugin(id: "stuck", name: "Stuck", version: "1.0", abi: injectedHostABI.lowerBound - 1)
+        ])
+        plugins.supportedABI = injectedHostABI
+        let repositories = BrowseRepositoryManagerSpy(repositories: [
+            makeRepository(packages: [
+                makePackage(id: "stuck", name: "Stuck", version: "2.0", abi: injectedHostABI.lowerBound - 1)
+            ])
+        ])
+        let viewModel = makeViewModel(plugins: plugins, repositories: repositories)
+
+        XCTAssertTrue(viewModel.availableUpdates.isEmpty)
+    }
+
+    func testANewerRunnableBuildIsStillAnUpdateButNotASourceUpdate() {
+        let plugins = BrowsePluginManagerSpy(installedPlugins: [
+            "newer": makePlugin(id: "newer", name: "Newer", version: "1.0", abi: injectedHostABI.lowerBound)
+        ])
+        plugins.supportedABI = injectedHostABI
+        let repositories = BrowseRepositoryManagerSpy(repositories: [
+            makeRepository(packages: [
+                makePackage(id: "newer", name: "Newer", version: "1.1", abi: injectedHostABI.lowerBound)
+            ])
+        ])
+        let viewModel = makeViewModel(plugins: plugins, repositories: repositories)
+
+        XCTAssertEqual(viewModel.availableUpdates.map(\.isSourceUpdate), [false])
+    }
+
+    func testABuildDeclaredCompatibleIsOfferedOverANewerUnknownOneFromAnotherRepository() {
+        let plugins = BrowsePluginManagerSpy(installedPlugins: [
+            "ranked": makePlugin(id: "ranked", name: "Ranked", version: "1.0", abi: injectedHostABI.upperBound)
+        ])
+        plugins.supportedABI = injectedHostABI
+        let repositories = BrowseRepositoryManagerSpy(repositories: [
+            makeRepository(url: "https://unknown.example", packages: [
+                makePackage(id: "ranked", name: "Ranked", version: "2.0")
+            ]),
+            makeRepository(url: "https://declared.example", packages: [
+                makePackage(id: "ranked", name: "Ranked", version: "1.5", abi: injectedHostABI.upperBound)
+            ])
+        ])
+        let viewModel = makeViewModel(plugins: plugins, repositories: repositories)
+
+        XCTAssertEqual(viewModel.availableUpdates.map(\.pkg.version), ["1.5"])
+        XCTAssertEqual(viewModel.availableUpdates.map(\.repoURL), ["https://declared.example"])
+    }
+
+    func testAnUnknownSameVersionRepairIsNotCountedAsAnUpdate() {
+        let plugins = BrowsePluginManagerSpy(installedPlugins: [
+            "repair": makePlugin(id: "repair", name: "Repair", version: "1.0", abi: injectedHostABI.lowerBound - 1)
+        ])
+        plugins.supportedABI = injectedHostABI
+        let repositories = BrowseRepositoryManagerSpy(repositories: [
+            makeRepository(packages: [makePackage(id: "repair", name: "Repair", version: "1.0")])
+        ])
+        let viewModel = makeViewModel(plugins: plugins, repositories: repositories)
+
+        XCTAssertTrue(viewModel.availableUpdates.isEmpty)
+    }
+
+    func testAnUnknownNewerBuildIsOfferedAsAnUpdateWithoutAClaimOfCompatibility() {
+        let plugins = BrowsePluginManagerSpy(installedPlugins: [
+            "newer": makePlugin(id: "newer", name: "Newer", version: "1.0", abi: injectedHostABI.lowerBound - 1)
+        ])
+        plugins.supportedABI = injectedHostABI
+        let repositories = BrowseRepositoryManagerSpy(repositories: [
+            makeRepository(packages: [makePackage(id: "newer", name: "Newer", version: "2.0")])
+        ])
+        let viewModel = makeViewModel(plugins: plugins, repositories: repositories)
+
+        XCTAssertEqual(viewModel.availableUpdates.map(\.isSourceUpdate), [false])
+    }
+
     func testStartingUpdateInvokesDependencyExactlyOnce() async throws {
         let plugins = BrowsePluginManagerSpy(installedPlugins: [
             "plugin": makePlugin(id: "plugin", name: "Plugin")
@@ -785,7 +876,8 @@ final class BrowseViewModelTests: XCTestCase {
         name: String,
         version: String = "1.0",
         type: MediaKind = .manga,
-        kinds: [MediaKind]? = nil
+        kinds: [MediaKind]? = nil,
+        abi: Int = 2
     ) -> InstalledPlugin {
         InstalledPlugin(
             url: URL(fileURLWithPath: "/plugins/\(id).ito"),
@@ -798,7 +890,7 @@ final class BrowseViewModelTests: XCTestCase {
                 kinds: kinds
             ),
             iconData: nil,
-            binary: makeRunnableBinary()
+            binary: makeRunnableBinary(abi: abi)
         )
     }
 
@@ -807,7 +899,8 @@ final class BrowseViewModelTests: XCTestCase {
         name: String,
         version: String,
         minAppVersion: String = "1.0",
-        archived: Bool = false
+        archived: Bool = false,
+        abi: Int? = nil
     ) -> RepoPackage {
         RepoPackage(
             id: id,
@@ -820,7 +913,8 @@ final class BrowseViewModelTests: XCTestCase {
             pluginType: "manga",
             archived: archived,
             archivedReason: nil,
-            archivedDate: nil
+            archivedDate: nil,
+            abi: abi
         )
     }
 
@@ -887,8 +981,11 @@ private struct BrowseFileFixture {
     }
 }
 
+private let injectedHostABI: ClosedRange<Int> = 3...3
+
 @MainActor
 private final class BrowsePluginManagerSpy: BrowsePluginManaging {
+    var supportedABI: ClosedRange<Int> = ItoRunner.supportedABIVersions
     @Published var installedPlugins: [String: InstalledPlugin]
     private(set) var reloadCallCount = 0
     private(set) var removedSecretsPluginIDs: [String] = []

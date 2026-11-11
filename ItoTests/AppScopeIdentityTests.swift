@@ -755,6 +755,7 @@ private final class AppScopeRecentStore: RecentSearchPersisting {
 
 @MainActor
 private final class AppScopeBrowsePluginManager: BrowsePluginManaging {
+    var supportedABI: ClosedRange<Int> = ItoRunner.supportedABIVersions
     let installedPlugins: [String: InstalledPlugin] = [:]
 
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> {

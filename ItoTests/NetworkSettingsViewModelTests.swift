@@ -266,6 +266,7 @@ private final class NetworkTestRepositoryManager: BrowseRepositoryManaging {
 
 @MainActor
 private final class NetworkTestPluginManager: BrowsePluginManaging {
+    var supportedABI: ClosedRange<Int> = ItoRunner.supportedABIVersions
     let installedPlugins: [String: InstalledPlugin] = [:]
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> {
         Just(installedPlugins).eraseToAnyPublisher()

@@ -13,6 +13,7 @@ enum AppMessageKind: Equatable {
     case repositoryAddFailed
     case repositoryRemoveFailed
     case repositoryRefreshFailed
+    case repositorySourcesRefreshed
     case repositoryInstallFailed
     case debugLogsCopied
     case sourceLoadFailed
@@ -158,6 +159,12 @@ extension AppMessageKind {
                 style: .error,
                 title: String(localized: "Error"),
                 detail: String(localized: "Some repositories could not be refreshed. Please try again.")
+            )
+        case .repositorySourcesRefreshed:
+            return .init(
+                style: .success,
+                title: String(localized: "Sources refreshed", comment: "Toast title shown after the user refreshes every repository's source list and the refresh succeeds."),
+                detail: nil
             )
         case .repositoryInstallFailed:
             return .init(

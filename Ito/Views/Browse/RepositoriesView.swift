@@ -246,10 +246,11 @@ struct RepoDetailView: View {
                             pkg: package,
                             repositoryUrl: viewModel.repositoryURL,
                             installState: viewModel.installState(for: package),
-                            isInstalling: viewModel.isInstalling(packageID: package.id)
-                        ) {
-                            Task { await viewModel.installPackage(package) }
-                        }
+                            isInstalling: viewModel.isInstalling(packageID: package.id),
+                            isRefreshingSources: viewModel.isRefreshingSources,
+                            onAction: { Task { await viewModel.installPackage(package) } },
+                            onRefreshSources: { Task { await viewModel.refreshSources() } }
+                        )
                     }
                 }
             } header: {
@@ -272,9 +273,11 @@ struct RepoDetailView: View {
 struct PackageRowView: View {
     let pkg: RepoPackage
     let repositoryUrl: String
-    let installState: RepoDetailViewModel.InstallState
+    let installState: PackageInstallStatus
     let isInstalling: Bool
+    let isRefreshingSources: Bool
     let onAction: () -> Void
+    let onRefreshSources: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -354,11 +357,73 @@ struct PackageRowView: View {
                     }
                 }
 
-            case .incompatible(let incompatibility):
-                Text(Self.incompatibilityLabel(incompatibility))
+            case .requiresNewerApp(let minimumAppVersion):
+                Text(Self.newerAppLabel(minimumAppVersion: minimumAppVersion))
                     .font(.caption2)
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.trailing)
+
+            case .sourceUpdateRequired:
+                Button(action: onAction) {
+                    Text(
+                        "Update Source",
+                        comment: "Button that installs a compatible build of a source this version of Ito can't run, replacing the installed file."
+                    )
+                }
+                .itoProminentButtonStyle()
+                .controlSize(.small)
+
+            case .repairUnverified:
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(
+                        "Compatibility unknown",
+                        comment: "Status under a source that can't run here, when its repository listing does not state the ABI it was built for. The app cannot tell whether installing it helps, so it does not claim that it will."
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+                    Button(action: onAction) {
+                        Text("Install", comment: "Button that installs a source package.")
+                    }
+                    .itoProminentButtonStyle()
+                    .controlSize(.small)
+                }
+
+            case .noCompatibleUpdate:
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(Self.noCompatibleUpdateText)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.trailing)
+                    if isRefreshingSources {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .accessibilityLabel(
+                                Text(
+                                    "Refreshing sources",
+                                    comment: "VoiceOver label of the progress indicator shown while every repository's source list is being refreshed."
+                                )
+                            )
+                    } else {
+                        Button(action: onRefreshSources) {
+                            Text(
+                                "Refresh Sources",
+                                comment: "Button that refreshes every repository's source list, so a source can be checked against newer builds. Not the same as refreshing chapters."
+                            )
+                        }
+                        .controlSize(.small)
+                    }
+                }
+
+            case .unavailableForThisIto:
+                // A status, not an action: the source cannot be installed here, so there is no button to press.
+                Text(
+                    "Built for an older Ito",
+                    comment: "Label under a source that is offered only in a build for an older version of Ito, which this version can't run. It is a status, not a button."
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
 
             case .updateAvailable:
                 Button("Update", action: onAction)
@@ -382,23 +447,20 @@ struct PackageRowView: View {
         }
     }
 
-    /// The short label for a package that can't run here. A source built for an older ABI has no compatible
-    /// update in this repository, so its label says so instead of naming an Ito version.
-    private static func incompatibilityLabel(_ incompatibility: PluginIncompatibility) -> String {
-        switch incompatibility {
-        case .requiresNewerApp(let minimumAppVersion?):
+    /// The short label for a package whose installed source needs a newer Ito than this one.
+    private static func newerAppLabel(minimumAppVersion: String?) -> String {
+        if let minimumAppVersion {
             return String(localized: "Requires v\(minimumAppVersion)")
-        case .requiresNewerApp(nil):
-            return String(localized: "Requires a newer Ito")
-        case .requiresSourceUpdate:
-            return String(
-                localized: "No compatible source update is available yet.",
-                comment: "Shown where a source was built for an older version of Ito and no repository offers a compatible version: a source package's status label, and a saved series' failure message. The source's publisher must release an update."
-            )
-        case .unsupportedFile:
-            return incompatibility.message
         }
+        return String(localized: "Requires a newer Ito")
     }
+
+    /// Shown where a source was built for an older version of Ito and this repository lists no build this version runs.
+    /// Other repositories are not consulted here, so the text names this repository only.
+    private static let noCompatibleUpdateText = String(
+        localized: "No compatible build in this repository yet.",
+        comment: "Shown on a source's row when this repository lists no build this version of Ito can run, though the installed file cannot run. Other repositories may list one, so the text names this repository only. Refreshing the sources may bring a build."
+    )
 }
 
 // MARK: - Preview

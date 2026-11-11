@@ -190,6 +190,9 @@ History: kind of media */
 /* Discord status: source name */
 "Browsing at %@" = "Browsing at %@";
 
+/* Label under a source that is offered only in a build for an older version of Ito, which this version can't run. It is a status, not a button. */
+"Built for an older Ito" = "Built for an older Ito";
+
 "Cache Limit" = "Cache Limit";
 
 /* Clear Cache confirmation: offline chapters are not cache data */
@@ -292,6 +295,12 @@ Downloads queue: cancel one job */
 "Close Settings" = "Close Settings";
 
 "Community" = "Community";
+
+/* Status under a source that can't run here, when its repository listing does not state the ABI it was built for. The app cannot tell whether installing it helps, so it does not claim that it will. */
+"Compatibility unknown" = "Compatibility unknown";
+
+/* Subtitle of an update row for a compatible build of a source this version of Ito can't run. Installing it replaces the installed file. The version is substituted. */
+"Compatible build v%@ available" = "Compatible build v%@ available";
 
 "Completed" = "Completed";
 
@@ -714,6 +723,7 @@ History: an episode without a title */
 
 "Inserted" = "Inserted";
 
+/* Button that installs a source package. */
 "Install" = "Install";
 
 "Install a source in Browse to check your library for updates." = "Install a source in Browse to check your library for updates.";
@@ -1017,6 +1027,9 @@ Manga format */
 /* Scanlator choice: a remembered scanlator that the source's current list has no chapters from. */
 "No chapters in the current list" = "No chapters in the current list";
 
+/* Shown on a source's row when this repository lists no build this version of Ito can run, though the installed file cannot run. Other repositories may list one, so the text names this repository only. Refreshing the sources may bring a build. */
+"No compatible build in this repository yet." = "No compatible build in this repository yet.";
+
 /* Shown where a source was built for an older version of Ito and no repository offers a compatible version: a source package's status label, and a saved series' failure message. The source's publisher must release an update. */
 "No compatible source update is available yet." = "No compatible source update is available yet.";
 
@@ -1304,6 +1317,12 @@ History: the page a chapter was left on */
 "Refine your search." = "Refine your search.";
 
 "Refresh Logs" = "Refresh Logs";
+
+/* Button that refreshes every repository's source list, so a source can be checked against newer builds. Not the same as refreshing chapters. */
+"Refresh Sources" = "Refresh Sources";
+
+/* VoiceOver label of the progress indicator shown while every repository's source list is being refreshed. */
+"Refreshing sources" = "Refreshing sources";
 
 "Reject" = "Reject";
 
@@ -1686,6 +1705,9 @@ Downloads queue: retry a failed or paused job */
 "Source unavailable" = "Source unavailable";
 
 "Sources" = "Sources";
+
+/* Toast title shown after the user refreshes every repository's source list and the refresh succeeds. */
+"Sources refreshed" = "Sources refreshed";
 
 /* Country of origin */
 "South Korea" = "South Korea";
@@ -2131,6 +2153,9 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 "Update Entry" = "Update Entry";
 
 "Update Frequency" = "Update Frequency";
+
+/* Button that installs a compatible build of a source this version of Ito can't run, replacing the installed file. */
+"Update Source" = "Update Source";
 
 "Update badges" = "Update badges";
 
