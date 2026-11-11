@@ -244,6 +244,25 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.loadPhase, .content)
     }
 
+    func testMainLoadIsForegroundReadingAndAdjacentPrefetchIsOneOperation() async {
+        let a = makeChapter("a", number: 1)
+        let b = makeChapter("b", number: 2)
+        let c = makeChapter("c", number: 3)
+        let subject = makeSubject(chapters: [a, b, c], initial: b)
+        subject.loader.enqueue(.pages([page(0)]), for: "b")
+        subject.loader.enqueue(.pages([page(8)]), for: "c")
+        subject.loader.enqueue(.pages([page(2)]), for: "a")
+
+        subject.viewModel.start()
+        await subject.viewModel.waitForTestingOperations()
+
+        let operations = subject.loader.operations
+        XCTAssertEqual(subject.loader.requestedChapterKeys, ["b", "c", "a"])
+        XCTAssertEqual(operations.map(\.purpose), [.foregroundReading, .prefetch, .prefetch])
+        XCTAssertEqual(operations[1].operationID, operations[2].operationID)
+        XCTAssertNotEqual(operations[0].operationID, operations[1].operationID)
+    }
+
     func testDisappearInvalidatesNonCooperativeLoadAndStopsPresentationEffects() async {
         let subject = makeSubject(chapters: [makeChapter("a", number: 1)])
         subject.loader.enqueue(.suspended, for: "a")

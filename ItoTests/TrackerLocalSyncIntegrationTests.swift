@@ -40,8 +40,8 @@ final class TrackerLocalSyncIntegrationTests: XCTestCase {
         let messages = MediaDetailMessageSpy()
 
         let routeContext = MediaDetailRouteContext<Manga>(
-            loadDetails: { try await route.load($0) },
-            searchForRelink: { try await route.search($0) },
+            loadDetails: { try await route.load($0, operation: $1) },
+            searchForRelink: { try await route.search($0, operationID: $1) },
             makeReaderDestination: { parent, selected in
                 .reading(
                     selected,

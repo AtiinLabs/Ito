@@ -39,6 +39,7 @@ final class MediaRouteHarness<M: MediaDisplayable> {
     var searchResponses: [SearchResponse] = []
     private(set) var loadRequests: [M] = []
     private(set) var searchQueries: [String] = []
+    private(set) var loadOperations: [PluginNetworkOperation] = []
     /// Runs once a suspended load's continuation is pending, so a test can resolve it safely.
     var onLoadSuspended: (() -> Void)?
     private var pendingLoads: [CheckedContinuation<M, any Error>] = []
@@ -47,8 +48,9 @@ final class MediaRouteHarness<M: MediaDisplayable> {
     var pendingLoadCount: Int { pendingLoads.count }
     var pendingSearchCount: Int { pendingSearches.count }
 
-    func load(_ media: M) async throws -> M {
+    func load(_ media: M, operation: PluginNetworkOperation) async throws -> M {
         loadRequests.append(media)
+        loadOperations.append(operation)
         guard !loadResponses.isEmpty else { return media }
         switch loadResponses.removeFirst() {
         case .value(let value): return value
@@ -61,7 +63,8 @@ final class MediaRouteHarness<M: MediaDisplayable> {
         }
     }
 
-    func search(_ query: String) async throws -> [M] {
+    func search(_ query: String, operationID: UUID) async throws -> [M] {
+        _ = operationID
         searchQueries.append(query)
         guard !searchResponses.isEmpty else { return [] }
         switch searchResponses.removeFirst() {

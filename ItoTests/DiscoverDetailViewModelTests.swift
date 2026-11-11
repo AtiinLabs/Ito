@@ -583,6 +583,7 @@ private final class DiscoverDetailPluginProviderFake: SourceResolverPluginProvid
     private(set) var installedPlugins: [String: InstalledPlugin] = [:]
     var runnerError: Error?
     private let runner = ItoRunner()
+    let networkContexts = PluginNetworkContexts()
 
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> {
         installedPluginsSubject.eraseToAnyPublisher()
@@ -596,7 +597,7 @@ private final class DiscoverDetailPluginProviderFake: SourceResolverPluginProvid
     func sourceRunnerContext(for pluginID: String) async throws -> any SourceRunnerContext {
         if let runnerError { throw runnerError }
         guard installedPlugins[pluginID] != nil else { throw DetailTestError.failed }
-        return ItoRunnerSourceContext(runner: runner)
+        return ItoRunnerSourceContext(runner: runner, pluginID: pluginID, contexts: networkContexts)
     }
 
     func evictSourceRunner(for pluginID: String) {
@@ -631,7 +632,7 @@ private actor DiscoverDetailSearchAdapter: PluginSearching {
         self.mediaType = mediaType
     }
 
-    func search(query: String) async throws -> [ResolvedPluginMedia] {
+    func search(query: String, operation: PluginNetworkOperation) async throws -> [ResolvedPluginMedia] {
         _ = query
         return []
     }

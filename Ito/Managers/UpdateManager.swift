@@ -47,7 +47,7 @@ nonisolated final class OnceFlag: @unchecked Sendable {
 protocol LibraryUpdateSource: AnyObject {
     /// The sources that can be checked now.
     var installedPluginIDs: Set<String> { get }
-    func fetchUpdate(for item: LibraryItem) async throws -> UpdateManager.SuccessfulUpdate
+    func fetchUpdate(for item: LibraryItem, operation: PluginNetworkOperation) async throws -> UpdateManager.SuccessfulUpdate
     func pendingTrust(for pluginID: String) -> PendingTrust?
     func clearPendingTrust(for pluginID: String)
 }
@@ -70,9 +70,10 @@ final class PluginLibraryUpdateSource: LibraryUpdateSource {
         Set(pluginManager.installedPlugins.keys)
     }
 
-    func fetchUpdate(for item: LibraryItem) async throws -> UpdateManager.SuccessfulUpdate {
+    func fetchUpdate(for item: LibraryItem, operation: PluginNetworkOperation) async throws -> UpdateManager.SuccessfulUpdate {
         clearPendingTrust(for: item.pluginId)
         let runner = try await pluginManager.getRunner(for: item.pluginId)
+        let context = pluginManager.pluginSettingsStore.networkContexts.context(pluginID: item.pluginId, operation)
         return try await pluginCall {
             let stored: MediaEntry
             switch item.effectiveType {
@@ -81,7 +82,7 @@ final class PluginLibraryUpdateSource: LibraryUpdateSource {
             case .novel: stored = .novel(try JSONDecoder().decode(Novel.self, from: item.rawPayload))
             }
             // Details are only needed where the update keeps them (manga and novels show status).
-            switch try await runner.getMediaUpdate(stored, needsDetails: item.effectiveType != .anime) {
+            switch try await runner.getMediaUpdate(stored, needsDetails: item.effectiveType != .anime, context: context) {
             case .manga(let manga):
                 return UpdateManager.SuccessfulUpdate(
                     freshCount: manga.chapters?.distinctChapterCount ?? 0,
@@ -239,7 +240,12 @@ public class UpdateManager: ObservableObject {
         itemsCheckedCurrentRun = 0
         AppLogger.update.debug("🔄 [UpdateManager] Checking \(batch.count) of \(items.count) series.")
 
-        let updated = await check(Self.sourceQueues(batch))
+        // One operation per run: every series of the run, on every source, shares its ID.
+        let operation = PluginNetworkOperation(
+            purpose: isBackground ? .automaticLibraryUpdate : .manualCatalogRefresh,
+            operationID: UUID()
+        )
+        let updated = await check(Self.sourceQueues(batch), operation: operation)
         AppLogger.update.debug("🔄 [UpdateManager] Finished: \(updated.count) series have new chapters.")
         return updated
     }
@@ -303,25 +309,25 @@ public class UpdateManager: ObservableObject {
     }
 
     /// Checks up to `maxConcurrentSources` sources at once, each one series at a time.
-    private func check(_ queues: [[LibraryItem]]) async -> [(LibraryItem, Int)] {
+    private func check(_ queues: [[LibraryItem]], operation: PluginNetworkOperation) async -> [(LibraryItem, Int)] {
         await withTaskGroup(of: [(LibraryItem, Int)].self) { group in
             var remaining = queues.makeIterator()
             for _ in 0..<Self.maxConcurrentSources {
                 guard let queue = remaining.next() else { break }
-                group.addTask { await self.check(queue: queue) }
+                group.addTask { await self.check(queue: queue, operation: operation) }
             }
             var updated: [(LibraryItem, Int)] = []
             for await result in group {
                 updated += result
                 if let queue = remaining.next() {
-                    group.addTask { await self.check(queue: queue) }
+                    group.addTask { await self.check(queue: queue, operation: operation) }
                 }
             }
             return updated
         }
     }
 
-    private func check(queue: [LibraryItem]) async -> [(LibraryItem, Int)] {
+    private func check(queue: [LibraryItem], operation: PluginNetworkOperation) async -> [(LibraryItem, Int)] {
         var updated: [(LibraryItem, Int)] = []
         for (index, item) in queue.enumerated() {
             if index > 0, sourcePacingNanoseconds > 0 {
@@ -338,7 +344,7 @@ public class UpdateManager: ObservableObject {
                 AppLogger.update.debug("🔄 [UpdateManager] Time budget used up, leaving the rest for the next run.")
                 break
             }
-            if let delta = await checkSingleItem(item), delta > 0 {
+            if let delta = await checkSingleItem(item, operation: operation), delta > 0 {
                 updated.append((item, delta))
             }
             itemsCheckedCurrentRun += 1
@@ -346,11 +352,11 @@ public class UpdateManager: ObservableObject {
         return updated
     }
 
-    private func checkSingleItem(_ item: LibraryItem) async -> Int? {
+    private func checkSingleItem(_ item: LibraryItem, operation: PluginNetworkOperation) async -> Int? {
         guard let updateSource else { return nil }
         AppLogger.update.debug("🔄 [UpdateManager] Checking a library series.")
         return await processUpdate(for: item, checkedAt: now()) {
-            try await updateSource.fetchUpdate(for: item)
+            try await updateSource.fetchUpdate(for: item, operation: operation)
         }
     }
 

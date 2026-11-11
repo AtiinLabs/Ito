@@ -5,19 +5,24 @@ import Nuke
 
 @MainActor
 protocol NovelChapterLoading: AnyObject {
-    func content(for entry: MediaEntry, chapter: Chapter) async throws -> [Page]
+    func content(for entry: MediaEntry, chapter: Chapter, operation: PluginNetworkOperation) async throws -> [Page]
 }
 
 @MainActor
 final class ItoRunnerNovelChapterLoader: NovelChapterLoading {
     let runner: ItoRunner
+    private let pluginID: String
+    private let contexts: PluginNetworkContexts
 
-    init(runner: ItoRunner) {
+    init(runner: ItoRunner, pluginID: String, contexts: PluginNetworkContexts) {
         self.runner = runner
+        self.pluginID = pluginID
+        self.contexts = contexts
     }
 
-    func content(for entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
-        try await pluginCall { try await runner.getChapterPages(entry: entry, chapter: chapter) }
+    func content(for entry: MediaEntry, chapter: Chapter, operation: PluginNetworkOperation) async throws -> [Page] {
+        let context = contexts.context(pluginID: pluginID, operation)
+        return try await pluginCall { try await runner.getChapterPages(entry: entry, chapter: chapter, context: context) }
     }
 }
 

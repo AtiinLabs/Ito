@@ -35,11 +35,14 @@ final class MangaPageLoaderFake: MangaPageLoading {
     private(set) var requestedEntries: [MediaEntry] = []
     private var pending: [Pending] = []
     private var pendingWaiters: [(String, Int, CheckedContinuation<Void, Never>)] = []
+    /// The operation of each page request, in order.
+    private(set) var operations: [PluginNetworkOperation] = []
     func enqueue(_ response: Response, for chapterKey: String) {
         responses[chapterKey, default: []].append(response)
     }
 
-    func pages(for entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
+    func pages(for entry: MediaEntry, chapter: Chapter, operation: PluginNetworkOperation) async throws -> [Page] {
+        operations.append(operation)
         requestedEntries.append(entry)
         requestedChapterKeys.append(chapter.key)
         let response = responses[chapter.key]?.isEmpty == false

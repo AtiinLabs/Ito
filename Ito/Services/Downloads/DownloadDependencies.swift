@@ -69,6 +69,7 @@ struct DownloadStack {
                 .map { _ in () }
                 .eraseToAnyPublisher(),
             fetcher: URLSessionAssetFetcher(trust: trust, userAgent: CloudflareManager.defaultUserAgent),
+            contexts: pluginSettings.networkContexts,
             progress: progress,
             predecessor: predecessor
         )

@@ -90,6 +90,37 @@ struct PluginCallErrorTests {
         #expect(error == PluginCallError(kind: .host, message: "The source's web page failed: Timed out"))
     }
 
+    @Test func anOfflinePolicyOutcomeAsksTheUserToCheckTheConnection() {
+        for outcome in [HostNetworkPolicyOutcome.deferred(.offline), .deferred(.unknownPath)] {
+            #expect(PluginCallError(.networkPolicy(outcome)) == PluginCallError(
+                kind: .host, message: "Check your internet connection or try again later."
+            ))
+        }
+    }
+
+    @Test func anAuthorizationPolicyOutcomeSendsTheUserToTheSourceSettings() {
+        #expect(PluginCallError(.networkPolicy(.sourceAuthorizationFailure)) == PluginCallError(
+            kind: .needsSettings, message: "The server or account settings changed, or are incomplete."
+        ))
+    }
+
+    @Test func otherPolicyOutcomesAndRunnerReloadsAreHostErrorsWithTheGenericMessage() {
+        let errors: [ItoError] = [
+            .networkPolicy(.deferred(.expensivePath)),
+            .networkPolicy(.deferred(.constrainedPath)),
+            .networkPolicy(.deferred(.policyChanged)),
+            .networkPolicy(.foregroundPermissionRequired),
+            .networkPolicy(.hardUserBlocked),
+            .reloadDuringActiveExport,
+            .pluginReloaded
+        ]
+        for error in errors {
+            #expect(PluginCallError(error) == PluginCallError(
+                kind: .host, message: "The source couldn't complete this request."
+            ))
+        }
+    }
+
     @Test func errorsThatDidNotComeFromTheRunnerPassThrough() {
         #expect(PluginCallError.wrapping(CancellationError()) is CancellationError)
         #expect((PluginCallError.wrapping(URLError(.timedOut)) as? URLError)?.code == .timedOut)

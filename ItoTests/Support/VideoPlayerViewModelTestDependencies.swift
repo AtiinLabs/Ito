@@ -57,7 +57,10 @@ final class VideoStreamLoaderFake: VideoStreamLoading {
         self.events = events
     }
 
-    func videos(for anime: Anime, episode: Anime.Episode) async throws -> [Anime.Video] {
+    /// The operation of each stream request, in order.
+    private(set) var operations: [PluginNetworkOperation] = []
+    func videos(for anime: Anime, episode: Anime.Episode, operation: PluginNetworkOperation) async throws -> [Anime.Video] {
+        operations.append(operation)
         events.record("stream")
         requests.append(Request(anime: anime, episode: episode))
         let response = responses.isEmpty ? .success([]) : responses.removeFirst()

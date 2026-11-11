@@ -29,17 +29,19 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
     private let store: PluginCompletionStore
     private let locatePlugin: @MainActor @Sendable (String) throws -> URL
     private let makeNetModule: @Sendable (_ pluginID: String) -> PluginCompletionNetModule
+    private let contexts: PluginNetworkContexts
 
     /// `locatePlugin` returns the installed file of a source that can run in this app, and throws
     /// when it is not installed or needs a newer app. `cookies` holds the sources' website
-    /// cookies, sent read-only.
+    /// cookies, sent read-only. `contexts` supplies the host context of each delivery.
     convenience init(
         store: PluginCompletionStore,
         cookies: PluginCookieJar,
         trust: PluginTrustStore,
+        contexts: PluginNetworkContexts,
         locatePlugin: @escaping @MainActor @Sendable (String) throws -> URL
     ) {
-        self.init(store: store, locatePlugin: locatePlugin, makeNetModule: { pluginID in
+        self.init(store: store, contexts: contexts, locatePlugin: locatePlugin, makeNetModule: { pluginID in
             PluginCompletionNetModule(
                 cookies: { url in cookies.cookies(pluginID: pluginID, for: url) },
                 trust: (pluginID, trust)
@@ -49,10 +51,12 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
 
     init(
         store: PluginCompletionStore,
+        contexts: PluginNetworkContexts,
         locatePlugin: @escaping @MainActor @Sendable (String) throws -> URL,
         makeNetModule: @escaping @Sendable (_ pluginID: String) -> PluginCompletionNetModule
     ) {
         self.store = store
+        self.contexts = contexts
         self.locatePlugin = locatePlugin
         self.makeNetModule = makeNetModule
     }
@@ -107,12 +111,22 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
 
     private func run(_ snapshot: PluginCompletionSnapshot, from pluginURL: URL) async throws -> Bool {
         let intent = snapshot.intent
+        // An unverified origin never falls back to the current configuration.
+        guard let frozenScope = intent.originatingEpoch else {
+            throw PluginCompletionExecutionFailure.unverifiableConfiguration
+        }
+        // One operation per delivered intent: the settings read and the completion share its ID and scope.
+        let operation = PluginNetworkOperation(purpose: .trackerWrite, operationID: UUID())
+        let contexts = self.contexts
+        let context: () -> NetworkOperationContext = {
+            contexts.context(pluginID: intent.pluginId, operation, frozenScope: frozenScope)
+        }
         let defaults = PluginCompletionDefaults(settings: snapshot.settings)
         let network = makeNetModule(intent.pluginId)
         defer { network.invalidate() }
 
         do {
-            let delivered = try await mark(intent, defaults: defaults, network: network, from: pluginURL)
+            let delivered = try await mark(intent, defaults: defaults, network: network, from: pluginURL, context: context)
             // A source may swallow its cut-off transfer and report anything, even success, so no
             // result counts once the trusted certificates changed. Delivery is idempotent, so
             // pausing until the source is checked again is safe.
@@ -130,10 +144,11 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
         _ intent: PluginCompletionIntent,
         defaults: PluginCompletionDefaults,
         network: PluginCompletionNetModule,
-        from pluginURL: URL
+        from pluginURL: URL,
+        context: () -> NetworkOperationContext
     ) async throws -> Bool {
         var runner = try await load(pluginURL, defaults: defaults, network: network)
-        let schemaRead = try await readSchemaDefaults(from: runner, into: defaults)
+        let schemaRead = try await readSchemaDefaults(from: runner, into: defaults, context: context)
         if !schemaRead {
             // The plugin crashed describing its settings, so that instance may be broken. Deliver
             // with a fresh one, as the app's own runner does, without the schema defaults.
@@ -147,7 +162,9 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
         case .novel: kind = .novel
         case .anime: kind = .anime
         }
-        return try await runner.markCompleted(kind: kind, mediaKey: intent.mediaKey, unitKey: intent.unitKey)
+        return try await runner.markCompleted(
+            kind: kind, mediaKey: intent.mediaKey, unitKey: intent.unitKey, context: context()
+        )
     }
 
     private func load(
@@ -168,9 +185,13 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
     /// Adds the schema's defaults to the sandbox so an unset key reads as the reader shows it.
     /// False when the plugin crashed describing its settings. Any other failure only leaves the
     /// plugin without defaults.
-    private func readSchemaDefaults(from runner: ItoRunner, into defaults: PluginCompletionDefaults) async throws -> Bool {
+    private func readSchemaDefaults(
+        from runner: ItoRunner,
+        into defaults: PluginCompletionDefaults,
+        context: () -> NetworkOperationContext
+    ) async throws -> Bool {
         do {
-            let surface = try await runner.getSettingsSurface()
+            let surface = try await runner.getSettingsSurface(context: context())
             let stored = await MainActor.run { surface?.storedDefaults ?? [:] }
             defaults.useSchemaDefaults(stored)
             return true
@@ -232,6 +253,20 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
             return domain == "webview" || domain == "js"
                 ? .paused(.incompatible, .incompatible)
                 : .paused(.sourceError, .sourceError)
+        case .networkPolicy(let outcome):
+            switch outcome {
+            case .deferred:
+                // A transient path condition: backoff and the retry limit apply.
+                return .retryable(.network)
+            case .sourceAuthorizationFailure:
+                return .paused(.configurationChanged, .configurationChanged)
+            case .foregroundPermissionRequired, .hardUserBlocked:
+                // Headless delivery cannot get foreground permission; pausing never drops data.
+                return .paused(.sourceError, .sourceError)
+            }
+        case .reloadDuringActiveExport, .pluginReloaded:
+            // Unreachable while every attempt loads fresh runners. Fail closed rather than retry.
+            return .paused(.sourceError, .sourceError)
         case .wasmTrap, .memoryOutOfBounds:
             return .paused(.sourceError, .sourceError)
         }

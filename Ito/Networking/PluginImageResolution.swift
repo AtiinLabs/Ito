@@ -36,14 +36,20 @@ nonisolated enum PluginImageResolution: Equatable, Sendable {
     /// The plugin doesn't handle this image: fetch the real URL directly.
     case direct(URL)
 
-    static func resolve(_ locator: PluginImageLocator, runner: any PluginImageRunner) async throws -> Self {
-        if let resolved = try await pluginCall({ try await runner.getImageRequest(locator.realURLString) }) {
-            let origins = try await pluginCall { try await runner.getImageOrigins() } ?? []
+    /// `context` builds the host context of each export. One resolution is one operation: the caller
+    /// passes a closure that shares the operation and scope, and every export gets a new generation.
+    static func resolve(
+        _ locator: PluginImageLocator,
+        runner: any PluginImageRunner,
+        context: () -> NetworkOperationContext
+    ) async throws -> Self {
+        if let resolved = try await pluginCall({ try await runner.getImageRequest(locator.realURLString, context: context()) }) {
+            let origins = try await pluginCall { try await runner.getImageOrigins(context: context()) } ?? []
             guard let target = URL(string: resolved.url) else { throw URLError(.badURL) }
             return .fetch(target, headers: resolved.headers, allowedOrigins: origins)
         }
 
-        let handledData = try await pluginCall { try await runner.handleImage(locator.realURLString) }
+        let handledData = try await pluginCall { try await runner.handleImage(locator.realURLString, context: context()) }
         try Task.checkCancellation()
         if let data = handledData {
             return .bytes(data)

@@ -116,6 +116,8 @@ public final class SearchViewModel: ObservableObject {
         var successfulPluginCount = 0
         var activePluginIDs = Set(plugins.map(\.id))
 
+        // One operation per search run: every source's search and link lookup share its ID.
+        let operation = PluginNetworkOperation(purpose: .interactiveSearch, operationID: operationID)
         for plugin in plugins {
             guard isCurrent(operationID), !Task.isCancelled else {
                 ignoreStaleResult(for: operationID)
@@ -135,7 +137,8 @@ public final class SearchViewModel: ObservableObject {
                     plugin: plugin,
                     kind: kind,
                     query: query,
-                    limit: Self.resultLimit
+                    limit: Self.resultLimit,
+                    operation: operation
                 )
 
                 guard isCurrent(operationID), !Task.isCancelled else {

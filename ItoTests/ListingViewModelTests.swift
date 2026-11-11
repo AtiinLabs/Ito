@@ -371,7 +371,7 @@ final class ListingViewModelTests: XCTestCase {
         XCTAssertEqual(routePluginID, "plugin.manga")
         XCTAssertTrue(runner === context.runner)
         XCTAssertEqual(routeMedia.key, media.key)
-        _ = try await loader(routeMedia)
+        _ = try await loader(routeMedia, makeTestNetworkOperation(.seriesMetadata))
         XCTAssertEqual(context.mangaDetailLoadCount, 1)
     }
 
@@ -419,7 +419,8 @@ final class ListingViewModelTests: XCTestCase {
             plugin: animePlugin,
             context: context,
             listing: mangaDestination.listing,
-            title: mangaDestination.title
+            title: mangaDestination.title,
+            operationID: UUID()
         )
         let mangaVM = ListingViewModel(destination: mangaDestination)
         let animeVM = ListingViewModel(destination: animeDestination)
@@ -456,7 +457,8 @@ final class ListingViewModelTests: XCTestCase {
             plugin: pr7bPlugin(),
             context: context,
             listing: Listing(id: listingID, name: title, kind: 1),
-            title: title
+            title: title,
+            operationID: UUID()
         )
     }
 

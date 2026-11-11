@@ -27,7 +27,7 @@ struct DownloadRuntimeTests {
                 foregroundLoads.increment()
                 return ItoRunner()
             },
-            downloadRunnerLoader: { _, _, _, _ in
+            downloadRunnerLoader: { _, _, _, _, _, _ in
                 downloadLoads.increment()
                 return ItoRunner()
             }
@@ -36,14 +36,14 @@ struct DownloadRuntimeTests {
         let recorder = DownloadPolicyRecorder()
         let modules = PluginRunnerHostModules(
             net: DownloadNetModule(
-                inner: ScriptedInnerNet(),
+                inner: ScriptedInnerNet(contexts: NetworkContextRecorder()),
                 gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver()),
                 recorder: recorder
             ),
             webview: DownloadWebviewModule(recorder: recorder)
         )
 
-        _ = try await manager.makeDownloadRuntime(for: "download.source", modules: modules)
+        _ = try await manager.makeDownloadRuntime(for: "download.source", modules: modules, operation: makeTestNetworkOperation(.manualBulkDownload), frozenScope: nil)
 
         #expect(downloadLoads.count == 1)
         #expect(foregroundLoads.count == 0)
@@ -59,19 +59,19 @@ struct DownloadRuntimeTests {
             pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
             runnerLoader: { _, _, _ in ItoRunner() },
-            downloadRunnerLoader: { _, _, _, _ in ItoRunner() }
+            downloadRunnerLoader: { _, _, _, _, _, _ in ItoRunner() }
         )
         manager.publishPreparedInstalledPlugins([Self.installedPlugin().id: Self.installedPlugin()])
         let recorder = DownloadPolicyRecorder()
         let modules = PluginRunnerHostModules(
             net: DownloadNetModule(
-                inner: ScriptedInnerNet(),
+                inner: ScriptedInnerNet(contexts: NetworkContextRecorder()),
                 gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver()),
                 recorder: recorder
             ),
             webview: DownloadWebviewModule(recorder: recorder)
         )
-        let runtime = try await manager.makeDownloadRuntime(for: "download.source", modules: modules)
+        let runtime = try await manager.makeDownloadRuntime(for: "download.source", modules: modules, operation: makeTestNetworkOperation(.manualBulkDownload), frozenScope: nil)
         #expect(runtime.isPluginCurrent())
 
         manager.publishPreparedInstalledPlugins([Self.installedPlugin().id: Self.installedPlugin()])
@@ -86,16 +86,16 @@ struct DownloadRuntimeTests {
             pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
             runnerLoader: { _, _, _ in ItoRunner() },
-            downloadRunnerLoader: { _, _, _, _ in ItoRunner() }
+            downloadRunnerLoader: { _, _, _, _, _, _ in ItoRunner() }
         )
         let recorder = DownloadPolicyRecorder()
         let modules = PluginRunnerHostModules(
-            net: ScriptedInnerNet(),
+            net: ScriptedInnerNet(contexts: NetworkContextRecorder()),
             webview: DownloadWebviewModule(recorder: recorder)
         )
 
         await #expect(throws: URLError.self) {
-            try await manager.makeDownloadRuntime(for: "not.installed", modules: modules)
+            try await manager.makeDownloadRuntime(for: "not.installed", modules: modules, operation: makeTestNetworkOperation(.manualBulkDownload), frozenScope: nil)
         }
     }
 

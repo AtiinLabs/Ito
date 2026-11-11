@@ -64,7 +64,8 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
         )
         let factory = MediaDetailReaderViewFactory(
             mangaReaderDependencies: .unavailable(),
-            novelReaderDependencies: dependencies
+            novelReaderDependencies: dependencies,
+            networkContexts: PluginNetworkContexts()
         )
         let runner = ItoRunner()
 

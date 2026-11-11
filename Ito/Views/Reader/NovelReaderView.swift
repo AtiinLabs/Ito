@@ -124,7 +124,8 @@ struct NovelReaderView: View {
                 lineSpacing: viewModel.lineSpacing,
                 theme: viewModel.theme,
                 prefetchChapters: viewModel.prefetchChapters,
-                onLoadNextChapter: { viewModel.loadNextChapter() },
+                // The paged view only calls this when Seamless Reading prefetches the next chapter.
+                onLoadNextChapter: { viewModel.loadNextChapter(trigger: .seamless) },
                 appendFailed: viewModel.appendFailed,
                 onRetryNextChapter: { viewModel.retryNextChapter() },
                 boundaryNotice: viewModel.loadedChapters.last.flatMap {
@@ -250,7 +251,7 @@ struct NovelReaderView: View {
                     .frame(maxWidth: .infinity)
                     .padding()
                 } else if !viewModel.prefetchChapters {
-                    Button(action: { viewModel.loadNextChapter() }) {
+                    Button(action: { viewModel.loadNextChapter(trigger: .reader) }) {
                         VStack(spacing: 4) {
                             Text("Next Chapter")
                                 .font(.caption.weight(.semibold))

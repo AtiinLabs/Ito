@@ -213,7 +213,7 @@ struct ReaderChapterBoundaryTests {
 
         // Loaded from the source before its copy finished: it stays pinned there.
         let pinned = ResolvingMangaPageLoader(pluginID: "plugin.test", local: store, remote: SourceOnlyPages())
-        _ = try await pinned.pages(for: entry, chapter: Self.p5)
+        _ = try await pinned.pages(for: entry, chapter: Self.p5, operation: makeTestNetworkOperation())
         let pinnedModel = MangaReaderViewModel(
             pageLoader: pinned,
             pluginID: "plugin.test",
@@ -406,7 +406,7 @@ struct ReaderChapterBoundaryTests {
         await subject.viewModel.waitForCurrentMainLoadForTesting()
 
         #expect(label(subject.viewModel.boundaryAfter(chapters[1])) == "notAvailableOffline:x3")
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
         await subject.viewModel.waitForAllOperationsForTesting()
 
         #expect(subject.loader.callCount(for: "x3") == 0)
@@ -494,7 +494,7 @@ struct ReaderChapterBoundaryTests {
         subject.loader.enqueue(.pages([Page(index: 0, content: .text("two"))]), for: "x2")
         subject.viewModel.start()
         await subject.viewModel.waitForCurrentMainLoadForTesting()
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
         subject.viewModel.disappear()
 
         subject.loader.enqueue(.pages([Page(index: 0, content: .text("three"))]), for: "x3")
@@ -521,7 +521,7 @@ struct ReaderChapterBoundaryTests {
         subject.loader.enqueue(.pages([Page(index: 0, content: .text("two"))]), for: "x2")
         subject.viewModel.start()
         await subject.viewModel.waitForCurrentMainLoadForTesting()
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
 
         subject.viewModel.setPrefetchChapters(false)
         subject.loader.enqueue(.pages([Page(index: 0, content: .text("three"))]), for: "x3")
@@ -607,7 +607,8 @@ struct ReaderChapterBoundaryTests {
             mangaReaderDependencies: base.dependencies,
             novelReaderDependencies: novelBase.dependencies,
             downloads: UnavailableMediaDetailDownloads(),
-            connectivity: ConnectivityFake(isOffline: true)
+            connectivity: ConnectivityFake(isOffline: true),
+            networkContexts: PluginNetworkContexts()
         )
         let pages = factory.makeMangaViewModel(
             content: ReaderContentSource(remote: ItoRunner()),
@@ -655,7 +656,8 @@ struct ReaderChapterBoundaryTests {
         let factory = MediaDetailReaderViewFactory(
             mangaReaderDependencies: base.dependencies,
             downloads: MediaDetailDownloadsFake(isAvailable: true),
-            connectivity: connectivity
+            connectivity: connectivity,
+            networkContexts: PluginNetworkContexts()
         )
         let viewModel = factory.makeMangaViewModel(
             content: ReaderContentSource(remote: ItoRunner()),
@@ -701,7 +703,7 @@ private final class ChangeCounter {
 /// A source that serves one remote page for any chapter.
 @MainActor
 private final class SourceOnlyPages: MangaPageLoading {
-    func pages(for entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
+    func pages(for entry: MediaEntry, chapter: Chapter, operation: PluginNetworkOperation) async throws -> [Page] {
         _ = entry
         return [Page(index: 0, content: .url("https://remote.example.test/\(chapter.key)/p0000.jpg"))]
     }

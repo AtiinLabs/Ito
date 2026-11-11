@@ -22,8 +22,11 @@ final class FakeLibraryUpdateSource: LibraryUpdateSource {
         self.installedPluginIDs = installedPluginIDs
     }
 
-    func fetchUpdate(for item: LibraryItem) async throws -> UpdateManager.SuccessfulUpdate {
+    private(set) var operations: [PluginNetworkOperation] = []
+
+    func fetchUpdate(for item: LibraryItem, operation: PluginNetworkOperation) async throws -> UpdateManager.SuccessfulUpdate {
         checkedItemIDs.append(item.id)
+        operations.append(operation)
         onCheck?()
         await gate?.enter()
         if cancelledItemIDs.contains(item.id) { throw CancellationError() }
@@ -62,6 +65,29 @@ final class TestClock {
 @MainActor
 struct UpdateRunTests {
     private let start = Date(timeIntervalSince1970: 1_700_000_000)
+
+    @Test func aBackgroundRunAndAManualRunEachUseOneOperationPerRunWithTheirOwnPurpose() async throws {
+        let source = FakeLibraryUpdateSource(installedPluginIDs: ["p", "q"])
+        let (database, manager, _) = try await makeManager(
+            items: [Self.item("a", plugin: "p"), Self.item("b", plugin: "q")],
+            source: source,
+            clock: TestClock(start)
+        )
+        defer { database.cleanup() }
+
+        _ = await manager.checkForUpdatesInBackground()
+        let background = source.operations
+        #expect(background.count == 2)
+        #expect(Set(background.map(\.operationID)).count == 1)
+        #expect(background.allSatisfy { $0.purpose == .automaticLibraryUpdate })
+
+        try await manager.checkForUpdates()
+        let manual = Array(source.operations.dropFirst(background.count))
+        #expect(manual.count == 2)
+        #expect(Set(manual.map(\.operationID)).count == 1)
+        #expect(manual.allSatisfy { $0.purpose == .manualCatalogRefresh })
+        #expect(manual.first?.operationID != background.first?.operationID)
+    }
 
     @Test func aRunBeforeSettingsAreReadyDoesNotBlockLaterRuns() async throws {
         let source = FakeLibraryUpdateSource(installedPluginIDs: ["p"])

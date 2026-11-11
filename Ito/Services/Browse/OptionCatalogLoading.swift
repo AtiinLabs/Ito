@@ -23,6 +23,8 @@ final class OptionCatalogLoading {
 
     func load(_ request: OptionRequest) async throws -> Page {
         let context = try await runnerProvider.sourceRunnerContext(for: pluginID)
-        return Page(options: try await context.loadOptionPage(request), context: context)
+        // Each page request is its own interactive operation.
+        let options = try await context.loadOptionPage(request, operationID: UUID())
+        return Page(options: options, context: context)
     }
 }

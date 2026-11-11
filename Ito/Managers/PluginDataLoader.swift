@@ -5,9 +5,9 @@ import ito_runner
 /// The optional image exports needed by the loader. The actor keeps WASM resolution serialized;
 /// native HTTP work starts only after these calls return.
 protocol PluginImageRunner: Sendable {
-    func getImageRequest(_ locator: String) async throws -> PluginImageRequest?
-    func getImageOrigins() async throws -> [String]?
-    func handleImage(_ locator: String) async throws -> Data?
+    func getImageRequest(_ locator: String, context: NetworkOperationContext) async throws -> PluginImageRequest?
+    func getImageOrigins(context: NetworkOperationContext) async throws -> [String]?
+    func handleImage(_ locator: String, context: NetworkOperationContext) async throws -> Data?
 }
 
 extension ItoRunner: PluginImageRunner {}
@@ -17,6 +17,7 @@ extension ItoRunner: PluginImageRunner {}
 public final class PluginDataLoader: DataLoading, @unchecked Sendable {
     private let defaultLoader: any DataLoading
     private let runnerProvider: @Sendable (String) async throws -> any PluginImageRunner
+    private let networkContexts: PluginNetworkContexts
     private let runnerEvictor: (@Sendable (String, any PluginImageRunner) async -> Void)?
     private let imageTransport: PluginImageTransport
 
@@ -27,6 +28,7 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
         self.init(
             configuration: configuration,
             trust: pluginManager.pluginSettingsStore.trust,
+            contexts: pluginManager.pluginSettingsStore.networkContexts,
             runnerProvider: { try await pluginManager.getImageRunner(for: $0) },
             runnerEvictor: { pluginId, runner in
                 if let itoRunner = runner as? ItoRunner {
@@ -41,6 +43,7 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
     init(
         configuration: URLSessionConfiguration,
         trust: PluginTrustStore? = nil,
+        contexts: PluginNetworkContexts,
         defaultLoader: (any DataLoading)? = nil,
         runnerProvider: @escaping @Sendable (String) async throws -> any PluginImageRunner,
         runnerEvictor: (@Sendable (String, any PluginImageRunner) async -> Void)? = nil
@@ -48,6 +51,7 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
         self.defaultLoader = defaultLoader ?? DataLoader(configuration: configuration)
         self.runnerProvider = runnerProvider
         self.runnerEvictor = runnerEvictor
+        self.networkContexts = contexts
         self.imageTransport = PluginImageTransport(configuration: configuration, trust: trust)
     }
 
@@ -70,7 +74,12 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                 usedRunner = runner
                 try Task.checkCancellation()
 
-                switch try await PluginImageResolution.resolve(locator, runner: runner) {
+                // One `ito://` load is one operation: every export of its resolution shares the ID and scope.
+                let operation = PluginNetworkOperation(purpose: .coverImage, operationID: UUID())
+                let contexts = networkContexts
+                switch try await PluginImageResolution.resolve(locator, runner: runner, context: {
+                    contexts.context(pluginID: pluginId, operation)
+                }) {
                 case .fetch(let target, let headers, let allowedOrigins):
                     let (data, response) = try await imageTransport.fetch(
                         url: target,

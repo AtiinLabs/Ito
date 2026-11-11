@@ -196,6 +196,25 @@ final class SearchViewModelTests: XCTestCase {
         XCTAssertEqual(executor.invocations.map(\.query), ["query"])
     }
 
+    func testEverySourceOfOneSearchRunSharesAnInteractiveOperationAndEachRunGetsItsOwn() async {
+        let other = SearchPluginDescriptor(id: "plugin.other", name: "Other", kinds: [.manga])
+        let executor = SearchViewModelRecordingExecutor(plugins: [.manga(), other])
+        let viewModel = makeViewModel(executor: executor)
+
+        viewModel.performSearch(query: "one")
+        await executor.waitForInvocations(2)
+        let first = executor.operations
+        XCTAssertEqual(first.count, 2)
+        XCTAssertEqual(Set(first.map(\.operationID)).count, 1)
+        XCTAssertTrue(first.allSatisfy { $0.purpose == .interactiveSearch })
+
+        viewModel.performSearch(query: "two")
+        await executor.waitForInvocations(4)
+        let second = Array(executor.operations.dropFirst(first.count))
+        XCTAssertEqual(second.count, 2)
+        XCTAssertNotEqual(second.first?.operationID, first.first?.operationID)
+    }
+
     func testInitialStateIsIdle() {
         let viewModel = makeViewModel()
 
@@ -552,18 +571,31 @@ private final class SearchViewModelRecordingExecutor: SearchPluginExecuting {
     var errorsByPluginID: [String: any Error] = [:]
     private(set) var invocations: [Invocation] = []
     private(set) var evictedPluginIDs: [String] = []
+    private(set) var operations: [PluginNetworkOperation] = []
+    private var invocationWaiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
 
     init(plugins: [SearchPluginDescriptor]) {
         self.plugins = plugins
+    }
+
+    /// Returns once `count` searches have reached the executor.
+    func waitForInvocations(_ count: Int) async {
+        if invocations.count >= count { return }
+        await withCheckedContinuation { invocationWaiters.append((count, $0)) }
     }
 
     func search(
         plugin: SearchPluginDescriptor,
         kind: MediaKind?,
         query: String,
-        limit: Int
+        limit: Int,
+        operation: PluginNetworkOperation
     ) async throws -> [PluginSearchResult] {
         invocations.append(.init(pluginID: plugin.id, kind: kind, query: query, limit: limit))
+        operations.append(operation)
+        let ready = invocationWaiters.filter { invocations.count >= $0.count }
+        invocationWaiters.removeAll { invocations.count >= $0.count }
+        ready.forEach { $0.continuation.resume() }
         if let error = errorsByPluginID[plugin.id] { throw error }
         return resultsByPluginID[plugin.id] ?? [.result(id: plugin.id)]
     }
@@ -595,7 +627,8 @@ private final class SearchViewModelSuspendingExecutor: SearchPluginExecuting {
         plugin: SearchPluginDescriptor,
         kind: MediaKind?,
         query: String,
-        limit: Int
+        limit: Int,
+        operation: PluginNetworkOperation
     ) async throws -> [PluginSearchResult] {
         _ = plugin
         _ = limit
@@ -663,7 +696,7 @@ private extension PluginSearchResult {
             subtitle: nil,
             destination: .manga(
                 pluginID: "plugin.manga",
-                context: ItoRunnerSearchContext(runner: runner),
+                context: ItoRunnerSearchContext(runner: runner, pluginID: "plugin.test", contexts: PluginNetworkContexts()),
                 media: Manga(key: id, title: title ?? id)
             )
         )

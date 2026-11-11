@@ -7,6 +7,8 @@ struct SourceListingDestination {
     let context: any SourceRunnerContext
     let listing: Listing
     let title: String
+    /// One operation per opened listing: every page of the listing is one export of it.
+    let operationID: UUID
 }
 
 struct SourceSettingsDestination {
@@ -255,7 +257,7 @@ final class SourceViewModel: ObservableObject {
         capabilitiesOperationID = operationID
         let result: SearchCapabilities?
         do {
-            result = try await context.loadSearchCapabilities(kind: kind)
+            result = try await context.loadSearchCapabilities(kind: kind, operationID: operationID)
         } catch {
             guard !(error is CancellationError) else { return }
             result = nil
@@ -289,7 +291,7 @@ final class SourceViewModel: ObservableObject {
             guard let self else { return }
             do {
                 if let searchDebounceNanoseconds { try await Task.sleep(nanoseconds: searchDebounceNanoseconds) }
-                let suggestions = try await context.loadSearchSuggestions(query: query, kind: kind)
+                let suggestions = try await context.loadSearchSuggestions(query: query, kind: kind, operationID: generation)
                 guard !Task.isCancelled, suggestionGeneration == generation,
                       isCurrentQuery(query, kind: kind) else { return }
                 searchSuggestions = suggestions ?? []
@@ -324,7 +326,8 @@ final class SourceViewModel: ObservableObject {
             plugin: plugin,
             context: context,
             listing: listing,
-            title: title
+            title: title,
+            operationID: UUID()
         )
     }
 
@@ -478,7 +481,7 @@ final class SourceViewModel: ObservableObject {
         do {
             let nextContext = try await runnerProvider.sourceRunnerContext(for: plugin.id)
             try Task.checkCancellation()
-            let settings = try await loadSettings(from: nextContext)
+            let settings = try await loadSettings(from: nextContext, operationID: operationID)
             try Task.checkCancellation()
             guard isCurrentLoad(operationID) else { return }
             // Published before the home loads: a home that fails for want of settings needs the
@@ -495,7 +498,7 @@ final class SourceViewModel: ObservableObject {
             await refreshSearchCapabilities()
             try Task.checkCancellation()
             guard isCurrentLoad(operationID) else { return }
-            let layout = try await nextContext.loadHome()
+            let layout = try await nextContext.loadHome(operationID: operationID)
             try Task.checkCancellation()
             guard isCurrentLoad(operationID) else { return }
 
@@ -544,7 +547,8 @@ final class SourceViewModel: ObservableObject {
                 kind: kind,
                 query: query,
                 page: 1,
-                filterValues: filterValues
+                filterValues: filterValues,
+                operationID: operationID
             )
             try Task.checkCancellation()
             guard isCurrentSearch(operationID) else { return }
@@ -596,9 +600,9 @@ final class SourceViewModel: ObservableObject {
 
     /// The plugin's settings schema (nil when it has none), or why it couldn't be read. A crash
     /// is not kept as a reason: the home would otherwise load on the crashed runner.
-    private func loadSettings(from context: any SourceRunnerContext) async throws -> SettingsLoad {
+    private func loadSettings(from context: any SourceRunnerContext, operationID: UUID) async throws -> SettingsLoad {
         do {
-            return .surface(try await context.loadSettingsSurface())
+            return .surface(try await context.loadSettingsSurface(operationID: operationID))
         } catch let error as PluginCallError where error.kind == .crashed {
             throw error
         } catch is CancellationError {

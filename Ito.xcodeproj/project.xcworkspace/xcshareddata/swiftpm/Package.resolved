@@ -22,7 +22,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AtiinLabs/ito-runner.git",
       "state" : {
-        "revision" : "a36484052cace894d186a7fcb7682483fed2a3ba"
+        "revision" : "f7f487bfff71cdc5cbbe72ae9ad2d7de17f3ef8c"
       }
     },
     {
@@ -154,7 +154,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AtiinLabs/WasmKit.git",
       "state" : {
-        "revision" : "c76d7ea351c10480c6473ab522fdc1b622ed9432"
+        "revision" : "c111d9111c52c23b2aaca1cea45d8495d64d8bf3"
       }
     },
     {

@@ -233,7 +233,7 @@ struct PluginSettingsDiagnosticServiceTests {
         let request = NetRequest(url: "https://example.com", method: "GET", headers: [:], body: nil)
 
         await #expect(throws: URLError.self) {
-            try await net.fetch(request: request)
+            try await net.fetch(request: request, context: makeTestNetworkContext())
         }
     }
 
@@ -242,10 +242,10 @@ struct PluginSettingsDiagnosticServiceTests {
         let request = WebviewRequest(url: "https://example.com", script: nil)
 
         await #expect(throws: ItoError.self) {
-            try await webview.loadUrl(request: request)
+            try await webview.loadUrl(request: request, context: makeTestNetworkContext())
         }
         await #expect(throws: ItoError.self) {
-            try await webview.executeJs(script: "console.log('hi')")
+            try await webview.executeJs(script: "console.log('hi')", context: makeTestNetworkContext())
         }
     }
 

@@ -22,8 +22,8 @@ final class MediaDetailRelinkNoticeTests: XCTestCase {
             media: media,
             pluginID: Self.pluginID,
             routeContext: MediaDetailRouteContext<Manga>(
-                loadDetails: { try await route.load($0) },
-                searchForRelink: { try await route.search($0) },
+                loadDetails: { try await route.load($0, operation: $1) },
+                searchForRelink: { try await route.search($0, operationID: $1) },
                 makeReaderDestination: { parent, selected in
                     .pages(
                         id: UUID(),

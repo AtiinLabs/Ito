@@ -75,6 +75,9 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
     /// Server certificates the user trusted for each source's self-hosted servers.
     public let trust: PluginTrustStore
     let completionStore: PluginCompletionStore
+    /// Host contexts for runner exports. Their authorization scopes follow `pluginCompletionScope` commits.
+    let networkContexts: PluginNetworkContexts
+    private let networkScopeObservation: PluginNetworkScopeObservation
     private let dbPool: DatabasePool
     private let standardApplicationDomain: String
     private let domainFactory: DomainFactory
@@ -125,6 +128,19 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
             }
         }
         dbPool.add(transactionObserver: discoverySources, extent: .observerLifetime)
+        let contexts = PluginNetworkContexts()
+        let scopeObservation = PluginNetworkScopeObservation(contexts: contexts)
+        networkContexts = contexts
+        networkScopeObservation = scopeObservation
+        do {
+            // Added and read in one writer section, so no rotation falls between the read and the observer.
+            try dbPool.writeWithoutTransaction { db in
+                db.add(transactionObserver: scopeObservation, extent: .observerLifetime)
+                contexts.replaceEpochs(try PluginNetworkScopeObservation.epochs(in: db))
+            }
+        } catch {
+            AppLogger.plugin.error("PluginSettingsStore: source authorization scopes could not be read")
+        }
     }
 
     internal func observeImageCacheEpoch(

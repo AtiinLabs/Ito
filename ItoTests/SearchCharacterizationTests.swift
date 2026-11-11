@@ -358,7 +358,8 @@ private final class RecordingSearchExecutor: SearchPluginExecuting {
         plugin: SearchPluginDescriptor,
         kind: MediaKind?,
         query: String,
-        limit: Int
+        limit: Int,
+        operation: PluginNetworkOperation
     ) async throws -> [PluginSearchResult] {
         invocations.append(.init(pluginID: plugin.id, query: query, limit: limit))
         if let error = errorsByPluginID[plugin.id] {
@@ -401,7 +402,8 @@ private final class SuspendingSearchExecutor: SearchPluginExecuting {
         plugin: SearchPluginDescriptor,
         kind: MediaKind?,
         query: String,
-        limit: Int
+        limit: Int,
+        operation: PluginNetworkOperation
     ) async throws -> [PluginSearchResult] {
         _ = limit
         startedPluginIDs.append(plugin.id)
@@ -468,7 +470,7 @@ private extension PluginSearchResult {
             subtitle: nil,
             destination: .manga(
                 pluginID: "plugin.manga",
-                context: ItoRunnerSearchContext(runner: runner),
+                context: ItoRunnerSearchContext(runner: runner, pluginID: "plugin.test", contexts: PluginNetworkContexts()),
                 media: Manga(key: id, title: id)
             )
         )

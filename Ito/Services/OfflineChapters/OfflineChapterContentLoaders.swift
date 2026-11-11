@@ -198,13 +198,13 @@ final class ResolvingMangaPageLoader: MangaPageLoading, DownloadedCopyReopening 
         resolver.readLocalFirst(chapterKey: chapterKey)
     }
 
-    func pages(for entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
+    func pages(for entry: MediaEntry, chapter: Chapter, operation: PluginNetworkOperation) async throws -> [Page] {
         if case .local(let lease) = try await resolver.source(for: entry, chapter: chapter),
            let pages = try await resolver.localPages(lease, chapter: chapter) {
             return pages
         }
         guard let remote else { throw OfflineReadError.notDownloaded }
-        return try await remote.pages(for: entry, chapter: chapter)
+        return try await remote.pages(for: entry, chapter: chapter, operation: operation)
     }
 }
 
@@ -242,13 +242,13 @@ final class ResolvingNovelChapterLoader: NovelChapterLoading, DownloadedCopyReop
         resolver.readLocalFirst(chapterKey: chapterKey)
     }
 
-    func content(for entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
+    func content(for entry: MediaEntry, chapter: Chapter, operation: PluginNetworkOperation) async throws -> [Page] {
         if case .local(let lease) = try await resolver.source(for: entry, chapter: chapter),
            let pages = try await resolver.localPages(lease, chapter: chapter) {
             return pages
         }
         guard let remote else { throw OfflineReadError.notDownloaded }
-        return try await remote.content(for: entry, chapter: chapter)
+        return try await remote.content(for: entry, chapter: chapter, operation: operation)
     }
 }
 

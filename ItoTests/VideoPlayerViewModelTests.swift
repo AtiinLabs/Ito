@@ -32,6 +32,7 @@ final class VideoPlayerViewModelTests: XCTestCase {
         XCTAssertEqual(subject.history.requests[0].pluginID, "plugin.test")
         XCTAssertEqual(subject.streamLoader.requests[0].anime.key, "exact-anime")
         XCTAssertEqual(subject.streamLoader.requests[0].episode.key, "exact-episode")
+        XCTAssertEqual(subject.streamLoader.operations.map(\.purpose), [.foregroundReading])
         XCTAssertEqual(subject.viewModel.loadPhase, .content)
         XCTAssertEqual(subject.viewModel.videos.map(\.url), ["first", "second"])
         XCTAssertEqual(subject.viewModel.selectedVideo?.url, "first")

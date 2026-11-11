@@ -3,15 +3,21 @@ import ito_runner
 
 /// Lists the pages of one chapter. `ItoRunner` provides it; tests substitute a fake.
 nonisolated protocol ChapterPageProviding: Sendable {
-    func getChapterPages(entry: MediaEntry, chapter: Chapter) async throws -> [Page]
+    func getChapterPages(entry: MediaEntry, chapter: Chapter, context: NetworkOperationContext) async throws -> [Page]
 }
 
 extension ItoRunner: ChapterPageProviding {}
 
 /// Builds the runtime one download attempt runs on. `PluginManager` provides it; tests substitute a fake.
+/// Every runner of the attempt runs under the same `operation` and `frozenScope` (the job's source epoch).
 protocol DownloadRuntimeProviding: AnyObject {
     @MainActor
-    func makeDownloadRuntime(for pluginId: String, modules: PluginRunnerHostModules) async throws -> DownloadPluginRuntime
+    func makeDownloadRuntime(
+        for pluginId: String,
+        modules: PluginRunnerHostModules,
+        operation: PluginNetworkOperation,
+        frozenScope: String?
+    ) async throws -> DownloadPluginRuntime
 }
 
 /// What one download attempt runs on. Every runner here belongs to that attempt alone: none is taken

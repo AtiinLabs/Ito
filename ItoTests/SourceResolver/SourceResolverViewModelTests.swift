@@ -9,6 +9,7 @@ final class FakePluginProvider: SourceResolverPluginProviding {
     var installedPlugins: [String: InstalledPlugin] = [:] {
         didSet { installedPluginsSubject.send(installedPlugins) }
     }
+    let networkContexts = PluginNetworkContexts()
     var configuredAdapters: [String: any PluginSearching] = [:]
     private var runners: [String: ItoRunner] = [:]
     private(set) var runnerRequestCount = 0
@@ -36,11 +37,11 @@ final class FakePluginProvider: SourceResolverPluginProviding {
         if let runnerError { throw runnerError }
         guard installedPlugins[pluginID] != nil else { throw URLError(.badURL) }
         if let runner = runners[pluginID] {
-            return ItoRunnerSourceContext(runner: runner)
+            return ItoRunnerSourceContext(runner: runner, pluginID: pluginID, contexts: networkContexts)
         }
         let runner = ItoRunner()
         runners[pluginID] = runner
-        return ItoRunnerSourceContext(runner: runner)
+        return ItoRunnerSourceContext(runner: runner, pluginID: pluginID, contexts: networkContexts)
     }
 
     func evictSourceRunner(for pluginID: String) {
@@ -53,7 +54,7 @@ final class FakePluginProvider: SourceResolverPluginProviding {
         }
         let runner = runners[pluginID] ?? ItoRunner()
         runners[pluginID] = runner
-        continuation.resume(returning: ItoRunnerSourceContext(runner: runner))
+        continuation.resume(returning: ItoRunnerSourceContext(runner: runner, pluginID: pluginID, contexts: networkContexts))
     }
 
     func sourceSearchAdapter(
@@ -84,7 +85,7 @@ actor FakePluginSearchAdapter: PluginSearching {
         self.mediaType = mediaType
     }
 
-    func search(query: String) async throws -> [ResolvedPluginMedia] {
+    func search(query: String, operation: PluginNetworkOperation) async throws -> [ResolvedPluginMedia] {
         if let err = errorToThrow { throw err }
         return resultsToReturn
     }

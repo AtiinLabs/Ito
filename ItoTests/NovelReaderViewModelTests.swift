@@ -212,6 +212,54 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.history.requests.map(\.chapterKey), ["a", "b"])
     }
 
+    func testMainLoadIsForegroundReadingAndSeamlessNextChapterIsPrefetch() async {
+        let a = makeChapter("a", number: 1)
+        let b = makeChapter("b", number: 2)
+        let settings = NovelReaderSettingsSnapshot(
+            fontSize: 18,
+            lineSpacing: 8,
+            fontFamily: .system,
+            theme: .system,
+            isPaging: false,
+            prefetchChapters: true
+        )
+        let subject = makeSubject(chapters: [a, b], initial: a, settings: settings)
+        subject.loader.enqueue(.pages([page(1), page(2)]), for: "a")
+        subject.loader.enqueue(.pages([page(3)]), for: "b")
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+        let chapter = subject.viewModel.loadedChapters[0]
+
+        subject.viewModel.continuousPageAppeared(chapterID: chapter.id, pageIndex: 1)
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        XCTAssertEqual(subject.loader.requests.map(\.chapter.key), ["a", "b"])
+        XCTAssertEqual(subject.loader.operations.map(\.purpose), [.foregroundReading, .prefetch])
+    }
+
+    func testReaderRequestedNextChapterAndItsRetryAreForegroundReading() async {
+        let a = makeChapter("a", number: 1)
+        let b = makeChapter("b", number: 2)
+        let subject = makeSubject(chapters: [a, b], initial: a)
+        subject.loader.enqueue(.pages([page(1)]), for: "a")
+        subject.loader.enqueue(.failure(NovelReaderTestError.expected), for: "b")
+        subject.loader.enqueue(.pages([page(2)]), for: "b")
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        subject.viewModel.loadNextChapter(trigger: .reader)
+        await subject.viewModel.waitForAllOperationsForTesting()
+        XCTAssertTrue(subject.viewModel.appendFailed)
+        subject.viewModel.retryNextChapter()
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        XCTAssertEqual(subject.loader.requests.map(\.chapter.key), ["a", "b", "b"])
+        XCTAssertEqual(
+            subject.loader.operations.map(\.purpose),
+            [.foregroundReading, .foregroundReading, .foregroundReading]
+        )
+    }
+
     func testSwitchingModesReopensAtTheSamePlace() async {
         let a = makeChapter("a", number: 1)
         let subject = makeSubject(chapters: [a], initial: a)
@@ -259,7 +307,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         subject.loader.enqueue(.pages([page(2)]), for: "b")
         subject.viewModel.start()
         await subject.viewModel.waitForAllOperationsForTesting()
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
         await subject.viewModel.waitForAllOperationsForTesting()
         XCTAssertEqual(subject.viewModel.loadedChapters.count, 2)
         subject.loader.enqueue(.pages([page(9)]), for: "b")
@@ -391,8 +439,8 @@ final class NovelReaderViewModelTests: XCTestCase {
         await subject.viewModel.waitForAllOperationsForTesting()
         let baselineEffects = subject.history.requests.count
 
-        subject.viewModel.loadNextChapter()
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
+        subject.viewModel.loadNextChapter(trigger: .reader)
         await subject.loader.waitForPendingCount(1, for: "b")
         XCTAssertTrue(subject.viewModel.isLoadingNext)
         XCTAssertEqual(subject.loader.callCount(for: "b"), 1)
@@ -420,7 +468,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         subject.viewModel.start()
         await subject.viewModel.waitForAllOperationsForTesting()
 
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
 
         XCTAssertEqual(subject.loader.requests.map { $0.chapter.key }, ["a"])
         XCTAssertFalse(subject.viewModel.isLoadingNext)
@@ -437,7 +485,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         await subject.viewModel.waitForAllOperationsForTesting()
 
         XCTAssertNil(subject.viewModel.chapterAfter(b))
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
 
         XCTAssertEqual(subject.loader.requests.map { $0.chapter.key }, ["b"])
         XCTAssertEqual(subject.viewModel.loadedChapters.map { $0.chapter.key }, ["b"])
@@ -453,7 +501,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         subject.viewModel.start()
         await subject.viewModel.waitForAllOperationsForTesting()
 
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
         await subject.viewModel.waitForAllOperationsForTesting()
         XCTAssertEqual(subject.viewModel.loadPhase, .content)
         XCTAssertEqual(subject.viewModel.loadedChapters.map { $0.chapter.key }, ["a"])
@@ -461,7 +509,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertTrue(subject.viewModel.appendFailed)
 
         // Scrolling to the end or turning pages again does not retry by itself.
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
         XCTAssertEqual(subject.loader.callCount(for: "b"), 1)
 
         subject.viewModel.retryNextChapter()
@@ -479,7 +527,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         subject.loader.enqueue(.pages([page(1), page(2)]), for: "b")
         subject.viewModel.start()
         await subject.viewModel.waitForAllOperationsForTesting()
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
         await subject.viewModel.waitForAllOperationsForTesting()
         let chapterA = subject.viewModel.loadedChapters[0]
         let chapterB = subject.viewModel.loadedChapters[1]
@@ -505,7 +553,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         subject.loader.enqueue(.pages([page(30)]), for: "c")
         subject.viewModel.start()
         await subject.viewModel.waitForAllOperationsForTesting()
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
         await subject.loader.waitForPendingCount(1, for: "b")
 
         subject.viewModel.goToChapter(c)
@@ -527,9 +575,9 @@ final class NovelReaderViewModelTests: XCTestCase {
         subject.loader.enqueue(.suspended, for: "c")
         subject.viewModel.start()
         await subject.viewModel.waitForAllOperationsForTesting()
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
         await subject.viewModel.waitForAllOperationsForTesting()
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
         await subject.loader.waitForPendingCount(1, for: "c")
 
         subject.viewModel.pagedChapterChanged(subject.viewModel.loadedChapters[1].chapter)
@@ -549,7 +597,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         subject.loader.enqueue(.pages((0...5).map { page(Int32($0)) }), for: "b")
         subject.viewModel.start()
         await subject.viewModel.waitForAllOperationsForTesting()
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
         await subject.viewModel.waitForAllOperationsForTesting()
         let firstID = subject.viewModel.loadedChapters[0].id
         let lastID = subject.viewModel.loadedChapters[1].id
@@ -891,7 +939,7 @@ final class NovelReaderViewModelTests: XCTestCase {
             chapterID: subject.viewModel.loadedChapters[0].id
         )
         await subject.progress.waitForPendingCount(1)
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
         await subject.loader.waitForPendingCount(1, for: "b")
 
         subject.viewModel.disappear()
@@ -955,7 +1003,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         // Neither neighbour is text: the reader ends here instead of skipping over them.
         XCTAssertNil(subject.viewModel.nextChapter)
         XCTAssertNil(subject.viewModel.previousChapter)
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
         XCTAssertEqual(subject.loader.requests.map { $0.chapter.key }, ["v2"])
     }
 
@@ -999,7 +1047,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         subject.loader.enqueue(.pages([page(2)]), for: b.key)
         subject.viewModel.start()
         await subject.viewModel.waitForAllOperationsForTesting()
-        subject.viewModel.loadNextChapter()
+        subject.viewModel.loadNextChapter(trigger: .reader)
         await subject.viewModel.waitForAllOperationsForTesting()
         return subject
     }

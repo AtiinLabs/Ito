@@ -129,6 +129,20 @@ nonisolated final class DownloadCallCounter: @unchecked Sendable {
     }
 }
 
+/// Records the host contexts a fake runner or transport received, in call order.
+nonisolated final class NetworkContextRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var received: [NetworkOperationContext] = []
+
+    var snapshot: [NetworkOperationContext] {
+        lock.withLock { received }
+    }
+
+    func record(_ context: NetworkOperationContext) {
+        lock.withLock { received.append(context) }
+    }
+}
+
 /// The plugin-side state a scripted source exposes to a download attempt: what it lists, whether the
 /// installed plugin and its trust still match, and what its hook does while listing.
 nonisolated final class ScriptedSourceState: @unchecked Sendable {
@@ -141,6 +155,7 @@ nonisolated final class ScriptedSourceState: @unchecked Sendable {
     private var pages: [Page]
     let imageRunnerCreations = DownloadCallCounter()
     let listings = DownloadCallCounter()
+    let contexts = NetworkContextRecorder()
 
     init(pages: [Page]) {
         self.pages = pages
@@ -210,8 +225,9 @@ nonisolated final class ScriptedChapterPages: ChapterPageProviding, @unchecked S
         self.modules = modules
     }
 
-    func getChapterPages(entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
+    func getChapterPages(entry: MediaEntry, chapter: Chapter, context: NetworkOperationContext) async throws -> [Page] {
         state.listings.increment()
+        state.contexts.record(context)
         state.recordListing(entry: entry, chapter: chapter)
         if let hook = state.currentListingHook {
             await hook(modules)
@@ -233,25 +249,40 @@ nonisolated struct ScriptedPluginError: Error {}
 
 /// An image runner that answers every `ito://` image with JPEG bytes.
 nonisolated final class ScriptedImageRunner: PluginImageRunner, @unchecked Sendable {
-    func getImageRequest(_ locator: String) async throws -> PluginImageRequest? {
-        nil
+    private let contexts: NetworkContextRecorder
+
+    init(contexts: NetworkContextRecorder) {
+        self.contexts = contexts
     }
 
-    func getImageOrigins() async throws -> [String]? {
-        nil
+    func getImageRequest(_ locator: String, context: NetworkOperationContext) async throws -> PluginImageRequest? {
+        contexts.record(context)
+        return nil
     }
 
-    func handleImage(_ locator: String) async throws -> Data? {
-        OfflineStoreFixture.jpeg("ito-\(locator)")
+    func getImageOrigins(context: NetworkOperationContext) async throws -> [String]? {
+        contexts.record(context)
+        return nil
+    }
+
+    func handleImage(_ locator: String, context: NetworkOperationContext) async throws -> Data? {
+        contexts.record(context)
+        return OfflineStoreFixture.jpeg("ito-\(locator)")
     }
 }
 
 /// The transport under the download's net module. It records calls and answers with an empty 200.
 nonisolated final class ScriptedInnerNet: NetModule, @unchecked Sendable {
     let calls = DownloadCallCounter()
+    private let contexts: NetworkContextRecorder
 
-    func fetch(request: NetRequest) async throws -> NetResponse {
+    init(contexts: NetworkContextRecorder) {
+        self.contexts = contexts
+    }
+
+    func fetch(request: NetRequest, context: NetworkOperationContext) async throws -> NetResponse {
         calls.increment()
+        contexts.record(context)
         return NetResponse(status: 200, headers: [:], body: [])
     }
 }
@@ -310,6 +341,9 @@ final class ScriptedRuntimeProvider: DownloadRuntimeProviding {
     let source: ScriptedSourceState
     var isInstalled = true
     private(set) var runtimeRequests = 0
+    /// The operation and frozen source epoch each runtime was requested with.
+    private(set) var operations: [PluginNetworkOperation] = []
+    private(set) var frozenScopes: [String?] = []
 
     init(source: ScriptedSourceState) {
         self.source = source
@@ -318,8 +352,15 @@ final class ScriptedRuntimeProvider: DownloadRuntimeProviding {
     /// Holds the next runtime load until the test releases it, as a slow plugin load does.
     var loadGate: DownloadTestGate?
 
-    func makeDownloadRuntime(for pluginId: String, modules: PluginRunnerHostModules) async throws -> DownloadPluginRuntime {
+    func makeDownloadRuntime(
+        for pluginId: String,
+        modules: PluginRunnerHostModules,
+        operation: PluginNetworkOperation,
+        frozenScope: String?
+    ) async throws -> DownloadPluginRuntime {
         runtimeRequests += 1
+        operations.append(operation)
+        frozenScopes.append(frozenScope)
         // Captured before the load, as the production runtime captures its authority.
         let source = source
         let revision = source.publicationRevision
@@ -339,7 +380,7 @@ final class ScriptedRuntimeProvider: DownloadRuntimeProviding {
             pages: ScriptedChapterPages(state: source, modules: modules),
             makeImageRunner: {
                 source.imageRunnerCreations.increment()
-                return ScriptedImageRunner()
+                return ScriptedImageRunner(contexts: source.contexts)
             },
             isPluginCurrent: { source.publicationRevision == revision },
             isTrustCurrent: { source.trustGeneration == trust }
@@ -362,6 +403,8 @@ final class DownloadWorkerFixture {
     let inner: ScriptedInnerNet
     let progress: DownloadProgressBoard
     let protectedEvents = PassthroughSubject<Void, Never>()
+    /// The host contexts every scripted export of this fixture records through.
+    let networkContexts = PluginNetworkContexts()
     let coordinator: DownloadQueueCoordinator
     let center: DownloadCenter
 
@@ -378,7 +421,7 @@ final class DownloadWorkerFixture {
         fetcher = ScriptedAssetFetcher()
         source = ScriptedSourceState(pages: pages)
         runtimes = ScriptedRuntimeProvider(source: source)
-        inner = ScriptedInnerNet()
+        inner = ScriptedInnerNet(contexts: source.contexts)
         progress = DownloadProgressBoard()
 
         let database = offline.database.dbPool
@@ -403,6 +446,7 @@ final class DownloadWorkerFixture {
             protectedData: offline.protectedData,
             protectedDataBecameAvailable: protectedEvents.eraseToAnyPublisher(),
             fetcher: fetcher,
+            contexts: networkContexts,
             progress: progress
         )
         center = DownloadCenter(

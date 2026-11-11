@@ -4,19 +4,24 @@ import Nuke
 
 @MainActor
 protocol MangaPageLoading: AnyObject {
-    func pages(for entry: MediaEntry, chapter: Chapter) async throws -> [Page]
+    func pages(for entry: MediaEntry, chapter: Chapter, operation: PluginNetworkOperation) async throws -> [Page]
 }
 
 @MainActor
 final class ItoRunnerMangaPageLoader: MangaPageLoading {
     let runner: ItoRunner
+    private let pluginID: String
+    private let contexts: PluginNetworkContexts
 
-    init(runner: ItoRunner) {
+    init(runner: ItoRunner, pluginID: String, contexts: PluginNetworkContexts) {
         self.runner = runner
+        self.pluginID = pluginID
+        self.contexts = contexts
     }
 
-    func pages(for entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
-        try await pluginCall { try await runner.getChapterPages(entry: entry, chapter: chapter) }
+    func pages(for entry: MediaEntry, chapter: Chapter, operation: PluginNetworkOperation) async throws -> [Page] {
+        let context = contexts.context(pluginID: pluginID, operation)
+        return try await pluginCall { try await runner.getChapterPages(entry: entry, chapter: chapter, context: context) }
     }
 }
 

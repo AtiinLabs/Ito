@@ -325,7 +325,7 @@ final class MediaDetailDownloadActionTests: XCTestCase {
             hasCustomCategories: false
         )
         let context = MediaDetailRouteContext<M>(
-            loadDetails: savedOnly ? nil : { $0 },
+            loadDetails: savedOnly ? nil : { media, _ in media },
             searchForRelink: nil,
             makeReaderDestination: { _, _ in
                 .pages(

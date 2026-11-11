@@ -32,7 +32,7 @@ final class PluginSettingsLoaderViewModel: ObservableObject {
         do {
             let context = try await runnerProvider.sourceRunnerContext(for: plugin.id)
             try Task.checkCancellation()
-            let surface = try await context.loadSettingsSurface()
+            let surface = try await context.loadSettingsSurface(operationID: operation)
             try Task.checkCancellation()
             guard generation == operation else { return }
             if let surface {

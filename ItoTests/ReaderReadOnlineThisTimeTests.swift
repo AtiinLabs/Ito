@@ -25,9 +25,9 @@ struct ReaderReadOnlineThisTimeTests {
             preference: .remoteThisTime(chapterKey: "chapter-1")
         )
 
-        let online = try await loader.pages(for: Self.entry, chapter: Self.first)
-        let neighbor = try await loader.pages(for: Self.entry, chapter: Self.second)
-        let onlineAgain = try await loader.pages(for: Self.entry, chapter: Self.first)
+        let online = try await loader.pages(for: Self.entry, chapter: Self.first, operation: makeTestNetworkOperation())
+        let neighbor = try await loader.pages(for: Self.entry, chapter: Self.second, operation: makeTestNetworkOperation())
+        let onlineAgain = try await loader.pages(for: Self.entry, chapter: Self.first, operation: makeTestNetworkOperation())
 
         #expect(remote.requestedKeys == ["chapter-1", "chapter-1"])
         #expect(Self.isRemote(online))
@@ -43,7 +43,7 @@ struct ReaderReadOnlineThisTimeTests {
         let remote = ScriptedRemotePages()
         let loader = ResolvingMangaPageLoader(pluginID: "plugin.test", local: store, remote: remote)
 
-        let pages = try await loader.pages(for: Self.entry, chapter: Self.first)
+        let pages = try await loader.pages(for: Self.entry, chapter: Self.first, operation: makeTestNetworkOperation())
 
         #expect(remote.requestedKeys.isEmpty)
         #expect(!Self.isRemote(pages))
@@ -60,7 +60,7 @@ struct ReaderReadOnlineThisTimeTests {
             preference: .remoteThisTime(chapterKey: "chapter-1")
         )
 
-        let pages = try await loader.pages(for: Self.entry, chapter: Self.first)
+        let pages = try await loader.pages(for: Self.entry, chapter: Self.first, operation: makeTestNetworkOperation())
 
         #expect(!Self.isRemote(pages))
         #expect(!loader.isReadingRemoteThisTime(chapterKey: "chapter-1"))
@@ -80,13 +80,13 @@ struct ReaderReadOnlineThisTimeTests {
         )
 
         await #expect(throws: RemoteFailure.offline) {
-            try await loader.pages(for: Self.entry, chapter: Self.first)
+            try await loader.pages(for: Self.entry, chapter: Self.first, operation: makeTestNetworkOperation())
         }
         #expect(loader.isReadingRemoteThisTime(chapterKey: "chapter-1"))
         #expect(loader.readsFromSource(chapterKey: "chapter-1"))
 
         loader.readDownloadedCopy(chapterKey: "chapter-1")
-        let pages = try await loader.pages(for: Self.entry, chapter: Self.first)
+        let pages = try await loader.pages(for: Self.entry, chapter: Self.first, operation: makeTestNetworkOperation())
 
         #expect(!loader.isReadingRemoteThisTime(chapterKey: "chapter-1"))
         #expect(!loader.readsFromSource(chapterKey: "chapter-1"))
@@ -105,11 +105,11 @@ struct ReaderReadOnlineThisTimeTests {
             remote: nil,
             preference: .remoteThisTime(chapterKey: "chapter-1")
         )
-        _ = try await loader.pages(for: Self.entry, chapter: Self.first)
+        _ = try await loader.pages(for: Self.entry, chapter: Self.first, operation: makeTestNetworkOperation())
         try await store.delete(OfflineStoreFixture.mangaEdition)
 
         loader.readDownloadedCopy(chapterKey: "chapter-1")
-        let pages = try await loader.pages(for: Self.entry, chapter: Self.first)
+        let pages = try await loader.pages(for: Self.entry, chapter: Self.first, operation: makeTestNetworkOperation())
 
         #expect(pages.count == 3)
     }
@@ -255,14 +255,14 @@ struct ReaderReadOnlineThisTimeTests {
             remote: nil
         )
         weak var released = open
-        let before = try await #require(open).content(for: Self.entry, chapter: Self.first)
+        let before = try await #require(open).content(for: Self.entry, chapter: Self.first, operation: makeTestNetworkOperation())
         #expect(Self.text(before) == "Version one.")
 
         try await store.delete(OfflineStoreFixture.mangaEdition)
         try await Self.publish(fixture, store, text: "Version two.")
 
         // The reader that is still open keeps reading the version it opened, and its files stay on disk.
-        let whileOpen = try await #require(open).content(for: Self.entry, chapter: Self.first)
+        let whileOpen = try await #require(open).content(for: Self.entry, chapter: Self.first, operation: makeTestNetworkOperation())
         #expect(Self.text(whileOpen) == "Version one.")
         #expect(fixture.fileSystem.childNames(of: fixture.versionsURL).count == 2)
 
@@ -274,7 +274,7 @@ struct ReaderReadOnlineThisTimeTests {
 
         // The next opening reads what is stored now.
         let reopened = ResolvingNovelChapterLoader(pluginID: "plugin.test", local: store, remote: nil)
-        let after = try await reopened.content(for: Self.entry, chapter: Self.first)
+        let after = try await reopened.content(for: Self.entry, chapter: Self.first, operation: makeTestNetworkOperation())
         #expect(Self.text(after) == "Version two.")
     }
 
@@ -312,7 +312,7 @@ private final class ScriptedRemotePages: MangaPageLoading {
         self.failure = failure
     }
 
-    func pages(for entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
+    func pages(for entry: MediaEntry, chapter: Chapter, operation: PluginNetworkOperation) async throws -> [Page] {
         _ = entry
         requestedKeys.append(chapter.key)
         if let failure { throw failure }
@@ -328,7 +328,7 @@ private final class ScriptedRemoteText: NovelChapterLoading {
         self.failure = failure
     }
 
-    func content(for entry: MediaEntry, chapter: Chapter) async throws -> [Page] {
+    func content(for entry: MediaEntry, chapter: Chapter, operation: PluginNetworkOperation) async throws -> [Page] {
         _ = (entry, chapter)
         throw failure
     }

@@ -239,7 +239,8 @@ struct PreparedApplicationDependencies {
                 runnerProvider: pluginManager,
                 settingsStore: pluginManager.pluginSettingsStore,
                 pluginStatePublisher: pluginManager,
-                fileDeletion: fileOperations
+                fileDeletion: fileOperations,
+                networkContexts: pluginManager.pluginSettingsStore.networkContexts
             ),
             discoverDetail: PreparedDiscoverDetailDependencies(
                 sourceMappingRepository: sourceMappingRepository,

@@ -123,9 +123,9 @@ extension MediaDetailReaderDestination {
 
 struct MediaDetailRouteContext<M: MediaDisplayable> {
     /// Loads the series from its installed source. nil on a saved-only route, which refreshes nothing.
-    let loadDetails: ((M) async throws -> M)?
+    let loadDetails: ((M, PluginNetworkOperation) async throws -> M)?
     /// Searches for relink targets. nil disables relinking.
-    let searchForRelink: ((String) async throws -> [M])?
+    let searchForRelink: ((String, UUID) async throws -> [M])?
     let makeReaderDestination: (M, M.Chapter) -> MediaDetailReaderDestination
     /// Whether a chapter has a verified offline copy. A saved-only route opens only those chapters.
     var isChapterAvailableOffline: ((M.Chapter) async -> Bool)?

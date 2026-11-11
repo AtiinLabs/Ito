@@ -7,6 +7,10 @@ nonisolated enum BulkDownloadAdmission: Equatable, Sendable {
 /// Pure admission rule for bulk downloads. M0 has no user setting: only an unmetered,
 /// unconstrained satisfied path is admitted.
 nonisolated enum BulkDownloadPolicy {
+    /// The revision of the network policy a host context carries. Ito has no network-policy setting
+    /// yet, so there is exactly one revision; a setting would bump it when its value changes.
+    static let revision: UInt64 = 1
+
     static func admit(_ path: NetworkPathSnapshot) -> BulkDownloadAdmission {
         switch path.status {
         case .unknown:

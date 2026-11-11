@@ -90,7 +90,7 @@ struct OfflineMilestoneZeroAcceptanceTests {
         let pluginBytes = OfflineStoreFixture.jpeg(
             "ito-" + (try PluginImageLocator.parse(try #require(URL(string: Self.pluginImage)))).realURLString
         )
-        let pages = try await mangaLoader.pages(for: .manga(Self.manga), chapter: Self.mangaChapter)
+        let pages = try await mangaLoader.pages(for: .manga(Self.manga), chapter: Self.mangaChapter, operation: makeTestNetworkOperation())
         #expect(pages.map(\.index) == [0, 1, 2, 3])
         let locators = try pages.map(Self.offlineURL)
         var served: [Data] = []
@@ -105,7 +105,7 @@ struct OfflineMilestoneZeroAcceptanceTests {
 
         // The novel chapter: its text and its inline image come from the verified copy.
         let novelLoader = ResolvingNovelChapterLoader(pluginID: DownloadWorkerFixture.plugin, local: relaunched, remote: nil)
-        let novelPages = try await novelLoader.content(for: .novel(Self.novel), chapter: Self.novelChapter)
+        let novelPages = try await novelLoader.content(for: .novel(Self.novel), chapter: Self.novelChapter, operation: makeTestNetworkOperation())
         #expect(novelPages.map(\.index) == [0, 1])
         guard novelPages.count == 2, case .text(let body) = novelPages[0].content else {
             Issue.record("A novel chapter reads its text page first")
@@ -119,7 +119,7 @@ struct OfflineMilestoneZeroAcceptanceTests {
 
         // A sibling chapter that was never downloaded does not read without its source.
         await #expect(throws: OfflineReadError.notDownloaded) {
-            try await mangaLoader.pages(for: .manga(Self.manga), chapter: Self.neverDownloaded)
+            try await mangaLoader.pages(for: .manga(Self.manga), chapter: Self.neverDownloaded, operation: makeTestNetworkOperation())
         }
 
         #expect(remote.count == 0)

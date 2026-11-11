@@ -222,8 +222,8 @@ final class MediaDetailOpenIntentTests: XCTestCase {
             media: manga(chapters: []),
             pluginID: "plugin.test",
             routeContext: MediaDetailRouteContext<Manga>(
-                loadDetails: { try await route.load($0) },
-                searchForRelink: { _ in [] },
+                loadDetails: { try await route.load($0, operation: $1) },
+                searchForRelink: { _, _ in [] },
                 makeReaderDestination: { parent, selected in
                     .pages(id: UUID(), content: ReaderContentSource(remote: runner), pluginID: "plugin.test", entry: .manga(parent), chapter: selected)
                 }

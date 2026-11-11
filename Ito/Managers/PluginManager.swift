@@ -55,7 +55,9 @@ typealias DownloadRunnerLoader = @MainActor (
     _ pluginID: String,
     _ pluginURL: URL,
     _ settingsStore: PluginSettingsStore,
-    _ modules: PluginRunnerHostModules
+    _ modules: PluginRunnerHostModules,
+    _ operation: PluginNetworkOperation,
+    _ frozenScope: String?
 ) async throws -> ItoRunner
 
 /// Reads one packaged file the way `PluginPackageReading.readInBackground(at:)` does. Tests inject their own.
@@ -297,7 +299,12 @@ public class PluginManager: ObservableObject {
     /// belongs to that attempt: it is never stored in `runnerCache` or `imageRunnerCache`, and the
     /// foreground `getRunner`/`getImageRunner` never see it.
     @MainActor
-    func makeDownloadRuntime(for pluginId: String, modules: PluginRunnerHostModules) async throws -> DownloadPluginRuntime {
+    func makeDownloadRuntime(
+        for pluginId: String,
+        modules: PluginRunnerHostModules,
+        operation: PluginNetworkOperation,
+        frozenScope: String?
+    ) async throws -> DownloadPluginRuntime {
         guard let plugin = installedPlugins[pluginId] else {
             throw URLError(.fileDoesNotExist)
         }
@@ -314,7 +321,7 @@ public class PluginManager: ObservableObject {
         // the baseline the commit checks against.
         let trust = settingsStore.trust
         let trustGeneration = trust.transportGeneration(for: pluginId)
-        let main = try await loader(pluginId, pluginURL, settingsStore, modules)
+        let main = try await loader(pluginId, pluginURL, settingsStore, modules, operation, frozenScope)
         guard installedPlugins[pluginId].map(runnerAuthority) == authority else {
             throw PluginRunnerAuthorityError.changedDuringLoad
         }
@@ -324,7 +331,7 @@ public class PluginManager: ObservableObject {
         return DownloadPluginRuntime(
             pages: main,
             makeImageRunner: {
-                try await loader(pluginId, pluginURL, settingsStore, modules)
+                try await loader(pluginId, pluginURL, settingsStore, modules, operation, frozenScope)
             },
             isPluginCurrent: { mirror.current == revision },
             isTrustCurrent: { trust.transportGeneration(for: pluginId) == trustGeneration }
@@ -340,7 +347,13 @@ public class PluginManager: ObservableObject {
         pluginURL: URL,
         settingsStore: PluginSettingsStore
     ) async throws -> ItoRunner {
-        try await load(pluginID: pluginID, pluginURL: pluginURL, settingsStore: settingsStore) {
+        try await load(
+            pluginID: pluginID,
+            pluginURL: pluginURL,
+            settingsStore: settingsStore,
+            operation: PluginNetworkOperation(purpose: .sourceSetup, operationID: UUID()),
+            frozenScope: nil
+        ) {
             PluginRunnerHostModules(
                 net: AppNetModule(pluginID: pluginID, cookieJar: settingsStore.cookies, trust: settingsStore.trust),
                 webview: AppWebviewModule()
@@ -355,9 +368,17 @@ public class PluginManager: ObservableObject {
         pluginID: String,
         pluginURL: URL,
         settingsStore: PluginSettingsStore,
-        modules: PluginRunnerHostModules
+        modules: PluginRunnerHostModules,
+        operation: PluginNetworkOperation,
+        frozenScope: String?
     ) async throws -> ItoRunner {
-        try await load(pluginID: pluginID, pluginURL: pluginURL, settingsStore: settingsStore) { modules }
+        try await load(
+            pluginID: pluginID,
+            pluginURL: pluginURL,
+            settingsStore: settingsStore,
+            operation: operation,
+            frozenScope: frozenScope
+        ) { modules }
     }
 
     @MainActor
@@ -365,6 +386,8 @@ public class PluginManager: ObservableObject {
         pluginID: String,
         pluginURL: URL,
         settingsStore: PluginSettingsStore,
+        operation: PluginNetworkOperation,
+        frozenScope: String?,
         makeModules: () -> PluginRunnerHostModules
     ) async throws -> ItoRunner {
         let (runner, defaults) = try await makeRunner(
@@ -374,7 +397,13 @@ public class PluginManager: ObservableObject {
             modules: makeModules()
         )
         let usable = try await applySchemaDefaults(
-            from: { try await runner.getSettingsSurface() },
+            from: {
+                try await runner.getSettingsSurface(
+                    context: settingsStore.networkContexts.context(
+                        pluginID: pluginID, operation, frozenScope: frozenScope
+                    )
+                )
+            },
             to: defaults,
             pluginID: pluginID
         )

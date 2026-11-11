@@ -108,7 +108,8 @@ actor AppNetModule: NetModule {
         return config
     }
 
-    func fetch(request: NetRequest) async throws -> NetResponse {
+    // The host context is accepted for the runner's contract and is not read yet: it is never logged.
+    func fetch(request: NetRequest, context: NetworkOperationContext) async throws -> NetResponse {
         return try await fetchInternal(request: request, isRetry: false)
     }
 

@@ -1103,7 +1103,7 @@ final class SourceViewModelTests: XCTestCase {
 
     func testProductionRunnerAdapterPreservesInjectedRunnerIdentity() {
         let runner = ItoRunner()
-        let context = ItoRunnerSourceContext(runner: runner)
+        let context = ItoRunnerSourceContext(runner: runner, pluginID: "plugin.test", contexts: PluginNetworkContexts())
 
         XCTAssertTrue(context.runner === runner)
     }

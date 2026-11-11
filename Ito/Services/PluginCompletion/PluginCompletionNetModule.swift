@@ -88,7 +88,8 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
         session.invalidateAndCancel()
     }
 
-    func fetch(request: NetRequest) async throws -> NetResponse {
+    // The host context is accepted for the runner's contract; trust and invalidation are unchanged.
+    func fetch(request: NetRequest, context: NetworkOperationContext) async throws -> NetResponse {
         guard isTrustCurrent else { throw PluginCompletionExecutionFailure.configurationChanged }
         let urlRequest = try Self.makeRequest(from: request, cookies: cookies)
         let refusal = RedirectRefusal(pluginID: trust?.pluginID, trustStore: trust?.store, recordsPending: false)

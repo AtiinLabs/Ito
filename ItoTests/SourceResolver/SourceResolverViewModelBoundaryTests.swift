@@ -687,7 +687,7 @@ private actor SuspendedPluginSearchAdapter: PluginSearching {
         self.pluginID = pluginID
     }
 
-    func search(query: String) async throws -> [ResolvedPluginMedia] {
+    func search(query: String, operation: PluginNetworkOperation) async throws -> [ResolvedPluginMedia] {
         _ = query
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
