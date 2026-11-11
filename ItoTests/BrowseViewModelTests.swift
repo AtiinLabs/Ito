@@ -797,7 +797,8 @@ final class BrowseViewModelTests: XCTestCase {
                 type: type,
                 kinds: kinds
             ),
-            iconData: nil
+            iconData: nil,
+            binary: makeRunnableBinary()
         )
     }
 

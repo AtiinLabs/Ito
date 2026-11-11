@@ -46,9 +46,10 @@ struct PluginCallError: LocalizedError, Equatable {
         case .postcardDecodingError, .postcardEncodingError, .controlContractViolation:
             self.init(kind: .incompatible, message: Self.incompatibleMessage)
         case .requiresNewerHost, .unsupportedABI:
-            // Only raised while loading, where PluginManager turns them into
-            // PluginRequiresNewerAppError; mapped here for completeness.
-            self.init(kind: .incompatible, message: PluginRequiresNewerAppError.unnamedVersionMessage)
+            // Only raised while loading, where PluginManager turns them into a PluginIncompatibility; mapped here
+            // for completeness, in the same direction.
+            let refusal = PluginIncompatibility.loading(error) ?? .requiresNewerApp(minimumAppVersion: nil)
+            self.init(kind: .incompatible, message: refusal.message)
         case .hostModuleError(let domain, let message):
             self.init(kind: .host, message: domain == "webview" ? String(localized: "The source's web page failed: \(message)") : message)
         }

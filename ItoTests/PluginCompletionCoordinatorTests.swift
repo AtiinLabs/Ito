@@ -178,6 +178,29 @@ struct PluginCompletionCoordinatorTests {
         #expect(fixture.coordinator.scheduledDeadline == nil)
     }
 
+    @Test func anIntentPausedBecauseItsSourceNeedsAnUpdateIsKeptAndDeliveredOnceReauthorizedAfterTheUpdate() async throws {
+        let source = SourceUpdateState()
+        let fixture = try CoordinatorFixture { _ in await source.deliveryOutcome() }
+        defer { fixture.coordinator.suspend() }
+        try fixture.enqueue("plugin.a", "chapter-1")
+
+        fixture.coordinator.start()
+        await fixture.coordinator.waitUntilIdle()
+
+        let paused = try #require(try fixture.rows().first)
+        #expect(paused.status == .paused)
+        #expect(paused.pauseReason == .incompatible)
+        #expect(fixture.executor.calls.count == 1)
+
+        await source.markUpdated()
+        try await fixture.coordinator.reauthorize(pluginID: "plugin.a")
+        await fixture.coordinator.waitUntilIdle()
+
+        #expect(fixture.executor.calls.count == 2)
+        #expect(try fixture.rows().isEmpty)
+        #expect(fixture.coordinator.summaries.isEmpty)
+    }
+
     @Test func anExecutorThatReportsCancellationItWasNotGivenBacksOffInsteadOfSpinning() async throws {
         let fixture = try CoordinatorFixture { _ in .cancelled }
         defer { fixture.coordinator.suspend() }
@@ -420,6 +443,19 @@ struct PluginCompletionRetryPolicyTests {
 }
 
 // MARK: - Fixtures
+
+/// Whether the source has been updated since the queued intent was first attempted.
+private actor SourceUpdateState {
+    private(set) var isUpdated = false
+
+    func markUpdated() {
+        isUpdated = true
+    }
+
+    func deliveryOutcome() -> PluginCompletionOutcome {
+        isUpdated ? .acknowledged : .paused(.incompatible, .incompatible)
+    }
+}
 
 @MainActor
 private final class CoordinatorFixture {

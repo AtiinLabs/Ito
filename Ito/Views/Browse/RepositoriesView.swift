@@ -354,8 +354,8 @@ struct PackageRowView: View {
                     }
                 }
 
-            case .incompatible(let minVersion):
-                Text(minVersion.map { String(localized: "Requires v\($0)") } ?? String(localized: "Requires a newer Ito"))
+            case .incompatible(let incompatibility):
+                Text(Self.incompatibilityLabel(incompatibility))
                     .font(.caption2)
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.trailing)
@@ -379,6 +379,24 @@ struct PackageRowView: View {
                     .itoProminentButtonStyle()
                     .controlSize(.small)
             }
+        }
+    }
+
+    /// The short label for a package that can't run here. A source built for an older ABI has no compatible
+    /// update in this repository, so its label says so instead of naming an Ito version.
+    private static func incompatibilityLabel(_ incompatibility: PluginIncompatibility) -> String {
+        switch incompatibility {
+        case .requiresNewerApp(let minimumAppVersion?):
+            return String(localized: "Requires v\(minimumAppVersion)")
+        case .requiresNewerApp(nil):
+            return String(localized: "Requires a newer Ito")
+        case .requiresSourceUpdate:
+            return String(
+                localized: "No compatible source update is available yet.",
+                comment: "Shown where a source was built for an older version of Ito and no repository offers a compatible version: a source package's status label, and a saved series' failure message. The source's publisher must release an update."
+            )
+        case .unsupportedFile:
+            return incompatibility.message
         }
     }
 }

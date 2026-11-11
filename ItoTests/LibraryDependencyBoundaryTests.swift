@@ -81,7 +81,8 @@ final class LibraryDependencyBoundaryTests: XCTestCase {
                 minAppVersion: "1.0",
                 type: .novel
             ),
-            iconData: nil
+            iconData: nil,
+            binary: makeRunnableBinary()
         )
         var revisions: [UInt64] = []
         let cancellable = manager.libraryPluginSnapshotPublisher
@@ -175,7 +176,8 @@ final class LibraryDependencyBoundaryTests: XCTestCase {
                 minAppVersion: "1.0",
                 type: .manga
             ),
-            iconData: nil
+            iconData: nil,
+            binary: makeRunnableBinary()
         )
     }
 

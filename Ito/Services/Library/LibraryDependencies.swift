@@ -335,9 +335,18 @@ struct DeferredPluginPackageCandidate: Equatable {
     let package: RepoPackage
     let repositoryURL: String
     /// Why the package can't run here, or nil when it can.
-    let incompatibility: PluginRequiresNewerAppError?
+    let incompatibility: PluginIncompatibility?
 
     var supportedKinds: [MediaKind] { package.supportedKinds }
+}
+
+extension DeferredPluginPackageCandidate {
+    /// The candidate to offer for a plugin that several repositories list: the first one this Ito can run, in
+    /// repository order, or else the first refused one. A refused candidate is only offered when no listing is
+    /// compatible, so the install screen never describes a source as incompatible when a compatible listing exists.
+    static func preferred(among candidates: [DeferredPluginPackageCandidate]) -> DeferredPluginPackageCandidate? {
+        candidates.first { $0.incompatibility == nil } ?? candidates.first
+    }
 }
 
 @MainActor
@@ -352,11 +361,11 @@ extension RepoManager: DeferredPluginInstalling {
         -> DeferredPluginPackageCandidate? {
         try await refreshAllReportingFailures()
 
-        for repository in repositories {
+        let candidates = repositories.compactMap { repository -> DeferredPluginPackageCandidate? in
             guard let package = repository.index?.packages.first(where: {
                 $0.id == pluginID && !$0.isArchived
             }) else {
-                continue
+                return nil
             }
             return DeferredPluginPackageCandidate(
                 package: package,
@@ -364,7 +373,7 @@ extension RepoManager: DeferredPluginInstalling {
                 incompatibility: compatibilityRefusal(for: package)
             )
         }
-        return nil
+        return DeferredPluginPackageCandidate.preferred(among: candidates)
     }
 
     func install(_ candidate: DeferredPluginPackageCandidate) async throws {

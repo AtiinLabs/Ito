@@ -77,7 +77,7 @@ enum DeferredPluginPhase {
     case pluginMissing
     case checkingPackage
     case packageUnavailable
-    case incompatible(minimumVersion: String?)
+    case incompatible(PluginIncompatibility)
     case installing
     case ready(DeferredPluginRoute)
     case failure(DeferredPluginFailure)
@@ -89,6 +89,11 @@ final class DeferredPluginViewModel: ObservableObject {
     let item: LibraryItem
 
     @Published private(set) var phase: DeferredPluginPhase = .idle
+    /// Why the installed source refused to load. Set only while `phase` is `.failure(.runnerLoad)`, and cleared by
+    /// every new operation, so a retry or a new publication never shows a stale direction.
+    @Published private(set) var runnerRefusal: PluginIncompatibility?
+    /// Why the install was refused. Set only while `phase` is `.failure(.install)`.
+    @Published private(set) var installRefusal: PluginIncompatibility?
 
     private let plugins: any LibraryPluginServing
     private let installer: any DeferredPluginInstalling
@@ -191,6 +196,8 @@ final class DeferredPluginViewModel: ObservableObject {
         isPresentationActive = false
         generation &+= 1
         cancelSupersedableTasks()
+        runnerRefusal = nil
+        installRefusal = nil
         phase = .cancelled
     }
 
@@ -267,7 +274,7 @@ final class DeferredPluginViewModel: ObservableObject {
                     return
                 }
                 if let refusal = candidate.incompatibility {
-                    self.phase = .incompatible(minimumVersion: refusal.minimumAppVersion)
+                    self.phase = .incompatible(refusal)
                     self.logFinished(
                         kind: .remoteLoad,
                         operationID: operationID,
@@ -425,6 +432,7 @@ final class DeferredPluginViewModel: ObservableObject {
                     return
                 }
                 self.installTask = nil
+                self.installRefusal = error as? PluginIncompatibility
                 self.phase = .failure(.install)
                 self.logFinished(
                     kind: .pluginInstall,
@@ -443,6 +451,7 @@ final class DeferredPluginViewModel: ObservableObject {
     ) {
         guard isCurrent(operationGeneration), runnerTask == nil else { return }
         let operationID = UUID()
+        runnerRefusal = nil
         phase = .loadingRunner
         logStarted(kind: .runnerLoad, operationID: operationID)
         let plugins = self.plugins
@@ -492,6 +501,7 @@ final class DeferredPluginViewModel: ObservableObject {
                     return
                 }
                 self.runnerTask = nil
+                self.runnerRefusal = error as? PluginIncompatibility
                 self.phase = .failure(.runnerLoad)
                 self.logFinished(
                     kind: .runnerLoad,
@@ -631,6 +641,8 @@ final class DeferredPluginViewModel: ObservableObject {
     private func beginNewGeneration() {
         generation &+= 1
         hasCurrentInstallCompleted = false
+        runnerRefusal = nil
+        installRefusal = nil
         cancelSupersedableTasks()
     }
 

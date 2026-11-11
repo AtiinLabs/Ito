@@ -342,7 +342,17 @@ struct PluginCompletionOutcomeMappingTests {
         ),
         .init(
             name: "needsNewerApp",
-            error: PluginRequiresNewerAppError(minimumAppVersion: "9.9"),
+            error: PluginIncompatibility.requiresNewerApp(minimumAppVersion: "9.9"),
+            expected: "paused(incompatible,incompatible)"
+        ),
+        .init(
+            name: "needsSourceUpdate",
+            error: PluginIncompatibility.requiresSourceUpdate,
+            expected: "paused(incompatible,incompatible)"
+        ),
+        .init(
+            name: "unsupportedFile",
+            error: PluginIncompatibility.unsupportedFile,
             expected: "paused(incompatible,incompatible)"
         ),
         .init(name: "unknown", error: URLError(.badURL), expected: "paused(sourceError,sourceError)")
@@ -355,6 +365,17 @@ struct PluginCompletionOutcomeMappingTests {
     @Test(arguments: PluginCompletionOutcomeMappingTests.cases)
     func eachFailureIsRecordedTheWayTheRetryPolicyAssumes(_ scenario: Case) {
         #expect(describe(PluginCompletionExecutor.outcome(forFailure: scenario.error)) == scenario.expected)
+    }
+
+    /// A source that needs a newer Ito pauses with the stored reason, which carries no direction. The copy shown for
+    /// that pause must never tell the user the source has to be updated, because the source may be fine.
+    @Test func aSourceNeedingANewerAppIsPausedWithCopyThatNeverSaysTheSourceMustBeUpdated() {
+        let outcome = PluginCompletionExecutor.outcome(
+            forFailure: PluginIncompatibility.requiresNewerApp(minimumAppVersion: "9.9")
+        )
+
+        #expect(describe(outcome) == "paused(incompatible,incompatible)")
+        #expect(!PluginCompletionPauseReason.incompatible.recoveryDescription.localizedCaseInsensitiveContains("must be updated"))
     }
 }
 
@@ -435,12 +456,39 @@ struct PluginCompletionExecutorTests {
     @Test func aSourceNeedingANewerAppPausesAsIncompatible() async throws {
         let harness = try await ExecutorHarness(
             wasm: TestWasm.build(.init()),
-            locate: { _ in throw PluginRequiresNewerAppError(minimumAppVersion: "99") }
+            locate: { _ in throw PluginIncompatibility.requiresNewerApp(minimumAppVersion: "99") }
         )
         defer { harness.cleanup() }
 
         let outcome = await harness.outcome()
         #expect(outcome == "paused(incompatible,incompatible)")
+    }
+
+    /// A source built for an older ABI pauses the intent without dropping it; once the source is updated, the same
+    /// intent is delivered by the next attempt.
+    @MainActor
+    @Test func aSourceBuiltForAnOlderABIPausesAsIncompatibleAndDeliversOnceUpdated() async throws {
+        let update = SourceUpdateGate()
+        let updatedArchive = FileManager.default.temporaryDirectory
+            .appendingPathComponent("completion-updated-\(UUID().uuidString).ito")
+        defer { try? FileManager.default.removeItem(at: updatedArchive) }
+        try makeTestPluginArchiveData(
+            id: "plugin.fixture",
+            version: "2.0",
+            wasm: Data(TestWasm.build(.init()))
+        ).write(to: updatedArchive)
+        let harness = try await ExecutorHarness(
+            wasm: TestWasm.build(.init()),
+            locate: { _ in
+                if update.isUpdated { return updatedArchive }
+                throw PluginIncompatibility.requiresSourceUpdate
+            }
+        )
+        defer { harness.cleanup() }
+
+        #expect(await harness.outcome() == "paused(incompatible,incompatible)")
+        update.isUpdated = true
+        #expect(await harness.outcome() == "acknowledged")
     }
 
     @Test func settingsChangedBeforeTheAttemptRunsStopItBeforeAnythingIsLoaded() async throws {
@@ -574,6 +622,12 @@ private final class LoadCounter: @unchecked Sendable {
     func increment() {
         lock.withLock { count += 1 }
     }
+}
+
+/// Whether the source has been updated since its first attempt. Read only on the main actor, where `locate` runs.
+@MainActor
+private final class SourceUpdateGate {
+    var isUpdated = false
 }
 
 /// A real store, a real `.ito` archive and a real runner around one queued intent.

@@ -26,10 +26,10 @@ nonisolated enum PluginPackageInspectionError: LocalizedError, Equatable, Sendab
 
 /// Why a package may not replace the installed file.
 nonisolated enum PluginPackageRefusal: Equatable, Sendable {
-    /// The manifest or module needs a newer Ito. A module built for an older ABI is reported here too, as it
-    /// always has been, until the install states split the two directions.
-    case requiresNewerApp(PluginRequiresNewerAppError)
-    /// The module is damaged, missing, or not one Ito can run.
+    /// The package can't run in this Ito, so the install must not replace the installed file. The reason names
+    /// which side has to change.
+    case incompatible(PluginIncompatibility)
+    /// The module is missing, too large or damaged, so there is nothing to check it against.
     case unreadable
 }
 
@@ -49,9 +49,12 @@ nonisolated struct PluginPackageReading: Sendable {
     /// import reads its private staging copy, so both opens see one version. Writes nothing, so it doesn't depend on
     /// temporary storage. Throws when the file can't be read, which a caller that finds it gone treats as absent, or
     /// when its archive or manifest can't be read. A malformed module is not an error here.
-    static func readInBackground(at url: URL) async throws -> PluginPackageReading {
+    static func readInBackground(
+        at url: URL,
+        supported: ClosedRange<Int> = ItoRunner.supportedABIVersions
+    ) async throws -> PluginPackageReading {
         try await Task.detached(priority: .utility) {
-            try PluginPackageReading.read(at: url)
+            try PluginPackageReading.read(at: url, supported: supported)
         }.value
     }
 
@@ -60,16 +63,21 @@ nonisolated struct PluginPackageReading: Sendable {
     /// the copy throws `PluginPackageInspectionError.temporaryStorageFailed`.
     static func readInBackground(
         downloaded data: Data,
-        scratchDirectory: URL = FileManager.default.temporaryDirectory
+        scratchDirectory: URL = FileManager.default.temporaryDirectory,
+        supported: ClosedRange<Int> = ItoRunner.supportedABIVersions
     ) async throws -> PluginPackageReading {
         try await Task.detached(priority: .utility) {
-            try PluginPackageReading.inspect(bytes: data, in: scratchDirectory)
+            try PluginPackageReading.inspect(bytes: data, in: scratchDirectory, supported: supported)
         }.value
     }
 
     /// Copies `bytes` to a scratch file in `directory`, reads that copy, and removes it. Removal is registered before
     /// the write, so a partial write is removed too.
-    private static func inspect(bytes: Data, in directory: URL) throws -> PluginPackageReading {
+    private static func inspect(
+        bytes: Data,
+        in directory: URL,
+        supported: ClosedRange<Int>
+    ) throws -> PluginPackageReading {
         let copyURL = directory.appendingPathComponent("ito-package-\(UUID().uuidString).ito", isDirectory: false)
         defer { try? FileManager.default.removeItem(at: copyURL) }
         do {
@@ -77,37 +85,34 @@ nonisolated struct PluginPackageReading: Sendable {
         } catch {
             throw PluginPackageInspectionError.temporaryStorageFailed
         }
-        return try read(at: copyURL)
+        return try read(at: copyURL, supported: supported)
     }
 
-    private static func read(at url: URL) throws -> PluginPackageReading {
+    private static func read(at url: URL, supported: ClosedRange<Int>) throws -> PluginPackageReading {
         let extracted = try ItoRunner.extractPluginInfo(from: url)
         let binary = (try? ItoRunner.inspectBundle(at: url))?.binary
         return PluginPackageReading(
             manifest: extracted.manifest,
             icon: extracted.icon,
             binary: binary,
-            installRefusal: refusal(manifest: extracted.manifest, binary: binary)
+            installRefusal: refusal(manifest: extracted.manifest, binary: binary, supported: supported)
         )
     }
 
-    /// The manifest's own requirements come first, so a `min_app_version` names its version. Then the module: a
-    /// module this Ito can't run is refused, and so is one that can't be read at all.
+    /// The manifest's own `min_app_version` comes first, so it names its version. Then the module. A module that
+    /// can't be read, or that no host runs (`.invalid`), is `.unreadable` and keeps the package messages it always
+    /// had; only a module this Ito can't run in a fixable direction is `.incompatible`.
     private static func refusal(
         manifest: PluginManifest,
-        binary: PluginBinaryInterface?
+        binary: PluginBinaryInterface?,
+        supported: ClosedRange<Int>
     ) -> PluginPackageRefusal? {
-        if let refusal = manifest.info.compatibilityRefusal {
-            return .requiresNewerApp(refusal)
+        if let incompatibility = PluginIncompatibility.appVersion(required: manifest.info.minAppVersion) {
+            return .incompatible(incompatibility)
         }
         guard let binary else { return .unreadable }
-        switch ItoRunner.compatibility(of: binary) {
-        case .compatible:
-            return nil
-        case .pluginTooOld, .pluginTooNew, .missingImports:
-            return .requiresNewerApp(PluginRequiresNewerAppError(minimumAppVersion: nil))
-        case .invalid:
-            return .unreadable
-        }
+        let compatibility = ItoRunner.compatibility(of: binary, supported: supported)
+        if case .invalid = compatibility { return .unreadable }
+        return PluginIncompatibility.binary(compatibility).map { .incompatible($0) }
     }
 }

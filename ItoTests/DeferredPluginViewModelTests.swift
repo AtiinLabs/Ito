@@ -199,9 +199,80 @@ final class DeferredPluginViewModelTests: XCTestCase {
         incompatible.viewModel.appear()
         await waitUntil { incompatible.viewModel.isPluginMissing }
         incompatible.viewModel.installMissingPlugin()
-        await waitUntil { incompatible.viewModel.incompatibleMinimumVersion == "99.0" }
+        await waitUntil { incompatible.viewModel.incompatibility == .requiresNewerApp(minimumAppVersion: "99.0") }
         XCTAssertEqual(incompatible.installer.lookupRequests, ["plugin.exact"])
         XCTAssertTrue(incompatible.installer.installRequests.isEmpty)
+    }
+
+    func testEachFeedIncompatibilityKeepsSavedDetailsOpenAndInstallsNothing() async throws {
+        let directions: [PluginIncompatibility] = [
+            .requiresNewerApp(minimumAppVersion: "99.0"),
+            .requiresNewerApp(minimumAppVersion: nil),
+            .requiresSourceUpdate
+        ]
+        for direction in directions {
+            let subject = try makeSubject(
+                item: encodedItem(.manga(Manga(key: "manga", title: "Manga")), pluginType: .manga),
+                lookupResponses: [.immediate(candidate(incompatibility: direction))],
+                offlineReading: InventoryOfflineChapterReading(rows: [])
+            )
+            subject.viewModel.appear()
+            await waitUntil { subject.viewModel.isPluginMissing }
+            subject.viewModel.installMissingPlugin()
+            await waitUntil { subject.viewModel.incompatibility == direction }
+            XCTAssertTrue(subject.viewModel.canOpenSavedDetails, "\(direction) keeps Open Saved Details")
+            XCTAssertTrue(subject.installer.installRequests.isEmpty)
+        }
+    }
+
+    func testAnInstalledSourceRefusedWhenItLoadsKeepsSavedDetailsOpenInEachDirection() async throws {
+        let refusals: [PluginIncompatibility] = [
+            .requiresNewerApp(minimumAppVersion: nil),
+            .requiresSourceUpdate,
+            .unsupportedFile
+        ]
+        for refusal in refusals {
+            let subject = try makeSubject(
+                item: encodedItem(.manga(Manga(key: "manga", title: "Manga")), pluginType: .manga),
+                installedPluginIDs: ["plugin.exact"],
+                runnerResponses: [.immediate(.failure(refusal))],
+                offlineReading: InventoryOfflineChapterReading(rows: [])
+            )
+            subject.viewModel.appear()
+            await waitUntil { subject.viewModel.failure == .runnerLoad }
+            XCTAssertEqual(subject.viewModel.runnerRefusal, refusal)
+            XCTAssertTrue(subject.viewModel.canOpenSavedDetails, "\(refusal) keeps Open Saved Details")
+        }
+    }
+
+    func testRetryClearsTheStoredRefusalWhileTheSourceLoadsAgain() async throws {
+        let subject = try makeSubject(
+            item: encodedItem(.manga(Manga(key: "manga", title: "Manga")), pluginType: .manga),
+            installedPluginIDs: ["plugin.exact"],
+            runnerResponses: [.immediate(.failure(PluginIncompatibility.requiresSourceUpdate)), .suspended],
+            offlineReading: InventoryOfflineChapterReading(rows: [])
+        )
+        subject.viewModel.appear()
+        await waitUntil { subject.viewModel.failure == .runnerLoad }
+        XCTAssertEqual(subject.viewModel.runnerRefusal, .requiresSourceUpdate)
+
+        subject.viewModel.retry()
+        await waitUntil { subject.plugins.pendingRunnerCount == 1 }
+        XCTAssertNil(subject.viewModel.runnerRefusal, "a retry never shows the previous attempt's direction")
+        XCTAssertTrue(subject.viewModel.isBusy)
+    }
+
+    func testAnInstallRefusedWhenInstallingIsKeptWithItsDirection() async throws {
+        let subject = try makeSubject(
+            item: encodedItem(.manga(Manga(key: "manga", title: "Manga")), pluginType: .manga),
+            lookupResponses: [.immediate(candidate())],
+            installResponses: [.immediate(.failure(PluginIncompatibility.requiresNewerApp(minimumAppVersion: nil)))]
+        )
+        subject.viewModel.appear()
+        await waitUntil { subject.viewModel.isPluginMissing }
+        subject.viewModel.installMissingPlugin()
+        await waitUntil { subject.viewModel.failure == .install }
+        XCTAssertEqual(subject.viewModel.installRefusal, .requiresNewerApp(minimumAppVersion: nil))
     }
 
     func testInstallSuppressesDuplicatesAndRequiresCompletionPlusAuthoritativePublication() async throws {
@@ -709,6 +780,7 @@ final class DeferredPluginViewModelTests: XCTestCase {
 
     private func candidate(
         isCompatible: Bool = true,
+        incompatibility: PluginIncompatibility? = nil,
         minimumVersion: String = "1.0",
         pluginType: MediaKind = .manga,
         kinds: [String]? = nil
@@ -729,7 +801,7 @@ final class DeferredPluginViewModelTests: XCTestCase {
                 kinds: kinds
             ),
             repositoryURL: "https://invalid.example/repository",
-            incompatibility: isCompatible ? nil : PluginRequiresNewerAppError(minimumAppVersion: minimumVersion)
+            incompatibility: incompatibility ?? (isCompatible ? nil : .requiresNewerApp(minimumAppVersion: minimumVersion))
         )
     }
 
@@ -779,9 +851,9 @@ private extension DeferredPluginViewModel {
         return true
     }
 
-    var incompatibleMinimumVersion: String? {
-        guard case .incompatible(let version) = phase else { return nil }
-        return version
+    var incompatibility: PluginIncompatibility? {
+        guard case .incompatible(let incompatibility) = phase else { return nil }
+        return incompatibility
     }
 
     var isInstalling: Bool {

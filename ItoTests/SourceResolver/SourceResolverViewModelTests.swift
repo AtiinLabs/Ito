@@ -927,7 +927,7 @@ final class SourceResolverViewModelTests: XCTestCase {
     }
 
     func makePlugin(id: String = "p1", version: String = "1.0", type: MediaKind = .manga, kinds: [MediaKind]? = nil) -> InstalledPlugin {
-        InstalledPlugin(url: URL(fileURLWithPath: "/"), info: PluginInfo(id: id, name: id, version: version, minAppVersion: "1.0", type: type, kinds: kinds), iconData: nil)
+        InstalledPlugin(url: URL(fileURLWithPath: "/"), info: PluginInfo(id: id, name: id, version: version, minAppVersion: "1.0", type: type, kinds: kinds), iconData: nil, binary: makeRunnableBinary())
     }
 
     func openSavedSourceAndWait(

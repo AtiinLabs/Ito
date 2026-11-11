@@ -616,12 +616,144 @@ struct RepositoryAndAliasStoreTests {
             if malformedModule {
                 return (error as? PluginPackageInspectionError) == .unreadablePackage
             }
-            return (error as? PluginRequiresNewerAppError) == PluginRequiresNewerAppError(minimumAppVersion: nil)
+            return (error as? PluginIncompatibility) == .requiresNewerApp(minimumAppVersion: nil)
         }
 
         #expect(try Data(contentsOf: installedFile) == installedArchive)
         #expect(try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path) == ["plugin.refused.ito"])
         #expect(pluginManager.installedPlugins["plugin.refused"]?.info.version == "1.0")
+    }
+
+    @Test func aDownloadedModuleWithAStartSectionIsUnreadableAndNeverReplacesTheInstalledFile() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let pluginsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RepositoryInstallStartSection-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
+        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+        let installedFile = pluginsDirectory.appendingPathComponent("plugin.start.ito")
+        let installedArchive = try makeTestPluginArchiveData(
+            id: "plugin.start", version: "1.0", wasm: makeTestPluginWasm(abi: 3)
+        )
+        try installedArchive.write(to: installedFile)
+        let downloaded = try makeTestPluginArchiveData(
+            id: "plugin.start", version: "2.0", wasm: startSectionModuleWasm
+        )
+        let pluginManager = PluginManager(
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginsDirectory: pluginsDirectory
+        )
+        await pluginManager.reloadInstalledPlugins()
+        let manager = RepoManager(
+            dbPool: database.dbPool,
+            pluginManager: pluginManager,
+            pluginsDirectory: nil,
+            packageFetcher: { _ in downloaded },
+            supportedABI: 3...3
+        )
+        let package = makePackage(id: "plugin.start", version: "2.0", sha256: sha256(downloaded))
+
+        await #expect(throws: PluginPackageInspectionError.unreadablePackage) {
+            try await manager.installPackage(package, repositoryUrl: "https://example.com")
+        }
+        #expect(try Data(contentsOf: installedFile) == installedArchive)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path) == ["plugin.start.ito"])
+    }
+
+    @Test func aDownloadedOlderModuleIsRefusedAsASourceUpdateWhenTheFeedDeclaresNoABI() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let pluginsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RepositoryInstallOlderABI-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
+        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+        let installedFile = pluginsDirectory.appendingPathComponent("plugin.older.ito")
+        let installedArchive = try makeTestPluginArchiveData(
+            id: "plugin.older", version: "1.0", wasm: makeTestPluginWasm(abi: 3)
+        )
+        try installedArchive.write(to: installedFile)
+        // The feed entry names no ABI, so only the downloaded module can show that it is too old for this host.
+        let downloaded = try makeTestPluginArchiveData(
+            id: "plugin.older", version: "2.0", wasm: makeTestPluginWasm(abi: 2)
+        )
+        let pluginManager = PluginManager(
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginsDirectory: pluginsDirectory
+        )
+        await pluginManager.reloadInstalledPlugins()
+        let manager = RepoManager(
+            dbPool: database.dbPool,
+            pluginManager: pluginManager,
+            pluginsDirectory: nil,
+            packageFetcher: { _ in downloaded },
+            supportedABI: 3...3
+        )
+        let package = makePackage(id: "plugin.older", version: "2.0", sha256: sha256(downloaded))
+
+        await #expect(throws: PluginIncompatibility.requiresSourceUpdate) {
+            try await manager.installPackage(package, repositoryUrl: "https://example.com")
+        }
+        #expect(try Data(contentsOf: installedFile) == installedArchive)
+    }
+
+    @Test func aManifestMinimumAppVersionDecidesTheRefusalBeforeTheModulesABI() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let pluginsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RepositoryInstallManifestFirst-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
+        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+        let installedFile = pluginsDirectory.appendingPathComponent("plugin.manifest.ito")
+        let installedArchive = try makeTestPluginArchiveData(
+            id: "plugin.manifest", version: "1.0", wasm: makeTestPluginWasm(abi: 3)
+        )
+        try installedArchive.write(to: installedFile)
+        // The module is also too old for this host, but the manifest names the version Ito must reach first.
+        let downloaded = try makeTestPluginArchiveData(
+            id: "plugin.manifest", version: "2.0", minAppVersion: "999.0", wasm: makeTestPluginWasm(abi: 2)
+        )
+        let pluginManager = PluginManager(
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginsDirectory: pluginsDirectory
+        )
+        await pluginManager.reloadInstalledPlugins()
+        let manager = RepoManager(
+            dbPool: database.dbPool,
+            pluginManager: pluginManager,
+            pluginsDirectory: nil,
+            packageFetcher: { _ in downloaded },
+            supportedABI: 3...3
+        )
+        let package = makePackage(id: "plugin.manifest", version: "2.0", sha256: sha256(downloaded))
+
+        await #expect(throws: PluginIncompatibility.requiresNewerApp(minimumAppVersion: "999.0")) {
+            try await manager.installPackage(package, repositoryUrl: "https://example.com")
+        }
+        #expect(try Data(contentsOf: installedFile) == installedArchive)
+    }
+
+    @Test func aCompatibleListingInAnotherRepositoryIsOfferedBeforeAnOlderRefusedOne() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        // The first repository added lists a build this Ito refuses; the second lists one it can run.
+        let refused = RepoPackage(
+            id: "plugin.shared", name: "Shared", version: "1.0", minAppVersion: "999.0",
+            downloadUrl: "shared.ito", iconUrl: nil, sha256: "unused", pluginType: "manga",
+            archived: nil, archivedReason: nil, archivedDate: nil
+        )
+        let runnable = makePackage(id: "plugin.shared", sha256: "unused")
+        let refusedIndex = try JSONEncoder().encode(makeIndex(packages: [refused]))
+        let runnableIndex = try JSONEncoder().encode(makeIndex(packages: [runnable]))
+        let manager = RepoManager(dbPool: database.dbPool, indexFetcher: { url in
+            url.host == "old.example" ? refusedIndex : runnableIndex
+        })
+        try await manager.addRepository(url: "https://old.example/repo")
+        try await manager.addRepository(url: "https://new.example/repo")
+
+        let candidate = try await manager.findPackage(forExactPluginID: "plugin.shared")
+
+        #expect(candidate?.repositoryURL == "https://new.example/repo")
+        #expect(candidate?.incompatibility == nil)
     }
 
     @Test func removedPackageVersionInstallsTheVersionTheRefreshedIndexLists() async throws {
@@ -762,6 +894,16 @@ struct RepositoryAndAliasStoreTests {
             packages: packages
         )
     }
+
+    /// A minimal module with a start section, which no host runs: one `() -> ()` function, named as the start
+    /// function. Its interface is `hasStartSection`, so the package is unreadable to every install path.
+    private let startSectionModuleWasm = Data([
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
+        0x03, 0x02, 0x01, 0x00,
+        0x08, 0x01, 0x00,
+        0x0A, 0x04, 0x01, 0x02, 0x00, 0x0B
+    ])
 
     private func sha256(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()

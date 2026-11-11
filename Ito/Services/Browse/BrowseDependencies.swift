@@ -128,15 +128,19 @@ final class LocalBrowsePluginFileOperations: BrowsePluginFileOperating, SourcePl
     private let fileManager: FileManager
     private let applicationSupportDirectory: URL?
     let configuredPluginsDirectory: URL?
+    /// The ABI range an imported module is checked against: `ItoRunner.supportedABIVersions` in production.
+    private let supportedABI: ClosedRange<Int>
 
     init(
         fileManager: FileManager = .default,
         applicationSupportDirectory: URL? = nil,
-        pluginsDirectory: URL? = nil
+        pluginsDirectory: URL? = nil,
+        supportedABI: ClosedRange<Int> = ItoRunner.supportedABIVersions
     ) {
         self.fileManager = fileManager
         self.applicationSupportDirectory = applicationSupportDirectory
         self.configuredPluginsDirectory = pluginsDirectory
+        self.supportedABI = supportedABI
     }
 
     func supportsPluginFile(at url: URL) -> Bool {
@@ -160,7 +164,7 @@ final class LocalBrowsePluginFileOperations: BrowsePluginFileOperating, SourcePl
         // installed file is replaced only after it passes.
         let reading: PluginPackageReading
         do {
-            reading = try await PluginPackageReading.readInBackground(at: stagingURL)
+            reading = try await PluginPackageReading.readInBackground(at: stagingURL, supported: supportedABI)
         } catch let error as PluginPackageInspectionError {
             throw error
         } catch {
@@ -169,8 +173,8 @@ final class LocalBrowsePluginFileOperations: BrowsePluginFileOperating, SourcePl
         switch reading.installRefusal {
         case nil:
             break
-        case .requiresNewerApp(let refusal)?:
-            throw refusal
+        case .incompatible(let incompatibility)?:
+            throw incompatibility
         case .unreadable?:
             throw BrowsePluginFileError.unsupportedPluginFile
         }

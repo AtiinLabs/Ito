@@ -17,7 +17,7 @@ protocol RepositoryDetailManaging: AnyObject {
     var repositoriesPublisher: AnyPublisher<[Repository], Never> { get }
 
     func installPackage(_ package: RepoPackage, repositoryURL: String) async throws
-    func compatibilityRefusal(for package: RepoPackage) -> PluginRequiresNewerAppError?
+    func compatibilityRefusal(for package: RepoPackage) -> PluginIncompatibility?
 }
 
 extension RepoManager: RepositoryListManaging, RepositoryDetailManaging {}

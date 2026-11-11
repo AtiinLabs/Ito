@@ -10,7 +10,8 @@ struct DownloadRuntimeTests {
         InstalledPlugin(
             url: URL(fileURLWithPath: "/test/download-source.ito"),
             info: PluginInfo(id: "download.source", name: "Download Source", version: "1.0", minAppVersion: "1.0", type: .manga),
-            iconData: nil
+            iconData: nil,
+            binary: makeRunnableBinary()
         )
     }
 
