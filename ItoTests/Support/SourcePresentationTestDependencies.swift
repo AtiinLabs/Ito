@@ -125,6 +125,8 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
     var suspendsHome = false
     var suspendsSearch = false
     var suspendedListingPages: Set<Int32> = []
+    var onHomeSuspended: (() -> Void)?
+    var onListingSuspended: ((Int32) -> Void)?
     private(set) var homeLoadCount = 0
     private(set) var settingsLoadCount = 0
     private(set) var loadEvents: [String] = []
@@ -141,7 +143,10 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
         homeLoadCount += 1
         loadEvents.append("home")
         if suspendsHome {
-            return try await withCheckedThrowingContinuation { pendingHomes.append($0) }
+            return try await withCheckedThrowingContinuation {
+                pendingHomes.append($0)
+                onHomeSuspended?()
+            }
         }
         return try homeResult.get()
     }
@@ -203,6 +208,7 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
         if suspendedListingPages.contains(page) {
             return try await withCheckedThrowingContinuation {
                 pendingListings.append(.init(page: page, continuation: $0))
+                onListingSuspended?(page)
             }
         }
         return try listingResults[page, default: .success(MediaPageResult(entries: [], hasNextPage: false))].get()
@@ -265,12 +271,12 @@ final class PR7BSettingsStoreSpy: PluginSettingsPersisting {
     var persistSucceeds = true
     var reloadResults: [Result<Void, any Error>] = [.success(())]
     var suspendsReload = false
+    var onReloadSuspended: (() -> Void)?
     private(set) var preparedPluginIDs: [String] = []
     private(set) var reads: [(pluginID: String, key: String)] = []
     private(set) var writes: [(pluginID: String, key: String, value: String)] = []
     private(set) var reloadCount = 0
     private var reloadContinuations: [CheckedContinuation<Void, any Error>] = []
-
     var settingsRevisionPublisher: AnyPublisher<Int, Never> {
         $revision.eraseToAnyPublisher()
     }
@@ -322,7 +328,10 @@ final class PR7BSettingsStoreSpy: PluginSettingsPersisting {
     func reloadPersistedSettings() async throws {
         reloadCount += 1
         if suspendsReload {
-            return try await withCheckedThrowingContinuation { reloadContinuations.append($0) }
+            return try await withCheckedThrowingContinuation {
+                reloadContinuations.append($0)
+                onReloadSuspended?()
+            }
         }
         guard !reloadResults.isEmpty else { return }
         if reloadResults.count == 1 {

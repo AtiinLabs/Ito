@@ -509,6 +509,26 @@ final class PluginSettingsViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.reloadError)
     }
 
+    func testCallerCancelledReloadEndingInHostErrorClearsReloadingWithoutFailure() async throws {
+        let store = PR7BSettingsStoreSpy()
+        store.suspendsReload = true
+        defer { store.completeReload(with: .failure(CancellationError())) }
+        let suspended = expectation(description: "Settings reload is suspended")
+        store.onReloadSuspended = { suspended.fulfill() }
+        let messages = PR7BMessagePresenterSpy()
+        let viewModel = makeViewModel(schema: try pr7bSettingsSchema(), store: store, messages: messages)
+
+        let task = Task { await viewModel.reload() }
+        await fulfillment(of: [suspended], timeout: 2)
+        task.cancel()
+        store.completeReload(with: .failure(URLError(.cancelled)))
+        await task.value
+
+        XCTAssertFalse(viewModel.isReloading)
+        XCTAssertNil(viewModel.reloadError)
+        XCTAssertTrue(messages.messages.isEmpty)
+    }
+
     func testImmediateCancelOwnsPersistenceTriggeredReloadBeforeItCanStart() async throws {
         let store = PR7BSettingsStoreSpy()
         store.suspendsReload = true

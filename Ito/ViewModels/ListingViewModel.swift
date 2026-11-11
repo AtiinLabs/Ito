@@ -172,16 +172,17 @@ final class ListingViewModel: ObservableObject {
             }
             phase = isEmpty ? .empty : .content
             finishRequest(requestID)
-        } catch is CancellationError {
-            guard isCurrent(sessionID: sessionID, requestID: requestID) else { return }
-            if isInitial {
-                phase = .cancelled
-            } else {
-                paginationState = .continuationRequired(page: page)
-            }
-            finishRequest(requestID)
         } catch {
-            guard isCurrent(sessionID: sessionID, requestID: requestID), !Task.isCancelled else {
+            guard isCurrent(sessionID: sessionID, requestID: requestID) else { return }
+            // A request its caller cancelled can end in a host error rather than CancellationError, such as
+            // URLError(.cancelled). That is still a cancellation: it is never shown as a failure.
+            if error is CancellationError || Task.isCancelled {
+                if isInitial {
+                    phase = .cancelled
+                } else {
+                    paginationState = .continuationRequired(page: page)
+                }
+                finishRequest(requestID)
                 return
             }
             let reason = error.localizedDescription

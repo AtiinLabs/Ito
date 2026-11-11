@@ -167,12 +167,15 @@ final class PluginSettingsViewModel: ObservableObject {
                 isReloading = false
                 reloadError = nil
                 finishReload(operationID)
-            } catch is CancellationError {
-                guard reloadOperationID == operationID else { return }
-                isReloading = false
-                finishReload(operationID)
             } catch {
-                guard reloadOperationID == operationID, !Task.isCancelled else { return }
+                guard reloadOperationID == operationID else { return }
+                // A reload its caller cancelled can end in a host error rather than CancellationError, such as
+                // URLError(.cancelled). That is still a cancellation: it is never shown as a failure.
+                if error is CancellationError || Task.isCancelled {
+                    isReloading = false
+                    finishReload(operationID)
+                    return
+                }
                 let reason = error.localizedDescription
                 isReloading = false
                 reloadError = reason
