@@ -1,11 +1,34 @@
 import Foundation
 import OSLog
 
+protocol MediaDetailSnapshotEncoding: Sendable {
+    func encode<Value: Encodable & Sendable>(_ value: Value) async throws -> Data
+}
+
+nonisolated struct JSONMediaDetailSnapshotEncoder: MediaDetailSnapshotEncoding {
+    func encode<Value: Encodable & Sendable>(_ value: Value) async throws -> Data {
+        try await Task.detached(priority: .utility) {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .sortedKeys
+            return try encoder.encode(value)
+        }.value
+    }
+}
+
 /// Reads and refreshes the details the Library saved for one series, for the detail screen. Every failure
 /// is absorbed: saved details are a convenience, and a screen never fails or waits because of them.
 @MainActor
 struct MediaDetailSnapshotRefresher {
     let library: any MediaDetailLibraryServing
+    let encoder: any MediaDetailSnapshotEncoding
+
+    init(
+        library: any MediaDetailLibraryServing,
+        encoder: any MediaDetailSnapshotEncoding = JSONMediaDetailSnapshotEncoder()
+    ) {
+        self.library = library
+        self.encoder = encoder
+    }
 
     /// Names the saved details, to be read before the source is asked. Nil when there is nothing to refresh
     /// or the token cannot be read.
@@ -35,20 +58,17 @@ struct MediaDetailSnapshotRefresher {
     ) async -> Date? {
         guard let chapters = updated.chapterList, !chapters.isEmpty, !Task.isCancelled else { return nil }
         do {
-            // Sorted keys: the same content is the same bytes, so an unchanged series is recognised as such.
-            // Encoding a long chapter list is not main-actor work.
-            let payload = try await Task.detached(priority: .utility) {
-                let encoder = JSONEncoder()
-                encoder.outputFormatting = .sortedKeys
-                return try encoder.encode(updated)
-            }.value
+            // Sorted keys make unchanged series encode to the same bytes.
+            let payload = try await encoder.encode(updated)
+            guard !Task.isCancelled else { return nil }
+            let catalog = LibraryCatalogDescription(updated.chapterCatalog)
+            guard !Task.isCancelled else { return nil }
             let outcome = try await library.replaceSnapshot(
                 token,
                 payload: payload,
                 coverURL: updated.cover,
                 chapterRowCount: chapters.count,
-                // The catalog's scope is not recorded yet; `.unknown` makes no claim about the series.
-                catalog: .unknown,
+                catalog: catalog,
                 refreshedAt: refreshedAt
             )
             return outcome == .replaced ? refreshedAt : nil

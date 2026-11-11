@@ -28,7 +28,8 @@ struct LibraryManagerSnapshotTests {
     }
 
     private func makeFixture(
-        coverUrl: String? = "https://example.com/original.jpg"
+        coverUrl: String? = "https://example.com/original.jpg",
+        rawPayload: Data = LibraryManagerSnapshotTests.originalPayload
     ) async throws -> Fixture {
         let database = try TestDatabase()
         let manager = LibraryManager(dbPool: database.dbPool)
@@ -40,7 +41,7 @@ struct LibraryManagerSnapshotTests {
                 pluginId: Self.pluginId,
                 isAnime: false,
                 pluginType: .manga,
-                rawPayload: Self.originalPayload,
+                rawPayload: rawPayload,
                 anilistId: nil
             ).insert(db)
         }
@@ -134,7 +135,7 @@ struct LibraryManagerSnapshotTests {
         #expect(cover == "https://example.com/original.jpg")
     }
 
-    @Test func aCatalogSavedAsCompleteIsNotReplacedByAFilteredOrPartialOne() async throws {
+    @Test func aNarrowerCatalogReplacesTheSavedCompleteOneAndIsRecordedAsNarrower() async throws {
         let fixture = try await makeFixture()
         defer { fixture.database.cleanup() }
         let complete = LibraryCatalogDescription(scope: .allEligible, completeness: .complete)
@@ -145,26 +146,20 @@ struct LibraryManagerSnapshotTests {
         let unknown = LibraryCatalogDescription.unknown
         let allEligibleUnknown = LibraryCatalogDescription(scope: .allEligible, completeness: .unknown)
         for narrower in [filtered, partial, unknown, allEligibleUnknown] {
-            let outcome = try await replace(
-                fixture,
-                try await token(fixture),
-                payload: Data("narrower".utf8),
-                catalog: narrower
-            )
-            #expect(outcome == .rejectedIncomplete)
+            let payload = Data("narrower \(narrower.scope) \(narrower.completeness)".utf8)
+            let outcome = try await replace(fixture, try await token(fixture), payload: payload, catalog: narrower)
+            #expect(outcome == .replaced)
+            #expect(try await fixture.payload() == payload)
+            // What the source reports now is what is recorded, so the entire-series claim drops with it.
+            let state = try #require(try await fixture.state())
+            #expect(state.catalog == narrower)
+            #expect(!state.coversEntireSeries)
         }
 
-        #expect(try await fixture.payload() == Self.refreshedPayload)
-        let state = try #require(try await fixture.state())
-        #expect(state.catalog == complete)
-        // A complete catalog may still be refreshed by another complete one.
-        let newer = try await replace(
-            fixture,
-            try await token(fixture),
-            payload: Data("newer".utf8),
-            catalog: complete
-        )
+        // A complete catalog may be refreshed by another complete one, and then the claim comes back.
+        let newer = try await replace(fixture, try await token(fixture), payload: Data("newer".utf8), catalog: complete)
         #expect(newer == .replaced)
+        #expect(try await fixture.state()?.coversEntireSeries == true)
     }
 
     @Test func anUnchangedRefreshOnlyRecordsTheTimeAndWritesNoLibraryRow() async throws {
@@ -252,6 +247,225 @@ struct LibraryManagerSnapshotTests {
         #expect(LibraryCatalogCompleteness(reported: "somethingNew") == .unknown)
         #expect(LibraryCatalogCompleteness(reported: "partial") == .partial)
         #expect(LibraryCatalogCompleteness(reported: "complete") == .complete)
+    }
+
+    @Test func onlyACompleteCatalogOfEveryEligibleUploadBacksTheEntireSeriesClaim() {
+        let cells: [(CatalogScope, CatalogCompleteness, SeriesCatalogScope)] = [
+            (.unknown, .unknown, .unknown),
+            (.unknown, .partial, .partial),
+            (.unknown, .complete, .unknown),
+            (.visible, .unknown, .visible),
+            (.visible, .partial, .partial),
+            (.visible, .complete, .visible),
+            (.allEligible, .unknown, .unknown),
+            (.allEligible, .partial, .partial),
+            (.allEligible, .complete, .complete)
+        ]
+        for (scope, completeness, offline) in cells {
+            let description = LibraryCatalogDescription(ChapterCatalog(scope: scope, completeness: completeness))
+            let state = LibrarySnapshotStateRecord(
+                pluginId: Self.pluginId,
+                mediaKind: .manga,
+                canonicalMediaId: "series-1",
+                payloadSHA256: String(repeating: "a", count: 64),
+                refreshedAt: Self.refreshedAt,
+                catalogScope: description.scope,
+                catalogCompleteness: description.completeness,
+                chapterRowCount: 3
+            )
+            let claim = scope == .allEligible && completeness == .complete
+            #expect(description.coversEntireSeries == claim, "\(scope) \(completeness)")
+            #expect(state.coversEntireSeries == claim, "\(scope) \(completeness)")
+            #expect(state.offlineSnapshot.catalogScope == offline, "\(scope) \(completeness)")
+        }
+        #expect(LibraryCatalogDescription(nil) == .unknown)
+    }
+
+    // MARK: - Recording a refresh through the refresher
+
+    private func makeRefresher(_ fixture: Fixture) -> MediaDetailSnapshotRefresher {
+        MediaDetailSnapshotRefresher(library: fixture.manager)
+    }
+
+    private static func manga(chapters count: Int, catalog: ChapterCatalog?) -> Manga {
+        Manga(
+            key: "series-1",
+            title: "Series",
+            chapters: (0..<count).map { index in
+                Chapter(key: "c\(index)", volume: nil, chapter: Double(index + 1), scanlator: "A", paywalled: nil)
+            },
+            catalog: catalog
+        )
+    }
+
+    @Test func aRefreshRecordsTheCatalogTheSourceReportedForTheEntireSeriesClaim() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.database.cleanup() }
+        let token = try await token(fixture)
+        let complete = ChapterCatalog(scope: .allEligible, completeness: .complete)
+
+        let saved = await makeRefresher(fixture).replace(
+            token,
+            with: Self.manga(chapters: 3, catalog: complete),
+            refreshedAt: Self.refreshedAt
+        )
+
+        #expect(saved == Self.refreshedAt)
+        let state = try #require(try await fixture.state())
+        #expect(state.catalog == LibraryCatalogDescription(complete))
+        #expect(state.offlineSnapshot.catalogScope == .complete)
+        #expect(try await fixture.manager.snapshotBasis(for: Self.media)?.snapshot.catalogScope == .complete)
+    }
+
+    @Test func aLaterNarrowerVisibleCatalogReplacesTheCompleteOneAndTheClaimDrops() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.database.cleanup() }
+        let refresher = makeRefresher(fixture)
+        let firstToken = try await token(fixture)
+        let first = await refresher.replace(
+            firstToken,
+            with: Self.manga(chapters: 3, catalog: ChapterCatalog(scope: .allEligible, completeness: .complete)),
+            refreshedAt: Self.refreshedAt
+        )
+        #expect(first == Self.refreshedAt)
+
+        let laterToken = try await token(fixture)
+        let later = Self.refreshedAt.addingTimeInterval(60)
+        let second = await refresher.replace(
+            laterToken,
+            with: Self.manga(chapters: 4, catalog: ChapterCatalog(scope: .visible, completeness: .complete)),
+            refreshedAt: later
+        )
+        #expect(second == later)
+
+        let state = try #require(try await fixture.state())
+        #expect(state.catalog == LibraryCatalogDescription(scope: .visible, completeness: .complete))
+        #expect(state.offlineSnapshot.catalogScope == .visible)
+        let basis = try #require(try await fixture.manager.snapshotBasis(for: Self.media))
+        #expect(basis.snapshot.catalogScope == .visible)
+    }
+
+    @Test func aSourceThatReportsNoCatalogRecordsUnknownAndDropsAnEarlierClaim() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.database.cleanup() }
+        let refresher = makeRefresher(fixture)
+        let firstToken = try await token(fixture)
+        let first = await refresher.replace(
+            firstToken,
+            with: Self.manga(chapters: 3, catalog: ChapterCatalog(scope: .allEligible, completeness: .complete)),
+            refreshedAt: Self.refreshedAt
+        )
+        #expect(first == Self.refreshedAt)
+
+        let laterToken = try await token(fixture)
+        let second = await refresher.replace(
+            laterToken,
+            with: Self.manga(chapters: 3, catalog: nil),
+            refreshedAt: Self.refreshedAt
+        )
+        #expect(second == Self.refreshedAt)
+
+        let state = try #require(try await fixture.state())
+        #expect(state.catalog == .unknown)
+        #expect(state.offlineSnapshot.catalogScope == .unknown)
+    }
+
+    @Test func anEmptyOrMissingChapterListIsNeverSaved() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.database.cleanup() }
+        let refresher = makeRefresher(fixture)
+        let complete = ChapterCatalog(scope: .allEligible, completeness: .complete)
+
+        let emptyToken = try await token(fixture)
+        let empty = await refresher.replace(
+            emptyToken,
+            with: Self.manga(chapters: 0, catalog: complete),
+            refreshedAt: Self.refreshedAt
+        )
+        #expect(empty == nil)
+
+        let missingToken = try await token(fixture)
+        let missing = await refresher.replace(
+            missingToken,
+            with: Manga(key: "series-1", title: "Series", catalog: complete),
+            refreshedAt: Self.refreshedAt
+        )
+        #expect(missing == nil)
+
+        #expect(try await fixture.payload() == Self.originalPayload)
+        #expect(try await fixture.state() == nil)
+    }
+
+    @Test func aRestoredPayloadWithACompleteCatalogInItsJSONMakesNoClaim() async throws {
+        let restored = try JSONEncoder().encode(Self.manga(
+            chapters: 3,
+            catalog: ChapterCatalog(scope: .allEligible, completeness: .complete)
+        ))
+
+        // Saved without a refresh: no state row, so nothing backs the claim.
+        let unrecorded = try await makeFixture(rawPayload: restored)
+        defer { unrecorded.database.cleanup() }
+        #expect(try await unrecorded.state() == nil)
+        #expect(try await unrecorded.manager.snapshotBasis(for: Self.media) == nil)
+
+        // A complete refresh of other bytes, then a restore of this payload: the state describes a payload that
+        // is no longer saved, so it does not back the claim.
+        let fixture = try await makeFixture()
+        defer { fixture.database.cleanup() }
+        let complete = LibraryCatalogDescription(scope: .allEligible, completeness: .complete)
+        #expect(try await replace(fixture, try await token(fixture), catalog: complete) == .replaced)
+        try await fixture.database.dbPool.write { db in
+            try db.execute(sql: "UPDATE libraryItem SET rawPayload = ? WHERE id = ?", arguments: [restored, "series-1"])
+        }
+        let basis = try #require(try await fixture.manager.snapshotBasis(for: Self.media))
+        #expect(basis.snapshot.payloadSHA256 != basis.currentPayloadSHA256)
+        #expect(basis.catalog.isEmpty)
+    }
+
+    @available(iOS 16, *)
+    @Test(.timeLimit(.minutes(1)))
+    func cancellingDuringEncodingLeavesTheSavedCompletePayloadAndClaimUnchanged() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.database.cleanup() }
+        let original = try JSONEncoder().encode(Self.manga(
+            chapters: 3,
+            catalog: ChapterCatalog(scope: .allEligible, completeness: .complete)
+        ))
+        let initial = try await token(fixture)
+        #expect(try await fixture.manager.replaceSnapshotDurably(
+            initial,
+            payload: original,
+            coverUrl: nil,
+            chapterRowCount: 3,
+            catalog: LibraryCatalogDescription(scope: .allEligible, completeness: .complete),
+            refreshedAt: Self.refreshedAt
+        ) == .replaced)
+        let completeState = try #require(try await fixture.state())
+        let token = try await token(fixture)
+        let encoder = SuspendedSnapshotEncoder()
+        defer { Task { await encoder.releaseAll() } }
+        let refresher = MediaDetailSnapshotRefresher(library: fixture.manager, encoder: encoder)
+        let task = Task {
+            await refresher.replace(
+                token,
+                with: Self.manga(
+                    chapters: 4,
+                    catalog: ChapterCatalog(scope: .visible, completeness: .complete)
+                ),
+                refreshedAt: Self.refreshedAt.addingTimeInterval(60)
+            )
+        }
+
+        try await encoder.waitUntilStarted(1)
+        task.cancel()
+        await encoder.release(request: 1)
+        #expect(await task.value == nil)
+        #expect(await encoder.observedCancellationState(for: 1) == true)
+        #expect(try await fixture.payload() == original)
+        #expect(try await fixture.state() == completeState)
+        let basis = try #require(try await fixture.manager.snapshotBasis(for: Self.media))
+        #expect(basis.snapshot.catalogScope == .complete)
+        #expect(basis.currentPayloadSHA256 == completeState.payloadSHA256)
     }
 
     // MARK: - Stale tokens

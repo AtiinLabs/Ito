@@ -16,11 +16,14 @@ public protocol MediaDisplayable: Identifiable, Codable, Sendable {
 
     associatedtype Chapter: ChapterDisplayable
     var chapterList: [Chapter]? { get }
+    /// What `chapterList` covers, as the source described it. Nil when the source said nothing about it.
+    var chapterCatalog: ChapterCatalog? { get }
 }
 
 nonisolated extension Manga: MediaDisplayable {
     public var mediaKind: MediaKind { .manga }
     public var chapterList: [Manga.Chapter]? { chapters }
+    public var chapterCatalog: ChapterCatalog? { catalog }
     public var studios: [String]? { nil }
     public var isCompleted: Bool { status == .Completed }
     public var displayStatus: String? {
@@ -38,6 +41,7 @@ nonisolated extension Anime: MediaDisplayable {
     public var mediaKind: MediaKind { .anime }
     public var authors: [String]? { nil }
     public var chapterList: [Anime.Episode]? { episodes }
+    public var chapterCatalog: ChapterCatalog? { nil }
     public var isCompleted: Bool { status == .Completed }
     public var displayStatus: String? {
         switch self.status {
@@ -53,6 +57,7 @@ nonisolated extension Anime: MediaDisplayable {
 nonisolated extension Novel: MediaDisplayable {
     public var mediaKind: MediaKind { .novel }
     public var chapterList: [Novel.Chapter]? { chapters }
+    public var chapterCatalog: ChapterCatalog? { catalog }
     public var studios: [String]? { nil }
     public var isCompleted: Bool { status == .Completed }
     public var displayStatus: String? {

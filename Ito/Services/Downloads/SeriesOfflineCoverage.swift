@@ -1,7 +1,9 @@
 import Foundation
 
-/// How much of a series' catalog the source said it returned. Ito does not record the source's scope, so it is
-/// always `.unknown`. The other cases describe a recorded scope.
+/// How much of a series' catalog the saved details say the source returned. Only `.complete` backs the
+/// "entire series" claim, and it is recorded only for a complete catalog of every eligible upload. Future
+/// pruning must key on `.complete`, never on completeness alone: a complete list of what is visible is not
+/// the whole series.
 nonisolated enum SeriesCatalogScope: Equatable, Sendable {
     case unknown
     case visible

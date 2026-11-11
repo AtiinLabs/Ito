@@ -36,6 +36,7 @@ extension MediaDetailViewModel {
     func refreshSavedSnapshot(_ token: LibrarySnapshotToken, with updated: M, requestedKey: String) async {
         guard updated.key == requestedKey,
               let refreshedAt = await snapshots.replace(token, with: updated),
+              !Task.isCancelled,
               media.key == requestedKey else { return }
         snapshotDateTask?.cancel()
         snapshotDateTask = nil

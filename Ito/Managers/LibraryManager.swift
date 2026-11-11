@@ -312,8 +312,8 @@ public class LibraryManager: ObservableObject {
     /// nothing. The Library title is the user's own and is kept; a refresh without a cover keeps the
     /// saved one. Downloads are untouched, whatever chapters the new list leaves out.
     ///
-    /// - Parameter catalog: How the source described the catalog; `unknown` until a source says more. A
-    ///   catalog saved as complete over every eligible upload is replaced only by another such catalog. The
+    /// - Parameter catalog: How the source described the catalog. It is always the one recorded, even when it is
+    ///   narrower than the one saved, so the entire-series claim drops as soon as the source reports less. The
     ///   same bytes and cover only record a new refresh time.
     func replaceSnapshotDurably(
         _ token: LibrarySnapshotToken,
@@ -324,6 +324,7 @@ public class LibraryManager: ObservableObject {
         refreshedAt: Date
     ) async throws -> LibrarySnapshotReplaceOutcome {
         guard chapterRowCount > 0 else { return .rejectedIncomplete }
+        guard !Task.isCancelled else { return .stale }
         let publicationClock = publicationClock
         let result = try await dbPool.write { db -> (LibrarySnapshotReplaceOutcome, LibraryPublication?) in
             guard let item = try LibraryItem.fetchOne(db, key: token.itemID),
@@ -332,18 +333,6 @@ public class LibraryManager: ObservableObject {
                 return (.stale, nil)
             }
             let media = token.media
-            let stored = try LibrarySnapshotStateRecord
-                .filter(Column("pluginId") == media.pluginId)
-                .filter(Column("canonicalMediaId") == media.canonicalMediaId)
-                .filter(Column("mediaKind") == media.mediaKind.rawValue)
-                .fetchOne(db)
-            // A saved complete catalog is only replaced by another complete one.
-            if let stored,
-               stored.payloadSHA256 == token.payloadSHA256,
-               stored.catalog.coversEntireSeries,
-               !catalog.coversEntireSeries {
-                return (.rejectedIncomplete, nil)
-            }
             let newCover = coverUrl.flatMap { $0.isEmpty ? nil : $0 }
             let payloadDigest = OfflineDigest.sha256Hex(payload)
             // The same bytes and cover change nothing the Library shows: only the refresh time is recorded,

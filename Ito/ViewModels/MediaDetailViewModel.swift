@@ -87,6 +87,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     private let presentationLogger: any PresentationEventLogging
 
     private var detailTask: Task<Void, Never>?
+    private var detailTaskOperationID: UUID?
     private var themeTask: Task<Void, Never>?
     private var relinkSearchTask: Task<Void, Never>?
     private var baselineTask: Task<Void, Never>?
@@ -123,6 +124,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         dependencies: PreparedMediaDetailDependencies,
         messagePresenter: any MediaDetailMessagePresenting,
         presentationLogger: any PresentationEventLogging,
+        snapshotEncoder: any MediaDetailSnapshotEncoding = JSONMediaDetailSnapshotEncoder(),
         openIntent: MediaDetailOpenIntent? = nil
     ) {
         self.media = media
@@ -131,7 +133,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         self.dependencies = dependencies
         self.messagePresenter = messagePresenter
         downloads = dependencies.downloads
-        snapshots = MediaDetailSnapshotRefresher(library: dependencies.library)
+        snapshots = MediaDetailSnapshotRefresher(library: dependencies.library, encoder: snapshotEncoder)
         downloadBatch = MediaDetailDownloadBatchModel(
             downloads: dependencies.downloads,
             progress: dependencies.progress,
@@ -614,6 +616,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         let snapshots = snapshots
         let tokenIdentity: MediaIdentity? = isSaved ? mediaIdentity : nil
         let task = Task { [weak self] in
+            defer { self?.clearDetailTask(operationID: operationID) }
             do {
                 // Read before the source is asked: a refresh may replace only the details this load started
                 // from. A token that cannot be read means no refresh, never a failed load.
@@ -631,7 +634,6 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
                 self?.media = updated
                 self?.selectedGroup = Self.preferredAnimeGroup(for: updated)
                 self?.detailOperationID = nil
-                self?.detailTask = nil
                 self?.detailLoadState = .content
                 self?.refreshIdentitySnapshots()
                 self?.logFinished(
@@ -652,6 +654,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
                 self?.publishDetailFailure(operationID: operationID, mediaKey: requestedKey)
             }
         }
+        detailTaskOperationID = operationID
         detailTask = task
         return task
     }
@@ -661,6 +664,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     private func beginSavedOnly() -> Task<Void, Never> {
         detailTask?.cancel()
         detailTask = nil
+        detailTaskOperationID = nil
         detailOperationID = nil
         detailLoadState = .savedOnly
         loadSnapshotRefreshDate()
@@ -986,6 +990,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         baselineTask?.cancel()
         trackerProgressTask?.cancel()
         savedChapterTask?.cancel()
+        detailTaskOperationID = nil
         detailTask = nil
         themeTask = nil
         relinkSearchTask = nil
@@ -1015,6 +1020,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         baselineTask?.cancel()
         trackerProgressTask?.cancel()
         savedChapterTask?.cancel()
+        detailTaskOperationID = nil
         detailTask = nil
         themeTask = nil
         relinkSearchTask = nil
@@ -1023,6 +1029,12 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         savedChapterTask = nil
         if detailLoadState == .loading { detailLoadState = .idle }
         if relinkSearchState == .loading { relinkSearchState = .idle }
+    }
+
+    private func clearDetailTask(operationID: UUID) {
+        guard detailTaskOperationID == operationID else { return }
+        detailTask = nil
+        detailTaskOperationID = nil
     }
 
     private func isCurrentDetailOperation(_ operationID: UUID, mediaKey: String) -> Bool {
