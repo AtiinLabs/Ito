@@ -159,7 +159,9 @@ struct DownloadAttemptTests {
         try await fixture.offline.assertInvariants(fixture.store)
     }
 
-    @Test func aPluginThatSwallowsAWebViewRefusalStillFailsTheChapter() async throws {
+    @available(iOS 16, *)
+    @Test(.timeLimit(.minutes(1)))
+    func aPluginThatSwallowsAWebViewRefusalStillFailsTheChapter() async throws {
         let fixture = try DownloadWorkerFixture()
         fixture.source.setListingHook { modules in
             _ = try? await modules.webview.loadUrl(request: WebviewRequest(url: "https://source.test/login", script: nil), context: makeTestNetworkContext())
@@ -198,6 +200,48 @@ struct DownloadAttemptTests {
         #expect(waiting?.waitingReason == .meteredNetwork)
         #expect(fixture.inner.calls.count == 0)
         #expect(fixture.fetcher.requestedURLs.isEmpty)
+        #expect(try await fixture.copy() == nil)
+        try await fixture.offline.assertInvariants(fixture.store)
+    }
+
+    /// The denial comes from the export's web view, on an unmetered path, so no path change can explain the
+    /// outcome. The recorder's handler cancels the attempt before `run` checks for a denial. Checking cancellation
+    /// first would requeue the attempt; the one-shot hook then lets the second attempt publish, which fails here.
+    @available(iOS 16, *)
+    @Test(.timeLimit(.minutes(1)))
+    func aWebViewDenialRecordedDuringAnExportFailsTheAttemptEvenThoughItCancelsIt() async throws {
+        let page = WebviewRequest(url: "https://source.test/login", script: nil)
+        let wasm = TestWasm.build(TestWasm.Fixture.abi2(try TestWasm.openingWebView(page)))
+        let fixture = try DownloadWorkerFixture()
+        let listingHooks = DownloadCallCounter()
+        fixture.source.setListingHook { modules in
+            // One-shot: a requeued attempt lists again and must not open the page a second time.
+            let earlier = listingHooks.count
+            listingHooks.increment()
+            guard earlier == 0 else { return }
+
+            let runner = ItoRunner()
+            await runner.setNetModule(modules.net)
+            await runner.setWebviewModule(modules.webview)
+            do {
+                try await runner.loadPlugin(fromBytes: wasm)
+                _ = try await runner.markCompleted(
+                    kind: .manga, mediaKey: "media", unitKey: "unit",
+                    context: makeTestNetworkContext(purpose: .manualBulkDownload)
+                )
+            } catch {
+                // However the refused export ends, the attempt's outcome is the recorded denial.
+            }
+        }
+        _ = await fixture.enqueue()
+
+        await fixture.startWorker()
+        await fixture.coordinator.untilIdle()
+
+        let failed = try await fixture.job()
+        #expect(failed?.state == .failed)
+        #expect(failed?.failureReason == .requiresInteractiveSource)
+        #expect(fixture.source.listings.count == 1)
         #expect(try await fixture.copy() == nil)
         try await fixture.offline.assertInvariants(fixture.store)
     }
