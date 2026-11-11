@@ -169,8 +169,17 @@ extension PluginSettingsStore: PluginSettingsPersisting {
 
 @MainActor
 protocol SourcePluginStatePublishing: AnyObject {
+    /// Runs `operation` holding the plugin directory gate. Source-plugin deletion runs through it from staging to
+    /// commit or rollback.
+    func withPluginDirectoryLease<Value>(
+        _ operation: (PluginDirectoryLease) async throws -> Value
+    ) async throws -> Value
     func currentSourcePlugin(for pluginID: String) -> InstalledPlugin?
-    func prepareSourcePluginStatePublication() async throws -> any SourcePluginStatePublication
+    /// Requires the plugin directory gate, passed as `lease`, so the preparation, the commit and the publish form
+    /// one operation.
+    func prepareSourcePluginStatePublicationLocked(
+        _ lease: PluginDirectoryLease
+    ) async throws -> any SourcePluginStatePublication
     func holdCompletionDelivery(for pluginID: String) async throws
     func revokeTrust(for pluginID: String) throws
     func purgeCompletionDelivery(for pluginID: String) async
@@ -180,7 +189,8 @@ protocol SourcePluginStatePublishing: AnyObject {
 @MainActor
 protocol SourcePluginStatePublication: AnyObject {
     func validateCurrentState() throws
-    func publish()
+    /// Requires the plugin directory gate, passed as `lease`.
+    func publish(_ lease: PluginDirectoryLease)
 }
 
 @MainActor
@@ -209,10 +219,10 @@ private final class PluginManagerSourcePluginStatePublication: SourcePluginState
         }
     }
 
-    func publish() {
+    func publish(_ lease: PluginDirectoryLease) {
         guard !isPublished else { return }
         isPublished = true
-        pluginManager.publishPreparedInstalledPlugins(installedPlugins)
+        pluginManager.publishPreparedInstalledPluginsLocked(installedPlugins, lease)
     }
 }
 
@@ -221,13 +231,15 @@ extension PluginManager: SourcePluginStatePublishing {
         installedPlugins[pluginID]
     }
 
-    func prepareSourcePluginStatePublication() async throws -> any SourcePluginStatePublication {
+    func prepareSourcePluginStatePublicationLocked(
+        _ lease: PluginDirectoryLease
+    ) async throws -> any SourcePluginStatePublication {
         let expectedIdentities = installedPlugins.mapValues(
             SourcePluginDeletionIdentity.init(plugin:)
         )
         return PluginManagerSourcePluginStatePublication(
             pluginManager: self,
-            installedPlugins: try prepareInstalledPluginsPublication(),
+            installedPlugins: try await prepareInstalledPluginsPublicationLocked(failOnInvalidPlugin: true, lease),
             expectedInstalledPluginIdentities: expectedIdentities
         )
     }
@@ -242,8 +254,11 @@ protocol PluginFileDeletionTransaction: AnyObject {
 @MainActor
 protocol SourcePluginFileDeleting: AnyObject {
     func snapshotPluginFile(for plugin: InstalledPlugin) throws -> SourcePluginFileSnapshot
+    /// Requires the plugin directory gate, passed as `lease`. The transaction's commit or rollback runs inside
+    /// the same gate operation.
     func stagePluginFileDeletion(
-        from snapshot: SourcePluginFileSnapshot
+        from snapshot: SourcePluginFileSnapshot,
+        _ lease: PluginDirectoryLease
     ) throws -> any PluginFileDeletionTransaction
 }
 
@@ -467,7 +482,15 @@ private final class UnavailableSourceDependency: SourceRunnerProviding,
 
     func currentSourcePlugin(for pluginID: String) -> InstalledPlugin? { nil }
 
-    func prepareSourcePluginStatePublication() async throws -> any SourcePluginStatePublication {
+    func withPluginDirectoryLease<Value>(
+        _ operation: (PluginDirectoryLease) async throws -> Value
+    ) async throws -> Value {
+        throw SourceDependencyUnavailableError.unavailable
+    }
+
+    func prepareSourcePluginStatePublicationLocked(
+        _ lease: PluginDirectoryLease
+    ) async throws -> any SourcePluginStatePublication {
         throw SourceDependencyUnavailableError.unavailable
     }
 
@@ -488,7 +511,8 @@ private final class UnavailableSourceDependency: SourceRunnerProviding,
     }
 
     func stagePluginFileDeletion(
-        from snapshot: SourcePluginFileSnapshot
+        from snapshot: SourcePluginFileSnapshot,
+        _ lease: PluginDirectoryLease
     ) throws -> any PluginFileDeletionTransaction {
         throw SourceDependencyUnavailableError.unavailable
     }

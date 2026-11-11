@@ -8,7 +8,13 @@ protocol BrowsePluginManaging: AnyObject {
     var installedPlugins: [String: InstalledPlugin] { get }
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> { get }
 
-    func reloadInstalledPlugins() async
+    /// Runs `operation` holding the plugin directory gate. Operations that change the directory and republish
+    /// the installed plugins run through it, so no other operation interleaves.
+    func withPluginDirectoryLease<Value>(
+        _ operation: (PluginDirectoryLease) async throws -> Value
+    ) async throws -> Value
+    /// Republishes the installed plugins. Requires the plugin directory gate, passed as `lease`.
+    func reloadInstalledPluginsLocked(_ lease: PluginDirectoryLease) async
     /// Pauses source-bound delivery before its installed file can be removed.
     func holdCompletionDelivery(for pluginID: String) async throws
     /// Forgets a removed source's held delivery.
@@ -33,8 +39,9 @@ protocol BrowseRepositoryManaging: AnyObject {
 @MainActor
 protocol BrowsePluginFileOperating: AnyObject {
     func supportsPluginFile(at url: URL) -> Bool
-    func installPluginFile(from url: URL) throws
-    func deletePluginFile(at url: URL) throws
+    /// Both mutations require the plugin directory gate, passed as `lease`.
+    func installPluginFile(from url: URL, _ lease: PluginDirectoryLease) async throws
+    func deletePluginFile(at url: URL, _ lease: PluginDirectoryLease) throws
 }
 
 public enum BrowseImportSource: Equatable {
@@ -136,7 +143,9 @@ final class LocalBrowsePluginFileOperations: BrowsePluginFileOperating, SourcePl
         url.pathExtension.lowercased() == "ito"
     }
 
-    func installPluginFile(from url: URL) throws {
+    /// Requires the plugin directory gate, passed as `lease`. The inspection of the staged copy and the replace
+    /// both run inside it, and so does the caller's reload.
+    func installPluginFile(from url: URL, _ lease: PluginDirectoryLease) async throws {
         guard supportsPluginFile(at: url) else {
             throw BrowsePluginFileError.unsupportedPluginFile
         }
@@ -147,14 +156,23 @@ final class LocalBrowsePluginFileOperations: BrowsePluginFileOperating, SourcePl
 
         defer { try? fileManager.removeItem(at: stagingURL) }
         try fileManager.copyItem(at: url, to: stagingURL)
-        let info: PluginInfo
+        // The staged copy is what gets inspected and then installed, so the two can't differ. The
+        // installed file is replaced only after it passes.
+        let reading: PluginPackageReading
         do {
-            info = try ItoRunner.extractPluginInfo(from: stagingURL).manifest.info
+            reading = try await PluginPackageReading.readInBackground(at: stagingURL)
+        } catch let error as PluginPackageInspectionError {
+            throw error
         } catch {
             throw BrowsePluginFileError.unsupportedPluginFile
         }
-        if let refusal = info.compatibilityRefusal {
+        switch reading.installRefusal {
+        case nil:
+            break
+        case .requiresNewerApp(let refusal)?:
             throw refusal
+        case .unreadable?:
+            throw BrowsePluginFileError.unsupportedPluginFile
         }
 
         if fileManager.fileExists(atPath: destinationURL.path) {
@@ -169,7 +187,9 @@ final class LocalBrowsePluginFileOperations: BrowsePluginFileOperating, SourcePl
         }
     }
 
-    func deletePluginFile(at url: URL) throws {
+    /// Requires the plugin directory gate, passed as `lease`, so the removal and the reload that follows it form
+    /// one operation.
+    func deletePluginFile(at url: URL, _ lease: PluginDirectoryLease) throws {
         try fileManager.removeItem(at: url)
     }
 
@@ -188,8 +208,11 @@ final class LocalBrowsePluginFileOperations: BrowsePluginFileOperating, SourcePl
         return SourcePluginFileSnapshot(identity: identity, fileData: fileData)
     }
 
+    /// Requires the plugin directory gate, passed as `lease`. The returned transaction's commit or rollback runs
+    /// inside the same gate operation.
     func stagePluginFileDeletion(
-        from snapshot: SourcePluginFileSnapshot
+        from snapshot: SourcePluginFileSnapshot,
+        _ lease: PluginDirectoryLease
     ) throws -> any PluginFileDeletionTransaction {
         let pluginURL = try validatedPluginURL(snapshot.identity.fileURL)
         let pluginsDirectory = try pluginsDirectory().standardizedFileURL

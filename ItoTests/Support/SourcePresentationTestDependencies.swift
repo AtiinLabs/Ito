@@ -383,7 +383,13 @@ final class PR7BPluginStatePublisherSpy: SourcePluginStatePublishing {
         removedSecretsPluginIDs.append(pluginID)
     }
 
-    func prepareSourcePluginStatePublication() async throws -> any SourcePluginStatePublication {
+    func withPluginDirectoryLease<Value>(_ operation: (PluginDirectoryLease) async throws -> Value) async throws -> Value {
+        try await operation(PluginDirectoryLease())
+    }
+
+    func prepareSourcePluginStatePublicationLocked(
+        _ lease: PluginDirectoryLease
+    ) async throws -> any SourcePluginStatePublication {
         callCount += 1
         let expectedIdentities = currentPlugins.mapValues(
             SourcePluginDeletionIdentity.init(plugin:)
@@ -443,7 +449,7 @@ private final class PR7BSourcePluginStatePublicationSpy: SourcePluginStatePublic
         try owner?.validatePreparedState(expectedIdentities: expectedIdentities)
     }
 
-    func publish() {
+    func publish(_ lease: PluginDirectoryLease) {
         owner?.publishPreparedState()
     }
 }
@@ -484,7 +490,8 @@ final class PR7BFileDeletionSpy: SourcePluginFileDeleting {
     }
 
     func stagePluginFileDeletion(
-        from snapshot: SourcePluginFileSnapshot
+        from snapshot: SourcePluginFileSnapshot,
+        _ lease: PluginDirectoryLease
     ) throws -> any PluginFileDeletionTransaction {
         stagedSnapshots.append(snapshot)
         if let stageError { throw stageError }

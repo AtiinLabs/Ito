@@ -214,6 +214,11 @@ public class RepoManager: ObservableObject {
     private let packageFetcher: @Sendable (URLRequest) async throws -> Data
     private let configuredPluginsDirectory: URL?
     private let repositoryMutationGate = RepositoryMutationGate()
+    /// The plugin directory gate of the owning `PluginManager`, or a private one when there is none.
+    private let directoryGate: PluginDirectoryGate
+    /// Where a downloaded package is copied to be checked. The system temporary directory unless a caller points it
+    /// elsewhere, as tests do to make it unwritable.
+    private let scratchDirectory: URL
     private var activeRefresh: (id: UUID, task: Task<Void, Error>)?
     private var activePackageInstallations: [
         String: (id: UUID, request: PackageInstallationRequest, task: Task<Void, Error>)
@@ -245,10 +250,13 @@ public class RepoManager: ObservableObject {
         pluginManager: PluginManager? = nil,
         pluginsDirectory: URL?,
         packageFetcher: (@Sendable (URLRequest) async throws -> Data)? = nil,
-        indexFetcher: (@Sendable (URL) async throws -> Data)? = nil
+        indexFetcher: (@Sendable (URL) async throws -> Data)? = nil,
+        scratchDirectory: URL? = nil
     ) {
         self.dbPool = dbPool
         self.pluginStatePublisher = pluginManager
+        self.directoryGate = pluginManager?.directoryGate ?? PluginDirectoryGate()
+        self.scratchDirectory = scratchDirectory ?? FileManager.default.temporaryDirectory
         self.configuredPluginsDirectory = pluginsDirectory ?? pluginManager?.configuredInstalledPluginsDirectory
         if let packageFetcher {
             self.packageFetcher = packageFetcher
@@ -570,36 +578,70 @@ public class RepoManager: ObservableObject {
             throw URLError(.cannotDecodeRawData) // Or a custom error
         }
 
-        // Save to Application Support/Plugins
-        let fileManager = FileManager.default
-
-        if !fileManager.fileExists(atPath: pluginsDirectory.path) {
-            try fileManager.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
-        }
-
-        let previousData: Data?
-        if fileManager.fileExists(atPath: destUrl.path) {
-            previousData = try Data(contentsOf: destUrl)
-        } else {
-            previousData = nil
-        }
-        try data.write(to: destUrl, options: .atomic)
-
-        AppLogger.database.debug("Package installed")
-
+        // Inspect the module before anything in the plugins directory changes, so an incompatible or
+        // unreadable package never replaces the installed file.
+        let reading: PluginPackageReading
         do {
-            try await pluginStatePublisher?.publishInstalledPluginState()
-        } catch {
-            do {
-                if let previousData {
-                    try previousData.write(to: destUrl, options: .atomic)
-                } else if fileManager.fileExists(atPath: destUrl.path) {
-                    try fileManager.removeItem(at: destUrl)
-                }
-            } catch {
-                throw RepositoryPackageInstallationError.rollbackFailed
-            }
+            reading = try await PluginPackageReading.readInBackground(
+                downloaded: data,
+                scratchDirectory: scratchDirectory
+            )
+        } catch let error as PluginPackageInspectionError {
+            AppLogger.database.error("Package install refused; the package could not be checked")
             throw error
+        } catch {
+            AppLogger.database.error("Package install refused; downloaded file is not a readable source")
+            throw PluginPackageInspectionError.unreadablePackage
+        }
+        switch reading.installRefusal {
+        case nil:
+            break
+        case .requiresNewerApp(let refusal)?:
+            AppLogger.database.error("Package install refused; the package needs a newer Ito")
+            throw refusal
+        case .unreadable?:
+            AppLogger.database.error("Package install refused; downloaded module is damaged or unsupported")
+            throw PluginPackageInspectionError.unreadablePackage
+        }
+
+        // From the write to the publish, or to the rollback, this install is the only change to the plugin
+        // directory, so it runs holding the directory gate. Every rollback is followed by a republish of
+        // what the disk now holds.
+        try await directoryGate.withLease { lease in
+            let fileManager = FileManager.default
+
+            if !fileManager.fileExists(atPath: pluginsDirectory.path) {
+                try fileManager.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+            }
+
+            let previousData: Data?
+            if fileManager.fileExists(atPath: destUrl.path) {
+                previousData = try Data(contentsOf: destUrl)
+            } else {
+                previousData = nil
+            }
+            try data.write(to: destUrl, options: .atomic)
+
+            AppLogger.database.debug("Package installed")
+
+            do {
+                try await pluginStatePublisher?.publishInstalledPluginStateLocked(lease)
+            } catch {
+                do {
+                    if let previousData {
+                        try previousData.write(to: destUrl, options: .atomic)
+                    } else if fileManager.fileExists(atPath: destUrl.path) {
+                        try fileManager.removeItem(at: destUrl)
+                    }
+                } catch {
+                    throw RepositoryPackageInstallationError.rollbackFailed
+                }
+                // Republish what the disk now holds. A failed strict publish publishes nothing itself, so for changes
+                // made inside the gate this only clears the runner caches. It covers changes made outside the gate,
+                // such as a plugin file replaced by another process after the state was last published.
+                await pluginStatePublisher?.reloadInstalledPluginsLocked(lease)
+                throw error
+            }
         }
     }
 

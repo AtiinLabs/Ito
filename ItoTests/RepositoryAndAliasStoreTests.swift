@@ -249,7 +249,9 @@ struct RepositoryAndAliasStoreTests {
         let pluginsDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("RepositoryInstallQueue-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
-        let successfulData = Data("second package".utf8)
+        let successfulData = try makeTestPluginArchiveData(
+            id: "plugin.queue", version: "1.0", wasm: makeTestPluginWasm(abi: 2)
+        )
         let fetchGate = RepositoryPackageFetchGate(successfulData: successfulData)
         let manager = RepoManager(
             dbPool: database.dbPool,
@@ -430,7 +432,7 @@ struct RepositoryAndAliasStoreTests {
             .appendingPathComponent("RepositoryInstallPublication-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
         let packageID = "plugin.authoritative"
-        let archiveData = try makeTestPluginArchiveData(id: packageID, version: "2.0")
+        let archiveData = try makeTestPluginArchiveData(id: packageID, version: "2.0", wasm: makeTestPluginWasm(abi: 2))
         let pluginManager = PluginManager(
             pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
             pluginsDirectory: pluginsDirectory
@@ -459,7 +461,9 @@ struct RepositoryAndAliasStoreTests {
         let pluginsDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("RepositoryInstallRollback-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
-        let invalidArchiveData = Data("not an Ito archive".utf8)
+        let archiveData = try makeTestPluginArchiveData(
+            id: "plugin.rollback", version: "1.0", wasm: makeTestPluginWasm(abi: 2)
+        )
         let pluginManager = PluginManager(
             pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
             pluginsDirectory: pluginsDirectory
@@ -468,14 +472,18 @@ struct RepositoryAndAliasStoreTests {
             dbPool: database.dbPool,
             pluginManager: pluginManager,
             pluginsDirectory: nil,
-            packageFetcher: { _ in invalidArchiveData }
+            packageFetcher: { _ in archiveData }
         )
         let package = makePackage(
             id: "plugin.rollback",
-            sha256: sha256(invalidArchiveData)
+            sha256: sha256(archiveData)
         )
+        // The package is valid, so only publication can fail: its identity registry is gone.
+        try await database.dbPool.write { db in
+            try db.execute(sql: "DROP TABLE pluginIdentityRegistry")
+        }
 
-        await #expect(throws: (any Error).self) {
+        await #expect(throws: DatabaseError.self) {
             try await manager.installPackage(package, repositoryUrl: "https://example.com")
         }
 
@@ -487,13 +495,144 @@ struct RepositoryAndAliasStoreTests {
         #expect(pluginManager.installedPlugins.isEmpty)
     }
 
+    @Test func aRollbackRepublishesTheVersionTheDiskHoldsAfterward() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let pluginsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RepositoryInstallRestored-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
+        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+        // A damaged file makes strict discovery, which the install's publish uses, fail. Non-strict discovery,
+        // which the rollback's republish uses, skips it.
+        try Data("not an Ito archive".utf8).write(to: pluginsDirectory.appendingPathComponent("damaged.ito"))
+        let installedFile = pluginsDirectory.appendingPathComponent("plugin.restored.ito")
+        try makeTestPluginArchiveData(id: "plugin.restored", version: "1.0", wasm: makeTestPluginWasm(abi: 2))
+            .write(to: installedFile)
+        let pluginManager = PluginManager(
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginsDirectory: pluginsDirectory
+        )
+        await pluginManager.reloadInstalledPlugins()
+        // The file is replaced outside the install path after version 1.0 was published, so the published state
+        // is stale until something publishes again.
+        let restoredArchive = try makeTestPluginArchiveData(
+            id: "plugin.restored", version: "2.0", wasm: makeTestPluginWasm(abi: 2)
+        )
+        try restoredArchive.write(to: installedFile)
+        let downloaded = try makeTestPluginArchiveData(
+            id: "plugin.restored", version: "3.0", wasm: makeTestPluginWasm(abi: 2)
+        )
+        let manager = RepoManager(
+            dbPool: database.dbPool,
+            pluginManager: pluginManager,
+            pluginsDirectory: nil,
+            packageFetcher: { _ in downloaded }
+        )
+        let package = makePackage(id: "plugin.restored", version: "3.0", sha256: sha256(downloaded))
+
+        await #expect(throws: ItoError.self) {
+            try await manager.installPackage(package, repositoryUrl: "https://example.com")
+        }
+
+        #expect(try Data(contentsOf: installedFile) == restoredArchive)
+        #expect(pluginManager.installedPlugins["plugin.restored"]?.info.version == "2.0")
+    }
+
+    @Test func strictDiscoveryStillListsInstalledPluginsWhenTemporaryStorageCannotBeWritten() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let pluginsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RepositoryScratchBlocked-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
+        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+        let installedFile = pluginsDirectory.appendingPathComponent("plugin.listed.ito")
+        try makeTestPluginArchiveData(id: "plugin.listed", version: "1.0", wasm: makeTestPluginWasm(abi: 2))
+            .write(to: installedFile)
+        // A regular file where the scratch directory should be, so nothing can be written under it.
+        let scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RepositoryScratchFile-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        try Data("not a directory".utf8).write(to: scratch)
+        let downloaded = try makeTestPluginArchiveData(
+            id: "plugin.listed", version: "2.0", wasm: makeTestPluginWasm(abi: 2)
+        )
+        let pluginManager = PluginManager(
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginsDirectory: pluginsDirectory
+        )
+        let manager = RepoManager(
+            dbPool: database.dbPool,
+            pluginManager: pluginManager,
+            pluginsDirectory: nil,
+            packageFetcher: { _ in downloaded },
+            scratchDirectory: scratch
+        )
+        let package = makePackage(id: "plugin.listed", version: "2.0", sha256: sha256(downloaded))
+
+        await #expect(throws: PluginPackageInspectionError.temporaryStorageFailed) {
+            try await manager.installPackage(package, repositoryUrl: "https://example.com")
+        }
+
+        // The install never wrote over the installed file. Strict discovery reads files in place and needs no
+        // temporary storage, so it still lists the plugin.
+        try await pluginManager.discoverAndPrepareInstalledPlugins()
+        #expect(pluginManager.installedPlugins["plugin.listed"]?.info.version == "1.0")
+    }
+
+    @Test(arguments: [false, true])
+    func incompatibleRepositoryDownloadNeverReplacesTheInstalledFile(malformedModule: Bool) async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let pluginsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RepositoryInstallRefused-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
+        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+        let installedFile = pluginsDirectory.appendingPathComponent("plugin.refused.ito")
+        let installedArchive = try makeTestPluginArchiveData(
+            id: "plugin.refused", version: "1.0", wasm: makeTestPluginWasm(abi: 2)
+        )
+        try installedArchive.write(to: installedFile)
+        let downloaded = try makeTestPluginArchiveData(
+            id: "plugin.refused",
+            version: "2.0",
+            wasm: malformedModule ? Data("not a module".utf8) : makeTestPluginWasm(abi: 3)
+        )
+        let pluginManager = PluginManager(
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginsDirectory: pluginsDirectory
+        )
+        await pluginManager.reloadInstalledPlugins()
+        let manager = RepoManager(
+            dbPool: database.dbPool,
+            pluginManager: pluginManager,
+            pluginsDirectory: nil,
+            packageFetcher: { _ in downloaded }
+        )
+        let package = makePackage(id: "plugin.refused", version: "2.0", sha256: sha256(downloaded))
+
+        await #expect {
+            try await manager.installPackage(package, repositoryUrl: "https://example.com")
+        } throws: { error in
+            if malformedModule {
+                return (error as? PluginPackageInspectionError) == .unreadablePackage
+            }
+            return (error as? PluginRequiresNewerAppError) == PluginRequiresNewerAppError(minimumAppVersion: nil)
+        }
+
+        #expect(try Data(contentsOf: installedFile) == installedArchive)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path) == ["plugin.refused.ito"])
+        #expect(pluginManager.installedPlugins["plugin.refused"]?.info.version == "1.0")
+    }
+
     @Test func removedPackageVersionInstallsTheVersionTheRefreshedIndexLists() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let pluginsDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("RepositoryInstallRemovedVersion-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
-        let currentData = Data("current package".utf8)
+        let currentData = try makeTestPluginArchiveData(
+            id: "plugin.moved", version: "1.1", wasm: makeTestPluginWasm(abi: 2)
+        )
         let stale = makePackage(
             id: "plugin.moved",
             version: "1.0",

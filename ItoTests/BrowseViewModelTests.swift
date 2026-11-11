@@ -380,30 +380,30 @@ final class BrowseViewModelTests: XCTestCase {
         XCTAssertTrue(firstAccepted)
     }
 
-    func testProductionFileAdapterInstallsIntoExistingPluginsLocation() throws {
+    func testProductionFileAdapterInstallsIntoExistingPluginsLocation() async throws {
         let fixture = try BrowseFileFixture()
         defer { fixture.cleanup() }
         let sourceURL = fixture.root.appendingPathComponent("plugin.ito")
-        let pluginData = try makeTestPluginArchiveData(id: "plugin", version: "1.0")
+        let pluginData = try makeTestPluginArchiveData(id: "plugin", version: "1.0", wasm: makeTestPluginWasm(abi: 2))
         try pluginData.write(to: sourceURL)
         let files = LocalBrowsePluginFileOperations(
             applicationSupportDirectory: fixture.applicationSupport
         )
 
-        try files.installPluginFile(from: sourceURL)
+        try await files.installPluginFile(from: sourceURL, PluginDirectoryLease())
 
         let installedURL = fixture.applicationSupport
             .appendingPathComponent("Plugins")
             .appendingPathComponent("plugin.ito")
         XCTAssertEqual(try Data(contentsOf: installedURL), pluginData)
 
-        let updatedData = try makeTestPluginArchiveData(id: "plugin", version: "2.0")
+        let updatedData = try makeTestPluginArchiveData(id: "plugin", version: "2.0", wasm: makeTestPluginWasm(abi: 2))
         try updatedData.write(to: sourceURL)
-        try files.installPluginFile(from: sourceURL)
+        try await files.installPluginFile(from: sourceURL, PluginDirectoryLease())
         XCTAssertEqual(try Data(contentsOf: installedURL), updatedData)
     }
 
-    func testProductionFileAdapterReplacesOnlyAfterStagingSucceeds() throws {
+    func testProductionFileAdapterReplacesOnlyAfterStagingSucceeds() async throws {
         let fixture = try BrowseFileFixture()
         defer { fixture.cleanup() }
         let pluginsDirectory = fixture.applicationSupport.appendingPathComponent("Plugins")
@@ -418,7 +418,10 @@ final class BrowseViewModelTests: XCTestCase {
             applicationSupportDirectory: fixture.applicationSupport
         )
 
-        XCTAssertThrowsError(try files.installPluginFile(from: missingSource))
+        do {
+            try await files.installPluginFile(from: missingSource, PluginDirectoryLease())
+            XCTFail("A missing source must not install")
+        } catch {}
 
         XCTAssertEqual(try Data(contentsOf: installedURL), Data("existing plugin".utf8))
     }
@@ -439,7 +442,7 @@ final class BrowseViewModelTests: XCTestCase {
             applicationSupportDirectory: fixture.applicationSupport
         )
 
-        try files.deletePluginFile(at: selectedURL)
+        try files.deletePluginFile(at: selectedURL, PluginDirectoryLease())
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: selectedURL.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: retainedURL.path))
@@ -904,12 +907,16 @@ private final class BrowsePluginManagerSpy: BrowsePluginManaging {
         $installedPlugins.eraseToAnyPublisher()
     }
 
-    func reloadInstalledPlugins() async {
+    func reloadInstalledPluginsLocked(_ lease: PluginDirectoryLease) async {
         reloadCallCount += 1
         if suspendReload {
             await withCheckedContinuation { reloadContinuation = $0 }
         }
         onReload?()
+    }
+
+    func withPluginDirectoryLease<Value>(_ operation: (PluginDirectoryLease) async throws -> Value) async throws -> Value {
+        try await operation(PluginDirectoryLease())
     }
 
     func holdCompletionDelivery(for pluginID: String) async throws {
@@ -1018,12 +1025,12 @@ private final class BrowsePluginFileOperationsSpy: BrowsePluginFileOperating {
         URL.pathExtension.lowercased() == "ito"
     }
 
-    func installPluginFile(from URL: URL) throws {
+    func installPluginFile(from URL: URL, _ lease: PluginDirectoryLease) throws {
         installInvocations.append(URL)
         if let installError { throw installError }
     }
 
-    func deletePluginFile(at URL: URL) throws {
+    func deletePluginFile(at URL: URL, _ lease: PluginDirectoryLease) throws {
         deleteInvocations.append(URL)
         onDelete?()
         if let deleteError { throw deleteError }

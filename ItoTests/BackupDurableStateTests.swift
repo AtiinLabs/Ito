@@ -242,7 +242,9 @@ struct BackupDurableStateTests {
         #expect(!backupView.contains("no changes were made"))
         #expect(!backupView.contains("Restore Successful"))
 
-        let initializer = try #require(pluginManager.range(of: "public init(pluginSettingsStore:"))
+        let initializer = try #require(
+            pluginManager.range(of: "    init(\n        pluginSettingsStore: PluginSettingsStore,")
+        )
         let getRunner = try #require(
             pluginManager.range(
                 of: "public func getRunner",

@@ -1,3 +1,4 @@
+import GRDB
 import Foundation
 import Testing
 import ito_runner
@@ -32,7 +33,7 @@ struct PluginGatingTests {
         #expect((DiscordRPCManager.shareableURL(url) != nil) == shared)
     }
 
-    @Test func aLocalPluginNeedingANewerItoIsRefusedAndNothingIsInstalled() throws {
+    @Test func aLocalPluginNeedingANewerItoIsRefusedAndNothingIsInstalled() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("PluginGating-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
         let pluginsDirectory = root.appendingPathComponent("Plugins")
@@ -41,13 +42,13 @@ struct PluginGatingTests {
         try makeTestPluginArchiveData(id: "future", version: "1.0", minAppVersion: "999.0").write(to: source)
         let operations = LocalBrowsePluginFileOperations(pluginsDirectory: pluginsDirectory)
 
-        #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: "999.0")) {
-            try operations.installPluginFile(from: source)
+        await #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: "999.0")) {
+            try await operations.installPluginFile(from: source, PluginDirectoryLease())
         }
         #expect(try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path).isEmpty)
     }
 
-    @Test func aFileThatIsNotAPluginBundleIsRefusedAsSuch() throws {
+    @Test func aFileThatIsNotAPluginBundleIsRefusedAsSuch() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("PluginGating-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
         let pluginsDirectory = root.appendingPathComponent("Plugins")
@@ -56,13 +57,78 @@ struct PluginGatingTests {
         try Data("not a zip".utf8).write(to: source)
         let operations = LocalBrowsePluginFileOperations(pluginsDirectory: pluginsDirectory)
 
-        #expect {
-            try operations.installPluginFile(from: source)
+        await #expect {
+            try await operations.installPluginFile(from: source, PluginDirectoryLease())
         } throws: { error in
             if case BrowsePluginFileError.unsupportedPluginFile = error { return true }
             return false
         }
         #expect(try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path).isEmpty)
+    }
+
+    @Test func anIncompatibleManualImportLeavesTheInstalledFileAndPluginsDirectoryUnchanged() async throws {
+        let fixture = try ManualImportFixture(incoming: makeTestPluginWasm(abi: 3))
+        defer { fixture.cleanup() }
+        let operations = LocalBrowsePluginFileOperations(pluginsDirectory: fixture.pluginsDirectory)
+
+        await #expect(throws: PluginRequiresNewerAppError(minimumAppVersion: nil)) {
+            try await operations.installPluginFile(from: fixture.source, PluginDirectoryLease())
+        }
+        try fixture.expectInstalledFileUntouched()
+    }
+
+    @Test func aMalformedModuleManualImportLeavesTheInstalledFileAndPluginsDirectoryUnchanged() async throws {
+        let fixture = try ManualImportFixture(incoming: Data("not a module".utf8))
+        defer { fixture.cleanup() }
+        let operations = LocalBrowsePluginFileOperations(pluginsDirectory: fixture.pluginsDirectory)
+
+        await #expect {
+            try await operations.installPluginFile(from: fixture.source, PluginDirectoryLease())
+        } throws: { error in
+            if case BrowsePluginFileError.unsupportedPluginFile = error { return true }
+            return false
+        }
+        try fixture.expectInstalledFileUntouched()
+    }
+
+    @Test func aCompatibleManualImportReplacesTheInstalledFile() async throws {
+        let incoming = makeTestPluginWasm(abi: 2)
+        let fixture = try ManualImportFixture(incoming: incoming)
+        defer { fixture.cleanup() }
+        let operations = LocalBrowsePluginFileOperations(pluginsDirectory: fixture.pluginsDirectory)
+
+        try await operations.installPluginFile(from: fixture.source, PluginDirectoryLease())
+
+        let installed = try Data(contentsOf: fixture.installedFile)
+        #expect(installed == fixture.incomingArchive)
+        #expect(installed != fixture.installedArchive)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.pluginsDirectory.path) == ["plugin.ito"])
+    }
+
+    @Test func strictDiscoveryListsAMalformedOrIncompatibleModuleWithItsSettingsPrepared() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let pluginsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PluginDiscovery-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
+        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+        try makeTestPluginArchiveData(id: "malformed", version: "1.0", wasm: Data("not a module".utf8))
+            .write(to: pluginsDirectory.appendingPathComponent("malformed.ito"))
+        try makeTestPluginArchiveData(id: "newer-abi", version: "1.0", wasm: makeTestPluginWasm(abi: 3))
+            .write(to: pluginsDirectory.appendingPathComponent("newer-abi.ito"))
+        let manager = PluginManager(
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginsDirectory: pluginsDirectory
+        )
+
+        try await manager.discoverAndPrepareInstalledPlugins(failOnInvalidPlugin: true)
+
+        #expect(manager.installedPlugins["malformed"]?.binary == nil)
+        #expect(manager.installedPlugins["newer-abi"]?.binary?.abiVersion == 3)
+        let registered = try await database.dbPool.read { db in
+            try String.fetchAll(db, sql: "SELECT pluginId FROM pluginIdentityRegistry ORDER BY pluginId")
+        }
+        #expect(registered == ["malformed", "newer-abi"])
     }
 
     @Test func aPluginNeedingANewerItoIsNotLoaded() async throws {
@@ -238,4 +304,38 @@ struct PluginGatingTests {
 private actor Counter {
     private(set) var value = 0
     func increment() { value += 1 }
+}
+
+/// A plugins directory holding an installed ABI 2 `plugin.ito`, and a source file of the same name
+/// outside it whose module is `incoming`.
+private struct ManualImportFixture {
+    let root: URL
+    let pluginsDirectory: URL
+    let installedFile: URL
+    let installedArchive: Data
+    let source: URL
+    let incomingArchive: Data
+
+    init(incoming: Data) throws {
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("ManualImport-\(UUID().uuidString)")
+        pluginsDirectory = root.appendingPathComponent("Plugins")
+        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+        installedFile = pluginsDirectory.appendingPathComponent("plugin.ito")
+        installedArchive = try makeTestPluginArchiveData(
+            id: "plugin", version: "1.0", wasm: makeTestPluginWasm(abi: 2)
+        )
+        try installedArchive.write(to: installedFile)
+        source = root.appendingPathComponent("plugin.ito")
+        incomingArchive = try makeTestPluginArchiveData(id: "plugin", version: "2.0", wasm: incoming)
+        try incomingArchive.write(to: source)
+    }
+
+    func expectInstalledFileUntouched() throws {
+        #expect(try Data(contentsOf: installedFile) == installedArchive)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: pluginsDirectory.path) == ["plugin.ito"])
+    }
+
+    func cleanup() {
+        try? FileManager.default.removeItem(at: root)
+    }
 }

@@ -189,11 +189,13 @@ public final class BrowseViewModel: ObservableObject {
 
         do {
             try await pluginManager.holdCompletionDelivery(for: plugin.id)
-            try pluginManager.revokeTrust(for: plugin.id)
-            try fileOperations.deletePluginFile(at: plugin.url)
+            try await pluginManager.withPluginDirectoryLease { lease in
+                try pluginManager.revokeTrust(for: plugin.id)
+                try fileOperations.deletePluginFile(at: plugin.url, lease)
+                await pluginManager.reloadInstalledPluginsLocked(lease)
+            }
             await pluginManager.purgeCompletionDelivery(for: plugin.id)
             pluginManager.removeSecrets(for: plugin.id)
-            await pluginManager.reloadInstalledPlugins()
         } catch {
             messagePresenter.present(
                 .deleteFailed(
@@ -219,8 +221,10 @@ public final class BrowseViewModel: ObservableObject {
         defer { isProcessingPluginFile = false }
 
         do {
-            try fileOperations.installPluginFile(from: url)
-            await pluginManager.reloadInstalledPlugins()
+            try await pluginManager.withPluginDirectoryLease { lease in
+                try await fileOperations.installPluginFile(from: url, lease)
+                await pluginManager.reloadInstalledPluginsLocked(lease)
+            }
             return true
         } catch BrowsePluginFileError.pluginsDirectoryUnavailable {
             messagePresenter.present(.pluginDirectoryUnavailable)

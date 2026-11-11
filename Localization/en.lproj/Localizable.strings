@@ -1849,6 +1849,12 @@ Reading font: the system font */
 
 "The plugin file no longer exists." = "The plugin file no longer exists.";
 
+/* Error shown when Ito cannot copy a plugin file to temporary storage in order to check it. */
+"The plugin package could not be checked because temporary storage failed. Try again." = "The plugin package could not be checked because temporary storage failed. Try again.";
+
+/* Error shown when a downloaded or imported plugin file is damaged or is not an Ito plugin. */
+"The plugin package could not be read, so it was not installed." = "The plugin package could not be read, so it was not installed.";
+
 "The plugin removal failed and the original file could not be restored." = "The plugin removal failed and the original file could not be restored.";
 
 "The plugin setting could not be saved." = "The plugin setting could not be saved.";

@@ -360,7 +360,7 @@ struct DurableStateAPIScanTests {
 
         let pluginManager = try read("Ito/Managers/PluginManager.swift")
         let initializerStart = try #require(
-            pluginManager.range(of: "public init(")
+            pluginManager.range(of: "    init(\n        pluginSettingsStore: PluginSettingsStore,")
         )
         let initializerEnd = try #require(
             pluginManager.range(
@@ -415,11 +415,11 @@ struct DurableStateAPIScanTests {
         }
 
         let scanStart = try #require(
-            pluginManager.range(of: "private func scanInstalledPlugins(")
+            pluginManager.range(of: "private func scanInstalledPluginsLocked(")
         )
         let scanEnd = try #require(
             pluginManager.range(
-                of: "private func publishInstalledPlugins(",
+                of: "func publishPreparedInstalledPluginsLocked(",
                 range: scanStart.upperBound..<pluginManager.endIndex
             )
         )
