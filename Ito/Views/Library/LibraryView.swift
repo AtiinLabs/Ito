@@ -358,15 +358,6 @@ struct LibraryView: View {
                             .accessibilityLabel(Text("Downloads", comment: "Library toolbar: open the downloads manager"))
                     }
                 }
-                if viewModel.hasItems {
-                    Button {
-                        Task { await viewModel.requestUpdate() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .accessibilityLabel("Check for Updates")
-                    }
-                    .disabled(viewModel.isRefreshing)
-                }
                 NavigationLink(destination: viewFactory.makeCategorySettingsView()) {
                     Image(systemName: "folder.badge.gearshape")
                         .accessibilityLabel("Manage Lists")
@@ -401,6 +392,14 @@ struct LibraryView: View {
                     }
                 }
                 Menu {
+                    if viewModel.hasItems {
+                        Button {
+                            Task { await viewModel.requestUpdate() }
+                        } label: {
+                            Label("Check for Updates", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(viewModel.isRefreshing)
+                    }
                     Button {
                         viewModel.beginExport()
                     } label: {
