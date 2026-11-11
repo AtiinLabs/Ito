@@ -128,37 +128,37 @@ final class ZoomablePageTests: XCTestCase {
         window.makeKeyAndVisible()
         controller.view.layoutIfNeeded()
         defer { window.isHidden = true }
-        let reset = expectation(description: "The new native zoom reaches its requested minimum")
-        let observer = NativeZoomAnimationObserver(controller: controller)
-        var completedReset = false
-        observer.onFrame = { [weak observer] in
-            // Landed means at the minimum with no zoom animation left that could still land elsewhere, so
-            // a late completion of the replaced zoom-in cannot slip past; no frame has to be caught
-            // mid-animation.
-            guard !completedReset,
-                  controller.imageView.layer.animationKeys()?.isEmpty ?? true,
-                  let presentation = controller.imageView.layer.presentation(),
-                  abs(presentation.frame.width - 300) < 0.5,
-                  controller.scrollView.zoomScale <= 1.001 else { return }
-            completedReset = true
-            observer?.stopFrames()
-            reset.fulfill()
+        let observer = NativeZoomEndObserver(controller: controller)
+        let landed = expectation(description: "The retargeted native zoom reports its minimum as its landing scale")
+        var fulfilledLanding = false
+        observer.onEndZooming = { scale in
+            // A landing above the minimum means the replaced zoom-in still completed; that is the stale landing.
+            guard scale <= 1.001 else {
+                XCTFail("A native zoom retargeted to reset landed at scale \(scale)")
+                return
+            }
+            guard !fulfilledLanding else { return }
+            fulfilledLanding = true
+            landed.fulfill()
         }
         controller.scrollView.delegate = observer
 
         controller.zoom(at: CGPoint(x: 100, y: 160), animated: true)
-        // The zoom-in is in flight: its animation is attached, and no frame has rendered in this turn of
-        // the run loop, so it cannot have landed. Retargeting now interrupts it at a known point.
+        // The zoom-in is in flight: its animation is attached and its scale is above the minimum.
         XCTAssertFalse(controller.imageView.layer.animationKeys()?.isEmpty ?? true)
         XCTAssertGreaterThan(controller.scrollView.zoomScale, 1.001)
         controller.zoom(
             at: CGPoint(x: controller.scrollView.bounds.midX, y: controller.scrollView.bounds.midY),
             animated: true
         )
-        observer.startFrames()
-        defer { observer.stopFrames() }
-        await fulfillment(of: [reset], timeout: 5)
+        assertLandedAtMinimum(controller)
+        await fulfillment(of: [landed], timeout: 5)
         controller.scrollView.delegate = controller
+        XCTAssertFalse(observer.endingScales.contains { $0 > 1.001 }, "Recorded landings: \(observer.endingScales)")
+        assertLandedAtMinimum(controller)
+    }
+
+    private func assertLandedAtMinimum(_ controller: NativeReaderImageZoomController) {
         XCTAssertEqual(controller.scrollView.zoomScale, 1, accuracy: 0.001)
         XCTAssertEqual(controller.scrollView.contentOffset, .zero)
         XCTAssertEqual(controller.imageView.frame, CGRect(x: 0, y: 0, width: 300, height: 400))
@@ -198,10 +198,10 @@ final class ZoomablePageTests: XCTestCase {
 }
 
 @MainActor
-private final class NativeZoomAnimationObserver: NSObject, UIScrollViewDelegate {
+private final class NativeZoomEndObserver: NSObject, UIScrollViewDelegate {
     let controller: NativeReaderImageZoomController
-    var onFrame: (() -> Void)?
-    private var displayLink: CADisplayLink?
+    private(set) var endingScales: [CGFloat] = []
+    var onEndZooming: ((CGFloat) -> Void)?
 
     init(controller: NativeReaderImageZoomController) { self.controller = controller }
 
@@ -213,19 +213,8 @@ private final class NativeZoomAnimationObserver: NSObject, UIScrollViewDelegate 
         controller.scrollViewDidZoom(scrollView)
     }
 
-    func startFrames() {
-        let link = CADisplayLink(target: self, selector: #selector(frame))
-        displayLink = link
-        link.add(to: .main, forMode: .common)
+    func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
+        endingScales.append(scale)
+        onEndZooming?(scale)
     }
-
-    func stopFrames() {
-        displayLink?.invalidate()
-        displayLink = nil
-    }
-
-    @objc private func frame() {
-        onFrame?()
-    }
-
 }
