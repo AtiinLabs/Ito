@@ -70,7 +70,8 @@ struct DownloadPreview: Identifiable, Equatable {
     let satisfied: [DownloadPreviewRow]
     let damaged: [DownloadPreviewRow]
     let locked: [DownloadPreviewRow]
-    /// Rows outside the selection that sit inside the preset's range. Never queued unless the user ticks them.
+    /// Other uploads inside the preset's range, from any group: extra uploads of chosen positions and rows the
+    /// selection does not supply. Never queued unless the user ticks them.
     let alternatives: [DownloadPreviewRow]
     let skippedReadCount: Int
     let issues: Set<DownloadPlanIssue>

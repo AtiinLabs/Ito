@@ -2525,8 +2525,8 @@
     "Original" : {
       "comment" : "Discord status: video in its original language"
     },
-    "Other scanlators' uploads in this range" : {
-      "comment" : "Download preview section: uploads from scanlators outside the selection that sit inside the range."
+    "Other uploads in this range" : {
+      "comment" : "Download preview section: uploads of chapters in the range that were not chosen for download, such as another group's upload of the same chapter or an extra upload from a selected group."
     },
     "Packages" : {
 
@@ -3696,7 +3696,7 @@
 
     },
     "These aren't downloaded unless you tick them." : {
-      "comment" : "Download preview footer: other scanlators' uploads are only downloaded when ticked."
+      "comment" : "Download preview footer: the uploads listed above are only downloaded when ticked."
     },
     "These settings can't be shown." : {
 
