@@ -9,6 +9,17 @@ struct SourceListingDestination {
     let title: String
     /// One operation per opened listing: every page of the listing is one export of it.
     let operationID: UUID
+
+    /// The same listing, page identity and operation, on a runner context acquired after a crash.
+    func replacingContext(_ context: any SourceRunnerContext) -> SourceListingDestination {
+        SourceListingDestination(
+            plugin: plugin,
+            context: context,
+            listing: listing,
+            title: title,
+            operationID: operationID
+        )
+    }
 }
 
 struct SourceSettingsDestination {
@@ -94,6 +105,9 @@ final class SourceViewModel: ObservableObject {
     private var searchOperationID: UUID?
     private var deleteOperationID: UUID?
     private var archivedPluginFileSnapshot: SourcePluginFileSnapshot?
+    /// Whether the screen is off screen: its operations were cancelled and it hasn't asked to load since.
+    private var isHidden = false
+    private static let maxLoadAttempts = 3
 
     init(
         plugin: InstalledPlugin,
@@ -118,6 +132,7 @@ final class SourceViewModel: ObservableObject {
     }
 
     func loadIfNeeded() async {
+        isHidden = false
         if phase == .content || phase == .empty, searchCapabilities == nil {
             await refreshSearchCapabilities()
             return
@@ -127,12 +142,14 @@ final class SourceViewModel: ObservableObject {
     }
 
     func retry() async {
+        isHidden = false
         await load(invalidateCachedRunner: false)
     }
 
     /// Reloads the source after its settings sheet closes. When the settings couldn't be shown
     /// nothing could have changed, so the search and home are kept.
     func reloadAfterSettingsChange() async {
+        isHidden = false
         guard settingsUnavailableReason == nil else { return }
         cancelSearch(publishCancelledState: false)
         clearSearchResults()
@@ -250,8 +267,9 @@ final class SourceViewModel: ObservableObject {
         )
     }
 
-    private func refreshSearchCapabilities() async {
-        guard let context else { return }
+    /// Reads the search capabilities from `context`. They are optional, so a failure leaves none; a crash is the
+    /// exception and is thrown, so the caller doesn't go on using the instance that crashed.
+    private func refreshSearchCapabilities(on context: any SourceRunnerContext) async throws {
         let kind = effectiveSearchKind(for: selectedKind)
         let operationID = UUID()
         capabilitiesOperationID = operationID
@@ -260,6 +278,7 @@ final class SourceViewModel: ObservableObject {
             result = try await context.loadSearchCapabilities(kind: kind, operationID: operationID)
         } catch {
             guard !(error is CancellationError) else { return }
+            if (error as? PluginCallError)?.kind == .crashed { throw error }
             result = nil
         }
         guard capabilitiesOperationID == operationID, !Task.isCancelled,
@@ -268,6 +287,16 @@ final class SourceViewModel: ObservableObject {
         // Only a resolved current response can end browsing, not transient nil capabilities.
         if isBrowsing, result?.flags.contains(.browse) != true { isBrowsing = false }
         searchCapabilities = result
+    }
+
+    /// The same outside a load, where a crash is handled here: the instance is retired and the context dropped.
+    private func refreshSearchCapabilities() async {
+        guard let context else { return }
+        do {
+            try await refreshSearchCapabilities(on: context)
+        } catch {
+            handleCrash(error, on: context)
+        }
     }
 
     private func isCurrentQuery(_ query: String, kind: MediaKind?) -> Bool {
@@ -296,7 +325,9 @@ final class SourceViewModel: ObservableObject {
                       isCurrentQuery(query, kind: kind) else { return }
                 searchSuggestions = suggestions ?? []
             } catch {
-                // Suggestions are optional and must never replace search errors or results.
+                // Suggestions are optional and must never replace search errors or results; a crash still
+                // retires the instance that trapped and drops the context that held it.
+                handleCrash(error, on: context)
             }
         }
     }
@@ -313,6 +344,7 @@ final class SourceViewModel: ObservableObject {
     }
 
     func cancelActiveOperations() {
+        isHidden = true
         cancelLoad(publishCancelledState: true)
         cancelSearch(publishCancelledState: true)
         capabilitiesOperationID = nil
@@ -445,9 +477,19 @@ final class SourceViewModel: ObservableObject {
     }
 
     private func load(invalidateCachedRunner: Bool) async {
+        let task = startLoad(invalidateCachedRunner: invalidateCachedRunner)
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    /// Begins a load synchronously, so the screen is already loading when the caller continues.
+    private func startLoad(invalidateCachedRunner: Bool, cancelsCapabilities: Bool = true) -> Task<Void, Never> {
         cancelLoad(publishCancelledState: false)
         capabilitiesOperationID = nil
-        capabilitiesTask?.cancel()
+        if cancelsCapabilities { capabilitiesTask?.cancel() }
         cancelSuggestions()
         let operationID = UUID()
         loadOperationID = operationID
@@ -469,49 +511,56 @@ final class SourceViewModel: ObservableObject {
             await executeLoad(operationID: operationID)
         }
         loadTask = task
-        await withTaskCancellationHandler {
-            await task.value
-        } onCancel: {
-            task.cancel()
-        }
+        return task
     }
 
     private func executeLoad(operationID: UUID) async {
         runnerProvider.clearPendingTrust(for: plugin.id)
+        var loadContext: (any SourceRunnerContext)?
         do {
-            let nextContext = try await runnerProvider.sourceRunnerContext(for: plugin.id)
-            try Task.checkCancellation()
-            let settings = try await loadSettings(from: nextContext, operationID: operationID)
-            try Task.checkCancellation()
-            guard isCurrentLoad(operationID) else { return }
-            // Published before the home loads: a home that fails for want of settings needs the
-            // settings button to recover.
-            switch settings {
-            case .surface(let surface):
-                settingsSurface = surface
-                settingsUnavailableReason = nil
-            case .unavailable(let reason):
-                settingsSurface = nil
-                settingsUnavailableReason = reason
+            // Another operation can see this load's runner crash and retire it while the home loads. Its context
+            // is gone then, so the load goes on inside this same operation with a fresh runner instead of
+            // publishing the retired one: searches waiting on this load and a kind switch's capabilities
+            // request keep their place. Each pass needs a new, independent crash, so the passes are bounded.
+            for _ in 0..<Self.maxLoadAttempts {
+                let nextContext = try await runnerProvider.sourceRunnerContext(for: plugin.id)
+                loadContext = nextContext
+                try Task.checkCancellation()
+                let settings = try await loadSettings(from: nextContext, operationID: operationID)
+                try Task.checkCancellation()
+                guard isCurrentLoad(operationID) else { return }
+                // Published before the home loads: a home that fails for want of settings needs the
+                // settings button to recover.
+                switch settings {
+                case .surface(let surface):
+                    settingsSurface = surface
+                    settingsUnavailableReason = nil
+                case .unavailable(let reason):
+                    settingsSurface = nil
+                    settingsUnavailableReason = reason
+                }
+                context = nextContext
+                try await refreshSearchCapabilities(on: nextContext)
+                try Task.checkCancellation()
+                guard isCurrentLoad(operationID) else { return }
+                let layout = try await nextContext.loadHome(operationID: operationID)
+                try Task.checkCancellation()
+                guard isCurrentLoad(operationID) else { return }
+                guard context?.runnerIdentity == nextContext.runnerIdentity else { continue }
+                homeLayout = layout
+                phase = layout.components.isEmpty ? .empty : .content
+                finishLoad(operationID)
+                return
             }
-            context = nextContext
-            await refreshSearchCapabilities()
-            try Task.checkCancellation()
-            guard isCurrentLoad(operationID) else { return }
-            let layout = try await nextContext.loadHome(operationID: operationID)
-            try Task.checkCancellation()
-            guard isCurrentLoad(operationID) else { return }
-
-            context = nextContext
-            homeLayout = layout
-            phase = layout.components.isEmpty ? .empty : .content
-            finishLoad(operationID)
+            throw SourceDependencyUnavailableErrorForPresentation.runnerUnavailable
         } catch {
+            // A crashed runner is retired even when the load was cancelled or superseded, so the next load starts a
+            // new one; only a current load publishes.
+            let crashed = handleCrash(error, on: loadContext)
             guard isCurrentLoad(operationID) else { return }
+            if crashed { context = nil }
             // A load its caller cancelled can end in a host error rather than CancellationError, such as
             // URLError(.cancelled). That is still a cancellation: it is never shown as a failure.
-            // A crashed runner is evicted even when the load was cancelled, so the next load starts a new one.
-            discardRunnerIfCrashed(error)
             if error is CancellationError || Task.isCancelled {
                 phase = .cancelled
                 finishLoad(operationID)
@@ -562,6 +611,7 @@ final class SourceViewModel: ObservableObject {
         } catch is CancellationError {
             finishCancelledSearch(operationID)
         } catch {
+            handleCrash(error, on: context)
             publishSearchFailure(error, operationID: operationID)
         }
     }
@@ -569,8 +619,11 @@ final class SourceViewModel: ObservableObject {
     /// The runner context, once the home load that creates it has finished. A search typed
     /// while the source is still loading waits for that load instead of failing.
     private func loadedContext() async -> (any SourceRunnerContext)? {
-        if phase == .loading, let loadTask {
-            await loadTask.value
+        // Each load task is awaited once, so a load that is replaced meanwhile is followed, not spun on.
+        var awaited: Task<Void, Never>?
+        while phase == .loading, let task = loadTask, task != awaited {
+            awaited = task
+            await task.value
         }
         guard phase == .content || phase == .empty else { return nil }
         return context
@@ -591,10 +644,6 @@ final class SourceViewModel: ObservableObject {
         searchPhase = .failure(reason)
         messagePresenter.present(.searchFailed(pluginName: plugin.info.name, reason: reason))
         finishSearch(operationID)
-        if discardRunnerIfCrashed(error) {
-            // Load the source again so the next search runs on a new runner.
-            Task { [weak self] in await self?.load(invalidateCachedRunner: false) }
-        }
     }
 
     private enum SettingsLoad {
@@ -616,13 +665,28 @@ final class SourceViewModel: ObservableObject {
         }
     }
 
-    /// A plugin that crashed may be left in a broken state, so its cached runner and the context
-    /// holding it are dropped, and the next call starts a new one.
+    /// The one place a crash of `failed` is handled, whether or not the operation that saw it is still current
+    /// (the caller publishes nothing from a stale one). The instance is retired by identity, so a late crash from
+    /// an old instance never evicts the runner that replaced it. If the screen still holds that instance it is
+    /// dropped. A visible screen that was showing content then loads again, so its next call runs on a new runner;
+    /// a hidden one (its operations were cancelled when it disappeared) is only marked cancelled, so appearing
+    /// again loads it and no load or message happens behind another screen. Returns whether `error` was a crash.
     @discardableResult
-    private func discardRunnerIfCrashed(_ error: any Error) -> Bool {
+    private func handleCrash(_ error: any Error, on failed: (any SourceRunnerContext)?) -> Bool {
         guard (error as? PluginCallError)?.kind == .crashed else { return false }
-        runnerProvider.evictSourceRunner(for: plugin.id)
+        guard let failed else { return true }
+        runnerProvider.retireSourceRunner(for: plugin.id, matching: failed)
+        guard context?.runnerIdentity == failed.runnerIdentity else { return true }
         context = nil
+        if loadOperationID == nil, phase == .content || phase == .empty {
+            if isHidden {
+                phase = .cancelled
+            } else {
+                // The reload must not cancel a capabilities request this crash came from: a kind switch that is
+                // waiting on it still starts its search, which waits for the reload.
+                _ = startLoad(invalidateCachedRunner: false, cancelsCapabilities: false)
+            }
+        }
         return true
     }
 

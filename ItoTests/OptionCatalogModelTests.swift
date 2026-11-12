@@ -325,6 +325,51 @@ final class OptionCatalogModelTests: XCTestCase {
         XCTAssertEqual(context.requests.count, 2)
     }
 
+    func testACrashedPageRetiresItsInstanceAndRetryRunsOnTheNextOne() async {
+        let crashed = CatalogContext()
+        crashed.pageHandler = { _ in throw PluginCallError(kind: .crashed, message: "Stopped") }
+        let fresh = CatalogContext()
+        fresh.pageHandler = { _ in self.page(["a"]) }
+        let provider = CatalogRunnerProvider(context: crashed)
+        let model = makeModel(provider: provider)
+
+        model.appear()
+        await model.requestTask?.value
+
+        XCTAssertEqual(provider.retiredRunners, [crashed.runnerIdentity])
+        provider.context = fresh
+        model.retry()
+        await model.requestTask?.value
+
+        assertItems(model, ["a"])
+        XCTAssertEqual(provider.retiredRunners, [crashed.runnerIdentity])
+        XCTAssertEqual(fresh.requests.count, 1)
+    }
+
+    func testACrashedLabelLookupRetiresItsInstanceAndKeepsTheLabelsUnavailable() async {
+        let crashed = CatalogContext()
+        crashed.pageHandler = { _ in throw PluginCallError(kind: .crashed, message: "Stopped") }
+        let provider = CatalogRunnerProvider(context: crashed)
+        let model = makeModel(provider: provider)
+
+        let resolution = await model.resolve(values: ["a"])
+
+        XCTAssertEqual(resolution.error, "Labels unavailable.")
+        XCTAssertEqual(provider.retiredRunners, [crashed.runnerIdentity])
+    }
+
+    func testAnOrdinaryPageFailureDoesNotRetireTheInstance() async {
+        let context = CatalogContext()
+        context.pageHandler = { _ in throw CatalogFailure.failed }
+        let provider = CatalogRunnerProvider(context: context)
+        let model = makeModel(provider: provider)
+
+        model.appear()
+        await model.requestTask?.value
+
+        XCTAssertTrue(provider.retiredRunners.isEmpty)
+    }
+
     private func page(_ values: [String], next: UInt32? = nil, revision: String? = "r1") -> OptionPage {
         OptionPage(options: values.map { ChoiceOption(value: $0, label: "Label \($0)", group: nil) }, nextOffset: next, total: nil, revision: revision)
     }
@@ -347,6 +392,10 @@ private final class CatalogRunnerProvider: SourceRunnerProviding {
     init(context: CatalogContext) { self.context = context }
     func sourceRunnerContext(for pluginID: String) async throws -> any SourceRunnerContext { context }
     func evictSourceRunner(for pluginID: String) {}
+    private(set) var retiredRunners: [ObjectIdentifier] = []
+    func retireSourceRunner(for pluginID: String, matching context: any SourceRunnerContext) {
+        retiredRunners.append(context.runnerIdentity)
+    }
     func pendingTrust(for pluginID: String) -> PendingTrust? { nil }
     func clearPendingTrust(for pluginID: String) {}
 }

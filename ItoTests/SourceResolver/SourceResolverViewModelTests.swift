@@ -48,6 +48,11 @@ final class FakePluginProvider: SourceResolverPluginProviding {
         runners[pluginID] = nil
     }
 
+    func retireSourceRunner(for pluginID: String, matching context: any SourceRunnerContext) {
+        guard let runner = runners[pluginID], ObjectIdentifier(runner) == context.runnerIdentity else { return }
+        runners[pluginID] = nil
+    }
+
     func resumeRunnerRequest(for pluginID: String) {
         guard let continuation = runnerContinuations.removeValue(forKey: pluginID) else {
             return

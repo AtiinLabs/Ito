@@ -105,7 +105,6 @@ final class SearchViewModelTests: XCTestCase {
             .init(pluginID: "plugin.b", pluginName: "Beta", message: "Try another title.", canOpenSettings: false)
         ])
         XCTAssertEqual(viewModel.searchResults["Gamma"]?.map(\.id), ["success"])
-        XCTAssertTrue(executor.evictedPluginIDs.isEmpty)
         XCTAssertFalse(logger.messages.joined().contains(privateReason))
 
         viewModel.performSearch(query: "")
@@ -130,7 +129,6 @@ final class SearchViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.pluginFailures.first?.message, "The source stopped unexpectedly. Try again.")
         XCTAssertEqual(viewModel.pluginFailures.first?.canOpenSettings, false)
-        XCTAssertEqual(executor.evictedPluginIDs, ["plugin.manga"])
         guard case .failure(.pluginTrap) = viewModel.state else {
             return XCTFail("Expected total crash failure")
         }
@@ -463,7 +461,7 @@ final class SearchViewModelTests: XCTestCase {
         XCTAssertEqual(failedLogger.events.last?.outcome, .failed(.pluginExecution))
     }
 
-    func testPluginTrapEmitsSafeTypedEventAndEvictsRunner() async {
+    func testPluginTrapEmitsSafeTypedEvent() async {
         let executor = SearchViewModelRecordingExecutor(plugins: [.manga()])
         executor.errorsByPluginID["plugin.manga"] = SearchPluginExecutionError.pluginTrap
         let logger = PresentationEventCaptureSpy()
@@ -472,7 +470,7 @@ final class SearchViewModelTests: XCTestCase {
         viewModel.performSearch(query: "query")
         await waitUntil { !viewModel.isSearching }
 
-        XCTAssertEqual(executor.evictedPluginIDs, ["plugin.manga"])
+        XCTAssertEqual(viewModel.pluginFailures.map(\.pluginID), ["plugin.manga"])
         XCTAssertTrue(logger.events.contains {
             $0.kind == .pluginExecution && $0.outcome == .failed(.pluginTrap)
         })
@@ -570,7 +568,6 @@ private final class SearchViewModelRecordingExecutor: SearchPluginExecuting {
     var resultsByPluginID: [String: [PluginSearchResult]] = [:]
     var errorsByPluginID: [String: any Error] = [:]
     private(set) var invocations: [Invocation] = []
-    private(set) var evictedPluginIDs: [String] = []
     private(set) var operations: [PluginNetworkOperation] = []
     private var invocationWaiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
 
@@ -598,10 +595,6 @@ private final class SearchViewModelRecordingExecutor: SearchPluginExecuting {
         ready.forEach { $0.continuation.resume() }
         if let error = errorsByPluginID[plugin.id] { throw error }
         return resultsByPluginID[plugin.id] ?? [.result(id: plugin.id)]
-    }
-
-    func evictRunner(for pluginID: String) {
-        evictedPluginIDs.append(pluginID)
     }
 }
 
@@ -636,10 +629,6 @@ private final class SearchViewModelSuspendingExecutor: SearchPluginExecuting {
             pending.append(.init(query: query, continuation: continuation))
             onStart?(query)
         }
-    }
-
-    func evictRunner(for pluginID: String) {
-        _ = pluginID
     }
 
     func complete(query: String, with results: [PluginSearchResult]) {
