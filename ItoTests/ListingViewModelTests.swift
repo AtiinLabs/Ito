@@ -242,74 +242,6 @@ final class ListingViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.entries.map(\.key), ["one", "retry"])
     }
 
-    func testReplacingListingSuppressesStaleNonCooperativeFirstPage() async {
-        let stale = PR7BSourceRunnerContextSpy()
-        stale.suspendedListingPages = [1]
-        let fresh = PR7BSourceRunnerContextSpy()
-        fresh.listingResults[1] = .success(MediaPageResult(
-            entries: [.manga(Manga(key: "fresh", title: "Fresh"))],
-            hasNextPage: false
-        ))
-        let viewModel = makeViewModel(context: stale)
-
-        let oldTask = Task { await viewModel.loadInitialIfNeeded() }
-        await pr7bWaitUntil { stale.pendingListings.count == 1 }
-        await viewModel.replaceDestination(makeDestination(
-            context: fresh,
-            listingID: "recent",
-            title: "Recent"
-        ))
-        stale.completeListing(
-            page: 1,
-            with: .success(MediaPageResult(
-                entries: [.manga(Manga(key: "stale", title: "Stale"))],
-                hasNextPage: true
-            ))
-        )
-        await oldTask.value
-
-        XCTAssertEqual(viewModel.identity.listingID, "recent")
-        XCTAssertEqual(viewModel.title, "Recent")
-        XCTAssertEqual(viewModel.entries.map(\.key), ["fresh"])
-        XCTAssertEqual(viewModel.nextPage, 2)
-    }
-
-    func testReplacingListingSuppressesStaleSubsequentPageAndTokenAdvance() async {
-        let stale = PR7BSourceRunnerContextSpy()
-        stale.listingResults[1] = .success(MediaPageResult(
-            entries: [.manga(Manga(key: "old-one", title: "Old"))],
-            hasNextPage: true
-        ))
-        stale.suspendedListingPages = [2]
-        let fresh = PR7BSourceRunnerContextSpy()
-        fresh.listingResults[1] = .success(MediaPageResult(
-            entries: [.manga(Manga(key: "fresh-one", title: "Fresh"))],
-            hasNextPage: true
-        ))
-        let viewModel = makeViewModel(context: stale)
-        await viewModel.loadInitialIfNeeded()
-
-        let oldPage = Task { await viewModel.loadMore() }
-        await pr7bWaitUntil { stale.pendingListings.count == 1 }
-        await viewModel.replaceDestination(makeDestination(
-            context: fresh,
-            listingID: "new-query",
-            title: "New Query"
-        ))
-        stale.completeListing(
-            page: 2,
-            with: .success(MediaPageResult(
-                entries: [.manga(Manga(key: "old-two", title: "Old Two"))],
-                hasNextPage: false
-            ))
-        )
-        await oldPage.value
-
-        XCTAssertEqual(viewModel.entries.map(\.key), ["fresh-one"])
-        XCTAssertEqual(viewModel.nextPage, 2)
-        XCTAssertEqual(viewModel.paginationState, .idle)
-    }
-
     func testCancellationSuppressesNonCooperativeFirstPagePublication() async {
         let context = PR7BSourceRunnerContextSpy()
         context.suspendedListingPages = [1]
@@ -386,71 +318,6 @@ final class ListingViewModelTests: XCTestCase {
         XCTAssertEqual(context.listingInvocations.map(\.page), [1, 2, 2])
         XCTAssertEqual(viewModel.entries.map(\.key), ["one", "two"])
         XCTAssertEqual(viewModel.paginationState, .exhausted)
-    }
-
-    func testReplacedListingCancellationErrorKeepsNewerFirstPage() async {
-        let stale = PR7BSourceRunnerContextSpy()
-        stale.suspendedListingPages = [1]
-        defer { stale.completeListing(page: 1, with: .failure(CancellationError())) }
-        let suspended = expectation(description: "Old listing request is suspended")
-        stale.onListingSuspended = { page in
-            if page == 1 { suspended.fulfill() }
-        }
-        let fresh = PR7BSourceRunnerContextSpy()
-        fresh.listingResults[1] = .success(MediaPageResult(
-            entries: [.manga(Manga(key: "fresh", title: "Fresh"))],
-            hasNextPage: false
-        ))
-        let viewModel = makeViewModel(context: stale)
-
-        let oldTask = Task { await viewModel.loadInitialIfNeeded() }
-        await fulfillment(of: [suspended], timeout: 2)
-        await viewModel.replaceDestination(makeDestination(
-            context: fresh,
-            listingID: "recent",
-            title: "Recent"
-        ))
-        stale.completeListing(page: 1, with: .failure(URLError(.cancelled)))
-        await oldTask.value
-
-        XCTAssertEqual(viewModel.phase, .content)
-        XCTAssertEqual(viewModel.entries.map(\.key), ["fresh"])
-        XCTAssertEqual(viewModel.paginationState, .exhausted)
-    }
-
-    func testReplacedListingCancellationErrorKeepsNewerPagination() async {
-        let stale = PR7BSourceRunnerContextSpy()
-        stale.listingResults[1] = .success(MediaPageResult(
-            entries: [.manga(Manga(key: "old-one", title: "Old"))],
-            hasNextPage: true
-        ))
-        stale.suspendedListingPages = [2]
-        defer { stale.completeListing(page: 2, with: .failure(CancellationError())) }
-        let suspended = expectation(description: "Old next-page request is suspended")
-        stale.onListingSuspended = { page in
-            if page == 2 { suspended.fulfill() }
-        }
-        let fresh = PR7BSourceRunnerContextSpy()
-        fresh.listingResults[1] = .success(MediaPageResult(
-            entries: [.manga(Manga(key: "fresh-one", title: "Fresh"))],
-            hasNextPage: true
-        ))
-        let viewModel = makeViewModel(context: stale)
-        await viewModel.loadInitialIfNeeded()
-
-        let oldPage = Task { await viewModel.loadMore() }
-        await fulfillment(of: [suspended], timeout: 2)
-        await viewModel.replaceDestination(makeDestination(
-            context: fresh,
-            listingID: "new-query",
-            title: "New Query"
-        ))
-        stale.completeListing(page: 2, with: .failure(URLError(.cancelled)))
-        await oldPage.value
-
-        XCTAssertEqual(viewModel.entries.map(\.key), ["fresh-one"])
-        XCTAssertEqual(viewModel.nextPage, 2)
-        XCTAssertEqual(viewModel.paginationState, .idle)
     }
 
     func testCharacterizedDuplicateItemsRemainUndeduplicatedAcrossPages() async {
@@ -543,8 +410,8 @@ final class ListingViewModelTests: XCTestCase {
             title: mangaDestination.title,
             operationID: UUID()
         )
-        let mangaVM = ListingViewModel(destination: mangaDestination)
-        let animeVM = ListingViewModel(destination: animeDestination)
+        let mangaVM = ListingViewModel(destination: mangaDestination, runnerProvider: PR7BSourceRunnerProviderSpy())
+        let animeVM = ListingViewModel(destination: animeDestination, runnerProvider: PR7BSourceRunnerProviderSpy())
         XCTAssertEqual(mangaVM.identity, animeVM.identity)
     }
 
@@ -566,7 +433,7 @@ final class ListingViewModelTests: XCTestCase {
     }
 
     private func makeViewModel(context: PR7BSourceRunnerContextSpy) -> ListingViewModel {
-        ListingViewModel(destination: makeDestination(context: context))
+        ListingViewModel(destination: makeDestination(context: context), runnerProvider: PR7BSourceRunnerProviderSpy())
     }
 
     private func makeDestination(

@@ -283,7 +283,7 @@ struct AppViewFactory {
     }
 
     func makeListingViewModel(destination: SourceListingDestination) -> ListingViewModel {
-        ListingViewModel(destination: destination)
+        ListingViewModel(destination: destination, runnerProvider: sourceDependencies.runnerProvider)
     }
 
     func makePluginSettingsView(destination: SourceSettingsDestination) -> PluginSettingsView {

@@ -194,9 +194,6 @@ public final class SearchViewModel: ObservableObject {
                         pendingTrust: searchExecutor.pendingTrust(for: plugin.id)
                     )
                 )
-                if failure == .pluginTrap {
-                    searchExecutor.evictRunner(for: plugin.id)
-                }
                 presentationLogger.log(
                     .finished(
                         feature: .search,
