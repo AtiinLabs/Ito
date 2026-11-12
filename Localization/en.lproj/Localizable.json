@@ -1,9 +1,4 @@
 {
-  "%lld selected positions need another edition or will be skipped.": {
-    "description": "Aggregate unresolved download positions. Does not claim source deletion.",
-    "one": "%lld selected position needs another edition or will be skipped.",
-    "other": "%lld selected positions need another edition or will be skipped."
-  },
   "%@ has %lld new chapters.": {
     "one": "%1$@ has %2$lld new chapter.",
     "other": "%1$@ has %2$lld new chapters."
@@ -127,6 +122,11 @@
     "description": "Library card chip: how many chapters of the series are saved on this device. The count is the number of saved chapters.\nSeries details: how many chapters of the series are saved on this device. The placeholder is a number, which needs plural forms.",
     "one": "%lld saved",
     "other": "%lld saved"
+  },
+  "%lld selected positions need another edition or will be skipped.": {
+    "description": "Aggregate unresolved download positions; count needs plural forms. Does not claim source deletion.",
+    "one": "%lld selected position needs another edition or will be skipped.",
+    "other": "%lld selected positions need another edition or will be skipped."
   },
   "%lld sources need attention": {
     "one": "%lld source needs attention",
