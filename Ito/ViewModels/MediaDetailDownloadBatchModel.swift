@@ -38,6 +38,8 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     @Published private(set) var remembered = RememberedEditionChoice.unknown
     /// What the saved details say about the catalog they hold; nil when nothing was recorded.
     @Published private(set) var coverageBasis: LibrarySnapshotBasis?
+    /// Set while a planned batch waits for the user to decide whether it may use cellular data.
+    @Published private(set) var meteredPrompt: MeteredDownloadPrompt?
 
     weak var host: (any MediaDetailDownloadBatchHost)? {
         didSet {
@@ -72,11 +74,21 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     private var savedScopeGeneration = 0
     /// The submission that set `isEnqueuing`; only that submission may end the queueing state.
     private var enqueueOperationID: UUID?
+    /// The batch held until the user decides whether it may use an expensive path.
+    private var pendingMeteredBatch: PendingMeteredBatch?
 
     /// The saved editions asked of the inventory, for one series and one set of unlisted keys.
     private struct SavedOnlyRequest: Equatable {
         let identity: MediaIdentity
         let missing: Set<String>
+    }
+
+    /// A planned batch held for the user's decision about expensive paths.
+    private struct PendingMeteredBatch {
+        let id: UUID
+        let request: DownloadBatchRequest
+        let alreadyStored: Int
+        let scope: BatchScope
     }
 
     private struct BatchScope {
@@ -156,6 +168,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         scopeGeneration &+= 1
         savedScopeGeneration &+= 1
         sheet = nil
+        dismissMeteredPrompt()
         choiceOperationID = nil
         isApplyingChoice = false
         releaseEnqueueOwnership()
@@ -208,6 +221,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
 
     /// A new series identity starts over. A batch already submitted is not cancelled; it no longer reports here.
     func reset() {
+        dismissMeteredPrompt()
         scopeGeneration &+= 1
         savedScopeGeneration &+= 1
         releaseEnqueueOwnership()
@@ -818,6 +832,26 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             catalogDigest: scope.catalogDigest.isEmpty ? nil : scope.catalogDigest,
             chapters: chapters
         )
+        // A batch that would use an expensive path waits for the user's direct decision, which is the only way a
+        // consent for it is ever requested. The decision is applied to this exact request.
+        if downloads.meteredUseNeedsConfirmation() {
+            let id = UUID()
+            pendingMeteredBatch = PendingMeteredBatch(
+                id: id, request: request, alreadyStored: alreadyStored, scope: scope
+            )
+            meteredPrompt = MeteredDownloadPrompt(id: id, chapterCount: chapters.count)
+            return nil
+        }
+        return submitBatch(request, confirmedMeteredUse: false, alreadyStored: alreadyStored, scope: scope)
+    }
+
+    private func submitBatch(
+        _ request: DownloadBatchRequest,
+        confirmedMeteredUse: Bool,
+        alreadyStored: Int,
+        scope: BatchScope
+    ) -> Task<Void, Never>? {
+        guard !isEnqueuing, isCurrent(scope) else { return nil }
         let downloads = downloads
         let operation = UUID()
         let savedGeneration = savedScopeGeneration
@@ -825,7 +859,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         isEnqueuing = true
         enqueueOperationID = operation
         let task = Task { [weak self] in
-            let outcome = await downloads.enqueueBatch(request)
+            let outcome = await downloads.enqueueBatch(request, confirmedMeteredUse: confirmedMeteredUse)
             self?.finishBatch(
                 outcome,
                 alreadyStored: alreadyStored,
@@ -836,6 +870,28 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         }
         enqueueTask = task
         return task
+    }
+
+    /// Applies the user's decision to the batch held for it. `useMeteredData` queues it with consent to use an
+    /// expensive path for this batch alone; otherwise it is queued without one and waits for an unmetered path.
+    /// A decision for a batch no longer held, or for a series no longer shown, does nothing.
+    @discardableResult
+    func resolveMeteredPrompt(_ promptID: UUID, useMeteredData: Bool) -> Task<Void, Never> {
+        guard let pending = pendingMeteredBatch, pending.id == promptID else { return Task {} }
+        pendingMeteredBatch = nil
+        meteredPrompt = nil
+        return submitBatch(
+            pending.request,
+            confirmedMeteredUse: useMeteredData,
+            alreadyStored: pending.alreadyStored,
+            scope: pending.scope
+        ) ?? Task {}
+    }
+
+    /// Drops the batch held for the user's decision without queueing anything.
+    func dismissMeteredPrompt() {
+        pendingMeteredBatch = nil
+        meteredPrompt = nil
     }
 
     /// Ends the queueing state of the submission that set it; a reset, a removal, or a later submission owns its own.
@@ -883,4 +939,11 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         await bytesTask?.value
     }
 #endif
+}
+
+/// A batch the user must decide about before it can use an expensive path (cellular or a hotspot). Only the
+/// size is shown; the batch itself stays with the model, bound to the series and catalog it was planned for.
+struct MeteredDownloadPrompt: Identifiable, Equatable {
+    let id: UUID
+    let chapterCount: Int
 }

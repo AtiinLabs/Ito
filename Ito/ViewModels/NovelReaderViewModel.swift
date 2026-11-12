@@ -89,6 +89,8 @@ final class NovelReaderViewModel: ObservableObject {
     private var mainLoadOperationID: UUID?
     private var appendTask: Task<Void, Never>?
     private var appendOperationID: UUID?
+    private var appendIsSpeculative = false
+    private var networkSubscription: AnyCancellable?
     /// The last append was refused only because the next chapter is not downloaded and cannot be fetched.
     private var appendWaitsForBoundary = false
     private var effectTasks: [UUID: Task<Void, Never>] = [:]
@@ -149,6 +151,16 @@ final class NovelReaderViewModel: ObservableObject {
                 guard let self, self.isActive else { return }
                 self.applySettings(settings)
             }
+        networkSubscription = dependencies.settings.novelReaderNetworkChanges.sink { @Sendable [weak self] in
+            Task { @MainActor in
+                guard let self, self.appendIsSpeculative,
+                      !self.dependencies.settings.novelReaderAllowsSpeculativePrefetch else { return }
+                self.appendOperationID = nil
+                self.appendTask?.cancel()
+                self.appendTask = nil
+                self.isLoadingNext = false
+            }
+        }
         // A download finishing or the network changing moves a boundary: the prompts follow.
         offline.observe { [weak self] in self?.offlineAvailabilityChanged() }
     }
@@ -582,6 +594,7 @@ final class NovelReaderViewModel: ObservableObject {
     }
 
     func loadNextChapter(trigger: NextChapterTrigger) {
+        guard trigger != .seamless || dependencies.settings.novelReaderAllowsSpeculativePrefetch else { return }
         guard isActive,
               appendOperationID == nil,
               !isLoadingNext,
@@ -606,6 +619,7 @@ final class NovelReaderViewModel: ObservableObject {
         let loader = chapterLoader
         let entry = entry
         appendOperationID = operationID
+        appendIsSpeculative = trigger == .seamless
         isLoadingNext = true
         logStarted(kind: .chapterAppend, operationID: operationID)
         let operation = PluginNetworkOperation(

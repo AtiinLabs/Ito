@@ -23,7 +23,11 @@ nonisolated final class PluginNetworkContexts: @unchecked Sendable {
     /// so repeated lookups agree; never derived from credentials.
     private var ephemeralScopes: [String: UUID] = [:]
 
-    init(epochs: [String: String] = [:]) {
+    /// The live network policy every context is stamped from.
+    let policy: NetworkPolicyCenter
+
+    init(epochs: [String: String] = [:], policy: NetworkPolicyCenter = NetworkPolicyCenter()) {
+        self.policy = policy
         replaceEpochs(epochs)
     }
 
@@ -38,21 +42,19 @@ nonisolated final class PluginNetworkContexts: @unchecked Sendable {
 
     /// The context for one export of `operation`. Every call gets a new `generation`. `frozenScope`,
     /// when given, is the epoch the operation captured and wins over the mirror. A frozen epoch that
-    /// is not a valid epoch yields a random scope, which no grant or identity can match.
+    /// is not a valid epoch yields a random scope, which no grant or identity can match. The context carries
+    /// the policy revision in force when it is built; a transport that sees a later revision refuses it as
+    /// `policyChanged`, and the scheduler builds a new one.
     func context(
         pluginID: String,
         _ operation: PluginNetworkOperation,
         frozenScope: String? = nil
     ) -> NetworkOperationContext {
-        let scope: UUID = lock.withLock {
-            if let frozenScope {
-                return PluginNetworkScopeID.uuid(epoch: frozenScope) ?? UUID()
-            }
-            if let mirrored = epochScopes[pluginID] { return mirrored }
-            if let ephemeral = ephemeralScopes[pluginID] { return ephemeral }
-            let fresh = UUID()
-            ephemeralScopes[pluginID] = fresh
-            return fresh
+        let scope: UUID
+        if let frozenScope {
+            scope = PluginNetworkScopeID.uuid(epoch: frozenScope) ?? UUID()
+        } else {
+            scope = liveScope(pluginID: pluginID)
         }
         return NetworkOperationContext(
             purpose: operation.purpose,
@@ -60,10 +62,29 @@ nonisolated final class PluginNetworkContexts: @unchecked Sendable {
             authorizationScope: scope,
             operationID: operation.operationID,
             batchID: operation.batchID,
-            policyRevision: BulkDownloadPolicy.revision,
+            policyRevision: policy.revision,
             generation: UUID(),
-            scopedGrant: nil
+            scopedGrant: operation.purpose == .manualBulkDownload || operation.purpose == .automaticBulkDownload
+                ? operation.batchID.flatMap { policy.consentReference(forBatch: $0) } : nil
         )
+    }
+
+    /// The authorization scope of a source now, as the mirror of committed epochs has it.
+    func liveScope(pluginID: String) -> UUID {
+        lock.withLock {
+            if let mirrored = epochScopes[pluginID] { return mirrored }
+            if let ephemeral = ephemeralScopes[pluginID] { return ephemeral }
+            let fresh = UUID()
+            ephemeralScopes[pluginID] = fresh
+            return fresh
+        }
+    }
+
+    /// What the policy checks a batch's consent against: the batch, its source, and that source's scope now.
+    func consentBinding(batchID: UUID, pluginID: String) -> NetworkConsentBinding {
+        NetworkConsentBinding(batchID: batchID, sourceID: pluginID) { [weak self] in
+            self?.liveScope(pluginID: pluginID) ?? UUID()
+        }
     }
 }
 

@@ -1,3 +1,27 @@
+/* Temporary permission for one foreground download batch only. */
+"Use Metered Data?" = "Use Metered Data?";
+"Use Metered Data for This Batch" = "Use Metered Data for This Batch";
+"Queue and Wait for Wi-Fi" = "Queue and Wait for Wi-Fi";
+"This batch may use cellular data or a personal hotspot while the app stays in the foreground. Other downloads and prefetching are not approved." = "This batch may use cellular data or a personal hotspot while the app stays in the foreground. Other downloads and prefetching are not approved.";
+"Unmetered Only" = "Unmetered Only";
+"Ask on Metered Networks" = "Ask on Metered Networks";
+"Allow Metered Networks" = "Allow Metered Networks";
+"Available on this network" = "Available on this network";
+"Waiting for a network reading" = "Waiting for a network reading";
+"Waiting for a connection" = "Waiting for a connection";
+"Paused by Low Data Mode" = "Paused by Low Data Mode";
+"Requires confirmation for each batch" = "Requires confirmation for each batch";
+"Waiting for an unmetered network" = "Waiting for an unmetered network";
+"Download Network" = "Download Network";
+"Image Preload" = "Image Preload";
+"Adjacent Chapters" = "Adjacent Chapters";
+"Prefetch Novel Chapters" = "Prefetch Novel Chapters";
+"Adjacent prefetch is off while Image Preload is off." = "Adjacent prefetch is off while Image Preload is off.";
+"Reader Prefetch" = "Reader Prefetch";
+"Reset Network and Prefetch Settings" = "Reset Network and Prefetch Settings";
+"Reset Network and Prefetch Settings?" = "Reset Network and Prefetch Settings?";
+"Restores network and prefetch defaults only. Credentials, cookies, site data and reading state are kept." = "Restores network and prefetch defaults only. Credentials, cookies, site data and reading state are kept.";
+
 /* Subtitle track: language, burned into the video */
 "%@ (Hardsub)" = "%@ (Hardsub)";
 

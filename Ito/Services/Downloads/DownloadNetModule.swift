@@ -25,17 +25,38 @@ nonisolated extension DownloadAttemptOutcome {
     }
 }
 
-/// Whether the network path admits bulk downloads right now.
+/// Whether the policy admits this attempt's bulk transfers right now.
 nonisolated protocol DownloadAdmissionGate: Sendable {
-    func admission() -> BulkDownloadAdmission
+    func admission() -> NetworkDecision
+    /// Whether an expensive, unconstrained path would be admitted now. The attempt's transport allows the system to
+    /// use such a path only then.
+    var allowsExpensiveTransport: Bool { get }
+    /// Whether `context` was stamped under the policy revision in force now.
+    func isCurrent(_ context: NetworkOperationContext) -> Bool
 }
 
-/// Admission read from the live network path through `BulkDownloadPolicy`.
+/// Admission decided by `NetworkPolicy` from the live configuration, the observed path and, for an exact batch,
+/// its scoped consent.
 nonisolated struct NetworkPathAdmissionGate: DownloadAdmissionGate {
     let observer: any NetworkPathObserving
+    var policy: NetworkPolicyCenter = NetworkPolicyCenter()
+    var intent: NetworkIntent = .manualBulkDownload
+    var consent: NetworkConsentBinding?
 
-    func admission() -> BulkDownloadAdmission {
-        BulkDownloadPolicy.admit(observer.current)
+    func admission() -> NetworkDecision {
+        policy.decide(intent, path: observer.current, consent: consent)
+    }
+
+    var allowsExpensiveTransport: Bool {
+        policy.decide(intent, path: NetworkPathSnapshot(status: .satisfied, isExpensive: true), consent: consent) == .allow
+    }
+
+    func isCurrent(_ context: NetworkOperationContext) -> Bool {
+        guard context.policyRevision == policy.revision else { return false }
+        guard let consent else { return true }
+        return context.batchID == consent.batchID && context.sourceID == consent.sourceID
+            && (context.scopedGrant == nil || context.authorizationScope == consent.liveAuthorizationScope())
+            && (context.purpose == .manualBulkDownload || context.purpose == .automaticBulkDownload)
     }
 }
 
@@ -97,6 +118,11 @@ nonisolated final class DownloadNetModule: NetModule, Sendable {
 
     func fetch(request: NetRequest, context: NetworkOperationContext) async throws -> NetResponse {
         if let denial = recorder.firstDenial { throw denial }
+        // A context stamped under an earlier policy revision never decides for the current one: the attempt
+        // is queued again and rebuilds its contexts under the revision in force.
+        if !gate.isCurrent(context) {
+            try recorder.deny(.deferred(.policyChanged))
+        }
         if case .wait(let wait) = gate.admission() {
             try recorder.deny(wait.policyOutcome)
         }
@@ -165,7 +191,7 @@ extension PluginRunnerHostModules {
         cloudflareUserAgent: @escaping @Sendable (String) async -> String
     ) -> PluginRunnerHostModules {
         let transport = AppNetModule(
-            configuration: .bulkDownload,
+            configuration: .bulkDownload(allowingExpensiveAccess: gate.allowsExpensiveTransport),
             cloudflare: RefusingCloudflareHandler(recorder: recorder, userAgent: cloudflareUserAgent),
             retryLogger: OSLogAppNetRetryLogger(),
             pluginID: pluginID,

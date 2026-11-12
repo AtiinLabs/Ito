@@ -466,7 +466,9 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
         if let failure { throw failure }
     }
 
-    func enqueueBatch(_ request: DownloadBatchRequest) async -> DownloadBatchOutcome {
+    func meteredUseNeedsConfirmation() -> Bool { false }
+
+    func enqueueBatch(_ request: DownloadBatchRequest, confirmedMeteredUse: Bool = false) async -> DownloadBatchOutcome {
         batchRequests.append(request)
         if holdsBatches {
             await withCheckedContinuation { continuation in

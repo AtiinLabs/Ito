@@ -75,6 +75,25 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             .sheet(item: downloadSheetBinding) { sheet in
                 downloadSheetContent(sheet)
             }
+            .confirmationDialog(
+                String(localized: "Use Metered Data?", comment: "Confirmation for one download batch on cellular or a hotspot"),
+                isPresented: Binding(
+                    get: { viewModel.downloadBatch.meteredPrompt != nil },
+                    set: { if !$0 { viewModel.downloadBatch.dismissMeteredPrompt() } }
+                ),
+                titleVisibility: .visible,
+                presenting: viewModel.downloadBatch.meteredPrompt
+            ) { prompt in
+                Button(String(localized: "Use Metered Data for This Batch", comment: "Grants cellular permission only to this exact download batch")) {
+                    viewModel.downloadBatch.resolveMeteredPrompt(prompt.id, useMeteredData: true)
+                }
+                Button(String(localized: "Queue and Wait for Wi-Fi", comment: "Queues downloads without cellular permission")) {
+                    viewModel.downloadBatch.resolveMeteredPrompt(prompt.id, useMeteredData: false)
+                }
+                Button("Cancel", role: .cancel) { viewModel.downloadBatch.dismissMeteredPrompt() }
+            } message: { _ in
+                Text("This batch may use cellular data or a personal hotspot while the app stays in the foreground. Other downloads and prefetching are not approved.", comment: "Scope of temporary metered download permission")
+            }
     }
 
     private var navigationContent: some View {

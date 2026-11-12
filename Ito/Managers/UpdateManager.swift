@@ -217,10 +217,7 @@ public class UpdateManager: ObservableObject {
             isRefreshing = false
             runDeadline = nil
         }
-        if isBackground, settingsStore.wifiOnlyUpdates, await !networkConditions.isOnUnmeteredNetwork() {
-            AppLogger.update.debug("🔄 [UpdateManager] Wi-Fi only: skipping the automatic check on this network.")
-            return []
-        }
+        if isBackground, await !automaticChecksAdmitted() { return [] }
 
         let items: [LibraryItem]
         do {
@@ -327,6 +324,19 @@ public class UpdateManager: ObservableObject {
         }
     }
 
+    /// Re-evaluated before every series, not just once at the beginning of a scheduled run.
+    private func automaticChecksAdmitted() async -> Bool {
+        guard let settingsStore else { return false }
+        let policy = settingsStore.networkPolicy
+        let path: NetworkPathSnapshot
+        if let observed = policy.observedPath {
+            path = observed
+        } else {
+            path = NetworkPathSnapshot(status: .satisfied, isExpensive: await !networkConditions.isOnUnmeteredNetwork())
+        }
+        return policy.decide(.automaticMetadata, path: path) == .allow
+    }
+
     private func check(queue: [LibraryItem], operation: PluginNetworkOperation) async -> [(LibraryItem, Int)] {
         var updated: [(LibraryItem, Int)] = []
         for (index, item) in queue.enumerated() {
@@ -344,6 +354,7 @@ public class UpdateManager: ObservableObject {
                 AppLogger.update.debug("🔄 [UpdateManager] Time budget used up, leaving the rest for the next run.")
                 break
             }
+            if operation.purpose == .automaticLibraryUpdate, await !automaticChecksAdmitted() { break }
             if let delta = await checkSingleItem(item, operation: operation), delta > 0 {
                 updated.append((item, delta))
             }

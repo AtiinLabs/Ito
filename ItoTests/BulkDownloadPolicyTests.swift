@@ -1,100 +1,98 @@
-import Combine
 import Foundation
-import ito_runner
 import Testing
 @testable import Ito
 
-/// One row of the admission table in the offline-chapters design (§4.2). Named so a failing row
-/// reports which path it covers.
-nonisolated struct BulkDownloadAdmissionRow: Sendable, CustomTestStringConvertible {
-    let name: String
-    let path: NetworkPathSnapshot
-    let expected: BulkDownloadAdmission
-
-    var testDescription: String { name }
-}
-
-struct BulkDownloadPolicyTests {
-    static let admissionTable: [BulkDownloadAdmissionRow] = [
-        BulkDownloadAdmissionRow(
-            name: "unknown path waits for a reading",
-            path: NetworkPathSnapshot(status: .unknown),
-            expected: .wait(.networkUnknown)
-        ),
-        BulkDownloadAdmissionRow(
-            name: "unknown path with expensive and constrained flags still waits for a reading",
-            path: NetworkPathSnapshot(status: .unknown, isExpensive: true, isConstrained: true),
-            expected: .wait(.networkUnknown)
-        ),
-        BulkDownloadAdmissionRow(
-            name: "unsatisfied path has no connection",
-            path: NetworkPathSnapshot(status: .unsatisfied),
-            expected: .wait(.noConnection)
-        ),
-        BulkDownloadAdmissionRow(
-            name: "unsatisfied path with expensive and constrained flags has no connection",
-            path: NetworkPathSnapshot(status: .unsatisfied, isExpensive: true, isConstrained: true),
-            expected: .wait(.noConnection)
-        ),
-        BulkDownloadAdmissionRow(
-            name: "requires-connection path has no connection",
-            path: NetworkPathSnapshot(status: .requiresConnection),
-            expected: .wait(.noConnection)
-        ),
-        BulkDownloadAdmissionRow(
-            name: "requires-connection path with expensive flag has no connection",
-            path: NetworkPathSnapshot(status: .requiresConnection, isExpensive: true),
-            expected: .wait(.noConnection)
-        ),
-        BulkDownloadAdmissionRow(
-            name: "satisfied expensive path is metered",
-            path: NetworkPathSnapshot(status: .satisfied, isExpensive: true),
-            expected: .wait(.meteredNetwork)
-        ),
-        BulkDownloadAdmissionRow(
-            name: "satisfied constrained path is low data mode",
-            path: NetworkPathSnapshot(status: .satisfied, isConstrained: true),
-            expected: .wait(.lowDataMode)
-        ),
-        BulkDownloadAdmissionRow(
-            name: "satisfied expensive and constrained path is metered, the stricter reason",
-            path: NetworkPathSnapshot(status: .satisfied, isExpensive: true, isConstrained: true),
-            expected: .wait(.meteredNetwork)
-        ),
-        BulkDownloadAdmissionRow(
-            name: "satisfied unmetered unconstrained path is allowed",
-            path: NetworkPathSnapshot(status: .satisfied),
-            expected: .allow
-        )
-    ]
-
-    @Test(arguments: BulkDownloadPolicyTests.admissionTable)
-    func admissionMatchesTheTable(_ row: BulkDownloadAdmissionRow) {
-        #expect(BulkDownloadPolicy.admit(row.path) == row.expected)
+struct NetworkPolicyTests {
+    @Test func modePathIntentConsentMatrix() {
+        for mode in NetworkDownloadMode.allCases {
+            for intent in NetworkIntent.allCases {
+                for consent in [false, true] {
+                    var configuration = NetworkPolicyConfiguration.defaults
+                    configuration.downloadMode = mode
+                    for status in [NetworkPathSnapshot.Status.unknown, .unsatisfied, .requiresConnection, .satisfied] {
+                        for expensive in [false, true] {
+                            for constrained in [false, true] {
+                                let path = NetworkPathSnapshot(status: status, isExpensive: expensive, isConstrained: constrained)
+                                let result = NetworkPolicy.evaluate(intent, path: path, configuration: configuration, hasBatchConsent: consent)
+                                if status == .unsatisfied || status == .requiresConnection { #expect(result == .wait(.noConnection)); continue }
+                                if status == .unknown { #expect(result == (intent == .interactive ? .allow : .wait(.networkUnknown))); continue }
+                                if intent == .interactive { #expect(result == .allow); continue }
+                                let deniedMetered: Bool
+                                switch intent {
+                                case .manualBulkDownload, .automaticBulkDownload:
+                                    deniedMetered = mode == .unmeteredOnly || (mode == .askMetered && !consent)
+                                case .speculativePrefetch: deniedMetered = true
+                                default: deniedMetered = false
+                                }
+                                #expect((result == .allow) == (!constrained && !(expensive && deniedMetered)))
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    @Test func admissionFollowsPathUpdatesFromTheObserver() {
-        let observer = ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied))
-        var admissions: [BulkDownloadAdmission] = []
-        var cancellables = Set<AnyCancellable>()
-        observer.updates
-            .map { BulkDownloadPolicy.admit($0) }
-            .sink { admissions.append($0) }
-            .store(in: &cancellables)
-
-        // The subscriber first replays the unmetered path. Switching to an expensive path
-        // mid-download reports metered, a repeated expensive report is suppressed, and returning
-        // to an unmetered path is admitted again.
-        observer.set(NetworkPathSnapshot(status: .satisfied, isExpensive: true))
-        observer.set(NetworkPathSnapshot(status: .satisfied, isExpensive: true))
-        observer.set(NetworkPathSnapshot(status: .satisfied))
-
-        #expect(admissions == [.allow, .wait(.meteredNetwork), .allow])
-        #expect(BulkDownloadPolicy.admit(observer.current) == .allow)
+    @Test func wifiOnlyAppliesOnlyToAutomaticMetadata() {
+        var configuration = NetworkPolicyConfiguration.defaults
+        configuration.wifiOnlyUpdates = true
+        let path = NetworkPathSnapshot(status: .satisfied, isExpensive: true)
+        #expect(NetworkPolicy.evaluate(.automaticMetadata, path: path, configuration: configuration) == .wait(.wifiOnlyUpdates))
+        #expect(NetworkPolicy.evaluate(.interactive, path: path, configuration: configuration) == .allow)
     }
 
-    @Test(arguments: BulkDownloadWait.allCases)
-    func everyWaitEndsAnAttemptWithTheWaitingReasonTheAdmissionRuleNames(_ wait: BulkDownloadWait) {
-        #expect(DownloadAttemptOutcome(policy: wait.policyOutcome) == .waiting(wait.waitingReason))
+    @Test func speculativeProjectionDoesNotRewriteConfiguration() {
+        var configuration = NetworkPolicyConfiguration.defaults
+        configuration.preloadImageCount = 15
+        #expect(NetworkPolicy.projection(configuration: configuration, path: .init(status: .satisfied, isExpensive: true)).imagePreloadCount == 0)
+        #expect(NetworkPolicy.projection(configuration: configuration, path: .init(status: .satisfied)).imagePreloadCount == 15)
+        configuration.preloadImageCount = 0
+        #expect(NetworkPolicy.projection(configuration: configuration, path: .init(status: .satisfied)).adjacentChapterPrefetch == 0)
+    }
+
+    @Test func consentIsExactAndExpiresIrreversibly() throws {
+        let path = ManualNetworkPathObserver(initial: .init(status: .satisfied, isExpensive: true))
+        var configuration = NetworkPolicyConfiguration.defaults
+        configuration.downloadMode = .askMetered
+        let policy = NetworkPolicyCenter(configuration: configuration, path: path)
+        let contexts = PluginNetworkContexts(policy: policy)
+        let batch = UUID()
+        let binding = contexts.consentBinding(batchID: batch, pluginID: "fixture")
+        #expect(policy.mintBatchConsent(binding) == nil)
+        policy.enterForeground()
+        #expect(policy.mintBatchConsent(binding) != nil)
+        #expect(policy.hasValidConsent(binding))
+        #expect(!policy.hasValidConsent(contexts.consentBinding(batchID: UUID(), pluginID: "fixture")))
+        #expect(!policy.hasValidConsent(contexts.consentBinding(batchID: batch, pluginID: "other")))
+        policy.mintBatchConsent(binding)
+        policy.enterBackground()
+        policy.enterForeground()
+        #expect(!policy.hasValidConsent(binding))
+        policy.mintBatchConsent(binding)
+        path.set(.init(status: .satisfied))
+        path.set(.init(status: .satisfied, isExpensive: true))
+        #expect(!policy.hasValidConsent(binding))
+        policy.mintBatchConsent(binding)
+        configuration.wifiOnlyUpdates.toggle()
+        policy.apply(configuration)
+        #expect(!policy.hasValidConsent(binding))
+        policy.mintBatchConsent(binding)
+        contexts.replaceEpochs([:])
+        #expect(!policy.hasValidConsent(binding))
+    }
+
+    @Test func staleContextIsNeverUpgraded() {
+        let path = ManualNetworkPathObserver(initial: .init(status: .satisfied))
+        let policy = NetworkPolicyCenter(path: path)
+        let contexts = PluginNetworkContexts(policy: policy)
+        let old = contexts.context(pluginID: "fixture", .init(purpose: .manualBulkDownload, operationID: UUID()))
+        let gate = NetworkPathAdmissionGate(observer: path, policy: policy)
+        var configuration = policy.current
+        configuration.downloadMode = .allowMetered
+        policy.apply(configuration)
+        configuration.downloadMode = .unmeteredOnly
+        policy.apply(configuration)
+        #expect(!gate.isCurrent(old))
+        #expect(gate.isCurrent(contexts.context(pluginID: "fixture", .init(purpose: .manualBulkDownload, operationID: UUID()))))
     }
 }

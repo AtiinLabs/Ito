@@ -162,7 +162,7 @@ struct AppSettingsStoreTests {
         let repaired = try await database.dbPool.read { db in
             try AppPreference.fetchAll(db)
         }
-        #expect(repaired.count == 20)
+        #expect(repaired.count == AppPreferenceCatalogEntry.allCases.count)
         #expect(try #require(repaired.first {
             $0.key == AppPreferenceKeys.updateInterval
         }).decodedValue(for: AppPreferenceCatalog.updateInterval) == .fourHours)

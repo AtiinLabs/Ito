@@ -110,6 +110,8 @@ struct NovelReaderSettingsSnapshot: Equatable {
 protocol NovelReaderSettingsAccessing: AnyObject {
     var novelReaderSettings: NovelReaderSettingsSnapshot { get }
     var novelReaderSettingsUpdates: AnyPublisher<NovelReaderSettingsSnapshot, Never> { get }
+    var novelReaderAllowsSpeculativePrefetch: Bool { get }
+    var novelReaderNetworkChanges: AnyPublisher<Void, Never> { get }
 
     func setNovelFontSize(_ value: Double) async throws
     func setNovelLineSpacing(_ value: Double) async throws
@@ -119,7 +121,17 @@ protocol NovelReaderSettingsAccessing: AnyObject {
     func setNovelPrefetchChapters(_ value: Bool) async throws
 }
 
+extension NovelReaderSettingsAccessing {
+    var novelReaderAllowsSpeculativePrefetch: Bool { novelReaderSettings.prefetchChapters }
+    var novelReaderNetworkChanges: AnyPublisher<Void, Never> { Empty().eraseToAnyPublisher() }
+}
+
 extension AppSettingsStore: NovelReaderSettingsAccessing {
+    var novelReaderNetworkChanges: AnyPublisher<Void, Never> { networkPolicy.changes }
+    var novelReaderAllowsSpeculativePrefetch: Bool {
+        networkPolicy.projection(path: networkPolicy.observedPath ?? .unknown).novelPrefetch
+    }
+
     var novelReaderSettings: NovelReaderSettingsSnapshot {
         NovelReaderSettingsSnapshot(
             fontSize: novelFontSize,

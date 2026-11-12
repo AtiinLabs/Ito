@@ -215,21 +215,29 @@ actor DownloadAttempt {
             let resolver = try await imageRunnerForAttempt()
             switch try await PluginImageResolution.resolve(locator, runner: resolver, context: { networkContext() }) {
             case .fetch(let target, let targetHeaders, let allowedOrigins):
+                let allowsExpensive = admission.allowsExpensiveTransport
                 return try await transfer {
                     try await fetcher.fetchPluginImage(
                         url: target,
                         headers: targetHeaders,
                         allowedOrigins: allowedOrigins,
-                        pluginID: job.pluginId
+                        pluginID: job.pluginId,
+                        allowsExpensiveAccess: allowsExpensive
                     )
                 }
             case .bytes(let data):
                 return .data(data)
             case .direct(let realURL):
-                return try await transfer { try await fetcher.fetchDirect(Self.request(url: realURL, headers: headers)) }
+                let allowsExpensive = admission.allowsExpensiveTransport
+                return try await transfer {
+                    try await fetcher.fetchDirect(Self.request(url: realURL, headers: headers), allowsExpensiveAccess: allowsExpensive)
+                }
             }
         case "http", "https":
-            return try await transfer { try await fetcher.fetchDirect(Self.request(url: url, headers: headers)) }
+            let allowsExpensive = admission.allowsExpensiveTransport
+            return try await transfer {
+                try await fetcher.fetchDirect(Self.request(url: url, headers: headers), allowsExpensiveAccess: allowsExpensive)
+            }
         default:
             throw DownloadAttemptFailure(outcome: .failed(.unsupportedPageLocator))
         }

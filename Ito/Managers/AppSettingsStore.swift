@@ -61,17 +61,32 @@ public final class AppSettingsStore: ObservableObject {
     @Published public private(set) var incognitoMode = AppPreferenceCatalog.incognitoMode.defaultValue
     @Published public private(set) var autoSyncTrackersToLocal = AppPreferenceCatalog.autoSyncTrackersToLocal.defaultValue
     @Published public private(set) var diskCacheLimitGB = AppPreferenceCatalog.diskCacheLimitGB.defaultValue
+    @Published public private(set) var networkDownloadMode = AppPreferenceCatalog.networkDownloadMode.defaultValue
+    @Published public private(set) var adjacentChapterPrefetchCount = AppPreferenceCatalog.adjacentChapterPrefetchCount.defaultValue
     @Published public private(set) var loadIssues: [AppSettingsLoadIssue] = []
 
     private let persistence: any AppSettingsPersistence
+    /// The live network policy this store feeds. It is told the configured values only after they are stored.
+    let networkPolicy: NetworkPolicyCenter
     private var operationTail = Task<Void, Never> {}
 
     public convenience init(dbPool: DatabasePool) {
         self.init(persistence: GRDBAppSettingsPersistence(dbPool: dbPool))
     }
 
-    public init(persistence: any AppSettingsPersistence) {
+    public convenience init(persistence: any AppSettingsPersistence) {
+        self.init(persistence: persistence, networkPolicy: NetworkPolicyCenter())
+    }
+
+    /// - Parameter networkPolicy: the process's live network policy, which this store feeds with every
+    ///   acknowledged change of the configured values.
+    convenience init(dbPool: DatabasePool, networkPolicy: NetworkPolicyCenter) {
+        self.init(persistence: GRDBAppSettingsPersistence(dbPool: dbPool), networkPolicy: networkPolicy)
+    }
+
+    init(persistence: any AppSettingsPersistence, networkPolicy: NetworkPolicyCenter) {
         self.persistence = persistence
+        self.networkPolicy = networkPolicy
     }
 
     public func reload() async throws {
@@ -84,7 +99,14 @@ public final class AppSettingsStore: ObservableObject {
 
     public func reloadAfterRestore() async throws {
         try await enqueue { [self] in
-            let rows = try await persistence.readPreferences()
+            var rows = try await persistence.readPreferences()
+            // A backup made before the network preferences existed carries none. Their values are derived
+            // from the restored image preload, never resolved as a generic default first. Nothing else is
+            // materialized here.
+            let derived = NetworkPreferenceMigration.missingRows(in: rows)
+            if !derived.isEmpty {
+                rows = try await persistence.writePreferences(derived)
+            }
             let resolved = AppSettingsSnapshot.resolve(rows)
             publish(resolved.snapshot, issues: resolved.issues)
         }
@@ -106,6 +128,41 @@ public final class AppSettingsStore: ObservableObject {
         }
     }
 
+    /// Writes the default of every network and prefetch preference in one transaction and publishes them only
+    /// after the write is acknowledged: the download mode, Wi-Fi-only automatic updates, the image preload,
+    /// the adjacent-chapter prefetch amount and the novel prefetch toggle. No other preference, and no
+    /// credential, site data or read state, is touched. A failed write changes nothing that is published.
+    public func resetNetworkPreferences() async throws {
+        try await enqueue { [self] in
+            let rows = try Self.networkDefaultRows()
+            let written = try await persistence.writePreferences(rows)
+            let resolved = try await resolveAndMaterialize(written)
+            publish(resolved.snapshot, issues: resolved.issues)
+        }
+    }
+
+    /// The keys `resetNetworkPreferences()` writes.
+    public static let networkPreferenceKeys: Set<String> = [
+        AppPreferenceKeys.networkDownloadMode,
+        AppPreferenceKeys.wifiOnlyUpdates,
+        AppPreferenceKeys.preloadImageCount,
+        AppPreferenceKeys.adjacentChapterPrefetchCount,
+        AppPreferenceKeys.novelPrefetchChapters
+    ]
+
+    private static func networkDefaultRows() throws -> [AppPreference] {
+        [
+            try AppPreference(key: AppPreferenceCatalog.networkDownloadMode, value: AppPreferenceCatalog.networkDownloadMode.defaultValue),
+            try AppPreference(key: AppPreferenceCatalog.wifiOnlyUpdates, value: AppPreferenceCatalog.wifiOnlyUpdates.defaultValue),
+            try AppPreference(key: AppPreferenceCatalog.preloadImageCount, value: AppPreferenceCatalog.preloadImageCount.defaultValue),
+            try AppPreference(
+                key: AppPreferenceCatalog.adjacentChapterPrefetchCount,
+                value: AppPreferenceCatalog.adjacentChapterPrefetchCount.defaultValue
+            ),
+            try AppPreference(key: AppPreferenceCatalog.novelPrefetchChapters, value: AppPreferenceCatalog.novelPrefetchChapters.defaultValue)
+        ]
+    }
+
     private func enqueue(_ operation: @escaping @MainActor () async throws -> Void) async throws {
         let preceding = operationTail
         let task = Task { @MainActor in
@@ -121,6 +178,13 @@ public final class AppSettingsStore: ObservableObject {
     private func resolveAndMaterialize(
         _ rows: [AppPreference]
     ) async throws -> (snapshot: AppSettingsSnapshot, issues: [AppSettingsLoadIssue]) {
+        // Absent network preferences are derived from the stored ones before any generic default is
+        // materialized, so a stored image preload of zero is never overtaken by a default adjacent amount.
+        var rows = rows
+        let derived = NetworkPreferenceMigration.missingRows(in: rows)
+        if !derived.isEmpty {
+            rows = try await persistence.writePreferences(derived)
+        }
         let first = AppSettingsSnapshot.resolve(rows)
         guard !first.repairs.isEmpty else {
             return (first.snapshot, first.issues)
@@ -155,7 +219,12 @@ public final class AppSettingsStore: ObservableObject {
         incognitoMode = snapshot.incognitoMode
         autoSyncTrackersToLocal = snapshot.autoSyncTrackersToLocal
         diskCacheLimitGB = snapshot.diskCacheLimitGB
+        networkDownloadMode = snapshot.networkDownloadMode
+        adjacentChapterPrefetchCount = snapshot.adjacentChapterPrefetchCount
         loadIssues = issues
+        // The configuration is published only here, after persistence acknowledged it, so the live policy
+        // revision never runs ahead of what is stored.
+        networkPolicy.apply(snapshot.networkConfiguration)
     }
 }
 
@@ -184,6 +253,18 @@ private struct AppSettingsSnapshot: Sendable {
     let incognitoMode: Bool
     let autoSyncTrackersToLocal: Bool
     let diskCacheLimitGB: Double
+    let networkDownloadMode: NetworkDownloadMode
+    let adjacentChapterPrefetchCount: AdjacentChapterPrefetchPreference
+
+    var networkConfiguration: NetworkPolicyConfiguration {
+        NetworkPolicyConfiguration(
+            downloadMode: networkDownloadMode,
+            wifiOnlyUpdates: wifiOnlyUpdates,
+            preloadImageCount: preloadImageCount.rawValue,
+            adjacentChapterPrefetch: adjacentChapterPrefetchCount.rawValue,
+            novelPrefetchChapters: novelPrefetchChapters
+        )
+    }
 
     static func resolve(
         _ preferences: [AppPreference]
@@ -226,7 +307,9 @@ private struct AppSettingsSnapshot: Sendable {
                 preloadImageCount: value(AppPreferenceCatalog.preloadImageCount),
                 incognitoMode: value(AppPreferenceCatalog.incognitoMode),
                 autoSyncTrackersToLocal: value(AppPreferenceCatalog.autoSyncTrackersToLocal),
-                diskCacheLimitGB: value(AppPreferenceCatalog.diskCacheLimitGB)
+                diskCacheLimitGB: value(AppPreferenceCatalog.diskCacheLimitGB),
+                networkDownloadMode: value(AppPreferenceCatalog.networkDownloadMode),
+                adjacentChapterPrefetchCount: value(AppPreferenceCatalog.adjacentChapterPrefetchCount)
             ),
             repairs,
             issues

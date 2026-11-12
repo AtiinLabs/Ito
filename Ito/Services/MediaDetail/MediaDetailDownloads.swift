@@ -21,7 +21,11 @@ protocol MediaDetailDownloadServing: AnyObject {
     func retry(_ edition: OfflineChapterEdition) async throws
     func delete(_ edition: OfflineChapterEdition) async throws
     /// Queues many chapters of this series as one frozen batch. A refusal means nothing was queued.
-    func enqueueBatch(_ request: DownloadBatchRequest) async -> DownloadBatchOutcome
+    /// `confirmedMeteredUse` says the user directly confirmed that this exact batch may use an expensive path;
+    /// the download service grants that to the queued batch only, and only when the configured mode asks.
+    func enqueueBatch(_ request: DownloadBatchRequest, confirmedMeteredUse: Bool) async -> DownloadBatchOutcome
+    /// Whether queueing a batch now would use an expensive path that the user must confirm first.
+    func meteredUseNeedsConfirmation() -> Bool
     /// The scanlators the user asked to remember for a series; nil when none were. Throws when a stored choice
     /// could not be read, which is not the same as having none.
     func editionPreference(for media: MediaIdentity) async throws -> EditionSelection?
@@ -31,6 +35,12 @@ protocol MediaDetailDownloadServing: AnyObject {
     func availableCapacity() async -> Int64?
     /// The bytes this series' stored copies occupy; nil when they cannot be read.
     func storedByteCount(for media: MediaIdentity) async -> Int64?
+}
+
+extension MediaDetailDownloadServing {
+    func enqueueBatch(_ request: DownloadBatchRequest) async -> DownloadBatchOutcome {
+        await enqueueBatch(request, confirmedMeteredUse: false)
+    }
 }
 
 extension DownloadCenter: MediaDetailDownloadServing {
@@ -98,8 +108,12 @@ final class UnavailableMediaDetailDownloads: MediaDetailDownloadServing {
         throw Unavailable.noOfflineStore
     }
 
-    func enqueueBatch(_ request: DownloadBatchRequest) async -> DownloadBatchOutcome {
+    func enqueueBatch(_ request: DownloadBatchRequest, confirmedMeteredUse: Bool) async -> DownloadBatchOutcome {
         .refused(.unavailable)
+    }
+
+    func meteredUseNeedsConfirmation() -> Bool {
+        false
     }
 
     func editionPreference(for media: MediaIdentity) async throws -> EditionSelection? {

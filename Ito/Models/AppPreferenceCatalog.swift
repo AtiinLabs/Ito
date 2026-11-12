@@ -75,6 +75,23 @@ nonisolated public enum ImagePreloadCountPreference: Int, Codable, CaseIterable,
     }
 }
 
+/// What bulk downloads may do on an expensive path (cellular, personal hotspot).
+nonisolated public enum NetworkDownloadMode: String, Codable, CaseIterable, Sendable {
+    /// Bulk downloads wait for an unmetered path.
+    case unmeteredOnly
+    /// A bulk batch needs the user's direct confirmation before it uses an expensive path.
+    case askMetered
+    /// Bulk downloads use an expensive path without asking.
+    case allowMetered
+}
+
+/// How many adjacent manga chapter page lists are prefetched: none, next, or next and previous.
+nonisolated public enum AdjacentChapterPrefetchPreference: Int, Codable, CaseIterable, Sendable {
+    case none = 0
+    case one = 1
+    case two = 2
+}
+
 nonisolated public enum AppPreferenceKeys {
     public static let libraryLayoutStyle = "ito_library_layout_style"
     public static let alwaysShowCategoryPicker = "ito_always_show_category_picker"
@@ -96,6 +113,8 @@ nonisolated public enum AppPreferenceKeys {
     public static let incognitoMode = "Ito.IncognitoMode"
     public static let autoSyncTrackersToLocal = "Ito.AutoSyncTrackersToLocal"
     public static let diskCacheLimitGB = "Ito.DiskCacheLimitGB"
+    public static let networkDownloadMode = "Ito.NetworkDownloadMode"
+    public static let adjacentChapterPrefetchCount = "Ito.AdjacentChapterPrefetchCount"
 }
 
 nonisolated public enum AppPreferenceCatalog {
@@ -124,6 +143,8 @@ nonisolated public enum AppPreferenceCatalog {
     public static let diskCacheLimitGB = AppPreferenceKey<Double>(name: AppPreferenceKeys.diskCacheLimitGB, defaultValue: 10) {
         $0.isFinite && $0.rounded() == $0 && (1...50).contains($0)
     }
+    public static let networkDownloadMode = AppPreferenceKey<NetworkDownloadMode>(name: AppPreferenceKeys.networkDownloadMode, defaultValue: .unmeteredOnly) { _ in true }
+    public static let adjacentChapterPrefetchCount = AppPreferenceKey<AdjacentChapterPrefetchPreference>(name: AppPreferenceKeys.adjacentChapterPrefetchCount, defaultValue: .two) { _ in true }
 
     private static func boolean(_ name: String, defaultValue: Bool) -> AppPreferenceKey<Bool> {
         AppPreferenceKey(name: name, defaultValue: defaultValue) { _ in true }
@@ -158,6 +179,8 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
     case incognitoMode = "Ito.IncognitoMode"
     case autoSyncTrackersToLocal = "Ito.AutoSyncTrackersToLocal"
     case diskCacheLimitGB = "Ito.DiskCacheLimitGB"
+    case networkDownloadMode = "Ito.NetworkDownloadMode"
+    case adjacentChapterPrefetchCount = "Ito.AdjacentChapterPrefetchCount"
 
     public var acceptedSource: LegacyPreferenceSourceType {
         switch self {
@@ -166,11 +189,11 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
              .novelIsPaging, .novelPrefetchChapters, .incognitoMode,
              .autoSyncTrackersToLocal:
             return .booleanNSNumber
-        case .libraryLayoutStyle, .updateInterval, .preloadImageCount:
+        case .libraryLayoutStyle, .updateInterval, .preloadImageCount, .adjacentChapterPrefetchCount:
             return .integerNSNumber
         case .novelFontSize, .novelLineSpacing, .diskCacheLimitGB:
             return .numericNSNumber
-        case .discordRPCURL, .appTheme, .novelFontFamily, .novelTheme:
+        case .discordRPCURL, .appTheme, .novelFontFamily, .novelTheme, .networkDownloadMode:
             return .string
         }
     }
@@ -189,11 +212,41 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
         case .novelFontSize: encode(18.0)
         case .novelLineSpacing: encode(8.0)
         case .preloadImageCount: encode(5)
+        case .networkDownloadMode: encode(NetworkDownloadMode.unmeteredOnly.rawValue)
+        case .adjacentChapterPrefetchCount: encode(AdjacentChapterPrefetchPreference.two.rawValue)
         case .diskCacheLimitGB: encode(10.0)
         }
     }
 
     public var materializesDefaultWhenAbsent: Bool { true }
+
+    /// Whether older builds could have kept this preference in UserDefaults. Preferences introduced in
+    /// GRDB never had a legacy source, so the migrator does not look for them.
+    public var hasLegacyDefaultsSource: Bool {
+        switch self {
+        case .networkDownloadMode, .adjacentChapterPrefetchCount: false
+        default: true
+        }
+    }
+
+    /// Whether a complete-catalog backup made before this preference existed is still complete without it.
+    /// Restore derives or defaults an absent optional preference instead of rejecting the backup.
+    public var isOptionalInBackupCatalog: Bool {
+        switch self {
+        case .networkDownloadMode, .adjacentChapterPrefetchCount: true
+        default: false
+        }
+    }
+
+    /// Keys every complete-catalog backup carries.
+    public static var backupRequiredKeys: Set<String> {
+        Set(allCases.filter { !$0.isOptionalInBackupCatalog }.map(\.rawValue))
+    }
+
+    /// Whether `keys` is a complete-catalog backup key set: every required key, and nothing outside the catalog.
+    public static func isCompleteBackupKeySet(_ keys: Set<String>) -> Bool {
+        keys.isSuperset(of: backupRequiredKeys) && keys.isSubset(of: Set(allCases.map(\.rawValue)))
+    }
 
     public func canonicalJSON(forLegacyValue value: Any) -> Data? {
         guard acceptsLegacyValue(value) else { return nil }
@@ -261,6 +314,10 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
              .novelIsPaging, .novelPrefetchChapters, .incognitoMode,
              .autoSyncTrackersToLocal:
             return value is Bool
+        case .networkDownloadMode:
+            return (value as? String).map { NetworkDownloadMode(rawValue: $0) != nil } ?? false
+        case .adjacentChapterPrefetchCount:
+            return (value as? Int).map { AdjacentChapterPrefetchPreference(rawValue: $0) != nil } ?? false
         }
     }
 

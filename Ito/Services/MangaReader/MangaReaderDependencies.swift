@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import ito_runner
 import Nuke
@@ -99,12 +100,30 @@ extension TrackerManager: MangaReaderTrackerUpdating {
 @MainActor
 protocol MangaReaderSettingsAccessing: AnyObject {
     var mangaReaderPreloadImageCount: Int { get }
+    var mangaReaderEffectivePreloadImageCount: Int { get }
+    var mangaReaderAdjacentPrefetchCount: Int { get }
+    var mangaReaderNetworkChanges: AnyPublisher<Void, Never> { get }
     func setMangaReaderPreloadImageCount(_ value: Int) async throws
 }
 
+extension MangaReaderSettingsAccessing {
+    var mangaReaderEffectivePreloadImageCount: Int { mangaReaderPreloadImageCount }
+    var mangaReaderAdjacentPrefetchCount: Int { mangaReaderPreloadImageCount == 0 ? 0 : 2 }
+    var mangaReaderNetworkChanges: AnyPublisher<Void, Never> { Empty().eraseToAnyPublisher() }
+}
+
 extension AppSettingsStore: MangaReaderSettingsAccessing {
+    var mangaReaderNetworkChanges: AnyPublisher<Void, Never> { networkPolicy.changes }
     var mangaReaderPreloadImageCount: Int {
         preloadImageCount.rawValue
+    }
+
+    var mangaReaderEffectivePreloadImageCount: Int {
+        networkPolicy.projection(path: networkPolicy.observedPath ?? .unknown).imagePreloadCount
+    }
+
+    var mangaReaderAdjacentPrefetchCount: Int {
+        networkPolicy.projection(path: networkPolicy.observedPath ?? .unknown).adjacentChapterPrefetch
     }
 
     func setMangaReaderPreloadImageCount(_ value: Int) async throws {

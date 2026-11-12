@@ -51,23 +51,32 @@ final class DownloadCenter: ObservableObject {
     private let store: OfflineChapterStore
     private let coordinator: DownloadQueueCoordinator
     private let progress: DownloadProgressBoard
+    private let contexts: PluginNetworkContexts
+    private let observedPath: @Sendable () -> NetworkPathSnapshot
     private let captureEpoch: @Sendable (String) throws -> String
     private var snapshot = DownloadTableSnapshot()
     private var observation: DatabaseCancellable?
     private var progressSubscription: AnyCancellable?
 
-    /// - Parameter captureEpoch: the source's current completion epoch; see `PluginCompletionStore.captureScopeEpoch`.
+    /// - Parameters:
+    ///   - captureEpoch: the source's current completion epoch; see `PluginCompletionStore.captureScopeEpoch`.
+    ///   - contexts: the host contexts of the sources, whose policy decides consent for a batch.
+    ///   - observedPath: the path the policy decides on now.
     init(
         dbPool: DatabasePool,
         store: OfflineChapterStore,
         coordinator: DownloadQueueCoordinator,
         progress: DownloadProgressBoard,
+        contexts: PluginNetworkContexts,
+        observedPath: @escaping @Sendable () -> NetworkPathSnapshot,
         captureEpoch: @escaping @Sendable (String) throws -> String
     ) {
         self.dbPool = dbPool
         self.store = store
         self.coordinator = coordinator
         self.progress = progress
+        self.contexts = contexts
+        self.observedPath = observedPath
         self.captureEpoch = captureEpoch
         progressSubscription = progress.$progress.sink { @MainActor [weak self] value in
             self?.republish(progress: value)
@@ -130,12 +139,24 @@ final class DownloadCenter: ObservableObject {
     /// Queues many chapters of one series as one frozen batch. The source's epoch is read once, here, and
     /// frozen on every job of the batch. The outcome counts how each chapter was settled; a refusal means
     /// the request as a whole was not queued.
-    func enqueueBatch(_ request: DownloadBatchRequest) async -> DownloadBatchOutcome {
+    ///
+    /// `confirmedMeteredUse` says the user directly confirmed, just now and in the foreground, that this exact
+    /// batch may use an expensive path. The consent is minted for the batch's stored ID only after the batch is
+    /// queued, so it can never name a different batch, and before the worker is woken for it. The policy mints
+    /// nothing unless the mode asks, the app is in the foreground and the path is expensive and unconstrained.
+    func enqueueBatch(_ request: DownloadBatchRequest, confirmedMeteredUse: Bool = false) async -> DownloadBatchOutcome {
         guard let epoch = try? captureEpoch(request.pluginId) else {
             return .refused(.unavailable)
         }
+        let confirmation = confirmedMeteredUse ? contexts.policy.captureConfirmation() : nil
         do {
             let outcome = try await store.enqueueBatch(request, sourceEpoch: epoch)
+            if let confirmation, outcome.queued > 0, let batchID = outcome.batchId.flatMap(UUID.init(uuidString:)),
+               PluginNetworkScopeID.uuid(epoch: epoch) == contexts.liveScope(pluginID: request.pluginId) {
+                contexts.policy.mintBatchConsent(
+                    contexts.consentBinding(batchID: batchID, pluginID: request.pluginId), confirmation: confirmation
+                )
+            }
             if outcome.queued > 0 {
                 coordinator.wake()
             }
@@ -145,11 +166,21 @@ final class DownloadCenter: ObservableObject {
         }
     }
 
+    /// Whether queueing a batch now needs the user's direct confirmation to use an expensive path: the mode asks,
+    /// the path is satisfied, expensive and unconstrained, and the app is in the foreground.
+    func meteredUseNeedsConfirmation() -> Bool {
+        let configuration = contexts.policy.current
+        guard configuration.downloadMode == .askMetered, contexts.policy.isForeground else { return false }
+        let path = observedPath()
+        return path.status == .satisfied && path.isExpensive && !path.isConstrained
+    }
+
     /// Removes a chapter's queue entry and stops its attempt. A verified copy is kept. Throws when the
     /// queue could not be read or changed, so the caller can say the chapter is still queued.
     func cancel(_ edition: OfflineChapterEdition) async throws {
         guard let job = try await queuedJob(for: edition) else { return }
         try await store.cancel(jobID: job.id)
+        if let batchID = UUID(uuidString: job.batchId) { contexts.policy.revokeConsent(forBatch: batchID) }
         coordinator.cancelAttempt(jobID: job.id)
     }
 
@@ -166,7 +197,11 @@ final class DownloadCenter: ObservableObject {
     /// are kept. Ids that no longer exist are skipped. Throws when the queue could not be changed, so the
     /// caller can say the chapters are still queued.
     func cancel(jobIDs: [String]) async throws {
+        let jobs = try await store.jobs(ids: jobIDs)
         let removed = try await store.cancel(jobIDs: jobIDs)
+        for job in jobs where removed.contains(job.id) {
+            if let batchID = UUID(uuidString: job.batchId) { contexts.policy.revokeConsent(forBatch: batchID) }
+        }
         for jobID in removed {
             coordinator.cancelAttempt(jobID: jobID)
         }
@@ -252,6 +287,14 @@ final class DownloadCenter: ObservableObject {
     }
 
     private func apply(_ current: DownloadTableSnapshot) {
+        // A batch that was listed and no longer is finished or was cancelled, so its metered-data consent ends. A
+        // batch never listed keeps its consent: a snapshot older than the enqueue must not take back a grant that
+        // was minted right after it.
+        let before = Set(snapshot.jobs.compactMap { UUID(uuidString: $0.batchId) })
+        let after = Set(current.jobs.compactMap { UUID(uuidString: $0.batchId) })
+        for batchID in before.subtracting(after) {
+            contexts.policy.revokeConsent(forBatch: batchID)
+        }
         snapshot = current
         // A running job the observation does not list was cancelled, deleted or moved away: stop its attempt
         // now instead of at the next gate. The commit's job check still decides correctness.

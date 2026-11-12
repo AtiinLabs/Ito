@@ -528,14 +528,16 @@ actor OfflineChapterStore {
 
     /// Marks every queued job waiting for `reason`, in one transaction, as a network condition does. Waiting jobs
     /// (including those that need a Retry) and jobs in an attempt are left alone, so one condition costs one write
-    /// however long the queue is.
-    func setWaitingForQueuedJobs(reason: DownloadWaitingReason) async throws {
+    /// however long the queue is. With `batchId`, only that batch's queued jobs wait: a condition that depends on
+    /// the batch, such as a metered-data consent it lacks, must not hold the batches behind it.
+    func setWaitingForQueuedJobs(reason: DownloadWaitingReason, batchId: String? = nil) async throws {
         let now = clock()
         try await database.write { db in
-            let queued = try DownloadJobRecord
-                .filter(Column("state") == DownloadJobState.queued.rawValue)
-                .fetchAll(db)
-            for var job in queued {
+            var request = DownloadJobRecord.filter(Column("state") == DownloadJobState.queued.rawValue)
+            if let batchId {
+                request = request.filter(Column("batchId") == batchId)
+            }
+            for var job in try request.fetchAll(db) {
                 job.state = .waiting
                 job.waitingReason = reason
                 job.updatedAt = now
@@ -560,6 +562,12 @@ actor OfflineChapterStore {
                 job.updatedAt = now
                 try job.update(db)
             }
+        }
+    }
+
+    func batchHasJobs(_ batchID: String) async throws -> Bool {
+        try await database.read { db in
+            try DownloadJobRecord.filter(Column("batchId") == batchID).fetchCount(db) > 0
         }
     }
 

@@ -1,6 +1,28 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Use Metered Data?" : { "comment" : "Confirmation for one download batch on cellular or a hotspot" },
+    "Use Metered Data for This Batch" : { "comment" : "Grants cellular permission only to this exact download batch" },
+    "Queue and Wait for Wi-Fi" : { "comment" : "Queues downloads without cellular permission" },
+    "This batch may use cellular data or a personal hotspot while the app stays in the foreground. Other downloads and prefetching are not approved." : { "comment" : "Scope of temporary metered download permission" },
+    "Unmetered Only" : { "comment" : "Download mode that avoids cellular and hotspots" },
+    "Ask on Metered Networks" : { "comment" : "Download mode requiring batch confirmation on cellular" },
+    "Allow Metered Networks" : { "comment" : "Download mode permitting cellular and hotspots" },
+    "Available on this network" : { "comment" : "Effective network policy status" },
+    "Waiting for a network reading" : { "comment" : "No path observation yet" },
+    "Waiting for a connection" : { "comment" : "Effective network policy refusal" },
+    "Paused by Low Data Mode" : { "comment" : "Effective network policy refusal" },
+    "Requires confirmation for each batch" : { "comment" : "Metered download consent is batch-scoped" },
+    "Waiting for an unmetered network" : { "comment" : "Effective network policy refusal" },
+    "Download Network" : { "comment" : "Configured bulk download network mode" },
+    "Image Preload" : { "comment" : "Configured number of speculative reader images" },
+    "Adjacent Chapters" : { "comment" : "Number of neighbor manga chapter manifests to prefetch" },
+    "Prefetch Novel Chapters" : { "comment" : "Configured speculative novel chapter loading" },
+    "Adjacent prefetch is off while Image Preload is off." : { "comment" : "Explains effective restriction without changing configured adjacent amount" },
+    "Reader Prefetch" : { "comment" : "Network settings section for speculative reader work" },
+    "Reset Network and Prefetch Settings" : { "comment" : "Resets only five network and reader prefetch preferences" },
+    "Reset Network and Prefetch Settings?" : { "comment" : "Confirmation of scoped settings reset" },
+    "Restores network and prefetch defaults only. Credentials, cookies, site data and reading state are kept." : { "comment" : "Exact scope of network settings reset" },
     "" : {
 
     },

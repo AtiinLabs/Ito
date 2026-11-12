@@ -88,7 +88,7 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
     private var failedSuites: Set<String> = []
     private let discoverySources = DiscoverySourceChanges()
 
-    public init(
+    init(
         dbPool: DatabasePool,
         standardApplicationDomain: String = Bundle.main.bundleIdentifier ?? "moe.itoapp.ito",
         domainFactory: @escaping DomainFactory = { domainName in
@@ -108,7 +108,8 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
         tokens: PluginSecretStore = PluginSecretStore(
             keychain: SystemPluginSecretKeychain(service: PluginSecretStore.tokenService)
         ),
-        trust: PluginTrustStore = PluginTrustStore()
+        trust: PluginTrustStore = PluginTrustStore(),
+        networkPolicy: NetworkPolicyCenter = NetworkPolicyCenter()
     ) {
         self.dbPool = dbPool
         self.standardApplicationDomain = standardApplicationDomain
@@ -128,7 +129,7 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
             }
         }
         dbPool.add(transactionObserver: discoverySources, extent: .observerLifetime)
-        let contexts = PluginNetworkContexts()
+        let contexts = PluginNetworkContexts(policy: networkPolicy)
         let scopeObservation = PluginNetworkScopeObservation(contexts: contexts)
         networkContexts = contexts
         networkScopeObservation = scopeObservation

@@ -123,3 +123,9 @@ Do not add unavailable signing credentials to the unsigned workflows.
 For a stable release, mark the release unavailable or publish a newer patch version; do not move or reuse a `v*` tag. Remove an unsafe version from the matching source JSON on `gh-pages` if necessary.
 
 Dev releases are temporary and automatically pruned.
+
+## Network preference upgrade checks
+
+Network preferences are scalar GRDB configuration, not runtime permissions. Upgrade and older-backup restore derive a missing adjacent-chapter prefetch amount once from the stored image preload (zero → zero, positive or absent → two); explicit values survive. No database schema migration is needed.
+
+Before shipping network changes, exercise `NetworkPolicyTests`, `NetworkPreferenceMigrationTests`, `AppSettingsStoreTests`, `NetworkSettingsViewModelTests`, `DownloadNetModuleTests`, `DownloadCenterBatchTests`, `DownloadAttemptTests`, `UpdateRunTests` and reader prefetch suites. Confirm metered permission is limited to one foreground batch and expires on background, source, path-class or policy change. Reset affects only download mode, Wi-Fi-only automatic checks, image preload, adjacent prefetch and novel prefetch. Runtime grants and effective values must not appear in backups.

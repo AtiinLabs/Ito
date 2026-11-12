@@ -72,7 +72,7 @@ struct PluginNetworkContextsTests {
         #expect(second.operationID == operationID)
         #expect(first.batchID == batchID)
         #expect(first.purpose == .manualBulkDownload)
-        #expect(first.policyRevision == BulkDownloadPolicy.revision)
+        #expect(first.policyRevision == contexts.policy.revision)
         #expect(first.scopedGrant == nil)
     }
 

@@ -382,9 +382,10 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         }
         if backup.metadata != nil,
            backup.representation(of: .scalarAppPreferences) == .representedNonempty {
-            let catalog = Set(AppPreferenceCatalogEntry.allCases.map(\.rawValue))
-            guard preferenceKeys == catalog,
-                  Set(backup.preferences.map(\.key)) == catalog else {
+            // A backup made before an optional preference existed is still complete without it; restore
+            // derives that preference instead of rejecting the backup.
+            guard AppPreferenceCatalogEntry.isCompleteBackupKeySet(preferenceKeys),
+                  Set(backup.preferences.map(\.key)) == preferenceKeys else {
                 throw rejection(
                     .invalidCapabilityMetadata(
                         component: .scalarAppPreferences,
@@ -1467,6 +1468,10 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                 outcomes[.scalarAppPreferences]?.inserted += 1
             }
         }
+        // A backup made before the network preferences existed carries none. Derive them from the restored
+        // image preload in this same transaction, so the stored catalog is never left incomplete and a default
+        // never takes the place of a derived value.
+        try NetworkPreferenceMigration.insertMissing(in: db)
     }
 
     /// `sourceMapping` uses its declared five-column primary key as merge identity.

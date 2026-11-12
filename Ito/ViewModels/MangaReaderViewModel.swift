@@ -58,6 +58,7 @@ final class MangaReaderViewModel: ObservableObject {
     private var sessionID = UUID()
     private var contentGeneration: UInt64 = 0
 
+    private var networkSubscription: AnyCancellable?
     private var mainLoadTask: Task<Void, Never>?
     private var mainLoadOperationID: UUID?
     private var adjacentPrefetchTask: Task<Void, Never>?
@@ -111,6 +112,17 @@ final class MangaReaderViewModel: ObservableObject {
         overrideViewer = dependencies.progress.savedViewer(media: mediaIdentity) ?? .Default
         publishContinuousSnapshot()
         observeOfflineChanges()
+        networkSubscription = dependencies.settings.mangaReaderNetworkChanges.sink { @Sendable [weak self] in
+            Task { @MainActor in
+                guard let self, self.isActive else { return }
+                if self.dependencies.settings.mangaReaderEffectivePreloadImageCount == 0 {
+                    self.imagePrefetcher.stopPrefetching()
+                }
+                self.adjacentPrefetchOperationID = nil
+                self.adjacentPrefetchTask?.cancel()
+                self.beginAdjacentChapterPrefetch()
+            }
+        }
     }
 
     private func rebuildFlatPages() {
@@ -612,7 +624,8 @@ final class MangaReaderViewModel: ObservableObject {
         adjacentPrefetchTask?.cancel()
         let reference = currentChapter
         let referenceToken = ChapterToken(reference)
-        let candidates = [boundaryAfter(reference).chapter, boundaryBefore(reference).chapter].compactMap { $0 }
+        let candidates = Array([boundaryAfter(reference).chapter, boundaryBefore(reference).chapter]
+            .compactMap { $0 }.prefix(dependencies.settings.mangaReaderAdjacentPrefetchCount))
         adjacentPrefetchKeys = Set(candidates.map(\.key))
         let missing = candidates.filter { prefetchedChapters[$0.key] == nil }
         guard !missing.isEmpty, isActive, isPaged else {
@@ -677,6 +690,7 @@ final class MangaReaderViewModel: ObservableObject {
         generation: UInt64
     ) -> Bool {
         isActive
+            && dependencies.settings.mangaReaderAdjacentPrefetchCount > 0
             && isPaged
             && sessionID == session
             && contentGeneration == generation
@@ -1084,15 +1098,19 @@ final class MangaReaderViewModel: ObservableObject {
     /// Starts at the page being shown: turning to a page still downloading must not drop its
     /// prefetch, which would cancel the download just before the page's view asks for it.
     private func prefetchPagedImages(around index: Int) {
-        preload(Self.pagesToPreload(after: index - 1, count: preloadImageCount > 0 ? preloadImageCount + 1 : 0, in: pagedPages) { $0 })
+        let count = dependencies.settings.mangaReaderEffectivePreloadImageCount
+        preload(Self.pagesToPreload(after: index - 1, count: count > 0 ? count + 1 : 0, in: pagedPages) { $0 })
     }
 
     private func prefetchContinuousImages(around index: Int, allPages: [FlatPage]) {
-        preload(Self.pagesToPreload(after: index, count: preloadImageCount, in: allPages) { $0.page })
+        preload(Self.pagesToPreload(after: index, count: dependencies.settings.mangaReaderEffectivePreloadImageCount, in: allPages) { $0.page })
     }
 
     private func preload(_ pages: [Page]) {
-        guard !pages.isEmpty else { return }
+        guard !pages.isEmpty, dependencies.settings.mangaReaderEffectivePreloadImageCount > 0 else {
+            imagePrefetcher.stopPrefetching()
+            return
+        }
         imagePrefetcher.prefetch(pages)
     }
 

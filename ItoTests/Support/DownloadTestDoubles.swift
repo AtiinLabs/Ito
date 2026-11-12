@@ -311,7 +311,7 @@ nonisolated final class ScriptedAssetFetcher: DirectAssetFetching, @unchecked Se
         lock.withLock { responses[url] = asset }
     }
 
-    func fetchDirect(_ request: URLRequest) async throws -> FetchedAsset {
+    func fetchDirect(_ request: URLRequest, allowsExpensiveAccess: Bool) async throws -> FetchedAsset {
         let key = request.url?.absoluteString ?? ""
         let (gate, response) = lock.withLock { () -> (DownloadTestGate?, FetchedAsset?) in
             directURLs.append(key)
@@ -327,7 +327,8 @@ nonisolated final class ScriptedAssetFetcher: DirectAssetFetching, @unchecked Se
         url: URL,
         headers: [String: String]?,
         allowedOrigins: [String],
-        pluginID: String
+        pluginID: String,
+        allowsExpensiveAccess: Bool
     ) async throws -> FetchedAsset {
         pluginRequests.increment()
         return .data(OfflineStoreFixture.jpeg(url.absoluteString))
@@ -404,7 +405,7 @@ final class DownloadWorkerFixture {
     let progress: DownloadProgressBoard
     let protectedEvents = PassthroughSubject<Void, Never>()
     /// The host contexts every scripted export of this fixture records through.
-    let networkContexts = PluginNetworkContexts()
+    let networkContexts: PluginNetworkContexts
     let coordinator: DownloadQueueCoordinator
     let center: DownloadCenter
 
@@ -418,6 +419,9 @@ final class DownloadWorkerFixture {
         offline = try OfflineStoreFixture()
         store = offline.makeStore()
         path = ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied))
+        networkContexts = PluginNetworkContexts(
+            epochs: [Self.plugin: OfflineStoreFixture.epoch], policy: NetworkPolicyCenter(path: path)
+        )
         fetcher = ScriptedAssetFetcher()
         source = ScriptedSourceState(pages: pages)
         runtimes = ScriptedRuntimeProvider(source: source)
@@ -454,6 +458,8 @@ final class DownloadWorkerFixture {
             store: store,
             coordinator: coordinator,
             progress: progress,
+            contexts: networkContexts,
+            observedPath: { [path] in path.current },
             captureEpoch: captureEpoch
         )
     }
