@@ -526,10 +526,12 @@ struct EditionSelectionTests {
         try #require(String(bytes: try selection.storageData(), encoding: .utf8))
     }
 
-    @Test func theSourceListSelectionHasAStableVersionedForm() throws {
-        let json = #"{"formatVersion":1,"kind":"sourceList"}"#
-        #expect(try decode(json) == .sourceList)
-        #expect(try EditionSelection.sourceList.storageData() == Data(json.utf8))
+    @Test func legacySourceListDecodesAndNewWritesUseVersionTwo() throws {
+        let legacy = #"{"formatVersion":1,"kind":"sourceList"}"#
+        let encoded = #"{"formatVersion":2,"kind":"sourceList"}"#
+        #expect(try decode(legacy) == .sourceList)
+        #expect(try EditionSelection.sourceList.storageData() == Data(encoded.utf8))
+        #expect(try decode(encoded) == .sourceList)
     }
 
     @Test func everySelectionRoundTrips() throws {
@@ -552,46 +554,54 @@ struct EditionSelectionTests {
     }
 
     @Test func anUnknownVersionOrKindDoesNotDecode() {
-        #expect(throws: DecodingError.self) { try decode(#"{"formatVersion":2,"kind":"sourceList"}"#) }
+        #expect(throws: DecodingError.self) { try decode(#"{"formatVersion":3,"kind":"sourceList"}"#) }
         #expect(throws: DecodingError.self) { try decode(#"{"formatVersion":1,"kind":"newest"}"#) }
         #expect(throws: DecodingError.self) { try decode(#"{"kind":"sourceList"}"#) }
         #expect(throws: DecodingError.self) { try decode(#"{"formatVersion":1,"kind":"scanlators"}"#) }
     }
 
-    @Test func namesMatchExactlyWithoutTrimmingOrCaseFolding() {
-        let selection = EditionSelection.scanlators([ScanlatorRef(name: "Group")])
-
-        #expect(selection.admits(scanlator: "Group"))
-        #expect(!selection.admits(scanlator: "group"))
-        #expect(!selection.admits(scanlator: "Group "))
-        #expect(!selection.admits(scanlator: nil))
+    @Test func namesMatchExactlyThroughCatalogResolution() {
+        let selection = EditionSelection.scanlators([ScanlatorRef(name: "Group", binding: .exactIDless)])
+        let catalog = [
+            ScanlatorRef(name: "Group", binding: .exactIDless),
+            ScanlatorRef(name: "group", binding: .exactIDless),
+            ScanlatorRef(name: "Group ", binding: .exactIDless),
+            ScanlatorRef(name: nil, binding: .exactIDless)
+        ]
+        let resolved = ScanlatorCatalogIndex(catalog).resolve(selection)
+        #expect(resolved?.admits(scanlator: "Group", groupID: nil) == true)
+        #expect(resolved?.admits(scanlator: "group", groupID: nil) == false)
+        #expect(resolved?.admits(scanlator: "Group ", groupID: nil) == false)
+        #expect(resolved?.admits(scanlator: nil, groupID: nil) == false)
     }
 
-    @Test func noGroupListedIsSelectableAsANameOfItsOwn() {
-        let selection = EditionSelection.scanlators([ScanlatorRef(name: nil)])
-
-        #expect(selection.admits(scanlator: nil))
-        #expect(!selection.admits(scanlator: "Group"))
+    @Test func noGroupListedIsAnExactIDlessGroup() {
+        let selection = EditionSelection.scanlators([ScanlatorRef(name: nil, binding: .exactIDless)])
+        let resolved = ScanlatorCatalogIndex([ScanlatorRef(name: nil)]).resolve(selection)
+        #expect(resolved?.admits(scanlator: nil, groupID: nil) == true)
+        #expect(resolved?.admits(scanlator: "Group", groupID: nil) == false)
+        #expect(resolved?.admits(scanlator: nil, groupID: "id") == false)
     }
 
-    @Test func idsDecideWhenBothSidesHaveOne() {
+    @Test func boundIDsDecideMembershipWithoutNameFallback() {
         let selection = EditionSelection.scanlators([ScanlatorRef(id: "g1", name: "Old Name")])
+        let resolved = ScanlatorCatalogIndex([
+            ScanlatorRef(id: "g1", name: "New Name"),
+            ScanlatorRef(id: "g2", name: "Old Name"),
+            ScanlatorRef(name: "Old Name")
+        ]).resolve(selection)
 
-        #expect(selection.admits(scanlator: "New Name", groupID: "g1"))
-        #expect(!selection.admits(scanlator: "Old Name", groupID: "g2"))
-        // Without a group id on the row, the name decides.
-        #expect(selection.admits(scanlator: "Old Name", groupID: nil))
-        #expect(!selection.admits(scanlator: "New Name", groupID: nil))
+        #expect(resolved?.admits(scanlator: "New Name", groupID: "g1") == true)
+        #expect(resolved?.admits(scanlator: "Old Name", groupID: "g2") == false)
+        #expect(resolved?.admits(scanlator: "Old Name", groupID: nil) == false)
     }
 
-    @Test func sourceListAndAllUploadsAdmitEveryRow() {
+    @Test func unrestrictedSelectionsAndEmptyStrictSetsResolveWithoutFallback() {
         for selection in [EditionSelection.sourceList, .allUploads] {
-            #expect(selection.admits(scanlator: nil))
-            #expect(selection.admits(scanlator: "Anyone", groupID: "g"))
+            #expect(selection.resolve(in: [])?.admits(scanlator: nil, groupID: nil) == true)
+            #expect(selection.resolve(in: [])?.admits(scanlator: "Anyone", groupID: "g") == true)
         }
-    }
-
-    @Test func anEmptyScanlatorSetAdmitsNothing() {
-        #expect(!EditionSelection.scanlators([]).admits(scanlator: "A"))
+        let empty = EditionSelection.scanlators([])
+        #expect(ScanlatorCatalogIndex([]).resolve(empty)?.admits(scanlator: "A", groupID: nil) == false)
     }
 }

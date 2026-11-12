@@ -622,18 +622,29 @@ struct LibrarySourceRemapperDownloadTests {
 
     // MARK: - Edition preferences
 
-    @Test func aRelinkMovesTheScanlatorChoiceWhenTheDestinationHasNone() async throws {
+    @Test func aRelinkMovesTheIDBoundScanlatorChoiceWhenTheDestinationHasNone() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let pool = database.dbPool
         try await Self.insertItem(pool)
-        try await pool.write { db in try Self.preference("series-1", bytes: "chosen").insert(db) }
+        let selection = EditionSelection.scanlators([ScanlatorRef(id: "group-a", name: "Group")])
+        let selectionBytes = try selection.storageData()
+        try await pool.write { db in
+            try SeriesEditionPreferenceRecord(
+                pluginId: Self.pluginId,
+                mediaKind: .manga,
+                canonicalMediaId: "series-1",
+                selection: selectionBytes,
+                updatedAt: Date(timeIntervalSince1970: 1)
+            ).insert(db)
+        }
 
         try await Self.relink(pool)
 
         let rows = try await pool.read { db in try SeriesEditionPreferenceRecord.fetchAll(db) }
         #expect(rows.map(\.canonicalMediaId) == ["series-2"])
-        #expect(rows.first?.selection == Data("chosen".utf8))
+        #expect(rows.first?.selection == selectionBytes)
+        #expect(try rows.first.map { try JSONDecoder().decode(EditionSelection.self, from: $0.selection) } == selection)
     }
 
     @Test func aRelinkKeepsTheDestinationsChoiceAndDropsTheSourcesWithoutAborting() async throws {
@@ -660,18 +671,27 @@ struct LibrarySourceRemapperDownloadTests {
         defer { database.cleanup() }
         let pool = database.dbPool
         try await Self.insertItem(pool)
-        try await pool.write { db in try Self.preference("series-1", bytes: "by name").insert(db) }
+        let selectionBytes = try EditionSelection.scanlators([ScanlatorRef(id: "source-group", name: "A")]).storageData()
+        try await pool.write { db in
+            try SeriesEditionPreferenceRecord(
+                pluginId: Self.pluginId, mediaKind: .manga, canonicalMediaId: "series-1",
+                selection: selectionBytes, updatedAt: Date()
+            ).insert(db)
+        }
 
         _ = try await LibrarySourceRemapper(dbPool: pool).remap(
             oldPluginId: Self.pluginId, newPluginId: Self.otherPluginId, affectedItemIds: ["series-1"]
         )
-        #expect(try await Self.count(pool, "seriesEditionPreference") == 0, "Names do not bind across sources")
+        #expect(try await Self.count(pool, "seriesEditionPreference") == 0, "Source-bound IDs are discarded across plugins")
 
         let again = try TestDatabase()
         defer { again.cleanup() }
         try await Self.insertItem(again.dbPool)
         try await again.dbPool.write { db in
-            try Self.preference("series-1", bytes: "by name").insert(db)
+            try SeriesEditionPreferenceRecord(
+                pluginId: Self.pluginId, mediaKind: .manga, canonicalMediaId: "series-1",
+                selection: selectionBytes, updatedAt: Date()
+            ).insert(db)
             try Self.preference("series-1", Self.otherPluginId, bytes: "own").insert(db)
         }
         _ = try await LibrarySourceRemapper(dbPool: again.dbPool).remap(

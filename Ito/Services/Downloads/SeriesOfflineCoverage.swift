@@ -60,8 +60,20 @@ nonisolated enum SeriesOfflineCoverage {
             return .saved(savedCount)
         }
 
+        let resolvedSelection: ResolvedEditionSelection?
+        if case .scanlators = selection {
+            resolvedSelection = ScanlatorCatalogIndex(
+                catalog,
+                id: \.scanlatorID,
+                name: \.scanlator
+            ).resolve(selection)
+        } else {
+            resolvedSelection = selection.resolve(in: [])
+        }
+        guard let resolvedSelection else { return .saved(savedCount) }
         let eligible = catalog.filter {
-            $0.isStorable && !$0.isLocked && selection.admits(scanlator: $0.scanlator, groupID: $0.scanlatorID)
+            $0.isStorable && !$0.isLocked &&
+                resolvedSelection.admits(scanlator: $0.scanlator, groupID: $0.scanlatorID)
         }
         // A series with nothing to download has no "entire series" to speak of.
         guard !eligible.isEmpty else { return .saved(savedCount) }

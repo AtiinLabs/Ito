@@ -190,7 +190,9 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 presentation: presentation,
                 isApplying: viewModel.downloadBatch.isApplyingChoice,
                 onConfirm: { selection, remember in
-                    viewModel.downloadBatch.applyEditionChoice(selection, remember: remember, then: presentation.preset)
+                    _ = viewModel.downloadBatch.applyEditionChoice(
+                        selection, remember: remember, then: presentation.preset, chooserID: presentation.id
+                    )
                 },
                 onCancel: viewModel.downloadBatch.dismissDownloadSheet
             )
@@ -199,7 +201,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 preview: preview,
                 availableBytes: viewModel.downloadBatch.availableBytes,
                 isEnqueuing: viewModel.downloadBatch.isEnqueuing,
-                onConfirm: { viewModel.downloadBatch.confirmDownloadPreview(including: $0) },
+                onConfirm: { viewModel.downloadBatch.confirmDownloadPreview(including: $0, previewID: preview.id) },
                 onCancel: viewModel.downloadBatch.dismissDownloadSheet
             )
         }

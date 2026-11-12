@@ -401,6 +401,8 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
     private var pendingPreferenceReads: [CheckedContinuation<Void, Never>] = []
     private var pendingPreferenceWrites: [CheckedContinuation<Void, Never>] = []
     private var pendingBatches: [CheckedContinuation<Void, Never>] = []
+    private var pendingBatchObservers: [UUID: (count: Int, continuation: CheckedContinuation<Void, any Error>)] = [:]
+    private var pendingPreferenceWriteObservers: [UUID: CheckedContinuation<Void, any Error>] = [:]
     var pendingPreferenceReadCount: Int { pendingPreferenceReads.count }
     var pendingPreferenceWriteCount: Int { pendingPreferenceWrites.count }
     var pendingBatchCount: Int { pendingBatches.count }
@@ -415,6 +417,13 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
         var all = states.value
         all[media, default: [:]][chapterKey] = state
         states.send(all)
+    }
+    func seedPreference(_ selection: EditionSelection, for media: MediaIdentity) {
+        storedPreferences[media] = selection
+    }
+    /// What the store does when a series leaves the library: its remembered choice is forgotten.
+    func forgetPreference(for media: MediaIdentity) {
+        storedPreferences[media] = nil
     }
 
     func chapterStates(for media: MediaIdentity) -> AnyPublisher<[String: ChapterDownloadState], Never> {
@@ -459,7 +468,15 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
 
     func enqueueBatch(_ request: DownloadBatchRequest) async -> DownloadBatchOutcome {
         batchRequests.append(request)
-        if holdsBatches { await withCheckedContinuation { pendingBatches.append($0) } }
+        if holdsBatches {
+            await withCheckedContinuation { continuation in
+                pendingBatches.append(continuation)
+                let arrived = pendingBatches.count
+                let ready = pendingBatchObservers.filter { $0.value.count <= arrived }
+                ready.keys.forEach { pendingBatchObservers.removeValue(forKey: $0) }
+                ready.values.forEach { $0.continuation.resume() }
+            }
+        }
         return batchOutcome ?? DownloadBatchOutcome(queued: request.chapters.count)
     }
 
@@ -472,7 +489,14 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
 
     func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity) async throws {
         preferenceWriteCount += 1
-        if holdsPreferenceWrites { await withCheckedContinuation { pendingPreferenceWrites.append($0) } }
+        if holdsPreferenceWrites {
+            await withCheckedContinuation { continuation in
+                pendingPreferenceWrites.append(continuation)
+                let observers = Array(pendingPreferenceWriteObservers.values)
+                pendingPreferenceWriteObservers.removeAll()
+                observers.forEach { $0.resume() }
+            }
+        }
         if let preferenceWriteFailure { throw preferenceWriteFailure }
         storedPreferences[media] = selection
     }
@@ -495,11 +519,68 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
         let pending = pendingPreferenceWrites
         pendingPreferenceWrites = []
         pending.forEach { $0.resume() }
+        let observers = Array(pendingPreferenceWriteObservers.values)
+        pendingPreferenceWriteObservers.removeAll()
+        observers.forEach { $0.resume(throwing: CancellationError()) }
+    }
+    func waitForPendingPreferenceWrite() async throws {
+        guard pendingPreferenceWrites.isEmpty else { return }
+        let waiterID = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                if Task.isCancelled {
+                    continuation.resume(throwing: CancellationError())
+                } else if !pendingPreferenceWrites.isEmpty {
+                    continuation.resume()
+                } else {
+                    pendingPreferenceWriteObservers[waiterID] = continuation
+                }
+            }
+        } onCancel: { [weak self] in
+            Task { @MainActor [weak self] in self?.cancelPreferenceWriteObserver(waiterID) }
+        }
     }
 
+    private func cancelPreferenceWriteObserver(_ id: UUID) {
+        pendingPreferenceWriteObservers.removeValue(forKey: id)?.resume(throwing: CancellationError())
+    }
+
+    /// Releases every held batch, and fails any waiter that has not seen one arrive.
     func releaseBatches() {
         let pending = pendingBatches
         pendingBatches = []
         pending.forEach { $0.resume() }
+        let observers = Array(pendingBatchObservers.values)
+        pendingBatchObservers.removeAll()
+        observers.forEach { $0.continuation.resume(throwing: CancellationError()) }
+    }
+
+    /// Releases only the earliest held batch, so a test can finish one submission while another is still held.
+    func releaseOldestBatch() {
+        guard !pendingBatches.isEmpty else { return }
+        pendingBatches.removeFirst().resume()
+    }
+
+    /// Returns once `count` batches are held; cancellation of the waiting task removes its observer.
+    func waitForPendingBatch(count: Int = 1) async throws {
+        guard pendingBatches.count < count else { return }
+        let waiterID = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                if Task.isCancelled {
+                    continuation.resume(throwing: CancellationError())
+                } else if pendingBatches.count >= count {
+                    continuation.resume()
+                } else {
+                    pendingBatchObservers[waiterID] = (count, continuation)
+                }
+            }
+        } onCancel: { [weak self] in
+            Task { @MainActor [weak self] in self?.cancelBatchObserver(waiterID) }
+        }
+    }
+
+    private func cancelBatchObserver(_ id: UUID) {
+        pendingBatchObservers.removeValue(forKey: id)?.continuation.resume(throwing: CancellationError())
     }
 }

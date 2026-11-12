@@ -535,6 +535,9 @@ Storage settings offline downloads section */
 
 "Edit List" = "Edit List";
 
+/* Distinguishes an explicitly empty source-provided group name from no group name. */
+"Empty source label" = "Empty source label";
+
 "Enter a name for your new list." = "Enter a name for your new list.";
 
 "Enter a new value to replace it" = "Enter a new value to replace it";
@@ -673,6 +676,9 @@ History: an episode without a title */
 
 "Go to Settings > Trackers and sign in to AniList, MyAnimeList or MangaBaka before tracking." = "Go to Settings > Trackers and sign in to AniList, MyAnimeList or MangaBaka before tracking.";
 
+/* Accessibility label for the untranslated source-provided group ID. */
+"Group ID %@" = "Group ID %@";
+
 "HTTPS to HTTP redirect downgrades are prohibited." = "HTTPS to HTTP redirect downgrades are prohibited.";
 
 /* Series status: paused */
@@ -698,6 +704,9 @@ History: an episode without a title */
 "Host" = "Host";
 
 "How would you like to restore?" = "How would you like to restore?";
+
+/* Raw source-provided group ID shown when chooser labels collide. */
+"ID: %@" = "ID: %@";
 
 /* Accessibility label of a manga page image */
 "Illustration" = "Illustration";
@@ -1070,6 +1079,9 @@ Downloads manager empty inventory */
 
 "No results found. Try again." = "No results found. Try again.";
 
+/* Distinguishes an ID-less source group from a same-label group with an ID. */
+"No source ID" = "No source ID";
+
 "No sources installed" = "No sources installed";
 
 "No tags matching \"%@\"" = "No tags matching \"%@\"";
@@ -1345,6 +1357,9 @@ History: the page a chapter was left on */
 
 /* Toggle: keep this scanlator choice for the series, so downloads follow it next time. */
 "Remember for this series" = "Remember for this series";
+
+/* Chooser row for a legacy name-only preference that cannot be matched unambiguously. */
+"Remembered name needs review" = "Remembered name needs review";
 
 "Remove" = "Remove";
 
@@ -1892,6 +1907,9 @@ Reading font: the system font */
 
 /* Download preview warning: the order of the chapters could not be worked out confidently. */
 "The reading order of this series isn't certain. Check the list before downloading." = "The reading order of this series isn't certain. Check the list before downloading.";
+
+/* Scanlator sheet warning: a remembered group identifier cannot be matched safely to the current source catalog. */
+"The remembered scanlator identity is missing or ambiguous. Remove it and choose the current group to continue." = "The remembered scanlator identity is missing or ambiguous. Remove it and choose the current group to continue.";
 
 "The remote entry changed, but its local link still needs to be saved." = "The remote entry changed, but its local link still needs to be saved.";
 

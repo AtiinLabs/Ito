@@ -816,7 +816,9 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     private func applyLibraryState(_ state: MediaDetailLibraryState) {
-        isSaved = state.isSaved(media: mediaIdentity)
+        let isSaved = state.isSaved(media: mediaIdentity)
+        self.isSaved = isSaved
+        downloadBatch.librarySavedStateDidChange(isSaved)
         hasCustomCategories = state.hasCustomCategories
     }
 

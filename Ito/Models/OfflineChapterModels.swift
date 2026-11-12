@@ -256,7 +256,7 @@ nonisolated struct DownloadBatchRecord: Codable, Sendable, FetchableRecord, Pers
     var mediaKind: MediaKind
     var canonicalMediaId: String
     var preset: DownloadBatchPreset
-    /// `EditionSelection` JSON, version 1. The store keeps these bytes as given and never reads them.
+    /// Versioned `EditionSelection` JSON. The store keeps these bytes as given and never reads them.
     var selection: Data
     /// SHA-256 hex of the chapter list the plan was made from; nil when no plan was involved.
     var catalogDigest: String?
@@ -286,8 +286,10 @@ nonisolated struct DownloadSuppressionRecord: Codable, Sendable, FetchableRecord
 }
 
 nonisolated enum SeriesEditionPreferenceError: Error, Equatable {
-    /// A choice is stored, but its bytes are not a selection this build understands.
+    /// Stored bytes are not a selection this build understands.
     case unreadable
+    /// A remembered choice cannot recreate or outlive its saved Library scope.
+    case seriesNotSaved
 }
 
 /// The scanlators a user chose to download for one series, when they asked to remember the choice.
@@ -338,7 +340,7 @@ nonisolated struct DownloadBatchRequest: Sendable {
     let entry: MediaEntry
     let seriesTitle: String
     let preset: DownloadBatchPreset
-    /// `EditionSelection` JSON, version 1, encoded by the caller. It must be a JSON object.
+    /// Versioned `EditionSelection` JSON, encoded by the caller. It must be a JSON object.
     let selection: Data
     /// SHA-256 hex digest (64 characters) of the chapter list the plan was made from, if any.
     let catalogDigest: String?

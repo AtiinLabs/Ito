@@ -10,12 +10,12 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
     private static let identity = MediaIdentity(pluginId: pluginID, canonicalMediaId: "series-1", mediaKind: .manga)
 
     /// The chapter list the route's loader returns, so a test can change what the next refresh brings.
-    private final class Catalog {
+    final class Catalog {
         var chapters: [Chapter]
         init(_ chapters: [Chapter]) { self.chapters = chapters }
     }
 
-    private struct Subject {
+    struct Subject {
         let viewModel: MediaDetailViewModel<Manga>
         let downloads: MediaDetailDownloadsFake
         let messages: MediaDetailMessageSpy
@@ -180,7 +180,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         let subject = await makeSubject(chapters: Self.twoScanlators())
         subject.progress.lastRead[Self.identity] = "a3"
         subject.progress.readChapterIDs[Self.identity] = ["a3"]
-        let choice = EditionSelection.scanlators([ScanlatorRef(name: "A")])
+        let choice = EditionSelection.scanlators([ScanlatorRef(name: "A", binding: .exactIDless)])
 
         await subject.viewModel.downloadBatch.applyEditionChoice(choice, remember: false, then: .next5).value
 
@@ -199,7 +199,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
     func testRememberStoresTheChoiceAndALaterVisitFollowsItWithoutAsking() async throws {
         let downloads = MediaDetailDownloadsFake()
         let first = await makeSubject(chapters: Self.twoScanlators(), downloads: downloads)
-        let choice = EditionSelection.scanlators([ScanlatorRef(name: "B")])
+        let choice = EditionSelection.scanlators([ScanlatorRef(name: "B", binding: .exactIDless)])
 
         await first.viewModel.downloadBatch.applyEditionChoice(choice, remember: true, then: nil).value
 
@@ -407,7 +407,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
 
     func testTheScanlatorsEntryWaitsForTheStoredChoiceBeforeBuildingTheChooser() async throws {
         let downloads = MediaDetailDownloadsFake()
-        let stored = EditionSelection.scanlators([ScanlatorRef(name: "B")])
+        let stored = EditionSelection.scanlators([ScanlatorRef(name: "B", binding: .exactIDless)])
         let seeded = await makeSubject(chapters: Self.twoScanlators(), downloads: downloads)
         await seeded.viewModel.downloadBatch.applyEditionChoice(stored, remember: true, then: nil).value
         downloads.holdsPreferenceReads = true
@@ -523,7 +523,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
     // MARK: - Preset mapping
 
     func testEveryPresetMapsToItsStoredBatchPresetAndFreezesTheSelectionBytes() async throws {
-        let selection = EditionSelection.scanlators([ScanlatorRef(name: "A"), ScanlatorRef(id: "g-2", name: "B")])
+        let selection = EditionSelection.scanlators([ScanlatorRef(name: "A", binding: .exactIDless)])
         for preset in DownloadPreset.allCases {
             let subject = await makeSubject(chapters: Self.numbered(1...3, scanlator: "A"))
             await subject.viewModel.downloadBatch.applyEditionChoice(selection, remember: false, then: nil).value
@@ -544,8 +544,8 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
 
         await subject.viewModel.downloadBatch.startDownload(.all).value
 
-        XCTAssertEqual(subject.downloads.batchRequests.first?.selection, DownloadBatchRecord.sourceListSelection)
         XCTAssertEqual(subject.downloads.batchRequests.first?.selection, try EditionSelection.sourceList.storageData())
+        XCTAssertEqual(DownloadBatchRecord.sourceListSelection, Data(#"{"formatVersion":1,"kind":"sourceList"}"#.utf8))
     }
 
     func testARefusedBatchIsReportedAndNothingElseIsClaimed() async {
@@ -1170,7 +1170,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
     }
 
     /// Serves a fixed inventory by series and records which series it was asked for.
-    private final class InventoryBox {
+    final class InventoryBox {
         let rows: [DownloadedChapterRecord]
         private(set) var requested: [MediaIdentity] = []
         var readCount: Int { requested.count }
@@ -1201,7 +1201,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
 
     /// Builds a screen and loads it. A runner route has a loader that returns `catalog`'s current chapters, so
     /// a test can change what the next refresh brings; a saved-only route has none.
-    private func makeSubject(
+    func makeSubject(
         chapters: [Chapter],
         saved: Bool = true,
         downloads: MediaDetailDownloadsFake = MediaDetailDownloadsFake(),

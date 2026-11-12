@@ -434,6 +434,7 @@ public class LibraryManager: ObservableObject {
                 number: $0.chapterNumber,
                 volume: $0.volumeNumber,
                 scanlator: $0.scanlator,
+                scanlatorID: $0.scanlatorID,
                 isLocked: $0.paywalled ?? false
             )
         }

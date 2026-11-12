@@ -1,93 +1,303 @@
 import Foundation
 
-/// A scanlator as the source shows it. `id` stays nil until the source reports group identifiers (ABI 3);
-/// `name` is nil for "no group listed". The two sit side by side so a stored selection can later gain an
-/// id without a schema change.
+/// The semantics of an ID-less descriptor. Untagged legacy descriptors retain name intent.
+nonisolated enum ScanlatorRefBinding: String, Codable, Hashable, Sendable {
+    case legacyName
+    case exactIDless
+}
+
+/// A source group descriptor. Bound IDs exclude the cached display name from identity.
 nonisolated struct ScanlatorRef: Codable, Hashable, Sendable {
     var id: String?
     var name: String?
+    var binding: ScanlatorRefBinding?
 
-    init(id: String? = nil, name: String? = nil) {
+    init(id: String? = nil, name: String? = nil, binding: ScanlatorRefBinding? = nil) {
         self.id = id
         self.name = name
+        self.binding = binding
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        switch (lhs.id, rhs.id) {
+        case let (left?, right?): left.utf8.elementsEqual(right.utf8)
+        case (nil, nil):
+            effectiveBinding(lhs.binding) == effectiveBinding(rhs.binding)
+                && optionalNameEquals(lhs.name, rhs.name)
+        default: false
+        }
+    }
+
+    func hash(into hasher: inout Hasher) {
+        if let id {
+            hasher.combine(1)
+            Self.hashUTF8(id, into: &hasher)
+        } else {
+            hasher.combine(0)
+            hasher.combine(Self.effectiveBinding(binding))
+            if let name {
+                hasher.combine(1)
+                Self.hashUTF8(name, into: &hasher)
+            } else {
+                hasher.combine(0)
+            }
+        }
+    }
+
+    private static func effectiveBinding(_ binding: ScanlatorRefBinding?) -> ScanlatorRefBinding {
+        binding ?? .legacyName
+    }
+
+    private static func optionalNameEquals(_ lhs: String?, _ rhs: String?) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil): true
+        case let (left?, right?): left.utf8.elementsEqual(right.utf8)
+        default: false
+        }
+    }
+
+    private static func hashUTF8(_ value: String, into hasher: inout Hasher) {
+        for byte in value.utf8 { hasher.combine(byte) }
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, name, binding }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        binding = try container.decodeIfPresent(ScanlatorRefBinding.self, forKey: .binding)
+        guard id == nil || binding == nil else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .binding,
+                in: container,
+                debugDescription: "A bound scanlator ID cannot have an ID-less binding."
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        guard id == nil || binding == nil else {
+            throw EncodingError.invalidValue(
+                self,
+                .init(codingPath: encoder.codingPath, debugDescription: "A bound scanlator ID cannot have an ID-less binding.")
+            )
+        }
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(id, forKey: .id)
+        try container.encodeIfPresent(name, forKey: .name)
+        try container.encodeIfPresent(binding, forKey: .binding)
     }
 }
 
-/// Which uploads of a series a download request may select. It is a user-chosen filter: it never
-/// identifies a stored edition, never dedupes, and never decides that a position is satisfied.
-nonisolated enum EditionSelection: Hashable, Sendable {
-    /// Follow the source's list: every row it returns (the default).
-    case sourceList
-    /// A strict set of scanlators. The order is the user's and is kept for ordered fallback later.
-    case scanlators([ScanlatorRef])
-    /// Every upload, including several translations of the same chapter (an explicit advanced action).
-    case allUploads
+nonisolated struct ScanlatorUTF8: Hashable, Sendable {
+    let value: String
 
-    /// Whether a chapter from `name` (and, when the source reports one, group `groupID`) is selected.
-    ///
-    /// A reference matches by id when both sides carry one. Otherwise it matches by exact display name:
-    /// no trimming and no case folding, so a renamed group stops matching rather than matching loosely.
-    func admits(scanlator name: String?, groupID: String? = nil) -> Bool {
-        switch self {
-        case .sourceList, .allUploads:
-            return true
-        case .scanlators(let references):
-            return references.contains { reference in
-                if let referenceID = reference.id, let groupID {
-                    return referenceID == groupID
-                }
-                return reference.name == name
-            }
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.value.utf8.elementsEqual(rhs.value.utf8)
+    }
+
+    func hash(into hasher: inout Hasher) {
+        for byte in value.utf8 { hasher.combine(byte) }
+    }
+}
+
+nonisolated struct ScanlatorNameKey: Hashable, Sendable {
+    let value: String?
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        switch (lhs.value, rhs.value) {
+        case (nil, nil): true
+        case let (left?, right?): left.utf8.elementsEqual(right.utf8)
+        default: false
+        }
+    }
+
+    func hash(into hasher: inout Hasher) {
+        if let value {
+            hasher.combine(1)
+            for byte in value.utf8 { hasher.combine(byte) }
+        } else {
+            hasher.combine(0)
         }
     }
 }
 
-/// The stored form is versioned: `{"formatVersion":1,"kind":"scanlators","scanlators":[…]}`. An unknown
-/// version or kind fails to decode instead of being read as something else.
-nonisolated extension EditionSelection: Codable {
-    static let formatVersion = 1
+nonisolated enum ScanlatorGroupKey: Hashable, Sendable {
+    case id(ScanlatorUTF8)
+    case idless(ScanlatorNameKey)
 
-    /// The bytes a store persists for this selection. Keys are sorted, so equal selections always
-    /// produce equal bytes; this is the only producer of the stored form.
+    init(id: String?, name: String?) {
+        if let id {
+            self = .id(ScanlatorUTF8(value: id))
+        } else {
+            self = .idless(ScanlatorNameKey(value: name))
+        }
+    }
+}
+
+nonisolated struct ResolvedEditionSelection: Sendable {
+    let selection: EditionSelection
+    fileprivate let groupKeys: Set<ScanlatorGroupKey>?
+
+    func admits(scanlator name: String?, groupID: String?) -> Bool {
+        groupKeys?.contains(ScanlatorGroupKey(id: groupID, name: name)) ?? true
+    }
+}
+
+/// One catalog-local identity index shared by the planner, chooser preflight and offline coverage.
+nonisolated struct ScanlatorCatalogIndex: Sendable {
+    private struct NameGroups: Sendable {
+        var firstID: ScanlatorUTF8?
+        var hasMultipleIDs = false
+        var hasIDless = false
+    }
+
+    private let groupKeys: Set<ScanlatorGroupKey>
+    private let groupsByID: [ScanlatorUTF8: ScanlatorRef]
+    private let groupsByName: [ScanlatorNameKey: NameGroups]
+
+    init(_ catalog: [ScanlatorRef]) {
+        self.init(catalog, id: { $0.id }, name: { $0.name })
+    }
+
+    init<C: Sequence>(
+        _ catalog: C,
+        id: (C.Element) -> String?,
+        name: (C.Element) -> String?
+    ) {
+        var groupKeys = Set<ScanlatorGroupKey>()
+        var groupsByID: [ScanlatorUTF8: ScanlatorRef] = [:]
+        var groupsByName: [ScanlatorNameKey: NameGroups] = [:]
+        for row in catalog {
+            let id = id(row)
+            let name = name(row)
+            groupKeys.insert(ScanlatorGroupKey(id: id, name: name))
+            let nameKey = ScanlatorNameKey(value: name)
+            var nameGroups = groupsByName[nameKey, default: NameGroups()]
+            if let id {
+                let exactID = ScanlatorUTF8(value: id)
+                if let firstID = nameGroups.firstID, firstID != exactID {
+                    nameGroups.hasMultipleIDs = true
+                } else {
+                    nameGroups.firstID = exactID
+                }
+                groupsByID[exactID] = ScanlatorRef(id: id, name: name)
+            } else {
+                nameGroups.hasIDless = true
+            }
+            groupsByName[nameKey] = nameGroups
+        }
+        self.groupKeys = groupKeys
+        self.groupsByID = groupsByID
+        self.groupsByName = groupsByName
+    }
+
+    func resolve(_ selection: EditionSelection) -> ResolvedEditionSelection? {
+        switch selection {
+        case .sourceList, .allUploads:
+            return ResolvedEditionSelection(selection: selection, groupKeys: nil)
+        case .scanlators(let references):
+            var resolvedReferences: [ScanlatorRef] = []
+            var selectedGroups = Set<ScanlatorGroupKey>()
+            for reference in references {
+                if let id = reference.id {
+                    let exactID = ScanlatorUTF8(value: id)
+                    guard let current = groupsByID[exactID] else { return nil }
+                    resolvedReferences.append(current)
+                    selectedGroups.insert(.id(exactID))
+                    continue
+                }
+
+                let nameKey = ScanlatorNameKey(value: reference.name)
+                guard let nameGroups = groupsByName[nameKey] else { return nil }
+                if reference.binding == .exactIDless {
+                    let groupKey = ScanlatorGroupKey.idless(nameKey)
+                    guard groupKeys.contains(groupKey) else { return nil }
+                    resolvedReferences.append(reference)
+                    selectedGroups.insert(groupKey)
+                    continue
+                }
+
+                if reference.name == nil {
+                    guard nameGroups.hasIDless else { return nil }
+                    let groupKey = ScanlatorGroupKey.idless(nameKey)
+                    resolvedReferences.append(ScanlatorRef(name: nil, binding: .exactIDless))
+                    selectedGroups.insert(groupKey)
+                    continue
+                }
+
+                guard !nameGroups.hasMultipleIDs,
+                      !(nameGroups.hasIDless && nameGroups.firstID != nil) else { return nil }
+                if let uniqueID = nameGroups.firstID {
+                    guard let current = groupsByID[uniqueID] else { return nil }
+                    resolvedReferences.append(current)
+                    selectedGroups.insert(.id(uniqueID))
+                } else if nameGroups.hasIDless {
+                    let groupKey = ScanlatorGroupKey.idless(nameKey)
+                    resolvedReferences.append(ScanlatorRef(name: reference.name, binding: .exactIDless))
+                    selectedGroups.insert(groupKey)
+                } else {
+                    return nil
+                }
+            }
+            return ResolvedEditionSelection(selection: .scanlators(resolvedReferences), groupKeys: selectedGroups)
+        }
+    }
+}
+
+nonisolated enum EditionSelection: Hashable, Sendable {
+    case sourceList
+    case scanlators([ScanlatorRef])
+    case allUploads
+
+    func resolve(in catalog: [ScanlatorRef]) -> ResolvedEditionSelection? {
+        switch self {
+        case .sourceList, .allUploads:
+            return ResolvedEditionSelection(selection: self, groupKeys: nil)
+        case .scanlators:
+            return ScanlatorCatalogIndex(catalog).resolve(self)
+        }
+    }
+
+    func resolved(in catalog: [ScanlatorRef]) -> Self? {
+        resolve(in: catalog)?.selection
+    }
+}
+
+nonisolated extension EditionSelection: Codable {
+    static let formatVersion = 2
+
     func storageData() throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         return try encoder.encode(self)
     }
 
-    private enum CodingKeys: String, CodingKey {
-        case formatVersion, kind, scanlators
-    }
-
-    private enum Kind: String {
-        case sourceList, scanlators, allUploads
-    }
+    private enum CodingKeys: String, CodingKey { case formatVersion, kind, scanlators }
+    private enum Kind: String { case sourceList, scanlators, allUploads }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let version = try container.decode(Int.self, forKey: .formatVersion)
-        guard version == Self.formatVersion else {
-            throw DecodingError.dataCorruptedError(
-                forKey: .formatVersion,
-                in: container,
-                debugDescription: "Unsupported edition selection format version \(version)."
-            )
+        guard version == 1 || version == Self.formatVersion else {
+            throw DecodingError.dataCorruptedError(forKey: .formatVersion, in: container, debugDescription: "Unsupported edition selection format version \(version).")
         }
         let rawKind = try container.decode(String.self, forKey: .kind)
         guard let kind = Kind(rawValue: rawKind) else {
-            throw DecodingError.dataCorruptedError(
-                forKey: .kind,
-                in: container,
-                debugDescription: "Unknown edition selection kind \(rawKind)."
-            )
+            throw DecodingError.dataCorruptedError(forKey: .kind, in: container, debugDescription: "Unknown edition selection kind \(rawKind).")
         }
         switch kind {
-        case .sourceList:
-            self = .sourceList
-        case .allUploads:
-            self = .allUploads
+        case .sourceList: self = .sourceList
+        case .allUploads: self = .allUploads
         case .scanlators:
-            self = .scanlators(try container.decode([ScanlatorRef].self, forKey: .scanlators))
+            let references = try container.decode([ScanlatorRef].self, forKey: .scanlators)
+            guard version != 1 || references.allSatisfy({ $0.binding != .exactIDless }) else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .scanlators, in: container, debugDescription: "Version 1 cannot contain explicit ID-less bindings."
+                )
+            }
+            self = .scanlators(references)
         }
     }
 
@@ -95,10 +305,8 @@ nonisolated extension EditionSelection: Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(Self.formatVersion, forKey: .formatVersion)
         switch self {
-        case .sourceList:
-            try container.encode(Kind.sourceList.rawValue, forKey: .kind)
-        case .allUploads:
-            try container.encode(Kind.allUploads.rawValue, forKey: .kind)
+        case .sourceList: try container.encode(Kind.sourceList.rawValue, forKey: .kind)
+        case .allUploads: try container.encode(Kind.allUploads.rawValue, forKey: .kind)
         case .scanlators(let references):
             try container.encode(Kind.scanlators.rawValue, forKey: .kind)
             try container.encode(references, forKey: .scanlators)
