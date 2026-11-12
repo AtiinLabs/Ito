@@ -583,9 +583,9 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         let chapters = host?.batchChapters ?? []
         let rows = chapters.map { chapter in
             DownloadPlanRow(
-                facts: ChapterFacts(chapter, scanlatorID: chapter.scanlatorID),
+                facts: ChapterFacts(chapter),
                 isRead: progress.isRead(media: identity, chapterID: chapter.key, chapterNumber: chapter.chapterNumber),
-                stored: storedEditionState(chapter.key)
+                stored: StoredEditionState(states[chapter.key])
             )
         }
         let plan = DownloadPresetResolver.plan(
@@ -596,17 +596,6 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             resolvedSelection: resolvedSelection
         )
         return PlannedDownload(chapters: chapters, plan: plan)
-    }
-
-    /// What the store knows of one exact key. A failed job still occupies its key, so it holds its position
-    /// and is not queued again: Retry is the way back.
-    private func storedEditionState(_ key: String) -> StoredEditionState {
-        switch states[key] {
-        case nil: .none
-        case .downloaded?: .verified
-        case .damaged?: .damaged
-        case .queued?, .downloading?, .waiting?, .failed?: .queued
-        }
     }
 
     private func isFailed(_ key: String) -> Bool {
@@ -660,7 +649,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
                     key: chapter.key,
                     title: ReaderChapterTitle.text(title: chapter.title, number: chapter.chapterNumber),
                     scanlator: chapter.scanlator,
-                    stored: storedEditionState(chapter.key),
+                    stored: StoredEditionState(states[chapter.key]),
                     isFailed: isFailed(chapter.key)
                 )
             }
