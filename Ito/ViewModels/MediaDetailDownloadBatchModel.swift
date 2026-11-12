@@ -62,6 +62,8 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     private var policySavedOnlyChapters: [Chapter] = []
 
     private var preferenceTask: Task<Void, Never>?
+    /// The read that may still publish; a replaced or superseded read finds another token and leaves.
+    private var preferenceReadToken: UUID?
     private var coverageTask: Task<Void, Never>?
     private var savedOnlyTask: Task<Void, Never>?
     private var capacityTask: Task<Void, Never>?
@@ -268,6 +270,8 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         remembered = .unknown
         let downloads = downloads
         let savedGeneration = savedScopeGeneration
+        let token = UUID()
+        preferenceReadToken = token
         preferenceTask = Task { [weak self] in
             // Only a stored choice this build cannot read is "unreadable". Any other failure is a read that did
             // not happen: the state stays unknown, and the next preset reads again.
@@ -283,10 +287,18 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             } catch {
                 result = nil
             }
-            guard let self, !Task.isCancelled, self.host?.batchIdentity == identity,
-                  self.host?.batchIsSaved == true,
-                  self.savedScopeGeneration == savedGeneration else { return }
+            // A read that was replaced belongs to its replacement.
+            guard let self, self.preferenceReadToken == token else { return }
+            self.preferenceReadToken = nil
             self.preferenceTask = nil
+            guard !Task.isCancelled, self.host?.batchIdentity == identity,
+                  self.host?.batchIsSaved == true,
+                  self.savedScopeGeneration == savedGeneration else {
+                // The series was not saved (or was replaced) while the read ran. Nothing was learned, so a
+                // later action reads again instead of finding a finished read that says nothing.
+                self.preferenceIdentity = nil
+                return
+            }
             // A choice made while the read ran is newer than what it found.
             if self.remembered == .unknown, let result { self.remembered = result }
         }
@@ -349,7 +361,10 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             self.policySavedOnlyChapters = SavedChapterMerge.savedOnly(
                 listedKeys: Set(host.batchChapters.map(\.key)),
                 inventory: records.filter { record in
-                    guard missing.contains(record.chapterKey) else { return false }
+                    guard missing.contains(record.chapterKey), record.pluginId == identity.pluginId,
+                          record.mediaKind == identity.mediaKind,
+                          record.canonicalMediaId == identity.canonicalMediaId else { return false }
+                    // Nil means the metadata belongs to the record's own series, not whichever screen asked.
                     guard let data = record.originIdentity else { return true }
                     guard let origin = try? JSONDecoder().decode(OfflineOriginIdentity.self, from: data) else { return false }
                     return origin.pluginId == identity.pluginId && origin.canonicalMediaId == identity.canonicalMediaId
@@ -366,9 +381,14 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         return OfflineDigest.sha256Hex(data)
     }
 
+    /// The scope an action starts under. The source epoch is read once here; the stores compare it again
+    /// inside their write transactions. A read that fails is reported: an action never silently does nothing.
     private func currentBatchScope() -> BatchScope? {
-        guard let host, host.batchIsSaved,
-              let epoch = try? downloads.editionPreferenceEpoch(for: host.batchIdentity.pluginId) else { return nil }
+        guard let host, host.batchIsSaved else { return nil }
+        guard let epoch = try? downloads.editionPreferenceEpoch(for: host.batchIdentity.pluginId) else {
+            host.presentBatchMessage(.downloadActionFailed)
+            return nil
+        }
         return BatchScope(
             identity: host.batchIdentity, generation: scopeGeneration,
             catalogDigest: catalogDigest, sourceEpoch: epoch
@@ -380,7 +400,22 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             && host?.batchIsSaved == true
             && scopeGeneration == scope.generation
             && catalogDigest == scope.catalogDigest
-            && (try? downloads.editionPreferenceEpoch(for: scope.identity.pluginId)) == scope.sourceEpoch
+    }
+
+    /// Whether the source's epoch is still the one a sheet was made under. A read that fails is not "the
+    /// same": the consent is stale.
+    private func isCurrentEpoch(_ epoch: String, for identity: MediaIdentity) -> Bool {
+        (try? downloads.editionPreferenceEpoch(for: identity.pluginId)) == epoch
+    }
+
+    /// A consent was made under a source epoch, policy or catalog that is no longer current. The sheet closes,
+    /// nothing is stored or queued, and the user is asked to review again; a confirm that cannot work is
+    /// never left on screen.
+    private func closeStaleConsent() {
+        sheet = nil
+        choiceOperationID = nil
+        isApplyingChoice = false
+        host?.presentBatchMessage(.editionChoiceChanged)
     }
 
     private func ownsChooser(_ id: UUID?) -> Bool {
@@ -494,9 +529,11 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
                   presentation.id == chooserID,
                   presentation.identity == scope.identity,
                   presentation.scopeGeneration == scope.generation,
-                  presentation.catalogDigest == scope.catalogDigest,
-                  presentation.sourceEpoch == scope.sourceEpoch,
-                  presentation.policy == remembered else { return Task {} }
+                  presentation.catalogDigest == scope.catalogDigest else { return Task {} }
+            guard presentation.sourceEpoch == scope.sourceEpoch, presentation.policy == remembered else {
+                closeStaleConsent()
+                return Task {}
+            }
         }
         guard let resolution = resolveSelection(selection) else { return Task {} }
         let reviewedSelection = resolution.selection
@@ -520,12 +557,16 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
                 guard case .chooser(let current)? = self.sheet, current.id == chooserID else { return }
             }
             var storeFailed = false
+            var sourceChanged = false
             let store = remember || preset == nil
             if store {
                 do {
                     try await downloads.setEditionPreference(
                         reviewedSelection, for: scope.identity, sourceEpoch: scope.sourceEpoch
                     )
+                } catch SeriesEditionPreferenceError.sourceChanged {
+                    storeFailed = true
+                    sourceChanged = true
                 } catch {
                     storeFailed = true
                 }
@@ -545,6 +586,11 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
                 guard case .chooser(let current)? = self.sheet, current.id == chooserID else { return }
             }
             if store, !storeFailed { self.remembered = .chosen(reviewedSelection) }
+            if sourceChanged {
+                // The source changed after the review. Nothing was stored; the user reviews again.
+                self.closeStaleConsent()
+                return
+            }
             if storeFailed {
                 self.host?.presentBatchMessage(preset == nil ? .editionChoiceNotSaved : .editionChoiceNotRemembered)
                 self.sheet = .chooser(self.makeChooser(
@@ -578,16 +624,12 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             sheet = nil
             return Task {}
         }
-        guard (try? downloads.editionPreferenceEpoch(for: preview.identity.pluginId)) == preview.sourceEpoch else {
-            sheet = nil
-            return Task {}
-        }
-        guard preview.policy == remembered else {
-            sheet = nil
-            return Task {}
-        }
         guard preview.catalogDigest == catalogDigest else {
             revalidatePreview()
+            return Task {}
+        }
+        guard isCurrentEpoch(preview.sourceEpoch, for: preview.identity), preview.policy == remembered else {
+            closeStaleConsent()
             return Task {}
         }
         let scope = BatchScope(
@@ -625,8 +667,11 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     func editFallbackOrder(previewID: UUID) {
         guard case .preview(let preview)? = sheet, preview.id == previewID,
               let scope = currentBatchScope(), preview.identity == scope.identity,
-              preview.catalogDigest == scope.catalogDigest, preview.sourceEpoch == scope.sourceEpoch,
-              preview.policy == remembered else { return }
+              preview.catalogDigest == scope.catalogDigest else { return }
+        guard preview.sourceEpoch == scope.sourceEpoch, preview.policy == remembered else {
+            closeStaleConsent()
+            return
+        }
         sheet = .chooser(makeChooser(
             preset: preview.preset, problem: nil, initialSelection: preview.selection, scope: scope
         ))
@@ -900,7 +945,8 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             preset: DownloadBatchPreset(preset),
             selection: storedSelection,
             catalogDigest: scope.catalogDigest.isEmpty ? nil : scope.catalogDigest,
-            chapters: chapters
+            chapters: chapters,
+            reviewedSourceEpoch: scope.sourceEpoch
         )
         let downloads = downloads
         let operation = UUID()
@@ -938,7 +984,11 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
               host?.batchIsSaved == true,
               host?.batchIdentity == identity else { return }
         if let refusal = outcome.refusal {
-            host?.presentBatchMessage(refusal == .unavailable ? .downloadActionFailed : .downloadRefused)
+            switch refusal {
+            case .unavailable: host?.presentBatchMessage(.downloadActionFailed)
+            case .sourceChanged: host?.presentBatchMessage(.editionChoiceChanged)
+            default: host?.presentBatchMessage(.downloadRefused)
+            }
         } else if outcome.queued > 0 {
             host?.presentBatchMessage(.downloadsQueued(
                 queued: outcome.queued,

@@ -45,6 +45,7 @@ enum AppMessageKind: Equatable {
     case mediaDetailEditionChoiceNotSaved
     case mediaDetailEditionChoiceUnreadable
     case mediaDetailEditionChoiceReadFailed(reviewing: Bool)
+    case mediaDetailEditionChoiceChanged
     case libraryLayoutPersistenceFailed
     case libraryItemRemovalFailed
     /// The series left the Library, but its downloads are still stored.
@@ -407,6 +408,18 @@ extension AppMessageKind {
                         localized: "Please try again.",
                         comment: "Series details: detail when the remembered scanlators could not be read and nothing was changed."
                     )
+            )
+        case .mediaDetailEditionChoiceChanged:
+            return .init(
+                style: .info,
+                title: String(
+                    localized: "Edition choice changed",
+                    comment: "Series details: a download choice or preview was made under a source, chapter list or edition policy that has since changed, so nothing was saved or queued."
+                ),
+                detail: String(
+                    localized: "The chapter list or edition choice changed. Review again.",
+                    comment: "Series details: detail when a draft was invalidated before confirmation; no changed plan was submitted automatically."
+                )
             )
         case .libraryLayoutPersistenceFailed:
             return .init(

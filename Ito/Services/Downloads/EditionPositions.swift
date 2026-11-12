@@ -17,6 +17,12 @@ nonisolated enum EditionPositionKey: Hashable, Sendable {
             self = .exact(ScanlatorUTF8(value: facts.key))
         }
     }
+
+    /// Whether the source itself declared this position, so its absence from a group is a proven gap.
+    var isLogical: Bool {
+        if case .logical = self { return true }
+        return false
+    }
 }
 
 /// The rows of one catalog that share a position, before any group policy is applied.

@@ -136,3 +136,8 @@ Confirm that Ask presents one aggregate batch decision, Cancel queues nothing, a
 catalog or source session invalidates the old confirmation. Remember must wait for persistence;
 an admitted save that outlives its sheet must refresh authoritative preferences without restoring
 removed Library scope or reporting stale success.
+
+Known limitation: that refresh reaches only the screen model that issued the save. Another detail
+screen already open for the same series keeps its cached choice until it reads again, and the
+store checks only the source epoch, not the stored policy, when that screen queues a reviewed
+batch. Verify this when changing preference caching.

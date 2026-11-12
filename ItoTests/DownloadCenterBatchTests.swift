@@ -60,6 +60,26 @@ struct DownloadCenterBatchTests {
         #expect(try await fixture.offline.rowCount("downloadBatch") == 0)
     }
 
+    @Test func aBatchReviewedUnderARotatedSourceEpochIsRefusedInTheStoreAndQueuesNothing() async throws {
+        let fixture = try DownloadWorkerFixture()
+        await fixture.coordinator.reconcile()
+        var request = Self.request(["chapter-1", "chapter-2"])
+        request.reviewedSourceEpoch = OfflineStoreFixture.epoch
+        try fixture.offline.rotateEpoch(to: OfflineStoreFixture.rotatedEpoch)
+
+        let stale = await fixture.center.enqueueBatch(request)
+        #expect(stale.refusal == .sourceChanged)
+        #expect(stale.queued == 0)
+        #expect(try await fixture.offline.rowCount("downloadJob") == 0)
+        #expect(try await fixture.offline.rowCount("downloadBatch") == 0)
+
+        request.reviewedSourceEpoch = OfflineStoreFixture.rotatedEpoch
+        let current = await fixture.center.enqueueBatch(request)
+        #expect(current.queued == 2)
+        let epochs = try await fixture.store.jobs().map(\.sourceEpoch)
+        #expect(epochs.allSatisfy { $0 == OfflineStoreFixture.rotatedEpoch }, "Jobs freeze the reviewed epoch")
+    }
+
     @available(iOS 16, *)
     @Test(.timeLimit(.minutes(1)))
     func deletingTheSeriesWhileTheFirstChapterIsInFlightLeavesNothingAndNeverStartsTheRest() async throws {

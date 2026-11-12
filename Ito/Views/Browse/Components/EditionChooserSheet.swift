@@ -84,19 +84,17 @@ struct EditionChooserSheet: View {
                         .sourceList,
                         title: String(
                             localized: "Follow the source's preferred edition",
-                            comment: "Select one source-ranked visible upload per proven reading position, not every upload."
+                            comment: "Let the source choose which visible upload to download. Uploads form one reading position only when the source supplies a shared logical-unit ID; otherwise each listed upload is separate."
                         )
                     )
                     modeRow(.preferred, title: String(
                         localized: "Choose a preferred group",
                         comment: "Choose the translation group normally used for this series."
                     ))
-                    if case .scanlators = presentation.initialSelection {
-                        modeRow(.scanlators, title: String(
-                            localized: "Selected groups only",
-                            comment: "Legacy strict allowed set; its order is not automatic fallback authorization."
-                        ))
-                    }
+                    modeRow(.scanlators, title: String(
+                        localized: "Selected groups only",
+                        comment: "Strict allowed set: only the ticked groups are used. Their order is not a fallback order and never authorizes another group."
+                    ))
                     modeRow(
                         .allUploads,
                         title: String(
@@ -108,7 +106,7 @@ struct EditionChooserSheet: View {
                     if mode == .allUploads {
                         Text(
                             "Downloads every upload, including several translations of the same chapter.",
-                            comment: "Footer under the All uploads scanlator choice."
+                            comment: "Footer under the Download all editions choice."
                         )
                     }
                 }
@@ -135,17 +133,19 @@ struct EditionChooserSheet: View {
                                 HStack {
                                     Text(renderedLabel(for: ScanlatorOption(ref: reference, chapterCount: 0)))
                                     Spacer()
-                                    Button {
-                                        guard let index = chosen.firstIndex(of: reference), index > 1 else { return }
-                                        chosen.swapAt(index, index - 1)
-                                    } label: {
-                                        Image(systemName: "arrow.up")
+                                    if chosen.firstIndex(of: reference).map({ $0 > 1 }) == true {
+                                        Button {
+                                            guard let index = chosen.firstIndex(of: reference), index > 1 else { return }
+                                            chosen.swapAt(index, index - 1)
+                                        } label: {
+                                            Image(systemName: "arrow.up")
+                                        }
+                                        .accessibilityLabel(Text("Move earlier", comment: "Move an approved fallback group earlier in priority order."))
                                     }
-                                    .accessibilityLabel(Text("Move earlier", comment: "Move an approved fallback group earlier in priority order."))
                                 }
                             }
                         } footer: {
-                            Text("Only these groups can be used automatically, in the order shown.", comment: "Approved fallback has no unlisted final fallback.")
+                            Text("Only these groups are offered as fallbacks, in the order shown. You review them before anything is queued.", comment: "Approved fallback has no unlisted final fallback, and a fallback is always shown in a preview before it is queued.")
                         }
                     }
                 }

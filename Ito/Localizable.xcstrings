@@ -1627,7 +1627,7 @@
       "comment" : "Downloads manager bulk Retry failure"
     },
     "Downloads every upload, including several translations of the same chapter." : {
-      "comment" : "Footer under the All uploads scanlator choice."
+      "comment" : "Footer under the Download all editions choice."
     },
     "Downloads not deleted" : {
       "comment" : "Library: a series was removed from the Library, but its saved chapters could not be deleted."
@@ -1668,6 +1668,9 @@
           }
         }
       }
+    },
+    "Edition choice changed" : {
+      "comment" : "Series details: a download choice or preview was made under a source, chapter list or edition policy that has since changed, so nothing was saved or queued."
     },
     "Empty source label" : {
       "comment" : "Distinguishes an explicitly empty source-provided group name from no group name."
@@ -1872,7 +1875,7 @@
       "comment" : "Series status: complete"
     },
     "Follow the source's preferred edition" : {
-      "comment" : "Select one source-ranked visible upload per proven reading position, not every upload.",
+      "comment" : "Let the source choose which visible upload to download. Uploads form one reading position only when the source supplies a shared logical-unit ID; otherwise each listed upload is separate.",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2607,8 +2610,12 @@
     "Ongoing" : {
 
     },
+    "Only these groups are offered as fallbacks, in the order shown. You review them before anything is queued." : {
+      "comment" : "Approved fallback has no unlisted final fallback, and a fallback is always shown in a preview before it is queued."
+    },
     "Only these groups can be used automatically, in the order shown." : {
       "comment" : "Approved fallback has no unlisted final fallback.",
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3322,7 +3329,7 @@
 
     },
     "Selected groups only" : {
-      "comment" : "Legacy strict allowed set; its order is not automatic fallback authorization.",
+      "comment" : "Strict allowed set: only the ticked groups are used. Their order is not a fallback order and never authorizes another group.",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3645,6 +3652,9 @@
     },
     "The chapter list changed; review again." : {
       "comment" : "Download preview: the series' chapter list changed while the preview was open, so it was made again."
+    },
+    "The chapter list or edition choice changed. Review again." : {
+      "comment" : "Series details: detail when a draft was invalidated before confirmation; no changed plan was submitted automatically."
     },
     "The chapter you last read isn't in the selected scanlators, so this starts from the first unread chapter." : {
       "comment" : "Download preview warning: the last-read chapter belongs to a scanlator that is not selected."

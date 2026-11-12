@@ -369,6 +369,19 @@ nonisolated extension EditionSelection: Codable {
         guard let kind = Kind(rawValue: rawKind) else {
             throw DecodingError.dataCorruptedError(forKey: .kind, in: container, debugDescription: "Unknown edition selection kind \(rawKind).")
         }
+        if version == Self.formatVersion {
+            // The newest format is strict about its shape: a key that belongs to another kind is not ignored.
+            let allowed: Set<CodingKeys>
+            switch kind {
+            case .sourceList, .allUploads: allowed = []
+            case .scanlators: allowed = [.scanlators]
+            case .preferred: allowed = [.primary, .fallback, .approved]
+            }
+            for key in [CodingKeys.scanlators, .primary, .fallback, .approved]
+            where container.contains(key) && !allowed.contains(key) {
+                throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "Unexpected key for this kind.")
+            }
+        }
         switch kind {
         case .sourceList: self = .sourceList
         case .allUploads: self = .allUploads
@@ -399,6 +412,9 @@ nonisolated extension EditionSelection: Codable {
                 fallback = .approved(refs)
             default:
                 throw DecodingError.dataCorruptedError(forKey: .fallback, in: container, debugDescription: "Unknown fallback mode.")
+            }
+            if mode != "approved", container.contains(.approved) {
+                throw DecodingError.dataCorruptedError(forKey: .approved, in: container, debugDescription: "Approved groups need the approved mode.")
             }
             self = .preferred(primary: primary, fallback: fallback)
         }

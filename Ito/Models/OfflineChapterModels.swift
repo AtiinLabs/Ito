@@ -347,6 +347,9 @@ nonisolated struct DownloadBatchRequest: Sendable {
     /// SHA-256 hex digest (64 characters) of the chapter list the plan was made from, if any.
     let catalogDigest: String?
     let chapters: [Chapter]
+    /// The source epoch the user reviewed this batch under. When set, the store refuses the whole request in
+    /// its write transaction unless the source's epoch is still this one; nil takes the epoch of the moment.
+    var reviewedSourceEpoch: String?
 }
 
 /// How each requested chapter was settled. The counts add up to the number of chapters requested
@@ -405,6 +408,8 @@ nonisolated enum DownloadRefusal: Equatable, Sendable {
     case paywalled
     case unsupportedKind
     case unavailable
+    /// The source's settings or account changed after the batch was reviewed; nothing was queued.
+    case sourceChanged
 }
 
 nonisolated enum DownloadEnqueueOutcome: Equatable, Sendable {

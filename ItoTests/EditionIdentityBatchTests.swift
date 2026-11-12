@@ -556,7 +556,7 @@ extension EditionIdentityBatchTests {
         #expect(downloads.batchRequests.first?.chapters.map(\.key) == ["b16"])
     }
 
-    @Test func sourceEpochChangeRefusesOldChooserAndPreviewConsent() async throws {
+    @Test func sourceEpochChangeClosesAStalePreviewWithAReviewMessage() async throws {
         let downloads = MediaDetailDownloadsFake()
         downloads.seedPreference(.preferred(primary: Self.primary, fallback: .ask), for: Self.policySeries)
         let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
@@ -567,14 +567,89 @@ extension EditionIdentityBatchTests {
         downloads.policyEpoch = "changed"
         await subject.viewModel.downloadBatch.confirmDownloadPreview(including: ["b16"], previewID: preview.id).value
         #expect(downloads.batchRequests.isEmpty)
+        #expect(subject.viewModel.downloadSheet == nil, "A confirm that cannot work is not left on screen")
+        #expect(subject.messages.messages == [.editionChoiceChanged])
+    }
+
+    @Test func sourceEpochChangeClosesAStaleChooserWithAReviewMessage() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
+            Chapter(key: "a1", chapter: 1, scanlator: "A", scanlatorID: "a", logicalUnitID: "u1"),
+            Chapter(key: "b1", chapter: 1, scanlator: "B", scanlatorID: "b", logicalUnitID: "u1")
+        ], downloads: downloads)
         await subject.viewModel.downloadBatch.openEditionChooser().value
         guard case .chooser(let chooser)? = subject.viewModel.downloadSheet else { Issue.record("Expected chooser"); return }
-        downloads.policyEpoch = "changed-again"
+        downloads.policyEpoch = "changed"
         await subject.viewModel.downloadBatch.applyEditionChoice(
             .sourceList, remember: true, then: .all, chooserID: chooser.id
         ).value
         #expect(downloads.preferenceWriteCount == 0)
         #expect(downloads.batchRequests.isEmpty)
+        #expect(subject.viewModel.downloadSheet == nil)
+        #expect(subject.messages.messages == [.editionChoiceChanged])
+    }
+
+    @Test func editingFallbackOrderUnderAChangedSourceClosesWithAReviewMessage() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.seedPreference(.preferred(primary: Self.primary, fallback: .ask), for: Self.policySeries)
+        let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
+            Chapter(key: "b16", chapter: 16, scanlator: "B", scanlatorID: "b", logicalUnitID: "u16")
+        ], downloads: downloads)
+        await subject.viewModel.downloadBatch.startDownload(.all).value
+        guard case .preview(let preview)? = subject.viewModel.downloadSheet else { Issue.record("Expected preview"); return }
+        downloads.policyEpoch = "changed"
+        subject.viewModel.downloadBatch.editFallbackOrder(previewID: preview.id)
+        #expect(subject.viewModel.downloadSheet == nil)
+        #expect(subject.messages.messages == [.editionChoiceChanged])
+    }
+
+    @Test func anActionThatCannotReadTheSourceEpochReportsInsteadOfDoingNothing() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
+            Chapter(key: "a1", chapter: 1, scanlator: "A", scanlatorID: "a", logicalUnitID: "u1")
+        ], downloads: downloads)
+        downloads.epochFailure = MediaDetailTestFailure.expected
+        await subject.viewModel.downloadBatch.startDownload(.next).value
+        #expect(subject.messages.messages == [.downloadActionFailed])
+        #expect(downloads.batchRequests.isEmpty)
+    }
+
+    @Test func aBatchWhoseSourceEpochRotatedAfterConfirmQueuesNothingAndSaysSo() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.seedPreference(.preferred(primary: Self.primary, fallback: .ask), for: Self.policySeries)
+        let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
+            Chapter(key: "b16", chapter: 16, scanlator: "B", scanlatorID: "b", logicalUnitID: "u16")
+        ], downloads: downloads)
+        await subject.viewModel.downloadBatch.startDownload(.all).value
+        guard case .preview(let preview)? = subject.viewModel.downloadSheet else { Issue.record("Expected preview"); return }
+        downloads.holdsBatches = true
+        defer { downloads.holdsBatches = false; downloads.releaseBatches() }
+        let confirming = subject.viewModel.downloadBatch.confirmDownloadPreview(
+            including: ["b16"], previewID: preview.id
+        )
+        try await downloads.waitForPendingBatch()
+        #expect(downloads.batchRequests.first?.reviewedSourceEpoch == preview.sourceEpoch)
+        downloads.policyEpoch = "rotated"
+        downloads.holdsBatches = false
+        downloads.releaseBatches()
+        await confirming.value
+        #expect(downloads.refusedForSourceChange == 1)
+        #expect(subject.messages.messages == [.editionChoiceChanged])
+    }
+
+    @Test func aSavedSeriesThatWasUnsavedWhenItsChoiceWasFirstReadIsReadAgainNotReportedAsFailed() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
+            Chapter(key: "a1", chapter: 1, scanlator: "A", scanlatorID: "a", logicalUnitID: "u1")
+        ], saved: false, downloads: downloads)
+        await subject.viewModel.downloadBatch.settleForTesting()
+        subject.library.publish(
+            records: [MediaDetailLibraryRecord(itemID: "series-1", pluginID: "plugin.test", mediaKind: .manga)],
+            hasCustomCategories: false
+        )
+        await subject.viewModel.downloadBatch.startDownload(.next).value
+        #expect(downloads.batchRequests.first?.chapters.map(\.key) == ["a1"])
+        #expect(subject.messages.messages == [.downloadsQueued(queued: 1, alreadyStored: 0)])
     }
 
     @Test func catalogReplacementCannotReuseExactAlternativeConsent() async throws {
@@ -596,7 +671,33 @@ extension EditionIdentityBatchTests {
         #expect(revised.alternatives.map(\.key) == ["new-b16"])
     }
 
-    @Test func aPreferenceResynchronizationInvalidatesNewerChooserConsentWithoutClosingIt() async throws {
+    @Test func aPreferenceResynchronizationClosesAStalePreviewWithAReviewMessage() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.holdsPreferenceWrites = true
+        defer { downloads.holdsPreferenceWrites = false; downloads.releasePreferenceWrites() }
+        let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
+            Chapter(key: "a1", chapter: 1, scanlator: "A", scanlatorID: "a", logicalUnitID: "u1"),
+            Chapter(key: "b1", chapter: 1, scanlator: "B", scanlatorID: "b", logicalUnitID: "u1")
+        ], downloads: downloads)
+        await subject.viewModel.downloadBatch.openEditionChooser().value
+        guard case .chooser(let chooser)? = subject.viewModel.downloadSheet else { Issue.record("Expected chooser"); return }
+        let saving = subject.viewModel.downloadBatch.applyEditionChoice(
+            .preferred(primary: Self.primary, fallback: .ask), remember: true, then: nil, chooserID: chooser.id
+        )
+        try await downloads.waitForPendingPreferenceWrite()
+        subject.viewModel.downloadBatch.dismissDownloadSheet()
+        await subject.viewModel.downloadBatch.applyEditionChoice(.allUploads, remember: false, then: .all).value
+        guard case .preview(let preview)? = subject.viewModel.downloadSheet else { Issue.record("Expected preview"); return }
+        downloads.releasePreferenceWrites()
+        await saving.value
+        await subject.viewModel.downloadBatch.settleForTesting()
+        await subject.viewModel.downloadBatch.confirmDownloadPreview(previewID: preview.id).value
+        #expect(downloads.batchRequests.isEmpty)
+        #expect(subject.viewModel.downloadSheet == nil)
+        #expect(subject.messages.messages == [.editionChoiceChanged])
+    }
+
+    @Test func aPreferenceResynchronizationClosesTheNewerChooserWithAReviewMessage() async throws {
         let downloads = MediaDetailDownloadsFake()
         downloads.holdsPreferenceWrites = true
         defer { downloads.holdsPreferenceWrites = false; downloads.releasePreferenceWrites() }
@@ -619,8 +720,10 @@ extension EditionIdentityBatchTests {
         await subject.viewModel.downloadBatch.applyEditionChoice(
             .sourceList, remember: true, then: .all, chooserID: newer.id
         ).value
-        #expect(downloads.preferenceWriteCount == 1)
+        #expect(downloads.preferenceWriteCount == 1, "The newer chooser was made before the resynchronized policy")
         #expect(downloads.batchRequests.isEmpty)
+        #expect(subject.viewModel.downloadSheet == nil)
+        #expect(subject.messages.messages == [.editionChoiceChanged])
     }
 }
 
@@ -636,6 +739,13 @@ struct EditionFallbackResolverTests {
         ), stored: stored)
     }
 
+    /// A row the source gave no logical unit ID or reading order: its own exact position.
+    private func plain(_ group: String, _ number: Float) -> DownloadPlanRow {
+        DownloadPlanRow(facts: ChapterFacts(
+            key: "\(group)\(Int(number))", number: number, scanlator: group.uppercased(), scanlatorID: group
+        ))
+    }
+
     @Test func approvedOrderHasNoUnlistedTailAndRequiresLogicalProof() {
         let rows = [row("c1", "c", "u1"), row("b1", "b", "u1"),
                     row("c2", "c", "u2"), row("d3", "d", "u3"), row("b-extra", "b", nil)]
@@ -645,7 +755,7 @@ struct EditionFallbackResolverTests {
         // b-extra shares u1's response order without sharing its logical identity, making ordering
         // ambiguous. This assertion tests approved membership/priority, not that incidental sequence.
         #expect(Set(plan.toQueue.map { rows[$0].facts.key }) == ["b1", "c2"])
-        #expect(plan.missingPositionCount == 2)
+        #expect(plan.missingPositionCount == 1, "Only the declared U3 is a proven gap; B's ID-less extra is not")
         #expect(plan.requiresPreview)
     }
 
@@ -683,13 +793,28 @@ struct EditionFallbackResolverTests {
     }
 
     @Test func anyAvailableNeverSubstitutesWithoutLogicalProofButKeepsThePrimaryRows() {
-        let rows = [row("a-exact", "a", nil), row("b-exact", "b", nil)]
+        let rows = [plain("b", 1), plain("a", 2), plain("b", 3), plain("a", 4), plain("b", 5)]
         let plan = DownloadPresetResolver.plan(
             rows: rows, preset: .all, selection: .preferred(primary: primary, fallback: .anyAvailable), anchorKey: nil
         )
-        #expect(plan.toQueue == [0])
-        #expect(plan.missingPositionCount == 1)
-        #expect(plan.alternatives == [1])
+        #expect(plan.toQueue == [1, 3])
+        #expect(plan.missingPositionCount == 0, "ID-less rows of other groups are alternatives, never proven gaps")
+        #expect(plan.alternatives == [2])
+    }
+
+    @Test func nextFiveOverInterleavedIDlessGroupsQueuesThePrimaryGroupWithoutAGap() {
+        var rows: [DownloadPlanRow] = []
+        for number in 1...7 { rows += [plain("a", Float(number)), plain("b", Float(number))] }
+        let fallbacks: [EditionFallback] = [.strict, .ask, .anyAvailable, .approved([b])]
+        for fallback in fallbacks {
+            let plan = DownloadPresetResolver.plan(
+                rows: rows, preset: .next5, selection: .preferred(primary: primary, fallback: fallback), anchorKey: nil
+            )
+            #expect(plan.toQueue.map { rows[$0].facts.key } == ["a1", "a2", "a3", "a4", "a5"])
+            #expect(plan.missingPositionCount == 0)
+            #expect(!plan.issues.contains(.preferredUnavailable))
+            #expect(!plan.requiresPreview)
+        }
     }
 
     @Test func anyAvailableIsExplicitAndStillPrefersPrimary() {
@@ -728,6 +853,25 @@ struct EditionFallbackResolverTests {
             #"{"formatVersion":3,"kind":"preferred","primary":{"id":"a"},"fallback":"approved","approved":[{"id":"a"}]}"#.utf8
         )
         #expect(throws: DecodingError.self) { try JSONDecoder().decode(EditionSelection.self, from: duplicate) }
+        let strays = [
+            #"{"formatVersion":3,"kind":"preferred","primary":{"id":"a"},"fallback":"ask","scanlators":[]}"#,
+            #"{"formatVersion":3,"kind":"preferred","primary":{"id":"a"},"fallback":"ask","approved":[{"id":"b"}]}"#,
+            #"{"formatVersion":3,"kind":"scanlators","scanlators":[{"id":"a"}],"primary":{"id":"a"}}"#,
+            #"{"formatVersion":3,"kind":"sourceList","fallback":"ask"}"#
+        ]
+        for stray in strays {
+            #expect(throws: DecodingError.self) { try JSONDecoder().decode(EditionSelection.self, from: Data(stray.utf8)) }
+        }
+        // Shipped formats stay as lenient as they were.
+        let shipped = Data(#"{"formatVersion":2,"kind":"sourceList","fallback":"ask"}"#.utf8)
+        #expect(try JSONDecoder().decode(EditionSelection.self, from: shipped) == .sourceList)
+    }
+
+    @Test @MainActor func theReviewAgainMessageReachesTheMessageCenterAsItsOwnKind() {
+        let center = AppMessageCenter()
+        AppMessageMediaDetailPresenter(messageCenter: center).present(.editionChoiceChanged)
+        #expect(center.currentMessage?.kind == .mediaDetailEditionChoiceChanged)
+        #expect(AppMessageKind.mediaDetailEditionChoiceChanged.presentation.detail != nil)
     }
 }
 
@@ -780,7 +924,7 @@ extension EditionIdentityBatchTests {
         #expect(downloads.batchRequests.isEmpty)
     }
 
-    @Test func anAdmittedSaveWhoseSourceEpochRotatedStoresNothingAndReportsNothing() async throws {
+    @Test func anAdmittedSaveWhoseSourceEpochRotatedStoresNothingAndAsksForReview() async throws {
         let downloads = MediaDetailDownloadsFake()
         downloads.holdsPreferenceWrites = true
         defer { downloads.holdsPreferenceWrites = false; downloads.releasePreferenceWrites() }
@@ -800,13 +944,16 @@ extension EditionIdentityBatchTests {
         await subject.viewModel.downloadBatch.settleForTesting()
         #expect(downloads.storedPreferences[Self.policySeries] == nil)
         #expect(subject.viewModel.downloadBatch.remembered != .chosen(policy))
-        #expect(subject.messages.messages.isEmpty)
+        #expect(subject.messages.messages == [.editionChoiceChanged])
+        #expect(subject.viewModel.downloadSheet == nil)
+        #expect(downloads.preferenceWriteCount == 1)
         #expect(downloads.batchRequests.isEmpty)
         #expect(subject.viewModel.downloadBatch.isApplyingChoice == false)
     }
 
     @Test func savedOnlyApprovedCopySatisfiesItsProvenPositionButForeignOriginDoesNot() async throws {
-        for foreign in [false, true] {
+        // A foreign origin, a foreign current row with nil origin, and a different media kind all fail closed.
+        for foreign in 0...3 {
             let downloads = MediaDetailDownloadsFake()
             let policy = EditionSelection.preferred(primary: Self.primary, fallback: .approved([Self.secondary]))
             downloads.seedPreference(policy, for: Self.policySeries)
@@ -820,16 +967,20 @@ extension EditionIdentityBatchTests {
                 chapterSnapshot: try JSONEncoder().encode(saved), seriesTitle: "Series", sourceEpoch: nil,
                 verifiedAt: Date()
             )
-            if foreign {
+            if foreign == 1 {
                 record.originIdentity = try JSONEncoder().encode(OfflineOriginIdentity(
                     pluginId: "foreign", canonicalMediaId: "other"
                 ))
+            } else if foreign == 2 {
+                record.pluginId = "foreign"
+            } else if foreign == 3 {
+                record.mediaKind = .novel
             }
             let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
                 Chapter(key: "a1", chapter: 1, scanlator: "A", scanlatorID: "a", logicalUnitID: "u1", readingOrder: 1)
             ], downloads: downloads, inventory: .init(rows: [record]))
             await subject.viewModel.downloadBatch.startDownload(.all).value
-            if foreign {
+            if foreign != 0 {
                 #expect(downloads.batchRequests.first?.chapters.map(\.key) == ["a1"])
             } else {
                 #expect(downloads.batchRequests.isEmpty)

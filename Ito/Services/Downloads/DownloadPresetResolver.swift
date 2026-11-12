@@ -160,9 +160,13 @@ nonisolated enum DownloadPresetResolver {
         let isRead = positions.map { position in position.members.contains { catalogRows[$0].isRead } }
 
         // 2. The positions this selection can supply, in reading order.
-        let includesMissing: Bool
-        if case .preferred = selection { includesMissing = true } else { includesMissing = false }
-        let permittedPositions = positions.indices.filter { includesMissing || positions[$0].hasPermitted }
+        // Only a position the source declared (a logical unit ID) is a proven gap when no permitted group has
+        // it. An exact-key row of another group is just an alternative: nothing says what it replaces.
+        let isPreferred: Bool
+        if case .preferred = selection { isPreferred = true } else { isPreferred = false }
+        let permittedPositions = positions.indices.filter {
+            positions[$0].hasPermitted || (isPreferred && positions[$0].key.isLogical)
+        }
         let ordering = ChapterReadingOrder.order(
             positions: permittedPositions.map { position in
                 positions[position].rankedMembers.map { catalogRows[$0].facts }
@@ -266,8 +270,7 @@ nonisolated enum DownloadPresetResolver {
             taken: taken,
             lastTaken: lastTaken,
             anchorPosition: anchorPosition,
-            firstUnreadExamined: firstUnreadExamined,
-            includeUnresolvedPositions: includesMissing && selectionResolution != nil
+            firstUnreadExamined: firstUnreadExamined
         )
 
         if ordering.confidence == .ambiguous { plan.issues.insert(.orderingAmbiguous) }
@@ -326,11 +329,8 @@ nonisolated enum DownloadPresetResolver {
         taken: Int,
         lastTaken: Int?,
         anchorPosition: Int?,
-        firstUnreadExamined: Int?,
-        includeUnresolvedPositions: Bool
+        firstUnreadExamined: Int?
     ) -> [Int] {
-        // An unresolved strict group identity is not permission to offer a whole replacement catalog.
-        guard includeUnresolvedPositions || positions.contains(where: \.hasPermitted) else { return [] }
         // Order over every position, permitted or not: a range needs both kinds.
         let fullOrder = ChapterReadingOrder.order(
             positions: positions.map { position in position.rankedMembers.map { rows[$0].facts } }
@@ -377,22 +377,15 @@ nonisolated enum DownloadPresetResolver {
             return result
         }
 
-        // Preferred policies retain unresolved positions for one aggregate review. Legacy strict sets
-        // retain their existing window: a wholly missing set never offers another group's catalog.
+        // Unread and All: positions between the first and last one taken. An unresolved declared position
+        // is taken (it is a proven gap); other groups' rows outside that window stay unlisted.
         let placedOffsets = placed.map { offsets[$0] }
-        let lower = placedOffsets.min()
-        let upper = placedOffsets.max()
+        guard let lower = placedOffsets.min(), let upper = placedOffsets.max() else { return [] }
         for position in fullOrder {
-            let inWindow: Bool
-            if includeUnresolvedPositions {
-                inWindow = true
-            } else if let lower, let upper {
-                inWindow = (lower...upper).contains(offsets[position])
-            } else {
-                inWindow = false
-            }
-            if inWindow, preset == .all || !isRead[position] {
-                result += candidates(position)
+            let candidateRows = candidates(position)
+            guard !candidateRows.isEmpty else { continue }
+            if placedSet.contains(position) || (offsets[position] > lower && offsets[position] < upper) {
+                result += candidateRows
             }
         }
         return result

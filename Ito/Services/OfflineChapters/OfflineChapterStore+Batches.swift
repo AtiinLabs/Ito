@@ -39,6 +39,13 @@ extension OfflineChapterStore {
         let jobIDs = request.chapters.map { _ in UUID().uuidString }
 
         return try await database.write { db -> DownloadBatchOutcome in
+            // A batch reviewed under one source epoch never queues under another.
+            if let reviewed = request.reviewedSourceEpoch {
+                guard sourceEpoch == reviewed,
+                      try PluginCompletionScope.current(pluginID: request.pluginId, in: db) == reviewed else {
+                    return .refused(.sourceChanged)
+                }
+            }
             var outcome = DownloadBatchOutcome()
             var pending: [Int] = []
             var requestedKeys = Set<String>()

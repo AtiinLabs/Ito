@@ -521,7 +521,7 @@ Storage settings offline downloads section */
 /* Downloads manager bulk Retry failure */
 "Downloads couldn't be retried. Check the list before trying again." = "Downloads couldn't be retried. Check the list before trying again.";
 
-/* Footer under the All uploads scanlator choice. */
+/* Footer under the Download all editions choice. */
 "Downloads every upload, including several translations of the same chapter." = "Downloads every upload, including several translations of the same chapter.";
 
 /* Library: a series was removed from the Library, but its saved chapters could not be deleted. */
@@ -543,6 +543,9 @@ Storage settings offline downloads section */
 
 /* Open the explicit ordered fallback policy editor, with optional Remember. */
 "Edit fallback order" = "Edit fallback order";
+
+/* Series details: a download choice or preview was made under a source, chapter list or edition policy that has since changed, so nothing was saved or queued. */
+"Edition choice changed" = "Edition choice changed";
 
 /* Distinguishes an explicitly empty source-provided group name from no group name. */
 "Empty source label" = "Empty source label";
@@ -663,7 +666,7 @@ History: an episode without a title */
 /* Series status: complete */
 "Finished" = "Finished";
 
-/* Select one source-ranked visible upload per proven reading position, not every upload. */
+/* Let the source choose which visible upload to download. Uploads form one reading position only when the source supplies a shared logical-unit ID; otherwise each listed upload is separate. */
 "Follow the source's preferred edition" = "Follow the source's preferred edition";
 
 "Format" = "Format";
@@ -1175,8 +1178,8 @@ Manga format: light novel */
 
 "Ongoing" = "Ongoing";
 
-/* Approved fallback has no unlisted final fallback. */
-"Only these groups can be used automatically, in the order shown." = "Only these groups can be used automatically, in the order shown.";
+/* Approved fallback has no unlisted final fallback, and a fallback is always shown in a preview before it is queued. */
+"Only these groups are offered as fallbacks, in the order shown. You review them before anything is queued." = "Only these groups are offered as fallbacks, in the order shown. You review them before anything is queued.";
 
 "Open" = "Open";
 
@@ -1621,7 +1624,7 @@ Downloads queue: retry a failed or paused job */
 
 "Selected" = "Selected";
 
-/* Legacy strict allowed set; its order is not automatic fallback authorization. */
+/* Strict allowed set: only the ticked groups are used. Their order is not a fallback order and never authorizes another group. */
 "Selected groups only" = "Selected groups only";
 
 "Selection limit reached." = "Selection limit reached.";
@@ -1852,6 +1855,9 @@ Reading font: the system font */
 
 /* Download preview: the series' chapter list changed while the preview was open, so it was made again. */
 "The chapter list changed; review again." = "The chapter list changed; review again.";
+
+/* Series details: detail when a draft was invalidated before confirmation; no changed plan was submitted automatically. */
+"The chapter list or edition choice changed. Review again." = "The chapter list or edition choice changed. Review again.";
 
 /* Download preview warning: the last-read chapter belongs to a scanlator that is not selected. */
 "The chapter you last read isn't in the selected scanlators, so this starts from the first unread chapter." = "The chapter you last read isn't in the selected scanlators, so this starts from the first unread chapter.";

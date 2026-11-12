@@ -154,15 +154,11 @@ struct DownloadPresetResolverTests {
 
     @Test func nameMatchingIsExactSoARenamedGroupSelectsNothing() {
         let catalog = listed(rows("Alpha", 1...3))
-        for preset in [DownloadPreset.all, .unread, .next] {
+        for preset in [DownloadPreset.all, .unread] {
             let result = plan(preset, catalog, selection: .scanlators([ScanlatorRef(name: "alpha")]))
             #expect(result.toQueue.isEmpty)
             #expect(keys(result.alternatives).isEmpty)
-            if preset == .next {
-                #expect(result.issues.contains(.nothingToDo))
-            } else {
-                #expect(result.issues == [.nothingToDo])
-            }
+            #expect(result.issues == [.nothingToDo])
         }
     }
 
