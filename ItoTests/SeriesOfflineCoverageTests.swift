@@ -143,4 +143,98 @@ struct SeriesOfflineCoverageTests {
         ]
         #expect(evaluate(snapshot: nil, catalog: catalog, states: states) == .saved(2))
     }
+
+    // MARK: Positions
+
+    private let strictA = EditionSelection.scanlators([ScanlatorRef(name: "A", binding: .exactIDless)])
+
+    private func unit(_ key: String, _ scanlator: String, _ unit: String?) -> ChapterFacts {
+        ChapterFacts(key: key, scanlator: scanlator, logicalUnitID: unit)
+    }
+
+    @Test func oneVerifiedPermittedCopySavesAPositionTheSourceDeclaredOnce() {
+        let rows = [unit("a1", "A", "u1"), unit("b1", "B", "u1")]
+
+        #expect(evaluate(snapshot: snapshot(), catalog: rows, states: ["a1": .downloaded]) == .entireSeries)
+        #expect(evaluate(snapshot: snapshot(), catalog: rows, states: ["b1": .downloaded]) == .entireSeries)
+
+        // Without a shared unit ID they are two positions, and one saved copy covers one.
+        let unrelated = [unit("a1", "A", nil), unit("b1", "B", nil)]
+        #expect(evaluate(snapshot: snapshot(), catalog: unrelated, states: ["b1": .downloaded]) == .saved(1))
+    }
+
+    @Test func aCopyOutsideThePermittedGroupsNeverSavesThePosition() {
+        let rows = [unit("a1", "A", "u1"), unit("b1", "B", "u1")]
+
+        #expect(evaluate(snapshot: snapshot(), selection: strictA, catalog: rows, states: ["b1": .downloaded]) == .saved(1))
+        #expect(evaluate(snapshot: snapshot(), selection: strictA, catalog: rows, states: ["a1": .downloaded]) == .entireSeries)
+    }
+
+    @Test func aQueuedOrDamagedCopyLeavesThePositionUnsaved() {
+        let rows = [unit("a1", "A", "u1"), unit("b1", "B", "u1")]
+
+        for state in [ChapterDownloadState.queued, .damaged, .failed(.network), .downloading(completed: 1, total: 2)] {
+            #expect(evaluate(snapshot: snapshot(), catalog: rows, states: ["a1": state]) == .saved(0))
+        }
+        // A verified copy beside a damaged one still saves it.
+        #expect(evaluate(snapshot: snapshot(), catalog: rows, states: ["a1": .damaged, "b1": .downloaded]) == .entireSeries)
+    }
+
+    @Test func coverageFollowsTheSelectionAndEveryDeclaredPosition() {
+        // u1 is offered by A and B, u2 by A only, u3 by B only.
+        let rows = [unit("a1", "A", "u1"), unit("b1", "B", "u1"), unit("a2", "A", "u2"), unit("b3", "B", "u3")]
+        struct Case {
+            let selection: EditionSelection
+            let states: [String: ChapterDownloadState]
+            let expected: SeriesOfflineCoverage.Result
+        }
+        let cases: [Case] = [
+            Case(selection: .sourceList, states: ["a1": .downloaded, "a2": .downloaded, "b3": .downloaded], expected: .entireSeries),
+            Case(selection: .sourceList, states: ["b1": .downloaded, "a2": .downloaded, "b3": .downloaded], expected: .entireSeries),
+            Case(selection: .sourceList, states: ["a1": .downloaded, "a2": .downloaded], expected: .saved(2)),
+            Case(selection: .sourceList, states: ["a1": .downloaded, "a2": .queued, "b3": .downloaded], expected: .saved(2)),
+            Case(
+                selection: .sourceList,
+                states: ["a1": .damaged, "b1": .damaged, "a2": .downloaded, "b3": .downloaded],
+                expected: .saved(2)
+            ),
+            Case(
+                selection: .sourceList,
+                states: ["a1": .downloaded, "b1": .downloaded, "a2": .downloaded, "b3": .downloaded],
+                expected: .entireSeries
+            ),
+            // Strict A cannot supply u3, which the source declared: never the entire series.
+            Case(selection: strictA, states: ["a1": .downloaded, "a2": .downloaded, "b3": .downloaded], expected: .saved(3)),
+            Case(selection: strictA, states: ["a1": .downloaded, "a2": .downloaded], expected: .saved(2)),
+            Case(
+                selection: .allUploads,
+                states: ["a1": .downloaded, "b1": .downloaded, "a2": .downloaded, "b3": .downloaded],
+                expected: .entireSeries
+            ),
+            Case(selection: .allUploads, states: ["a1": .downloaded, "a2": .downloaded, "b3": .downloaded], expected: .saved(3))
+        ]
+        for entry in cases {
+            #expect(evaluate(snapshot: snapshot(), selection: entry.selection, catalog: rows, states: entry.states) == entry.expected)
+        }
+    }
+
+    @Test func aStrictGroupOnlyIgnoresRowsTheSourceNeverDeclaredAsPositions() {
+        let declared = [unit("a1", "A", "u1"), unit("b1", "B", "u1"), unit("b3", "B", "u3")]
+        #expect(evaluate(snapshot: snapshot(), selection: strictA, catalog: declared, states: ["a1": .downloaded]) == .saved(1))
+
+        let undeclared = [unit("a1", "A", "u1"), unit("b1", "B", "u1"), unit("b3", "B", nil)]
+        #expect(evaluate(snapshot: snapshot(), selection: strictA, catalog: undeclared, states: ["a1": .downloaded]) == .entireSeries)
+    }
+
+    @Test func aLockedRowWithASavedCopyStillSavesItsPosition() {
+        let rows = [
+            ChapterFacts(key: "a1", scanlator: "A", isLocked: true, logicalUnitID: "u1"),
+            ChapterFacts(key: "b1", scanlator: "B", logicalUnitID: "u1")
+        ]
+        let states: [String: ChapterDownloadState] = ["a1": .downloaded]
+        #expect(evaluate(snapshot: snapshot(), catalog: rows, states: states) == .entireSeries)
+        #expect(evaluate(snapshot: snapshot(), selection: strictA, catalog: rows, states: states) == .entireSeries)
+        // Without the copy the free upload is still missing.
+        #expect(evaluate(snapshot: snapshot(), catalog: rows, states: [:]) == .saved(0))
+    }
 }
