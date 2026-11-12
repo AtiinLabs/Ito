@@ -9,6 +9,7 @@ struct NovelReaderView: View {
     @State private var brightnessBeforeReading: CGFloat?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     /// `viewModel` is evaluated once, when SwiftUI first creates this view's state.
     init(viewModel: @autoclosure @escaping () -> NovelReaderViewModel) {
@@ -33,6 +34,19 @@ struct NovelReaderView: View {
                 UIScreen.main.brightness = brightnessBeforeReading
                 self.brightnessBeforeReading = nil
             }
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase != .active { viewModel.cancelGroupSwitch() }
+        }
+        .alert(
+            String(localized: "Switch groups?", comment: "Reader consent title: open one exact upload from another translation group"),
+            isPresented: Binding(get: { viewModel.groupSwitchConsent != nil }, set: { if !$0 { viewModel.cancelGroupSwitch() } }),
+            presenting: viewModel.groupSwitchConsent
+        ) { consent in
+            Button("Continue", role: nil) { viewModel.confirmGroupSwitch(consent.id) }
+            Button("Cancel", role: .cancel) { viewModel.cancelGroupSwitch() }
+        } message: { consent in
+            Text(consent.message)
         }
     }
 
@@ -91,8 +105,8 @@ struct NovelReaderView: View {
                     Spacer()
 
                     NovelReaderFooterView(
-                        hasPrev: viewModel.previousChapter != nil,
-                        hasNext: viewModel.nextChapter != nil,
+                        hasPrev: viewModel.previousChapter != nil || viewModel.boundaryBefore(viewModel.currentChapter).needsGroupConsent,
+                        hasNext: viewModel.nextChapter != nil || viewModel.boundaryAfter(viewModel.currentChapter).needsGroupConsent,
                         safeAreaBottom: safeAreaBottom,
                         onPrevChapter: { viewModel.goToPreviousChapter() },
                         onNextChapter: { viewModel.goToNextChapter() },
@@ -235,6 +249,9 @@ struct NovelReaderView: View {
                             .font(.footnote)
                             .opacity(0.7)
                     }
+                    if boundary.needsGroupConsent {
+                        Button("Continue") { viewModel.requestGroupSwitch(.next, atLoadedEdge: true) }
+                    }
                 }
                 .multilineTextAlignment(.center)
                 .foregroundColor(viewModel.theme.textColor)
@@ -327,6 +344,10 @@ struct NovelReaderView: View {
                     prefetchChapters: Binding(
                         get: { viewModel.prefetchChapters },
                         set: { viewModel.setPrefetchChapters($0) }
+                    ),
+                    askBeforeSwitchingGroups: Binding(
+                        get: { viewModel.askBeforeSwitchingGroups },
+                        set: { viewModel.setAskBeforeSwitchingGroups($0) }
                     ),
                     onBrightnessChange: { value in
                         if brightnessBeforeReading == nil {
@@ -673,6 +694,7 @@ struct NovelReaderSettingsView: View {
     @Binding var theme: NovelTheme
     @Binding var isPaging: Bool
     @Binding var prefetchChapters: Bool
+    @Binding var askBeforeSwitchingGroups: Bool
     /// Sets the screen brightness; the reader puts the old value back when it closes.
     let onBrightnessChange: (CGFloat) -> Void
 
@@ -955,6 +977,11 @@ struct NovelReaderSettingsView: View {
             .background(Color(UIColor.secondarySystemBackground))
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
+            Toggle(isOn: $askBeforeSwitchingGroups) {
+                Text("Ask before switching groups",
+                     comment: "Reader setting, off by default: require confirmation before Next or Resume opens another translation group's upload")
+            }
+            .padding()
             HStack {
                 Text("Line Spacing")
                     .font(.headline)

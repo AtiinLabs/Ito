@@ -1975,6 +1975,15 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         if let disposition = disposition(for: history, library: library) {
             result.libraryItemId = disposition.targetId
             result.mediaKey = disposition.targetId
+            let targetIdentity = remappedIdentity(
+                pluginId: history.pluginId,
+                canonicalMediaId: history.mediaKey,
+                mediaKind: history.mediaKind,
+                library: library
+            )
+            if targetIdentity.pluginId != history.pluginId {
+                result.scanlatorID = nil
+            }
         }
         return result
     }

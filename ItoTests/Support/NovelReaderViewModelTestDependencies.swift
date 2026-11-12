@@ -310,6 +310,13 @@ final class NovelReaderTrackerFake: NovelReaderTrackerUpdating {
 
 @MainActor
 final class NovelReaderSettingsFake: NovelReaderSettingsAccessing {
+    var askBeforeSwitchingGroups = false {
+        didSet { readerContinuationSettingsRevision &+= 1 }
+    }
+    private(set) var readerContinuationSettingsRevision: UInt64 = 0
+    func setAskBeforeSwitchingGroups(_ value: Bool) async throws {
+        askBeforeSwitchingGroups = value
+    }
     enum Key: Hashable {
         case fontSize
         case lineSpacing

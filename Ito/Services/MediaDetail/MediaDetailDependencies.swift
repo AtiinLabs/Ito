@@ -113,7 +113,7 @@ extension LibraryManager: MediaDetailLibraryServing {
 }
 
 @MainActor
-protocol MediaDetailProgressServing: AnyObject {
+protocol MediaDetailProgressServing: PluginCompletionScopeCapturing, AnyObject {
     var progressPublisher: AnyPublisher<Void, Never> { get }
 
     func isRead(media: MediaIdentity, chapterID: String, chapterNumber: Float?) -> Bool
@@ -251,12 +251,19 @@ extension UpdateManager: MediaDetailBaselineAdvancing {
 }
 
 @MainActor
-protocol MediaDetailSettingsReading: AnyObject {
+protocol MediaDetailSettingsReading: ReaderContinuationSettingsReading {
     var alwaysShowCategoryPicker: Bool { get }
     var autoSyncTrackersToLocal: Bool { get }
 }
 
 extension AppSettingsStore: MediaDetailSettingsReading {}
+
+@MainActor
+protocol MediaDetailHistoryReading: AnyObject {
+    func recordedGroup(media: MediaIdentity, chapterKey: String) async throws -> ReaderContinuationGroup?
+}
+
+extension HistoryManager: MediaDetailHistoryReading {}
 
 @MainActor
 protocol MediaDetailPluginMetadataProviding: AnyObject {
@@ -402,6 +409,7 @@ struct PreparedMediaDetailDependencies {
     var downloads: any MediaDetailDownloadServing = UnavailableMediaDetailDownloads()
     /// Never offline unless the composition root passes the live observer.
     var connectivity: any ConnectivityServing = UnavailableConnectivity()
+    var history: (any MediaDetailHistoryReading)?
 
     static func production(
         libraryManager: LibraryManager,
@@ -414,7 +422,8 @@ struct PreparedMediaDetailDependencies {
         pluginManager: PluginManager,
         discordRPCManager: DiscordRPCManager,
         downloads: (any MediaDetailDownloadServing)?,
-        connectivity: any ConnectivityServing = UnavailableConnectivity()
+        connectivity: any ConnectivityServing = UnavailableConnectivity(),
+        historyManager: HistoryManager? = nil
     ) -> Self {
         Self(
             library: libraryManager,
@@ -429,7 +438,8 @@ struct PreparedMediaDetailDependencies {
             pluginMetadata: pluginManager,
             discord: discordRPCManager,
             downloads: downloads ?? UnavailableMediaDetailDownloads(),
-            connectivity: connectivity
+            connectivity: connectivity,
+            history: historyManager
         )
     }
 }

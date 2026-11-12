@@ -93,6 +93,7 @@ nonisolated public enum AppPreferenceKeys {
     public static let novelIsPaging = "Ito.NovelIsPaging"
     public static let novelPrefetchChapters = "Ito.NovelPrefetchChapters"
     public static let preloadImageCount = "Ito.PreloadImageCount"
+    public static let askBeforeSwitchingGroups = "Ito.AskBeforeSwitchingGroups"
     public static let incognitoMode = "Ito.IncognitoMode"
     public static let autoSyncTrackersToLocal = "Ito.AutoSyncTrackersToLocal"
     public static let diskCacheLimitGB = "Ito.DiskCacheLimitGB"
@@ -119,6 +120,7 @@ nonisolated public enum AppPreferenceCatalog {
     public static let novelIsPaging = boolean(AppPreferenceKeys.novelIsPaging, defaultValue: false)
     public static let novelPrefetchChapters = boolean(AppPreferenceKeys.novelPrefetchChapters, defaultValue: true)
     public static let preloadImageCount = AppPreferenceKey<ImagePreloadCountPreference>(name: AppPreferenceKeys.preloadImageCount, defaultValue: .five) { _ in true }
+    public static let askBeforeSwitchingGroups = boolean(AppPreferenceKeys.askBeforeSwitchingGroups, defaultValue: false)
     public static let incognitoMode = boolean(AppPreferenceKeys.incognitoMode, defaultValue: false)
     public static let autoSyncTrackersToLocal = boolean(AppPreferenceKeys.autoSyncTrackersToLocal, defaultValue: true)
     public static let diskCacheLimitGB = AppPreferenceKey<Double>(name: AppPreferenceKeys.diskCacheLimitGB, defaultValue: 10) {
@@ -155,6 +157,7 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
     case novelIsPaging = "Ito.NovelIsPaging"
     case novelPrefetchChapters = "Ito.NovelPrefetchChapters"
     case preloadImageCount = "Ito.PreloadImageCount"
+    case askBeforeSwitchingGroups = "Ito.AskBeforeSwitchingGroups"
     case incognitoMode = "Ito.IncognitoMode"
     case autoSyncTrackersToLocal = "Ito.AutoSyncTrackersToLocal"
     case diskCacheLimitGB = "Ito.DiskCacheLimitGB"
@@ -164,7 +167,7 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
         case .alwaysShowCategoryPicker, .backgroundUpdatesEnabled, .skipCompleted,
              .updateNotifications, .wifiOnlyUpdates, .discordRPCEnabled,
              .novelIsPaging, .novelPrefetchChapters, .incognitoMode,
-             .autoSyncTrackersToLocal:
+             .autoSyncTrackersToLocal, .askBeforeSwitchingGroups:
             return .booleanNSNumber
         case .libraryLayoutStyle, .updateInterval, .preloadImageCount:
             return .integerNSNumber
@@ -179,7 +182,7 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
         switch self {
         case .libraryLayoutStyle: encode(1)
         case .alwaysShowCategoryPicker, .backgroundUpdatesEnabled, .skipCompleted,
-             .wifiOnlyUpdates, .discordRPCEnabled, .novelIsPaging, .incognitoMode:
+             .wifiOnlyUpdates, .discordRPCEnabled, .novelIsPaging, .incognitoMode, .askBeforeSwitchingGroups:
             encode(false)
         case .updateInterval: encode(4)
         case .updateNotifications, .novelPrefetchChapters, .autoSyncTrackersToLocal:
@@ -259,7 +262,7 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
         case .alwaysShowCategoryPicker, .backgroundUpdatesEnabled, .skipCompleted,
              .updateNotifications, .wifiOnlyUpdates, .discordRPCEnabled,
              .novelIsPaging, .novelPrefetchChapters, .incognitoMode,
-             .autoSyncTrackersToLocal:
+             .autoSyncTrackersToLocal, .askBeforeSwitchingGroups:
             return value is Bool
         }
     }

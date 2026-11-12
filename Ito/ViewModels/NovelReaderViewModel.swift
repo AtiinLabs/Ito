@@ -50,7 +50,7 @@ final class NovelReaderViewModel: ObservableObject {
     let offline: ReaderOfflineContext
 
     @Published private(set) var currentChapter: Novel.Chapter
-    @Published private(set) var loadedChapters: [NovelLoadedChapter] = [] {
+    @Published var loadedChapters: [NovelLoadedChapter] = [] {
         didSet {
             let ids = Set(loadedChapters.map(\.id))
             visibleBlocks = visibleBlocks.filter { ids.contains($0.chapterID) }
@@ -75,20 +75,20 @@ final class NovelReaderViewModel: ObservableObject {
         didSet { if !prefetchChapters { appendWaitsForBoundary = false } }
     }
 
-    private let dependencies: PreparedNovelReaderDependencies
-    private let mediaIdentity: MediaIdentity
+    let dependencies: PreparedNovelReaderDependencies
+    let mediaIdentity: MediaIdentity
     /// Captured once per reader session; every chapter in the session shares it.
     private let completionContext: PluginCompletionContext
 
-    private var isActive = true
+    private(set) var isActive = true
     private var hasPresentedPresence = false
-    private var sessionID = UUID()
+    private(set) var sessionID = UUID()
     private var contentGeneration: UInt64 = 0
 
     private var mainLoadTask: Task<Void, Never>?
     private var mainLoadOperationID: UUID?
-    private var appendTask: Task<Void, Never>?
-    private var appendOperationID: UUID?
+    var appendTask: Task<Void, Never>?
+    var appendOperationID: UUID?
     /// The last append was refused only because the next chapter is not downloaded and cannot be fetched.
     private var appendWaitsForBoundary = false
     private var effectTasks: [UUID: Task<Void, Never>] = [:]
@@ -114,6 +114,9 @@ final class NovelReaderViewModel: ObservableObject {
 #endif
 
     nonisolated deinit {}
+
+    @Published var groupSwitchConsent: ReaderGroupSwitchConsent<Novel.Chapter>?
+    var askBeforeSwitchingGroups: Bool { dependencies.settings.askBeforeSwitchingGroups }
 
     init(
         chapterLoader: any NovelChapterLoading,
@@ -197,6 +200,7 @@ final class NovelReaderViewModel: ObservableObject {
         imageSession.deactivate()
         hasPresentedPresence = false
         sessionID = UUID()
+        groupSwitchConsent = nil
         contentGeneration &+= 1
         cancelContentOperations(finishingAs: .cancelled)
 
@@ -229,26 +233,31 @@ final class NovelReaderViewModel: ObservableObject {
 
     /// Stop at the immediate neighbor when it uses the other reader.
     func chapterAfter(_ chapter: Novel.Chapter) -> Novel.Chapter? {
-        ReaderChapterOrdering.novelChapter(after: chapter, in: entry.chapters).flatMap(textChapter)
+        ReaderChapterOrdering.boundary(after: chapter, in: entry.chapters)
+            .requiringGroupConsent(from: chapter, enabled: dependencies.settings.askBeforeSwitchingGroups)
+            .chapter.flatMap(textChapter)
     }
 
     func chapterBefore(_ chapter: Novel.Chapter) -> Novel.Chapter? {
-        ReaderChapterOrdering.novelChapter(before: chapter, in: entry.chapters).flatMap(textChapter)
+        ReaderChapterOrdering.boundary(before: chapter, in: entry.chapters)
+            .requiringGroupConsent(from: chapter, enabled: dependencies.settings.askBeforeSwitchingGroups)
+            .chapter.flatMap(textChapter)
     }
 
-    /// What follows `chapter` for this reader: a chapter it can open, or why it stops.
+    /// What follows `chapter` for this reader: a chapter it can open, or why it stops. With the
+    /// continuation setting on, another group's upload is a consent boundary, not an open chapter.
     func boundaryAfter(_ chapter: Novel.Chapter) -> ReaderChapterBoundary<Novel.Chapter> {
         offline.resolving(
             ReaderChapterOrdering.boundary(after: chapter, in: entry.chapters),
             opensHere: { textChapter($0) != nil }
-        )
+        ).requiringGroupConsent(from: chapter, enabled: dependencies.settings.askBeforeSwitchingGroups)
     }
 
     func boundaryBefore(_ chapter: Novel.Chapter) -> ReaderChapterBoundary<Novel.Chapter> {
         offline.resolving(
             ReaderChapterOrdering.boundary(before: chapter, in: entry.chapters),
             opensHere: { textChapter($0) != nil }
-        )
+        ).requiringGroupConsent(from: chapter, enabled: dependencies.settings.askBeforeSwitchingGroups)
     }
 
     private func textChapter(_ chapter: Novel.Chapter) -> Novel.Chapter? {
@@ -256,11 +265,21 @@ final class NovelReaderViewModel: ObservableObject {
     }
 
     func goToNextChapter() {
+        if boundaryAfter(currentChapter).needsGroupConsent {
+            requestGroupSwitch(.next)
+            return
+        }
         guard let nextChapter else { return }
         goToChapter(nextChapter)
     }
 
+    var continuationSettingsTask: Task<Void, Never>?
+
     func goToPreviousChapter() {
+        if boundaryBefore(currentChapter).needsGroupConsent {
+            requestGroupSwitch(.previous)
+            return
+        }
         guard let previousChapter else { return }
         goToChapter(previousChapter)
     }
@@ -396,6 +415,7 @@ final class NovelReaderViewModel: ObservableObject {
 
     private func changeCurrentChapter(to chapter: Novel.Chapter) {
         let changedKey = currentChapter.key != chapter.key
+        groupSwitchConsent = nil
         currentChapter = chapter
         if changedKey, isActive, hasPresentedPresence {
             presentPresence(for: chapter, resetTimer: false)
@@ -588,6 +608,9 @@ final class NovelReaderViewModel: ObservableObject {
               !appendFailed,
               let last = loadedChapters.last else { return }
         let boundary = boundaryAfter(last.chapter)
+        if boundary.needsGroupConsent, trigger == .reader {
+            requestGroupSwitch(.next, atLoadedEdge: true)
+        }
         if case .notAvailableOffline = boundary {
             // Shown instead of an append that would fail; it goes ahead if the chapter becomes available.
             appendWaitsForBoundary = true
@@ -691,7 +714,7 @@ final class NovelReaderViewModel: ObservableObject {
         finishAppend(operationID: operationID, outcome: .failed(.pluginExecution))
     }
 
-    private func finishAppend(
+    func finishAppend(
         operationID: UUID,
         outcome: PresentationEventOutcome
     ) {
@@ -1118,6 +1141,11 @@ struct NovelChapterToken: Equatable {
     let url: String?
     let language: String?
     let paywalled: Bool?
+    let scanlatorID: String?
+    let kind: ContentKind?
+    let logicalUnitID: String?
+    let readingOrder: Int64?
+    let revision: String?
 
     init(_ chapter: Novel.Chapter) {
         key = chapter.key
@@ -1129,5 +1157,10 @@ struct NovelChapterToken: Equatable {
         url = chapter.url
         language = chapter.lang
         paywalled = chapter.paywalled
+        scanlatorID = chapter.scanlatorID
+        kind = chapter.kind
+        logicalUnitID = chapter.logicalUnitID
+        readingOrder = chapter.readingOrder
+        revision = chapter.revision
     }
 }

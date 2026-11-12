@@ -1001,7 +1001,8 @@ final class MediaDetailViewModelTests: XCTestCase {
         saved: Bool = false,
         customCategories: Bool = false,
         alwaysShowCategoryPicker: Bool = false,
-        autoSyncTrackersToLocal: Bool = true
+        autoSyncTrackersToLocal: Bool = true,
+        history: (any MediaDetailHistoryReading)? = nil
     ) -> MangaSubject {
         let media = providedMedia ?? manga()
         let state = explicitState ?? MediaDetailLibraryState(
@@ -1051,7 +1052,8 @@ final class MediaDetailViewModelTests: XCTestCase {
                 baseline: baseline,
                 settings: settings,
                 pluginMetadata: metadata,
-                discord: discord
+                discord: discord,
+                history: history
             ),
             messagePresenter: messages,
             presentationLogger: PresentationEventCaptureSpy()

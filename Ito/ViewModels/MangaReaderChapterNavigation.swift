@@ -5,34 +5,53 @@ extension MangaReaderViewModel {
     /// The next chapter, if it is pages too: the reader stops where the series switches to text,
     /// which opens in the text reader instead.
     func chapterAfter(_ chapter: Manga.Chapter) -> Manga.Chapter? {
-        ReaderChapterOrdering.mangaChapter(
+        let askBeforeSwitching = dependencies.settings.askBeforeSwitchingGroups
+        return ReaderChapterOrdering.boundary(
             after: chapter,
             in: entry.chapters,
-            preferredScanlator: currentChapter.scanlator
-        ).flatMap(pagesChapter)
+            preferredScanlator: currentChapter.scanlator,
+            preferredScanlatorID: askBeforeSwitching ? currentChapter.scanlatorID : nil
+        ).requiringGroupConsent(from: chapter, enabled: askBeforeSwitching)
+            .chapter.flatMap(pagesChapter)
     }
 
     func chapterBefore(_ chapter: Manga.Chapter) -> Manga.Chapter? {
-        ReaderChapterOrdering.mangaChapter(
+        let askBeforeSwitching = dependencies.settings.askBeforeSwitchingGroups
+        return ReaderChapterOrdering.boundary(
             before: chapter,
             in: entry.chapters,
-            preferredScanlator: currentChapter.scanlator
-        ).flatMap(pagesChapter)
+            preferredScanlator: currentChapter.scanlator,
+            preferredScanlatorID: askBeforeSwitching ? currentChapter.scanlatorID : nil
+        ).requiringGroupConsent(from: chapter, enabled: askBeforeSwitching)
+            .chapter.flatMap(pagesChapter)
     }
 
-    /// What follows `chapter` for this reader: a chapter it can open, or why it stops.
+    /// What follows `chapter` for this reader: a chapter it can open, or why it stops. With the
+    /// continuation setting on, another group's upload is a consent boundary, not an open chapter.
     func boundaryAfter(_ chapter: Manga.Chapter) -> ReaderChapterBoundary<Manga.Chapter> {
-        offline.resolving(
-            ReaderChapterOrdering.boundary(after: chapter, in: entry.chapters, preferredScanlator: currentChapter.scanlator),
+        let askBeforeSwitching = dependencies.settings.askBeforeSwitchingGroups
+        return offline.resolving(
+            ReaderChapterOrdering.boundary(
+                after: chapter,
+                in: entry.chapters,
+                preferredScanlator: currentChapter.scanlator,
+                preferredScanlatorID: askBeforeSwitching ? currentChapter.scanlatorID : nil
+            ),
             opensHere: { pagesChapter($0) != nil }
-        )
+        ).requiringGroupConsent(from: chapter, enabled: askBeforeSwitching)
     }
 
     func boundaryBefore(_ chapter: Manga.Chapter) -> ReaderChapterBoundary<Manga.Chapter> {
-        offline.resolving(
-            ReaderChapterOrdering.boundary(before: chapter, in: entry.chapters, preferredScanlator: currentChapter.scanlator),
+        let askBeforeSwitching = dependencies.settings.askBeforeSwitchingGroups
+        return offline.resolving(
+            ReaderChapterOrdering.boundary(
+                before: chapter,
+                in: entry.chapters,
+                preferredScanlator: currentChapter.scanlator,
+                preferredScanlatorID: askBeforeSwitching ? currentChapter.scanlatorID : nil
+            ),
             opensHere: { pagesChapter($0) != nil }
-        )
+        ).requiringGroupConsent(from: chapter, enabled: askBeforeSwitching)
     }
 
     /// The keys of the neighbors this reader can open, which a paged reader prefetches.

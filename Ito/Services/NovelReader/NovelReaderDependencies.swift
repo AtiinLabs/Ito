@@ -107,7 +107,7 @@ struct NovelReaderSettingsSnapshot: Equatable {
 }
 
 @MainActor
-protocol NovelReaderSettingsAccessing: AnyObject {
+protocol NovelReaderSettingsAccessing: ReaderContinuationSettingsAccessing {
     var novelReaderSettings: NovelReaderSettingsSnapshot { get }
     var novelReaderSettingsUpdates: AnyPublisher<NovelReaderSettingsSnapshot, Never> { get }
 
@@ -287,6 +287,16 @@ private final class UnavailableNovelReaderDependencies:
     )
 
     var novelReaderSettings: NovelReaderSettingsSnapshot { settings }
+
+    var askBeforeSwitchingGroups: Bool {
+        AppPreferenceCatalog.askBeforeSwitchingGroups.defaultValue
+    }
+
+    var readerContinuationSettingsRevision: UInt64 { 0 }
+
+    func setAskBeforeSwitchingGroups(_ value: Bool) async throws {
+        _ = value
+    }
 
     var novelReaderSettingsUpdates: AnyPublisher<NovelReaderSettingsSnapshot, Never> {
         Just(settings).eraseToAnyPublisher()

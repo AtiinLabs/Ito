@@ -249,6 +249,9 @@ final class MediaDetailLibraryFake: MediaDetailLibraryServing {
 
 @MainActor
 final class MediaDetailProgressFake: MediaDetailProgressServing {
+    func captureCompletionContext(media: MediaIdentity, mediaKey: String) -> PluginCompletionContext {
+        PluginCompletionContext(media: media, mediaKey: mediaKey, originatingEpoch: "test-scope")
+    }
     struct ReadRequest {
         let media: MediaIdentity
         let chapterID: String
@@ -461,6 +464,10 @@ final class MediaDetailBaselineFake: MediaDetailBaselineAdvancing {
 
 @MainActor
 final class MediaDetailSettingsFake: MediaDetailSettingsReading {
+    var askBeforeSwitchingGroups = false {
+        didSet { readerContinuationSettingsRevision &+= 1 }
+    }
+    private(set) var readerContinuationSettingsRevision: UInt64 = 0
     var alwaysShowCategoryPicker: Bool
     var autoSyncTrackersToLocal: Bool
 

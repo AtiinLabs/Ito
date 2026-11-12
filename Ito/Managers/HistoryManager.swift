@@ -37,6 +37,7 @@ public struct HistoryChapter: Sendable {
     public let number: Float?
     public let volume: Float?
     public let scanlator: String?
+    public let scanlatorID: String?
     public let format: HistoryReaderFormat
     public let textLength: Int?
 
@@ -46,6 +47,7 @@ public struct HistoryChapter: Sendable {
         number: Float?,
         volume: Float? = nil,
         scanlator: String? = nil,
+        scanlatorID: String? = nil,
         format: HistoryReaderFormat,
         textLength: Int? = nil
     ) {
@@ -54,6 +56,7 @@ public struct HistoryChapter: Sendable {
         self.number = number
         self.volume = volume
         self.scanlator = scanlator.flatMap { $0.isEmpty ? nil : $0 }
+        self.scanlatorID = scanlatorID.flatMap { $0.isEmpty ? nil : $0 }
         self.format = format
         self.textLength = textLength
     }
@@ -64,7 +67,8 @@ extension HistoryChapter {
     init(_ chapter: Chapter, format: HistoryReaderFormat, textLength: Int? = nil) {
         self.init(
             key: chapter.key, title: chapter.title, number: chapter.chapterNumber,
-            volume: chapter.volumeNumber, scanlator: chapter.scanlator, format: format,
+            volume: chapter.volumeNumber, scanlator: chapter.scanlator,
+            scanlatorID: chapter.scanlatorID, format: format,
             textLength: textLength
         )
     }
@@ -154,6 +158,22 @@ public class HistoryManager: ObservableObject {
         apply(HistoryPublication(revision: revision, records: records))
     }
 
+    func recordedGroup(media: MediaIdentity, chapterKey: String) async throws -> ReaderContinuationGroup? {
+        guard settingsStore?.incognitoMode == false else { return nil }
+        return try await dbPool.read { db in
+            guard let record = try ReadingHistoryRecord
+                .filter(ReadingHistoryRecord.Columns.pluginId == media.pluginId)
+                .filter(ReadingHistoryRecord.Columns.mediaKind == media.mediaKind.rawValue)
+                .filter(ReadingHistoryRecord.Columns.mediaKey == media.canonicalMediaId)
+                .filter(ReadingHistoryRecord.Columns.chapterKey == chapterKey)
+                .order(ReadingHistoryRecord.Columns.readAt.desc, ReadingHistoryRecord.Columns.id.desc)
+                .fetchOne(db)
+            else { return nil }
+            guard record.mediaKind != .anime else { return nil }
+            return ReaderContinuationGroup(id: record.scanlatorID, name: record.scanlator)
+        }
+    }
+
     // MARK: - Observation
 
     private func startObservation<Scheduler: ValueObservationMainActorScheduler>(
@@ -230,6 +250,7 @@ public class HistoryManager: ObservableObject {
             chapterNumber: chapter.number.map(Double.init),
             volume: chapter.volume.map(Double.init),
             scanlator: chapter.scanlator,
+            scanlatorID: mediaKind == .anime ? nil : chapter.scanlatorID,
             format: chapter.format,
             textLength: chapter.textLength
         )

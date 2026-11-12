@@ -97,7 +97,7 @@ extension TrackerManager: MangaReaderTrackerUpdating {
 }
 
 @MainActor
-protocol MangaReaderSettingsAccessing: AnyObject {
+protocol MangaReaderSettingsAccessing: ReaderContinuationSettingsAccessing {
     var mangaReaderPreloadImageCount: Int { get }
     func setMangaReaderPreloadImageCount(_ value: Int) async throws
 }
@@ -261,6 +261,16 @@ private final class UnavailableMangaReaderDependencies:
     let imageSession = ReaderPageImageSession()
     var mangaReaderPreloadImageCount: Int {
         AppPreferenceCatalog.preloadImageCount.defaultValue.rawValue
+    }
+
+    var askBeforeSwitchingGroups: Bool {
+        AppPreferenceCatalog.askBeforeSwitchingGroups.defaultValue
+    }
+
+    var readerContinuationSettingsRevision: UInt64 { 0 }
+
+    func setAskBeforeSwitchingGroups(_ value: Bool) async throws {
+        _ = value
     }
 
     func captureCompletionContext(

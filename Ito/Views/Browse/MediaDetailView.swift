@@ -18,6 +18,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     private let categoryHistoryViewFactory: CategoryHistoryViewFactory
 
     @State private var showNavTitle = false
+    @Environment(\.scenePhase) private var scenePhase
 
     init(
         viewModel: MediaDetailViewModel<M>,
@@ -56,6 +57,9 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                     UIAccessibility.post(notification: .announcement, argument: message)
                 }
             }
+            .onChange(of: scenePhase) { phase in
+                if phase != .active { viewModel.cancelGroupSwitch() }
+            }
     }
 
     private var presentationContent: some View {
@@ -74,6 +78,16 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             }
             .sheet(item: downloadSheetBinding) { sheet in
                 downloadSheetContent(sheet)
+            }
+            .alert(
+                String(localized: "Switch groups?", comment: "Reader consent title: open one exact upload from another translation group"),
+                isPresented: Binding(get: { viewModel.groupSwitchConsent != nil }, set: { if !$0 { viewModel.cancelGroupSwitch() } }),
+                presenting: viewModel.groupSwitchConsent
+            ) { consent in
+                Button("Continue", role: nil) { viewModel.confirmGroupSwitch(consent.id) }
+                Button("Cancel", role: .cancel) { viewModel.cancelGroupSwitch() }
+            } message: { consent in
+                Text(consent.message)
             }
     }
 
@@ -354,9 +368,9 @@ struct MediaDetailView<M: MediaDisplayable>: View {
         displayedChapters: [M.Chapter]
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let target = viewModel.resumeChapter {
+            if viewModel.resumeChapter != nil {
                 Button {
-                    viewModel.selectChapter(target)
+                    viewModel.resumeReading()
                 } label: {
                     Label(resumeTitle, systemImage: resumeIcon)
                     .font(.subheadline.weight(.semibold))

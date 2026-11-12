@@ -4,7 +4,7 @@ enum MediaDetailOpenIntent: Equatable {
     /// Where the series was left off, as the screen's Resume button would open it. The group read
     /// last is preferred for the next chapter when the series' own record cannot name it, such as
     /// after the series moved to another source.
-    case resume(preferredScanlator: String?)
+    case resume(preferredScanlator: String?, preferredScanlatorID: String? = nil)
     /// One chapter or episode as history recorded it.
     case chapter(MediaDetailChapterReference)
 }
@@ -21,8 +21,15 @@ extension MediaDetailOpenIntent {
     /// The group History saw, for picking among several groups' releases.
     var preferredScanlator: String? {
         switch self {
-        case .resume(let scanlator): scanlator
+        case .resume(let scanlator, _): scanlator
         case .chapter(let reference): reference.scanlator
+        }
+    }
+
+    var preferredScanlatorID: String? {
+        switch self {
+        case .resume(_, let id): id
+        case .chapter(let reference): reference.scanlatorID
         }
     }
 
@@ -50,6 +57,7 @@ struct MediaDetailChapterReference: Equatable {
     let number: Float?
     let volume: Float?
     let scanlator: String?
+    var scanlatorID: String?
 }
 
 extension Collection where Element: ChapterDisplayable {
@@ -89,10 +97,14 @@ extension Collection where Element: ChapterDisplayable {
             guard volumes.count <= 1, volumes.isEmpty || !hasUnknownVolume else { return nil }
             candidates = sameNumber
         }
+        if let id = reference.scanlatorID {
+            let matches = candidates.filter { $0.scanlatorID?.utf8.elementsEqual(id.utf8) == true }
+            return matches.count == 1 ? matches.first : nil
+        }
         let recorded = Self.group(reference.scanlator)
         let sameGroup = candidates.filter { Self.group($0.scanlator) == recorded }
         if recorded != nil {
-            if let match = sameGroup.first { return match }
+            if !sameGroup.isEmpty { return sameGroup.count == 1 ? sameGroup.first : nil }
             guard allSatisfy({ Self.group($0.scanlator) == nil }), candidates.count == 1 else { return nil }
             return candidates.first
         }
@@ -122,6 +134,8 @@ struct MediaDetailResumeTarget<Chapter: ChapterDisplayable> {
         chapters: [Chapter],
         lastReadKey: String?,
         fallbackGroup: String?,
+        fallbackGroupID: String? = nil,
+        useGroupIDs: Bool = false,
         isCompleted: Bool,
         isRead: (Chapter) -> Bool
     ) {
@@ -130,14 +144,19 @@ struct MediaDetailResumeTarget<Chapter: ChapterDisplayable> {
             self.init(chapter: last, isRereading: false)
             return
         }
-        let group = last?.scanlator ?? fallbackGroup
+        let group = useGroupIDs
+            ? (last.map(ReaderContinuationGroup.init) ?? ReaderContinuationGroup(id: fallbackGroupID, name: fallbackGroup))
+            : ReaderContinuationGroup(id: nil, name: last?.scanlator ?? fallbackGroup)
         let ascending = chapters.sorted {
             let lhsVolume = $0.volumeNumber ?? -Float.infinity
             let rhsVolume = $1.volumeNumber ?? -Float.infinity
             if lhsVolume != rhsVolume { return lhsVolume < rhsVolume }
             return ($0.chapterNumber ?? Float.infinity) < ($1.chapterNumber ?? Float.infinity)
         }
-        let pick: (Chapter) -> Chapter = { Self.chapter(sameNumberAs: $0, in: chapters, preferring: group) }
+        let pick: (Chapter) -> Chapter = {
+            Self.chapter(sameNumberAs: $0, in: chapters, preferring: group, useGroupIDs: useGroupIDs,
+                         legacyName: last?.scanlator ?? fallbackGroup)
+        }
         if let unread = ascending.first(where: { !isRead($0) }) {
             self.init(chapter: pick(unread), isRereading: false)
         } else if isCompleted, let first = ascending.first {
@@ -155,10 +174,14 @@ struct MediaDetailResumeTarget<Chapter: ChapterDisplayable> {
         self.continuationChapter = continuation ?? chapter
     }
 
-    private static func chapter(sameNumberAs chapter: Chapter, in chapters: [Chapter], preferring group: String?) -> Chapter {
-        guard let group, chapter.scanlator != group, let number = chapter.chapterNumber else { return chapter }
+    private static func chapter(sameNumberAs chapter: Chapter, in chapters: [Chapter], preferring group: ReaderContinuationGroup, useGroupIDs: Bool, legacyName: String?) -> Chapter {
+        let matches: (Chapter) -> Bool = {
+            useGroupIDs ? group.matches(ReaderContinuationGroup($0)) : $0.scanlator == legacyName
+        }
+        guard useGroupIDs ? (group.id != nil || group.name != nil) : legacyName != nil,
+              !matches(chapter), let number = chapter.chapterNumber else { return chapter }
         return chapters.first {
-            $0.scanlator == group && $0.volumeNumber == chapter.volumeNumber
+            matches($0) && $0.volumeNumber == chapter.volumeNumber
                 && $0.chapterNumber.map { abs($0 - number) < 0.0001 } == true
         } ?? chapter
     }

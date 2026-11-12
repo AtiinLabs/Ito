@@ -232,6 +232,14 @@ final class MangaReaderTrackerFake: MangaReaderTrackerUpdating {
 
 @MainActor
 final class MangaReaderSettingsFake: MangaReaderSettingsAccessing {
+    var askBeforeSwitchingGroups = false {
+        didSet { readerContinuationSettingsRevision &+= 1 }
+    }
+    private(set) var readerContinuationSettingsRevision: UInt64 = 0
+    func setAskBeforeSwitchingGroups(_ value: Bool) async throws {
+        if let error { throw error }
+        askBeforeSwitchingGroups = value
+    }
     var mangaReaderPreloadImageCount: Int
     var error: (any Error)?
     private(set) var writtenValues: [Int] = []

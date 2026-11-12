@@ -162,17 +162,6 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
         XCTAssertTrue(dependencies.presentationLogger as AnyObject === logger)
     }
 
-    func testPR12HelpersRemainOnlyNovelOrderingAndEffectAlgorithms() throws {
-        let viewModel = try source("Ito/ViewModels/NovelReaderViewModel.swift")
-        let behavior = try source("Ito/Views/Reader/ReaderBehavior.swift")
-
-        XCTAssertTrue(viewModel.contains("ReaderChapterOrdering.novelChapter("))
-        XCTAssertTrue(viewModel.contains("ReaderPageOrdering.ascending("))
-        XCTAssertFalse(viewModel.contains("chapterNumberEpsilon"))
-        XCTAssertFalse(viewModel.contains("missingChapterNumber"))
-        XCTAssertTrue(behavior.contains("static let chapterNumberEpsilon: Float32 = 0.0001"))
-    }
-
     func testPaginationUIKitAndPageStateRemainInPagingView() throws {
         let paging = try source("Ito/Views/Reader/NovelPagingReaderView.swift")
         let viewModel = try source("Ito/ViewModels/NovelReaderViewModel.swift")

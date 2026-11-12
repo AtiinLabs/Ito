@@ -26,6 +26,7 @@ final class ReaderOfflineContext {
     private let isSavedOnly: Bool
     private let downloadedCopy: (any DownloadedCopyReopening)?
     private var subscription: AnyCancellable?
+    var isLocalOnly: Bool { isSavedOnly }
 
     init(
         availability: any ReaderOfflineAvailability = UnavailableReaderOfflineAvailability(),
@@ -38,13 +39,16 @@ final class ReaderOfflineContext {
     }
 
     /// Adds what only a reader knows to the ordering's answer. A chapter of the other format opens
-    /// elsewhere, and one with neither a copy nor a way to fetch it is not available. While offline
-    /// chapters do not exist on this build, everything but a chapter this reader opens ends the reader,
-    /// exactly as it did before they existed.
+    /// elsewhere, and one with neither a copy nor a way to fetch it is not available. Without offline
+    /// support, other-reader boundaries retain the earlier end behavior; source locks always remain
+    /// explicit boundaries.
     func resolving(
         _ boundary: ReaderChapterBoundary<Chapter>,
         opensHere: (Chapter) -> Bool
     ) -> ReaderChapterBoundary<Chapter> {
+        // Source access is a boundary even when this runtime has no offline inventory service.
+        // Absence of download support must not disguise a locked neighbor as the end.
+        if case .locked = boundary { return boundary }
         guard availability.isAvailable else {
             guard case .chapter(let chapter) = boundary, opensHere(chapter) else { return .end }
             return boundary

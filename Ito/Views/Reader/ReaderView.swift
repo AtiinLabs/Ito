@@ -9,6 +9,7 @@ struct ReaderView: View {
     @State private var showUI = true
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     /// `viewModel` is evaluated once, when SwiftUI first creates this view's state.
     init(viewModel: @autoclosure @escaping () -> MangaReaderViewModel) {
@@ -35,12 +36,29 @@ struct ReaderView: View {
                 preloadCount: Binding(
                     get: { viewModel.preloadImageCount },
                     set: { viewModel.setPreloadImageCount($0) }
+                ),
+                askBeforeSwitchingGroups: Binding(
+                    get: { viewModel.askBeforeSwitchingGroups },
+                    set: { viewModel.setAskBeforeSwitchingGroups($0) }
                 )
             )
         }
         .task { viewModel.start() }
         .onAppear { viewModel.appear() }
         .onDisappear { viewModel.disappear() }
+        .onChange(of: scenePhase) { phase in
+            if phase != .active { viewModel.cancelGroupSwitch() }
+        }
+        .alert(
+            String(localized: "Switch groups?", comment: "Reader consent title: open one exact upload from another translation group"),
+            isPresented: Binding(get: { viewModel.groupSwitchConsent != nil }, set: { if !$0 { viewModel.cancelGroupSwitch() } }),
+            presenting: viewModel.groupSwitchConsent
+        ) { consent in
+            Button("Continue", role: nil) { viewModel.confirmGroupSwitch(consent.id) }
+            Button("Cancel", role: .cancel) { viewModel.cancelGroupSwitch() }
+        } message: { consent in
+            Text(consent.message)
+        }
     }
 
     private func readerBody(safeAreaBottom: CGFloat) -> some View {
@@ -104,8 +122,10 @@ struct ReaderView: View {
                         displayTotal: viewModel.isPaged
                             ? viewModel.pagedPages.count
                             : viewModel.continuousChapterPage.count,
-                        hasPrev: viewModel.boundaryBefore(viewModel.currentChapter).chapter != nil,
-                        hasNext: viewModel.boundaryAfter(viewModel.currentChapter).chapter != nil,
+                        hasPrev: viewModel.boundaryBefore(viewModel.currentChapter).chapter != nil
+                            || viewModel.boundaryBefore(viewModel.currentChapter).needsGroupConsent,
+                        hasNext: viewModel.boundaryAfter(viewModel.currentChapter).chapter != nil
+                            || viewModel.boundaryAfter(viewModel.currentChapter).needsGroupConsent,
                         overrideViewer: Binding(
                             get: { viewModel.overrideViewer },
                             set: { viewModel.setViewerOverride($0) }
@@ -190,7 +210,7 @@ struct ReaderView: View {
     @ViewBuilder
     private func neighborView(_ boundary: ReaderChapterBoundary<Manga.Chapter>, isNext: Bool) -> some View {
         if let notice = ReaderBoundaryNotice.pages(for: boundary, isNext: isNext) {
-            boundaryNoticeView(notice, chapter: boundary.candidate)
+            boundaryNoticeView(notice, chapter: boundary.candidate, isNext: isNext)
         } else if let chapter = boundary.chapter {
             loadingChapterView(chapter: chapter, isNext: isNext)
         }
@@ -206,7 +226,7 @@ struct ReaderView: View {
 
     // MARK: - Shared views
 
-    private func boundaryNoticeView(_ notice: ReaderBoundaryNotice, chapter: Manga.Chapter?) -> some View {
+    private func boundaryNoticeView(_ notice: ReaderBoundaryNotice, chapter: Manga.Chapter?, isNext: Bool) -> some View {
         VStack(spacing: 16) {
             Image(systemName: notice.systemImage)
                 .font(.system(size: 40))
@@ -226,7 +246,13 @@ struct ReaderView: View {
         .padding(40)
         .accessibilityElement(children: .combine)
         .contentShape(Rectangle())
-        .onTapGesture(perform: toggleUI)
+        .onTapGesture {
+            if notice.requestsGroupConsent {
+                viewModel.requestGroupSwitch(isNext ? .next : .previous, opensAtEnd: !isNext)
+            } else {
+                toggleUI()
+            }
+        }
     }
 
     private func loadingChapterView(chapter: Manga.Chapter, isNext: Bool) -> some View {
@@ -282,6 +308,7 @@ struct ReaderSettingsView: View {
     @Binding var viewer: Manga.Viewer
     let defaultViewer: Manga.Viewer
     @Binding var preloadCount: Int
+    @Binding var askBeforeSwitchingGroups: Bool
 
     @Environment(\.dismiss) var dismiss
 
@@ -306,6 +333,13 @@ struct ReaderSettingsView: View {
                             Text(option.localizedTitle)
                                 .tag(option.rawValue)
                         }
+                    }
+                }
+
+                Section {
+                    Toggle(isOn: $askBeforeSwitchingGroups) {
+                        Text("Ask before switching groups",
+                             comment: "Reader setting, off by default: require confirmation before Next or Resume opens another translation group's upload")
                     }
                 }
 
