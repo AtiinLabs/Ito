@@ -211,8 +211,6 @@ private final class RouterSearchExecutor: SearchPluginExecuting {
         _ = limit
         return []
     }
-
-    func evictRunner(for pluginID: String) { _ = pluginID }
 }
 
 @MainActor

@@ -466,10 +466,6 @@ private final class DebugLogSearchExecutor: SearchPluginExecuting {
         _ = limit
         return []
     }
-
-    func evictRunner(for pluginID: String) {
-        _ = pluginID
-    }
 }
 
 @MainActor

@@ -1078,10 +1078,6 @@ private final class SettingsTestSearchExecutor: SearchPluginExecuting {
         _ = limit
         return []
     }
-
-    func evictRunner(for pluginID: String) {
-        _ = pluginID
-    }
 }
 
 @MainActor

@@ -485,6 +485,16 @@ public class PluginManager: ObservableObject {
         }
     }
 
+    /// Evicts the cached foreground runner only when it is the instance that failed. A crash reported late by an
+    /// older instance must never evict the newer runner that replaced it; the comparison is by instance, as for
+    /// `evictImageRunner`, so it cannot match a different runner.
+    @MainActor
+    func retireRunner(for pluginId: String, matching runner: ItoRunner) {
+        guard let cached = runnerCache[pluginId], cached.runner === runner else { return }
+        runnerCache.removeValue(forKey: pluginId)
+        AppLogger.plugin.debug("🔌 [PluginManager] Retired crashed runner for \(pluginId)")
+    }
+
     /// Evicts a cached image runner for a plugin only if the currently cached runner matches the instance.
     /// This prevents a late trap callback from an old instance from evicting a newer runner or an in-flight replacement.
     @MainActor

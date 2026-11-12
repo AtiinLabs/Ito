@@ -78,6 +78,7 @@ private final class CertificateProvider: SourceRunnerProviding {
     }
 
     func evictSourceRunner(for pluginID: String) {}
+    func retireSourceRunner(for pluginID: String, matching context: any SourceRunnerContext) {}
     func pendingTrust(for pluginID: String) -> PendingTrust? { trust.pending(pluginID: pluginID) }
     func clearPendingTrust(for pluginID: String) { trust.clearPending(pluginID: pluginID) }
 }

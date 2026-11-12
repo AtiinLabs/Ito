@@ -1165,10 +1165,6 @@ private final class BrowseSearchExecutor: SearchPluginExecuting {
         _ = limit
         return []
     }
-
-    func evictRunner(for pluginID: String) {
-        _ = pluginID
-    }
 }
 
 @MainActor

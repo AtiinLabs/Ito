@@ -35,7 +35,6 @@ protocol SearchPluginExecuting: AnyObject {
         operation: PluginNetworkOperation
     ) async throws -> [PluginSearchResult]
 
-    func evictRunner(for pluginID: String)
     func pendingTrust(for pluginID: String) -> PendingTrust?
     func clearPendingTrust(for pluginID: String)
 }
@@ -169,6 +168,7 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
+            retireIfCrashed(error, runner: runner, pluginID: plugin.id)
             throw Self.classify(error, fallback: .pluginExecution)
         }
     }
@@ -229,6 +229,7 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
+            retireIfCrashed(error, runner: runner, pluginID: plugin.id)
             throw Self.classify(error, fallback: .pluginExecution)
         }
     }
@@ -257,8 +258,11 @@ final class PluginManagerSearchExecutor: SearchPluginExecuting {
         }
     }
 
-    func evictRunner(for pluginID: String) {
-        pluginManager.evictRunner(for: pluginID)
+    /// Retires the runner that crashed during a search, matched by instance, so a stale crash never evicts a newer
+    /// runner. It runs whether or not the search is still wanted; the caller publishes nothing from a stale one.
+    private func retireIfCrashed(_ error: any Error, runner: ItoRunner, pluginID: String) {
+        guard (error as? PluginCallError)?.kind == .crashed else { return }
+        pluginManager.retireRunner(for: pluginID, matching: runner)
     }
 
     func pendingTrust(for pluginID: String) -> PendingTrust? {

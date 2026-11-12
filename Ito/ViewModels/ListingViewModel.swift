@@ -35,13 +35,18 @@ final class ListingViewModel: ObservableObject {
     @Published private(set) var nextPage: Int32 = 1
 
     private(set) var destination: SourceListingDestination
-    private(set) var identity: Identity
+    let identity: Identity
+    private let runnerProvider: any SourceRunnerProviding
     private var sessionID = UUID()
     private var requestID: UUID?
     private var requestTask: Task<Void, Never>?
+    /// Set once the runner behind `destination.context` crashed: the next request reacquires a context from
+    /// the provider instead of reusing the retired instance. Ordinary failures never set it.
+    private var contextNeedsReacquisition = false
 
-    init(destination: SourceListingDestination) {
+    init(destination: SourceListingDestination, runnerProvider: any SourceRunnerProviding) {
         self.destination = destination
+        self.runnerProvider = runnerProvider
         identity = Self.identity(for: destination)
     }
 
@@ -78,17 +83,6 @@ final class ListingViewModel: ObservableObject {
         } else {
             await loadMore()
         }
-    }
-
-    func replaceDestination(_ destination: SourceListingDestination) async {
-        guard Self.identity(for: destination) != identity
-                || ObjectIdentifier(destination.context) != ObjectIdentifier(self.destination.context) else {
-            return
-        }
-        cancelActiveRequest(publishCancelledState: false)
-        self.destination = destination
-        identity = Self.identity(for: destination)
-        await loadInitial()
     }
 
     func cancel() {
@@ -155,8 +149,11 @@ final class ListingViewModel: ObservableObject {
         sessionID: UUID,
         requestID: UUID
     ) async {
+        var failedContext: (any SourceRunnerContext)?
         do {
-            let result = try await destination.context.loadListing(
+            let context = try await requestContext(for: destination, sessionID: sessionID, requestID: requestID)
+            failedContext = context
+            let result = try await context.loadListing(
                 listing: destination.listing,
                 page: page,
                 operationID: destination.operationID
@@ -173,6 +170,9 @@ final class ListingViewModel: ObservableObject {
             phase = isEmpty ? .empty : .content
             finishRequest(requestID)
         } catch {
+            // The failed instance is retired whether or not this request is still current: a cancelled or
+            // superseded request can still have trapped its runner. Nothing else it holds is published.
+            retireCrashedRunner(error, pluginID: destination.plugin.id, context: failedContext)
             guard isCurrent(sessionID: sessionID, requestID: requestID) else { return }
             // A request its caller cancelled can end in a host error rather than CancellationError, such as
             // URLError(.cancelled). That is still a cancellation: it is never shown as a failure.
@@ -192,6 +192,32 @@ final class ListingViewModel: ObservableObject {
                 paginationState = .failure(page: page, reason: reason)
             }
             finishRequest(requestID)
+        }
+    }
+
+    /// The context a request runs on: the retained one, or a freshly acquired one once its runner crashed. The
+    /// fresh context replaces the retained one only while the request is still current.
+    private func requestContext(
+        for destination: SourceListingDestination,
+        sessionID: UUID,
+        requestID: UUID
+    ) async throws -> any SourceRunnerContext {
+        guard contextNeedsReacquisition else { return destination.context }
+        let fresh = try await runnerProvider.sourceRunnerContext(for: destination.plugin.id)
+        try Task.checkCancellation()
+        guard isCurrent(sessionID: sessionID, requestID: requestID) else { throw CancellationError() }
+        self.destination = destination.replacingContext(fresh)
+        contextNeedsReacquisition = false
+        return fresh
+    }
+
+    /// Retires the runner a crashed request used, matched by instance, so an old crash can't evict a newer runner.
+    /// The retained context is flagged for reacquisition only while it is still that instance.
+    private func retireCrashedRunner(_ error: any Error, pluginID: String, context failed: (any SourceRunnerContext)?) {
+        guard let failed, (error as? PluginCallError)?.kind == .crashed else { return }
+        runnerProvider.retireSourceRunner(for: pluginID, matching: failed)
+        if destination.context.runnerIdentity == failed.runnerIdentity {
+            contextNeedsReacquisition = true
         }
     }
 

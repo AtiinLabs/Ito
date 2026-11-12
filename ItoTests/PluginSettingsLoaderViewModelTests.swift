@@ -41,7 +41,8 @@ final class PluginSettingsLoaderViewModelTests: XCTestCase {
 
         await model.load()
         XCTAssertEqual(model.failure, "Stopped")
-        XCTAssertEqual(provider.evictedPluginIDs, ["plugin.manga"])
+        XCTAssertEqual(provider.retiredRunners, [.init(pluginID: "plugin.manga", runnerIdentity: crashed.runnerIdentity)])
+        XCTAssertTrue(provider.evictedPluginIDs.isEmpty)
         await model.load()
         XCTAssertNotNil(model.destination)
         XCTAssertNil(model.failure)

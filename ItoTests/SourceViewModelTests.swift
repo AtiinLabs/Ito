@@ -451,7 +451,8 @@ final class SourceViewModelTests: XCTestCase {
         await viewModel.loadIfNeeded()
 
         XCTAssertEqual(viewModel.phase, .failure("The source stopped unexpectedly."))
-        XCTAssertEqual(provider.evictedPluginIDs, ["plugin.manga"])
+        XCTAssertEqual(provider.retiredRunners, [.init(pluginID: "plugin.manga", runnerIdentity: crashed.runnerIdentity)])
+        XCTAssertTrue(provider.evictedPluginIDs.isEmpty)
 
         await viewModel.retry()
 
@@ -483,7 +484,8 @@ final class SourceViewModelTests: XCTestCase {
         await pr7bWaitUntil { provider.requestedPluginIDs.count == 2 && viewModel.phase != .loading }
 
         XCTAssertEqual(viewModel.searchPhase, .failure("The source stopped unexpectedly."))
-        XCTAssertEqual(provider.evictedPluginIDs, ["plugin.manga"])
+        XCTAssertEqual(provider.retiredRunners, [.init(pluginID: "plugin.manga", runnerIdentity: crashed.runnerIdentity)])
+        XCTAssertTrue(provider.evictedPluginIDs.isEmpty)
 
         viewModel.performSearch(query: "again")
         await pr7bWaitUntil { viewModel.searchPhase == .content }
@@ -501,7 +503,8 @@ final class SourceViewModelTests: XCTestCase {
         await viewModel.loadIfNeeded()
 
         XCTAssertEqual(viewModel.phase, .failure("The source stopped unexpectedly."))
-        XCTAssertEqual(provider.evictedPluginIDs, ["plugin.manga"])
+        XCTAssertEqual(provider.retiredRunners, [.init(pluginID: "plugin.manga", runnerIdentity: context.runnerIdentity)])
+        XCTAssertTrue(provider.evictedPluginIDs.isEmpty)
         XCTAssertEqual(context.homeLoadCount, 0)
     }
 

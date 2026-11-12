@@ -23,6 +23,11 @@ enum TestWasm {
         var data: [(offset: Int, bytes: [UInt8])] = []
         /// The `ito_abi_version` the module exports. It defaults to the host's ABI, so the module runs here.
         var abiVersion: Int = ItoRunner.supportedABIVersions.upperBound
+        /// The body of `search(i32 ×6) -> i64`, or nil to leave it unexported. `[0x00]` traps; `[0x42, 0x00]`
+        /// returns no response, so the export's reported failure (see `lastError`) is what the runner throws.
+        var search: [UInt8]?
+        /// The same for `handle_url(i32, i32) -> i64`.
+        var handleUrl: [UInt8]?
     }
 
     static let i32: UInt8 = 0x7F
@@ -36,7 +41,9 @@ enum TestWasm {
         ([i32, i32], [i32]),               // 3: net fetch, webview load
         ([i32], []),                       // 4: net fetch_read
         ([], [i32]),                       // 5: ito_abi_version, ito_supported_kinds, ito_error_version
-        ([i32, i32, i32, i32, i32], [i32]) // 6: mark_completed
+        ([i32, i32, i32, i32, i32], [i32]), // 6: mark_completed
+        ([i32, i32, i32, i32, i32, i32], [i64]), // 7: search
+        ([i32, i32], [i64])                // 8: handle_url
     ]
 
     /// A source whose completion reports a failure of `category` through `ito_last_error`.
@@ -99,6 +106,8 @@ enum TestWasm {
             ("dealloc", 1, [])
         ]
         if let completed = fixture.completed { defined.append(("mark_completed", 6, completed)) }
+        if let search = fixture.search { defined.append(("search", 7, search)) }
+        if let handleUrl = fixture.handleUrl { defined.append(("handle_url", 8, handleUrl)) }
         if let error = fixture.lastError {
             let packed = (Int64(error.pointer) << 32) | Int64(error.length)
             defined.append(("ito_last_error", 2, [0x42] + signed(packed)))

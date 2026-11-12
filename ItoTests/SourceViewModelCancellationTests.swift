@@ -66,7 +66,8 @@ final class SourceViewModelCancellationTests: XCTestCase {
         context.completeHome(with: .failure(PluginCallError(kind: .crashed, message: "x")))
         await task.value
 
-        XCTAssertEqual(provider.evictedPluginIDs, [viewModel.plugin.id])
+        XCTAssertEqual(provider.retiredRunners, [.init(pluginID: viewModel.plugin.id, runnerIdentity: context.runnerIdentity)])
+        XCTAssertTrue(provider.evictedPluginIDs.isEmpty)
         XCTAssertEqual(viewModel.phase, .cancelled)
         XCTAssertTrue(messages.messages.isEmpty)
     }

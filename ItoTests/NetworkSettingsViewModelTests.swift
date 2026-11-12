@@ -232,10 +232,6 @@ private final class NetworkTestSearchExecutor: SearchPluginExecuting {
         _ = limit
         return []
     }
-
-    func evictRunner(for pluginID: String) {
-        _ = pluginID
-    }
 }
 
 @MainActor

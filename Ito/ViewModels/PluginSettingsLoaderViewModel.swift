@@ -29,8 +29,10 @@ final class PluginSettingsLoaderViewModel: ObservableObject {
             failure = String(localized: "This source is no longer installed.")
             return
         }
+        var failedContext: (any SourceRunnerContext)?
         do {
             let context = try await runnerProvider.sourceRunnerContext(for: plugin.id)
+            failedContext = context
             try Task.checkCancellation()
             let surface = try await context.loadSettingsSurface(operationID: operation)
             try Task.checkCancellation()
@@ -43,10 +45,12 @@ final class PluginSettingsLoaderViewModel: ObservableObject {
         } catch is CancellationError {
             return
         } catch {
-            guard generation == operation, !Task.isCancelled else { return }
-            if (error as? PluginCallError)?.kind == .crashed {
-                runnerProvider.evictSourceRunner(for: plugin.id)
+            // A crashed runner is retired even when its load was cancelled or superseded; only a current load shows
+            // the failure.
+            if (error as? PluginCallError)?.kind == .crashed, let failedContext {
+                runnerProvider.retireSourceRunner(for: plugin.id, matching: failedContext)
             }
+            guard generation == operation, !Task.isCancelled else { return }
             failure = error.localizedDescription
         }
     }
