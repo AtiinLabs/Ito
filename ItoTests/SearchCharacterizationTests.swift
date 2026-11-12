@@ -243,11 +243,10 @@ final class SearchCharacterizationTests: XCTestCase {
         XCTAssertEqual(executor.invocations.map(\.pluginID), ["plugin.a", "plugin.b"])
         XCTAssertNil(viewModel.searchResults["Alpha"])
         XCTAssertEqual(viewModel.searchResults["Beta"]?.map(\.id), ["success"])
-        XCTAssertTrue(executor.evictedPluginIDs.isEmpty)
 
     }
 
-    func testWasmTrapFailureEvictsRunner() async {
+    func testWasmTrapFailureIsReportedWithoutResults() async {
         let executor = RecordingSearchExecutor(plugins: [.manga()])
         executor.errorsByPluginID["plugin.manga"] = SearchPluginExecutionError.pluginTrap
         let viewModel = makeViewModel(executor: executor)
@@ -255,7 +254,7 @@ final class SearchCharacterizationTests: XCTestCase {
         viewModel.performSearch(query: "query")
         await waitUntil { !viewModel.isSearching }
 
-        XCTAssertEqual(executor.evictedPluginIDs, ["plugin.manga"])
+        XCTAssertTrue(viewModel.pluginFailures.first?.message.isEmpty == false)
         XCTAssertTrue(viewModel.searchResults.isEmpty)
     }
 
@@ -348,7 +347,6 @@ private final class RecordingSearchExecutor: SearchPluginExecuting {
     var resultsByPluginID: [String: [PluginSearchResult]] = [:]
     var errorsByPluginID: [String: any Error] = [:]
     private(set) var invocations: [Invocation] = []
-    private(set) var evictedPluginIDs: [String] = []
 
     init(plugins: [SearchPluginDescriptor]) {
         self.plugins = plugins
@@ -366,10 +364,6 @@ private final class RecordingSearchExecutor: SearchPluginExecuting {
             throw error
         }
         return resultsByPluginID[plugin.id] ?? [.result(id: plugin.id)]
-    }
-
-    func evictRunner(for pluginID: String) {
-        evictedPluginIDs.append(pluginID)
     }
 }
 
@@ -413,10 +407,6 @@ private final class SuspendingSearchExecutor: SearchPluginExecuting {
         return try await withCheckedThrowingContinuation { continuation in
             pending.append(.init(query: query, continuation: continuation))
         }
-    }
-
-    func evictRunner(for pluginID: String) {
-        _ = pluginID
     }
 
     func completeNext(with results: [PluginSearchResult]) {

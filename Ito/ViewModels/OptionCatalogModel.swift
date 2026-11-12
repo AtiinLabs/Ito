@@ -145,9 +145,9 @@ final class OptionCatalogModel: ObservableObject {
                     return cached[identity] == nil && !cachedUnavailable.contains(identity)
                 }
                 guard !missing.isEmpty else { continue }
-                let response = try await context.loadOptionPage(
+                let response = try await loader.loadOptionPage(
                     OptionRequest(catalog: catalog.id, query: .values(missing), limit: UInt32(missing.count)),
-                    operationID: UUID()
+                    on: context
                 )
                 guard isCurrent() else { return LabelResolution(labels: [:], unavailable: [], error: nil) }
                 guard let page = response else { throw CatalogUnavailableError.unavailable }

@@ -71,8 +71,15 @@ func pr7bWaitUntil(
 final class PR7BSourceRunnerProviderSpy: SourceRunnerProviding {
     var contexts: [any SourceRunnerContext]
     var error: (any Error)?
+    struct Retirement: Equatable {
+        let pluginID: String
+        let runnerIdentity: ObjectIdentifier
+    }
+
     private(set) var requestedPluginIDs: [String] = []
     private(set) var evictedPluginIDs: [String] = []
+    private(set) var retiredRunners: [Retirement] = []
+    var onRetire: (() -> Void)?
 
     init(contexts: [any SourceRunnerContext] = [PR7BSourceRunnerContextSpy()]) {
         self.contexts = contexts
@@ -89,6 +96,11 @@ final class PR7BSourceRunnerProviderSpy: SourceRunnerProviding {
     func evictSourceRunner(for pluginID: String) {
         evictedPluginIDs.append(pluginID)
     }
+
+    func retireSourceRunner(for pluginID: String, matching context: any SourceRunnerContext) {
+        retiredRunners.append(Retirement(pluginID: pluginID, runnerIdentity: context.runnerIdentity))
+        onRetire?()
+    }
 }
 
 @MainActor
@@ -103,6 +115,7 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
     struct ListingInvocation: Equatable {
         let listingID: String
         let page: Int32
+        let operationID: UUID
     }
 
     struct PendingSearch {
@@ -112,6 +125,7 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
     }
 
     struct PendingListing {
+        let call: Int
         let page: Int32
         let continuation: CheckedContinuation<MediaPageResult, any Error>
     }
@@ -126,6 +140,8 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
     var suspendsSearch = false
     var suspendedListingPages: Set<Int32> = []
     var onHomeSuspended: (() -> Void)?
+    var onSearchSuspended: (() -> Void)?
+    var settingsHandler: (() async throws -> SettingsSchema?)?
     var onListingSuspended: ((Int32) -> Void)?
     private(set) var homeLoadCount = 0
     private(set) var settingsLoadCount = 0
@@ -154,6 +170,7 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
     func loadSettingsSurface(operationID: UUID) async throws -> SettingsSurface? {
         settingsLoadCount += 1
         loadEvents.append("settings")
+        if let settingsHandler { return try await settingsHandler().map { .legacy($0, formFailure: nil) } }
         return try settingsResult.get().map { .legacy($0, formFailure: nil) }
     }
 
@@ -192,6 +209,7 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
         if suspendsSearch {
             return try await withCheckedThrowingContinuation {
                 pendingSearches.append(.init(query: query, kind: pluginType, continuation: $0))
+                onSearchSuspended?()
             }
         }
         return try searchResult.get()
@@ -203,11 +221,11 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
         operationID: UUID
     ) async throws -> MediaPageResult {
         listingInvocations.append(
-            .init(listingID: listing.id, page: page)
+            .init(listingID: listing.id, page: page, operationID: operationID)
         )
         if suspendedListingPages.contains(page) {
             return try await withCheckedThrowingContinuation {
-                pendingListings.append(.init(page: page, continuation: $0))
+                pendingListings.append(.init(call: listingInvocations.count, page: page, continuation: $0))
                 onListingSuspended?(page)
             }
         }
@@ -257,6 +275,13 @@ final class PR7BSourceRunnerContextSpy: @MainActor SourceRunnerContext {
 
     func completeListing(page: Int32, with result: Result<MediaPageResult, any Error>) {
         guard let index = pendingListings.firstIndex(where: { $0.page == page }) else { return }
+        let pending = pendingListings.remove(at: index)
+        pending.continuation.resume(with: result)
+    }
+
+    /// Completes the suspended listing request that was the `call`th (1-based) to reach this context.
+    func completeListing(call: Int, with result: Result<MediaPageResult, any Error>) {
+        guard let index = pendingListings.firstIndex(where: { $0.call == call }) else { return }
         let pending = pendingListings.remove(at: index)
         pending.continuation.resume(with: result)
     }

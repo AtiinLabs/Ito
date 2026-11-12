@@ -112,6 +112,10 @@ final class ItoRunnerSourceContext: SourceRunnerContext {
 protocol SourceRunnerProviding: AnyObject {
     func sourceRunnerContext(for pluginID: String) async throws -> any SourceRunnerContext
     func evictSourceRunner(for pluginID: String)
+    /// Retires the cached runner after a crash, only when it is the instance behind `context`, the context that
+    /// failed. Unlike `evictSourceRunner`, a late report from an older instance cannot evict the runner that
+    /// replaced it.
+    func retireSourceRunner(for pluginID: String, matching context: any SourceRunnerContext)
     func pendingTrust(for pluginID: String) -> PendingTrust?
     func clearPendingTrust(for pluginID: String)
 }
@@ -132,6 +136,11 @@ extension PluginManager: SourceRunnerProviding {
 
     func evictSourceRunner(for pluginID: String) {
         evictRunner(for: pluginID)
+    }
+
+    func retireSourceRunner(for pluginID: String, matching context: any SourceRunnerContext) {
+        guard let context = context as? ItoRunnerSourceContext else { return }
+        retireRunner(for: pluginID, matching: context.runner)
     }
 
     func pendingTrust(for pluginID: String) -> PendingTrust? {
@@ -490,6 +499,8 @@ private final class UnavailableSourceDependency: SourceRunnerProviding,
     }
 
     func evictSourceRunner(for pluginID: String) {}
+
+    func retireSourceRunner(for pluginID: String, matching context: any SourceRunnerContext) {}
 
     func prepareSettings(pluginID: String) throws {
         throw SourceDependencyUnavailableError.unavailable

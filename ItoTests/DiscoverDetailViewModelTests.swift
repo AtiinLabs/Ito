@@ -604,6 +604,11 @@ private final class DiscoverDetailPluginProviderFake: SourceResolverPluginProvid
         _ = pluginID
     }
 
+    func retireSourceRunner(for pluginID: String, matching context: any SourceRunnerContext) {
+        _ = pluginID
+        _ = context
+    }
+
     func sourceSearchAdapter(
         for pluginID: String,
         mediaType: PluginMediaType
