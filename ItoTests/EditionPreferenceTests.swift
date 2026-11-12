@@ -76,7 +76,7 @@ struct EditionPreferenceTests {
         defer { database.cleanup() }
         let unreadable = [
             Data("not json".utf8),
-            Data(#"{"formatVersion":2,"kind":"allUploads"}"#.utf8),
+            Data(#"{"formatVersion":3,"kind":"allUploads"}"#.utf8),
             Data(#"{"formatVersion":1,"kind":"somethingNew"}"#.utf8)
         ]
 
@@ -137,18 +137,27 @@ struct EditionPreferenceTests {
         }
     }
 
-    @Test func theDownloadCenterRemembersAndRereadsAChoice() async throws {
+    @Test func theDownloadCenterRemembersAndRereadsAChoiceOnlyForASavedSeries() async throws {
         let fixture = try DownloadWorkerFixture()
-        let selection = EditionSelection.scanlators([ScanlatorRef(name: "A")])
+        let selection = EditionSelection.scanlators([ScanlatorRef(id: "group-a", name: "A")])
         let series = MediaIdentity(
             pluginId: DownloadWorkerFixture.plugin,
             canonicalMediaId: "series-1",
             mediaKind: .manga
         )
         #expect(try await fixture.center.editionPreference(for: series) == nil)
+        await #expect(throws: SeriesEditionPreferenceError.seriesNotSaved) {
+            try await fixture.center.setEditionPreference(selection, for: series)
+        }
+        #expect(try await fixture.center.editionPreference(for: series) == nil)
 
+        try await fixture.offline.database.dbPool.write { db in
+            try LibraryItem(
+                id: "series-1", title: "Series", coverUrl: nil, pluginId: series.pluginId,
+                isAnime: false, pluginType: .manga, rawPayload: Data("{}".utf8), anilistId: nil
+            ).insert(db)
+        }
         try await fixture.center.setEditionPreference(selection, for: series)
-
         #expect(try await fixture.center.editionPreference(for: series) == selection)
         try await fixture.center.setEditionPreference(.allUploads, for: series)
         #expect(try await fixture.center.editionPreference(for: series) == .allUploads)

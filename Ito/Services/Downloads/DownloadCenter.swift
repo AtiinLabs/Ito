@@ -222,7 +222,19 @@ final class DownloadCenter: ObservableObject {
     /// be written.
     func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity) async throws {
         let now = Date()
-        try await dbPool.write { db in try SeriesEditionPreferenceRecord.save(selection, for: media, at: now, in: db) }
+        try await dbPool.write { db in
+            let candidates = ImportedMediaIdentity.localItemIDs(
+                pluginId: media.pluginId,
+                canonicalMediaId: media.canonicalMediaId,
+                mediaKind: media.mediaKind
+            )
+            let exists = try candidates.contains { id in
+                guard let item = try LibraryItem.fetchOne(db, key: id) else { return false }
+                return item.mediaIdentity == media
+            }
+            guard exists else { throw SeriesEditionPreferenceError.seriesNotSaved }
+            try SeriesEditionPreferenceRecord.save(selection, for: media, at: now, in: db)
+        }
     }
 
     /// The free space where downloads are stored; nil when it cannot be read.

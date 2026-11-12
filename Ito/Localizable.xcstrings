@@ -1589,6 +1589,9 @@
     "Edit List" : {
 
     },
+    "Empty source label" : {
+      "comment" : "Distinguishes an explicitly empty source-provided group name from no group name."
+    },
     "Enter a name for your new list." : {
 
     },
@@ -1818,6 +1821,9 @@
     "Go to Settings > Trackers and sign in to AniList, MyAnimeList or MangaBaka before tracking." : {
 
     },
+    "Group ID %@" : {
+      "comment" : "Accessibility label for the untranslated source-provided group ID."
+    },
     "HTTPS to HTTP redirect downgrades are prohibited." : {
 
     },
@@ -1853,6 +1859,9 @@
     },
     "How would you like to restore?" : {
 
+    },
+    "ID: %@" : {
+      "comment" : "Raw source-provided group ID shown when chooser labels collide."
     },
     "Illustration" : {
       "comment" : "Accessibility label of a manga page image"
@@ -2378,6 +2387,9 @@
     "No results found. Try again." : {
 
     },
+    "No source ID" : {
+      "comment" : "Distinguishes an ID-less source group from a same-label group with an ID."
+    },
     "No sources installed" : {
 
     },
@@ -2775,6 +2787,9 @@
     },
     "Remember for this series" : {
       "comment" : "Toggle: keep this scanlator choice for the series, so downloads follow it next time."
+    },
+    "Remembered name needs review" : {
+      "comment" : "Chooser row for a legacy name-only preference that cannot be matched unambiguously."
     },
     "Remove" : {
 
@@ -3574,6 +3589,9 @@
     },
     "The reading order of this series isn't certain. Check the list before downloading." : {
       "comment" : "Download preview warning: the order of the chapters could not be worked out confidently."
+    },
+    "The remembered scanlator identity is missing or ambiguous. Remove it and choose the current group to continue." : {
+      "comment" : "Scanlator sheet warning: a remembered group identifier cannot be matched safely to the current source catalog."
     },
     "The remote entry changed, but its local link still needs to be saved." : {
 

@@ -31,9 +31,9 @@ nonisolated enum DownloadPlanIssue: Hashable, Sendable {
     case orderingAmbiguous
     /// The recorded anchor key is absent from the selected rows.
     case anchorNotInSelection
-    /// Two selected rows share a (volume, number) hint and differ in scanlator.
+    /// Two selected rows share a (volume, number) hint and have distinct source group identities.
     case alternativeUploads
-    /// Unread or All over the source's list, which spans two or more scanlator names.
+    /// Unread or All over the source list spans multiple source group identities.
     case multipleScanlators
     /// A locked row was skipped inside the window.
     case lockedGap
@@ -103,7 +103,7 @@ struct DownloadPresetInput<C: ChapterDisplayable> {
     let stored: (String) -> StoredEditionState
     /// Manga and novel chapters; never anime.
     let isStorable: (C) -> Bool
-    /// The source's group identifier for a row. Ito does not record it, so it is nil.
+    /// Concrete extraction seam for a source-provided group ID; absent IDs remain nil.
     let scanlatorID: (C) -> String?
     let largeBatchThreshold: Int
 
@@ -170,7 +170,8 @@ nonisolated enum DownloadPresetResolver {
         preset: DownloadPreset,
         selection: EditionSelection,
         anchorKey: String?,
-        largeBatchThreshold: Int = DownloadPresetResolver.largeBatchThreshold
+        largeBatchThreshold: Int = DownloadPresetResolver.largeBatchThreshold,
+        resolvedSelection: ResolvedEditionSelection? = nil
     ) -> DownloadPlan<Int> {
         // The catalog the preset sees: storable rows, one per exact key.
         var catalog: [Int] = []
@@ -179,9 +180,23 @@ nonisolated enum DownloadPresetResolver {
             if seenKeys.insert(rows[index].facts.key).inserted { catalog.append(index) }
         }
 
-        // 1-2. Filter by the selection, then order the selected catalog.
+        let selectionResolution: ResolvedEditionSelection?
+        if let resolvedSelection {
+            selectionResolution = resolvedSelection
+        } else if case .scanlators = selection {
+            selectionResolution = ScanlatorCatalogIndex(
+                rows,
+                id: { $0.facts.scanlatorID },
+                name: { $0.facts.scanlator }
+            ).resolve(selection)
+        } else {
+            selectionResolution = selection.resolve(in: [])
+        }
         let selectedCatalog = catalog.filter {
-            selection.admits(scanlator: rows[$0].facts.scanlator, groupID: rows[$0].facts.scanlatorID)
+            selectionResolution?.admits(
+                scanlator: rows[$0].facts.scanlator,
+                groupID: rows[$0].facts.scanlatorID
+            ) ?? false
         }
         let ordering = ChapterReadingOrder.order(selectedCatalog.map { rows[$0].facts })
         let selectedOrder = ordering.order.map { selectedCatalog[$0] }
@@ -242,7 +257,10 @@ nonisolated enum DownloadPresetResolver {
                 }
                 place(index)
             }
-            if Set(selectedCatalog.map { rows[$0].facts.scanlator }).count >= 2, selection == .sourceList {
+            let selectedGroupCount = Set(selectedCatalog.map {
+                ScanlatorGroupKey(id: rows[$0].facts.scanlatorID, name: rows[$0].facts.scanlator)
+            }).count
+            if selectedGroupCount >= 2, selection == .sourceList {
                 plan.issues.insert(.multipleScanlators)
             }
         }
@@ -279,22 +297,22 @@ nonisolated enum DownloadPresetResolver {
 
     // MARK: - Internals
 
-    /// Two selected rows with one exact (volume, number) hint and different scanlators are possible
-    /// alternative uploads. Rows from the same scanlator with one number are splits or extras: separate
-    /// positions, no flag.
+    /// Two selected rows with one exact (volume, number) hint and distinct source group identities are
+    /// possible alternative uploads. Cached labels never establish or erase group identity.
     private static func hasAlternativeUploads(rows: [DownloadPlanRow], positions: [Int]) -> Bool {
         struct Hint: Hashable {
             let volume: Float?
             let number: Float
         }
-        var scanlators: [Hint: Set<String?>] = [:]
+        var groupKeys: [Hint: Set<ScanlatorGroupKey>] = [:]
         for index in positions {
             let facts = rows[index].facts
             guard let number = facts.number, number.isFinite else { continue }
             let volume = facts.volume.flatMap { $0.isFinite ? $0 : nil }
-            scanlators[Hint(volume: volume, number: number), default: []].insert(facts.scanlator)
+            groupKeys[Hint(volume: volume, number: number), default: []]
+                .insert(ScanlatorGroupKey(id: facts.scanlatorID, name: facts.scanlator))
         }
-        return scanlators.values.contains { $0.count >= 2 }
+        return groupKeys.values.contains { $0.count >= 2 }
     }
 
     /// Rows outside the selection that the user may tick in the preview. A candidate is unlocked, has

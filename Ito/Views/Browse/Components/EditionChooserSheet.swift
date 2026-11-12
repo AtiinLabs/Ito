@@ -42,8 +42,7 @@ struct EditionChooserSheet: View {
         _remember = State(initialValue: presentation.remember)
     }
 
-    /// The scanlators of the catalog, then any remembered one the catalog no longer has: a renamed group
-    /// stops matching, and the list says so instead of dropping it.
+    /// Current catalog groups plus remembered references that still need explicit review.
     private var options: [ScanlatorOption] {
         var result = presentation.options
         if case .scanlators(let references) = presentation.initialSelection {
@@ -55,7 +54,10 @@ struct EditionChooserSheet: View {
     }
 
     private var canConfirm: Bool {
-        mode != .scanlators || !chosen.isEmpty
+        guard mode == .scanlators else { return true }
+        return !chosen.isEmpty && chosen.allSatisfy { reference in
+            options.contains { $0.ref == reference && $0.chapterCount > 0 }
+        }
     }
 
     var body: some View {
@@ -113,6 +115,11 @@ struct EditionChooserSheet: View {
                                 "The choice saved for this series couldn't be loaded. It isn't replaced unless you turn on Remember.",
                                 comment: "Scanlator sheet warning: reading the scanlators remembered for this series failed this time, so the stored choice is kept unless the user turns Remember on."
                             )
+                        case .needsReview:
+                            Text(
+                                "The remembered scanlator identity is missing or ambiguous. Remove it and choose the current group to continue.",
+                                comment: "Scanlator sheet warning: a remembered group identifier cannot be matched safely to the current source catalog."
+                            )
                         }
                     }
                     .foregroundStyle(.orange)
@@ -164,6 +171,16 @@ struct EditionChooserSheet: View {
         .accessibilityAddTraits(mode == value ? .isSelected : [])
     }
 
+    private func renderedLabel(for option: ScanlatorOption) -> String {
+        option.displayName ?? String(localized: "No group listed", comment: "Scanlator choice: the chapters whose source names no scanlator.")
+    }
+
+    private func hasRenderedLabelCollision(_ option: ScanlatorOption) -> Bool {
+        let label = renderedLabel(for: option)
+        return options.contains { other in
+            other.ref != option.ref && renderedLabel(for: other) == label
+        }
+    }
     private func scanlatorRow(_ option: ScanlatorOption) -> some View {
         Button {
             if let index = chosen.firstIndex(of: option.ref) {
@@ -174,11 +191,45 @@ struct EditionChooserSheet: View {
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(option.displayName ?? String(
-                        localized: "No group listed",
-                        comment: "Scanlator choice: the chapters whose source names no scanlator."
-                    ))
-                    .foregroundColor(.primary)
+                    Text(renderedLabel(for: option))
+                        .foregroundColor(.primary)
+                    if hasRenderedLabelCollision(option) {
+                        if let groupID = option.ref.id {
+                            Text(
+                                String(
+                                    localized: "ID: \(groupID)",
+                                    comment: "Raw source-provided group ID shown when chooser labels collide."
+                                )
+                            )
+                            .accessibilityLabel(
+                                String(
+                                    localized: "Group ID \(groupID)",
+                                    comment: "Accessibility label for the untranslated source-provided group ID."
+                                )
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        } else if option.ref.binding == .exactIDless {
+                            Text("No source ID", comment: "Distinguishes an ID-less source group from a same-label group with an ID.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(
+                                "Remembered name needs review",
+                                comment: "Chooser row for a legacy name-only preference that cannot be matched unambiguously."
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+                    if option.ref.name?.isEmpty == true {
+                        Text(
+                            "Empty source label",
+                            comment: "Distinguishes an explicitly empty source-provided group name from no group name."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                     Text(
                         option.chapterCount > 0
                             ? String(
@@ -207,7 +258,10 @@ struct EditionChooserSheet: View {
         switch mode {
         case .sourceList: selection = .sourceList
         case .allUploads: selection = .allUploads
-        case .scanlators: selection = .scanlators(chosen)
+        case .scanlators:
+            selection = .scanlators(chosen.map { reference in
+                options.first(where: { $0.ref == reference && $0.chapterCount > 0 })?.ref ?? reference
+            })
         }
         // Without a download behind it the choice has nothing else to apply to, so it is always remembered.
         onConfirm(selection, presentation.offersRemember ? remember : true)

@@ -7,7 +7,7 @@ nonisolated struct ChapterFacts: Sendable, Equatable {
     let number: Float?
     let volume: Float?
     let scanlator: String?
-    /// The source's group identifier. Ito does not record it, so it is nil.
+    /// The source's group identifier, when available in its chapter descriptor.
     let scanlatorID: String?
     /// A known paywall lock. A locked row is never queued.
     let isLocked: Bool

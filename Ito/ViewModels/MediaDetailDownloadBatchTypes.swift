@@ -6,11 +6,7 @@ struct ScanlatorOption: Identifiable, Hashable, Sendable {
     let ref: ScanlatorRef
     let chapterCount: Int
 
-    var id: String {
-        if let groupID = ref.id { return "id:\(groupID)" }
-        if let name = ref.name { return "name:\(name)" }
-        return "none"
-    }
+    var id: ScanlatorRef { ref }
 
     /// The name to show, or nil for a row whose source lists no group (or an empty name).
     var displayName: String? {
@@ -21,6 +17,10 @@ struct ScanlatorOption: Identifiable, Hashable, Sendable {
 
 /// What the scanlator chooser shows. `preset` is the download that asked for the choice, if one did.
 struct EditionChooserPresentation: Equatable {
+    let id = UUID()
+    let identity: MediaIdentity
+    let scopeGeneration: Int
+    let catalogDigest: String
     let options: [ScanlatorOption]
     let initialSelection: EditionSelection
     /// Whether "Remember for this series" starts on. Only a choice made for a download can be left unremembered.
@@ -39,6 +39,7 @@ enum StoredChoiceProblem: Equatable {
     case unreadable
     /// Reading the store failed this time. Whatever is stored is untouched and may be fine.
     case readFailed
+    case needsReview
 }
 
 /// One catalog row as the preview lists it.
@@ -60,6 +61,8 @@ struct DownloadPreview: Identifiable, Equatable {
     let id: UUID
     let preset: DownloadPreset
     let selection: EditionSelection
+    let identity: MediaIdentity
+    let scopeGeneration: Int
     /// The digest of the chapter list this was made from.
     let catalogDigest: String
     let toQueue: [DownloadPreviewRow]
