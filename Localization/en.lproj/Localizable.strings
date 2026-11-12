@@ -130,6 +130,9 @@ History: kind of media */
 
 "Are you sure you want to reject this match?" = "Are you sure you want to reject this match?";
 
+/* Reader setting, off by default: require confirmation before Next or Resume opens another translation group's upload */
+"Ask before switching groups" = "Ask before switching groups";
+
 "Ask on Discord" = "Ask on Discord";
 
 /* Audio track button when no track is selected */
@@ -331,6 +334,9 @@ Downloads queue: cancel one job */
 "Continue Watching?" = "Continue Watching?";
 
 "Continue from %@" = "Continue from %@";
+
+/* Consent to one exact upload. Title and translation group name are untranslated source content. No saved preference or historical link changes. */
+"Continue to %@ from %@ for this reading only?" = "Continue to %1$@ from %2$@ for this reading only?";
 
 "Cookies, website data and Cloudflare clearance were removed." = "Cookies, website data and Cloudflare clearance were removed.";
 
@@ -1008,6 +1014,9 @@ Manga format */
 /* Download menu item: download the next unread chapter. */
 "Next Unread Chapter" = "Next Unread Chapter";
 
+/* Reader boundary: the next chapter belongs to a different translation group; tapping asks to open that one upload */
+"Next chapter is from another group. Tap to continue" = "Next chapter is from another group. Tap to continue";
+
 /* Reader: shown after the last page when the next chapter needs an unlock */
 "Next chapter is locked" = "Next chapter is locked";
 
@@ -1265,6 +1274,9 @@ History: the page a chapter was left on */
 "Previous Chapter" = "Previous Chapter";
 
 "Previous Page" = "Previous Page";
+
+/* Reader boundary: the previous chapter belongs to a different translation group; tapping asks to open that one upload */
+"Previous chapter is from another group. Tap to continue" = "Previous chapter is from another group. Tap to continue";
 
 /* Reader: shown before the first page when the previous chapter needs an unlock */
 "Previous chapter is locked" = "Previous chapter is locked";
@@ -1760,6 +1772,9 @@ Downloads queue: retry a failed or paused job */
 /* Anime season */
 "Summer" = "Summer";
 
+/* Reader consent title: open one exact upload from another translation group */
+"Switch groups?" = "Switch groups?";
+
 "Switch to sectioned layout" = "Switch to sectioned layout";
 
 "Switch to tabbed layout" = "Switch to tabbed layout";
@@ -2154,6 +2169,9 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 "Unlock your device to read this chapter." = "Unlock your device to read this chapter.";
 
 "Unmatched Sources" = "Unmatched Sources";
+
+/* Reader consent: the source supplies no translation group name */
+"Unnamed group" = "Unnamed group";
 
 "Unread/Unwatched" = "Unread/Unwatched";
 

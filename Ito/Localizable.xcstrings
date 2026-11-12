@@ -927,6 +927,9 @@
     "Are you sure you want to reject this match?" : {
 
     },
+    "Ask before switching groups" : {
+      "comment" : "Reader setting, off by default: require confirmation before Next or Resume opens another translation group's upload"
+    },
     "Ask on Discord" : {
 
     },
@@ -1221,6 +1224,17 @@
     },
     "Continue from %@" : {
 
+    },
+    "Continue to %@ from %@ for this reading only?" : {
+      "comment" : "Consent to one exact upload. Title and translation group name are untranslated source content. No saved preference or historical link changes.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Continue to %1$@ from %2$@ for this reading only?"
+          }
+        }
+      }
     },
     "Cookies, website data and Cloudflare clearance were removed." : {
 
@@ -2297,6 +2311,9 @@
     "Next Unread Chapter" : {
       "comment" : "Download menu item: download the next unread chapter."
     },
+    "Next chapter is from another group. Tap to continue" : {
+      "comment" : "Reader boundary: the next chapter belongs to a different translation group; tapping asks to open that one upload"
+    },
     "Next chapter is locked" : {
       "comment" : "Reader: shown after the last page when the next chapter needs an unlock"
     },
@@ -2636,6 +2653,9 @@
     },
     "Previous Page" : {
 
+    },
+    "Previous chapter is from another group. Tap to continue" : {
+      "comment" : "Reader boundary: the previous chapter belongs to a different translation group; tapping asks to open that one upload"
     },
     "Previous chapter is locked" : {
       "comment" : "Reader: shown before the first page when the previous chapter needs an unlock"
@@ -3389,6 +3409,9 @@
     "Summer" : {
       "comment" : "Anime season"
     },
+    "Switch groups?" : {
+      "comment" : "Reader consent title: open one exact upload from another translation group"
+    },
     "Switch to sectioned layout" : {
 
     },
@@ -3969,6 +3992,9 @@
     },
     "Unmatched Sources" : {
 
+    },
+    "Unnamed group" : {
+      "comment" : "Reader consent: the source supplies no translation group name"
     },
     "Unread/Unwatched" : {
 
