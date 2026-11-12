@@ -148,6 +148,10 @@ nonisolated struct ResolvedEditionSelection: Sendable {
     /// The place of a group in the user's selected order, or nil when the selection does not admit it.
     /// An unrestricted selection ranks every group equally, so source order decides.
     func rank(scanlator name: String?, groupID: String?) -> Int? {
+        if case .preferred(let primary, .anyAvailable) = selection {
+            return ScanlatorGroupKey(id: primary.id, name: primary.name)
+                == ScanlatorGroupKey(id: groupID, name: name) ? 0 : 1
+        }
         guard let groupRanks else { return 0 }
         return groupRanks[ScanlatorGroupKey(id: groupID, name: name)]
     }
@@ -210,10 +214,43 @@ nonisolated struct ScanlatorCatalogIndex: Sendable {
         self.groupsByName = groupsByName
     }
 
+    /// Missing bound IDs retain their identity. An ID-less same-label replacement needs review.
+    private func preferredReference(_ reference: ScanlatorRef) -> ScanlatorRef? {
+        if let resolved = resolve(.scanlators([reference])),
+           case .scanlators(let refs) = resolved.selection { return refs.first }
+        if reference.binding == .exactIDless,
+           groupsByName[ScanlatorNameKey(value: reference.name)] == nil { return reference }
+        guard reference.id != nil,
+              groupsByName[ScanlatorNameKey(value: reference.name)]?.hasIDless != true else { return nil }
+        return reference
+    }
+
     func resolve(_ selection: EditionSelection) -> ResolvedEditionSelection? {
         switch selection {
         case .sourceList, .allUploads:
             return ResolvedEditionSelection(selection: selection, groupRanks: nil)
+        case .preferred(let primary, let fallback):
+            guard let primary = preferredReference(primary) else { return nil }
+            var references = [primary]
+            var resolvedFallback = fallback
+            if case .approved(let approved) = fallback {
+                var seen: Set<ScanlatorRef> = [primary]
+                var resolved: [ScanlatorRef] = []
+                for reference in approved {
+                    guard let current = preferredReference(reference), seen.insert(current).inserted else { return nil }
+                    resolved.append(current)
+                }
+                references += resolved
+                resolvedFallback = .approved(resolved)
+            }
+            var ranks = SelectedGroupRanks()
+            for reference in references {
+                ranks.insert(ScanlatorGroupKey(id: reference.id, name: reference.name))
+            }
+            return ResolvedEditionSelection(
+                selection: .preferred(primary: primary, fallback: resolvedFallback),
+                groupRanks: fallback == .anyAvailable ? nil : ranks.ranks
+            )
         case .scanlators(let references):
             var resolvedReferences: [ScanlatorRef] = []
             var selectedGroups = SelectedGroupRanks()
@@ -265,16 +302,39 @@ nonisolated struct ScanlatorCatalogIndex: Sendable {
     }
 }
 
+nonisolated enum EditionFallback: Hashable, Sendable {
+    case strict
+    case ask
+    case approved([ScanlatorRef])
+    case anyAvailable
+}
+
 nonisolated enum EditionSelection: Hashable, Sendable {
     case sourceList
     case scanlators([ScanlatorRef])
     case allUploads
+    case preferred(primary: ScanlatorRef, fallback: EditionFallback)
+
+    var references: [ScanlatorRef] {
+        switch self {
+        case .sourceList, .allUploads: return []
+        case .scanlators(let refs): return refs
+        case .preferred(let primary, let fallback):
+            if case .approved(let refs) = fallback { return [primary] + refs }
+            return [primary]
+        }
+    }
+
+    var asksBeforeSwitching: Bool {
+        if case .preferred(_, .ask) = self { return true }
+        return false
+    }
 
     func resolve(in catalog: [ScanlatorRef]) -> ResolvedEditionSelection? {
         switch self {
         case .sourceList, .allUploads:
             return ResolvedEditionSelection(selection: self, groupRanks: nil)
-        case .scanlators:
+        case .scanlators, .preferred:
             return ScanlatorCatalogIndex(catalog).resolve(self)
         }
     }
@@ -285,7 +345,10 @@ nonisolated enum EditionSelection: Hashable, Sendable {
 }
 
 nonisolated extension EditionSelection: Codable {
-    static let formatVersion = 2
+    /// The newest format this build reads. Format 1 and 2 decode exactly as shipped. Only the primary/fallback
+    /// policy needs format 3; every earlier kind keeps writing format 2 so older builds still read it.
+    static let formatVersion = 3
+    private static let legacyWriteVersion = 2
 
     func storageData() throws -> Data {
         let encoder = JSONEncoder()
@@ -293,13 +356,13 @@ nonisolated extension EditionSelection: Codable {
         return try encoder.encode(self)
     }
 
-    private enum CodingKeys: String, CodingKey { case formatVersion, kind, scanlators }
-    private enum Kind: String { case sourceList, scanlators, allUploads }
+    private enum CodingKeys: String, CodingKey { case formatVersion, kind, scanlators, primary, fallback, approved }
+    private enum Kind: String { case sourceList, scanlators, allUploads, preferred }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let version = try container.decode(Int.self, forKey: .formatVersion)
-        guard version == 1 || version == Self.formatVersion else {
+        guard (1...Self.formatVersion).contains(version) else {
             throw DecodingError.dataCorruptedError(forKey: .formatVersion, in: container, debugDescription: "Unsupported edition selection format version \(version).")
         }
         let rawKind = try container.decode(String.self, forKey: .kind)
@@ -317,18 +380,57 @@ nonisolated extension EditionSelection: Codable {
                 )
             }
             self = .scanlators(references)
+        case .preferred:
+            guard version == Self.formatVersion else {
+                throw DecodingError.dataCorruptedError(forKey: .kind, in: container, debugDescription: "Preferred policy requires format 3.")
+            }
+            let primary = try container.decode(ScanlatorRef.self, forKey: .primary)
+            let mode = try container.decode(String.self, forKey: .fallback)
+            let fallback: EditionFallback
+            switch mode {
+            case "strict": fallback = .strict
+            case "ask": fallback = .ask
+            case "anyAvailable": fallback = .anyAvailable
+            case "approved":
+                let refs = try container.decode([ScanlatorRef].self, forKey: .approved)
+                guard !refs.contains(primary), Set(refs).count == refs.count else {
+                    throw DecodingError.dataCorruptedError(forKey: .approved, in: container, debugDescription: "Duplicate approved groups.")
+                }
+                fallback = .approved(refs)
+            default:
+                throw DecodingError.dataCorruptedError(forKey: .fallback, in: container, debugDescription: "Unknown fallback mode.")
+            }
+            self = .preferred(primary: primary, fallback: fallback)
         }
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(Self.formatVersion, forKey: .formatVersion)
+        let writtenVersion: Int
+        if case .preferred = self { writtenVersion = Self.formatVersion } else { writtenVersion = Self.legacyWriteVersion }
+        try container.encode(writtenVersion, forKey: .formatVersion)
         switch self {
         case .sourceList: try container.encode(Kind.sourceList.rawValue, forKey: .kind)
         case .allUploads: try container.encode(Kind.allUploads.rawValue, forKey: .kind)
         case .scanlators(let references):
             try container.encode(Kind.scanlators.rawValue, forKey: .kind)
             try container.encode(references, forKey: .scanlators)
+        case .preferred(let primary, let fallback):
+            try container.encode(Kind.preferred.rawValue, forKey: .kind)
+            try container.encode(primary, forKey: .primary)
+            let mode: String
+            switch fallback {
+            case .strict: mode = "strict"
+            case .ask: mode = "ask"
+            case .anyAvailable: mode = "anyAvailable"
+            case .approved(let refs):
+                guard !refs.contains(primary), Set(refs).count == refs.count else {
+                    throw EncodingError.invalidValue(refs, .init(codingPath: encoder.codingPath, debugDescription: "Duplicate approved groups."))
+                }
+                mode = "approved"
+                try container.encode(refs, forKey: .approved)
+            }
+            try container.encode(mode, forKey: .fallback)
         }
     }
 }

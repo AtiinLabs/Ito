@@ -290,6 +290,8 @@ nonisolated enum SeriesEditionPreferenceError: Error, Equatable {
     case unreadable
     /// A remembered choice cannot recreate or outlive its saved Library scope.
     case seriesNotSaved
+    /// The source's settings or account changed after the choice was reviewed, so it is not stored.
+    case sourceChanged
 }
 
 /// The scanlators a user chose to download for one series, when they asked to remember the choice.

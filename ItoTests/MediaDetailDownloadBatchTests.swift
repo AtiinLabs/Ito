@@ -239,7 +239,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         XCTAssertTrue(Self.isChooser(second.viewModel.downloadSheet))
     }
 
-    func testAChoiceThatCannotBeRememberedStillAppliesToThatBatchAndSaysSo() async throws {
+    func testAChoiceThatCannotBeRememberedWaitsForExplicitBatchOnlyConsent() async throws {
         let downloads = MediaDetailDownloadsFake()
         downloads.preferenceWriteFailure = MediaDetailTestFailure.expected
         let subject = await makeSubject(chapters: Self.numbered(1...3), downloads: downloads)
@@ -247,8 +247,11 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         await subject.viewModel.downloadBatch.applyEditionChoice(.sourceList, remember: true, then: .next).value
 
         XCTAssertEqual(subject.messages.messages.first, .editionChoiceNotRemembered)
-        XCTAssertEqual(downloads.batchRequests.count, 1, "The download goes ahead under the choice")
+        XCTAssertTrue(downloads.batchRequests.isEmpty, "A failed durable approval never becomes batch-only consent")
         XCTAssertEqual(subject.viewModel.downloadBatch.remembered, .none, "A choice that was not stored is not remembered")
+        XCTAssertTrue(Self.isChooser(subject.viewModel.downloadSheet))
+        await subject.viewModel.downloadBatch.applyEditionChoice(.sourceList, remember: false, then: .next).value
+        XCTAssertEqual(downloads.batchRequests.count, 1)
     }
 
     func testAChoiceFromTheScanlatorsEntryIsAlwaysRememberedAndFailureIsReportedAsNotSaved() async throws {
@@ -266,7 +269,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         await subject.viewModel.downloadBatch.applyEditionChoice(.sourceList, remember: true, then: nil).value
 
         XCTAssertEqual(subject.messages.messages, [.editionChoiceNotSaved])
-        XCTAssertNil(subject.viewModel.downloadSheet)
+        XCTAssertTrue(Self.isChooser(subject.viewModel.downloadSheet))
         XCTAssertEqual(subject.viewModel.downloadBatch.rememberedSelection, .allUploads, "The stored choice stands")
     }
 
@@ -1003,7 +1006,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         let capacity = await downloads.availableCapacity()
         let bytes = await downloads.storedByteCount(for: Self.identity)
         var wrote = true
-        do { try await downloads.setEditionPreference(.sourceList, for: Self.identity) } catch { wrote = false }
+        do { try await downloads.setEditionPreference(.sourceList, for: Self.identity, sourceEpoch: "epoch") } catch { wrote = false }
 
         XCTAssertEqual(outcome, .refused(.unavailable))
         XCTAssertNil(preference)

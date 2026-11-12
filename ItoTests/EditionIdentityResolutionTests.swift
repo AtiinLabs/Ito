@@ -3,7 +3,7 @@ import Testing
 @testable import Ito
 
 struct EditionIdentityResolutionTests {
-    @Test func v1AndV2DecodeButEveryNewEncodingUsesV2() throws {
+    @Test func v1AndV2DecodeAndLegacyKindsKeepWritingV2() throws {
         let v1 = Data(#"{"formatVersion":1,"kind":"scanlators","scanlators":[{"id":"g1","name":"Old"}]}"#.utf8)
         let decoded = try JSONDecoder().decode(EditionSelection.self, from: v1)
         #expect(decoded == .scanlators([ScanlatorRef(id: "g1", name: "Old")]))
@@ -12,7 +12,7 @@ struct EditionIdentityResolutionTests {
         #expect(object?["formatVersion"] as? Int == 2)
         #expect(try JSONDecoder().decode(EditionSelection.self, from: encoded) == decoded)
         #expect(throws: DecodingError.self) {
-            try JSONDecoder().decode(EditionSelection.self, from: Data(#"{"formatVersion":3,"kind":"sourceList"}"#.utf8))
+            try JSONDecoder().decode(EditionSelection.self, from: Data(#"{"formatVersion":4,"kind":"sourceList"}"#.utf8))
         }
     }
 

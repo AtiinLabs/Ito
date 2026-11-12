@@ -76,7 +76,7 @@ struct EditionPreferenceTests {
         defer { database.cleanup() }
         let unreadable = [
             Data("not json".utf8),
-            Data(#"{"formatVersion":3,"kind":"allUploads"}"#.utf8),
+            Data(#"{"formatVersion":4,"kind":"allUploads"}"#.utf8),
             Data(#"{"formatVersion":1,"kind":"somethingNew"}"#.utf8)
         ]
 
@@ -146,8 +146,10 @@ struct EditionPreferenceTests {
             mediaKind: .manga
         )
         #expect(try await fixture.center.editionPreference(for: series) == nil)
+        let epoch = try fixture.center.editionPreferenceEpoch(for: series.pluginId)
+        #expect(epoch == OfflineStoreFixture.epoch)
         await #expect(throws: SeriesEditionPreferenceError.seriesNotSaved) {
-            try await fixture.center.setEditionPreference(selection, for: series)
+            try await fixture.center.setEditionPreference(selection, for: series, sourceEpoch: epoch)
         }
         #expect(try await fixture.center.editionPreference(for: series) == nil)
 
@@ -157,10 +159,16 @@ struct EditionPreferenceTests {
                 isAnime: false, pluginType: .manga, rawPayload: Data("{}".utf8), anilistId: nil
             ).insert(db)
         }
-        try await fixture.center.setEditionPreference(selection, for: series)
+        try await fixture.center.setEditionPreference(selection, for: series, sourceEpoch: epoch)
         #expect(try await fixture.center.editionPreference(for: series) == selection)
-        try await fixture.center.setEditionPreference(.allUploads, for: series)
+        try await fixture.center.setEditionPreference(.allUploads, for: series, sourceEpoch: epoch)
         #expect(try await fixture.center.editionPreference(for: series) == .allUploads)
+
+        try fixture.offline.rotateEpoch(to: OfflineStoreFixture.rotatedEpoch)
+        await #expect(throws: SeriesEditionPreferenceError.sourceChanged) {
+            try await fixture.center.setEditionPreference(selection, for: series, sourceEpoch: epoch)
+        }
+        #expect(try await fixture.center.editionPreference(for: series) == .allUploads, "A stale source epoch stores nothing")
     }
 
     // MARK: - Backup

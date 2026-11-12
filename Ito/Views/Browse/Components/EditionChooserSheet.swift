@@ -1,11 +1,11 @@
 import SwiftUI
 
-/// Which scanlators' chapters downloads follow: the source's list, a chosen few, or every upload. The choice
-/// is a filter by the names the source shows; it never says that two uploads are the same chapter.
+/// Explicit series download policy. Group labels are source content, never group identity.
 struct EditionChooserSheet: View {
     private enum Mode: Hashable {
-        case sourceList, scanlators, allUploads
+        case sourceList, preferred, scanlators, allUploads
     }
+    private enum FallbackMode: Hashable { case strict, ask, approved, anyAvailable }
 
     let presentation: EditionChooserPresentation
     /// A choice is being applied; the button waits for it.
@@ -17,6 +17,7 @@ struct EditionChooserSheet: View {
     /// The ticked scanlators, in the order the user ticked them.
     @State private var chosen: [ScanlatorRef]
     @State private var remember: Bool
+    @State private var fallbackMode: FallbackMode = .ask
 
     init(
         presentation: EditionChooserPresentation,
@@ -38,6 +39,19 @@ struct EditionChooserSheet: View {
         case .scanlators(let references):
             _mode = State(initialValue: .scanlators)
             _chosen = State(initialValue: references)
+        case .preferred(let primary, let fallback):
+            _mode = State(initialValue: .preferred)
+            if case .approved(let refs) = fallback {
+                _chosen = State(initialValue: [primary] + refs)
+            } else {
+                _chosen = State(initialValue: [primary])
+            }
+            switch fallback {
+            case .strict: _fallbackMode = State(initialValue: .strict)
+            case .ask: _fallbackMode = State(initialValue: .ask)
+            case .approved: _fallbackMode = State(initialValue: .approved)
+            case .anyAvailable: _fallbackMode = State(initialValue: .anyAvailable)
+            }
         }
         _remember = State(initialValue: presentation.remember)
     }
@@ -45,18 +59,20 @@ struct EditionChooserSheet: View {
     /// Current catalog groups plus remembered references that still need explicit review.
     private var options: [ScanlatorOption] {
         var result = presentation.options
-        if case .scanlators(let references) = presentation.initialSelection {
-            for reference in references where !result.contains(where: { $0.ref == reference }) {
-                result.append(ScanlatorOption(ref: reference, chapterCount: 0))
-            }
+        for reference in presentation.initialSelection.references where !result.contains(where: { $0.ref == reference }) {
+            result.append(ScanlatorOption(ref: reference, chapterCount: 0))
         }
         return result
     }
 
     private var canConfirm: Bool {
-        guard mode == .scanlators else { return true }
-        return !chosen.isEmpty && chosen.allSatisfy { reference in
-            options.contains { $0.ref == reference && $0.chapterCount > 0 }
+        guard mode == .scanlators || mode == .preferred else { return true }
+        let selected = choosesSinglePrimary ? Array(chosen.prefix(1)) : chosen
+        return !selected.isEmpty && selected.allSatisfy { reference in
+            options.contains {
+                $0.ref == reference && ($0.chapterCount > 0
+                    || (mode == .preferred && presentation.storedChoiceProblem != .needsReview))
+            }
         }
     }
 
@@ -67,22 +83,25 @@ struct EditionChooserSheet: View {
                     modeRow(
                         .sourceList,
                         title: String(
-                            localized: "Follow the source's list",
-                            comment: "Scanlator choice: download whatever the source lists, from every scanlator it shows."
+                            localized: "Follow the source's preferred edition",
+                            comment: "Select one source-ranked visible upload per proven reading position, not every upload."
                         )
                     )
-                    modeRow(
-                        .scanlators,
-                        title: String(
-                            localized: "Choose scanlators",
-                            comment: "Scanlator choice: download only chapters from the scanlators the user ticks."
-                        )
-                    )
+                    modeRow(.preferred, title: String(
+                        localized: "Choose a preferred group",
+                        comment: "Choose the translation group normally used for this series."
+                    ))
+                    if case .scanlators = presentation.initialSelection {
+                        modeRow(.scanlators, title: String(
+                            localized: "Selected groups only",
+                            comment: "Legacy strict allowed set; its order is not automatic fallback authorization."
+                        ))
+                    }
                     modeRow(
                         .allUploads,
                         title: String(
-                            localized: "All uploads",
-                            comment: "Scanlator choice: download every upload of every chapter. An advanced choice."
+                            localized: "Download all editions",
+                            comment: "Advanced action: download every exact upload, including multiple translations of one chapter."
                         )
                     )
                 } footer: {
@@ -94,7 +113,44 @@ struct EditionChooserSheet: View {
                     }
                 }
 
-                if mode == .scanlators {
+                if mode == .preferred {
+                    Section {
+                        Picker(selection: $fallbackMode) {
+                            Text("Strict selection", comment: "Leave positions unavailable when the preferred group is missing.").tag(FallbackMode.strict)
+                            Text("Ask before switching", comment: "Require batch consent before using another group.").tag(FallbackMode.ask)
+                            Text("Use approved groups in order", comment: "Use only the explicitly ordered fallback groups.").tag(FallbackMode.approved)
+                            Text("Any available group", comment: "Advanced explicit permission to use any eligible visible group.").tag(FallbackMode.anyAvailable)
+                        } label: {
+                            Text("When unavailable", comment: "Fallback policy for a missing preferred edition.")
+                        }
+                        if let primary = chosen.first {
+                            Text(renderedLabel(for: ScanlatorOption(ref: primary, chapterCount: 0)))
+                        }
+                    } header: {
+                        Text("Preferred group", comment: "The first selected group is the primary edition choice.")
+                    }
+                    if fallbackMode == .approved {
+                        Section {
+                            ForEach(Array(chosen.dropFirst()), id: \.self) { reference in
+                                HStack {
+                                    Text(renderedLabel(for: ScanlatorOption(ref: reference, chapterCount: 0)))
+                                    Spacer()
+                                    Button {
+                                        guard let index = chosen.firstIndex(of: reference), index > 1 else { return }
+                                        chosen.swapAt(index, index - 1)
+                                    } label: {
+                                        Image(systemName: "arrow.up")
+                                    }
+                                    .accessibilityLabel(Text("Move earlier", comment: "Move an approved fallback group earlier in priority order."))
+                                }
+                            }
+                        } footer: {
+                            Text("Only these groups can be used automatically, in the order shown.", comment: "Approved fallback has no unlisted final fallback.")
+                        }
+                    }
+                }
+
+                if mode == .scanlators || mode == .preferred {
                     Section {
                         ForEach(options) { option in
                             scanlatorRow(option)
@@ -181,9 +237,19 @@ struct EditionChooserSheet: View {
             other.ref != option.ref && renderedLabel(for: other) == label
         }
     }
+
+    /// Outside an ordered approved list only the first group is the preferred one.
+    private var choosesSinglePrimary: Bool { mode == .preferred && fallbackMode != .approved }
+
+    private func isChosen(_ reference: ScanlatorRef) -> Bool {
+        choosesSinglePrimary ? chosen.first == reference : chosen.contains(reference)
+    }
+
     private func scanlatorRow(_ option: ScanlatorOption) -> some View {
         Button {
-            if let index = chosen.firstIndex(of: option.ref) {
+            if choosesSinglePrimary {
+                chosen = [option.ref]
+            } else if let index = chosen.firstIndex(of: option.ref) {
                 chosen.remove(at: index)
             } else {
                 chosen.append(option.ref)
@@ -245,12 +311,12 @@ struct EditionChooserSheet: View {
                     .foregroundStyle(.secondary)
                 }
                 Spacer()
-                if chosen.contains(option.ref) {
+                if isChosen(option.ref) {
                     Image(systemName: "checkmark").foregroundColor(.accentColor).accessibilityHidden(true)
                 }
             }
         }
-        .accessibilityAddTraits(chosen.contains(option.ref) ? .isSelected : [])
+        .accessibilityAddTraits(isChosen(option.ref) ? .isSelected : [])
     }
 
     private func confirm() {
@@ -262,6 +328,16 @@ struct EditionChooserSheet: View {
             selection = .scanlators(chosen.map { reference in
                 options.first(where: { $0.ref == reference && $0.chapterCount > 0 })?.ref ?? reference
             })
+        case .preferred:
+            guard let primary = chosen.first else { return }
+            let fallback: EditionFallback
+            switch fallbackMode {
+            case .strict: fallback = .strict
+            case .ask: fallback = .ask
+            case .anyAvailable: fallback = .anyAvailable
+            case .approved: fallback = .approved(Array(chosen.dropFirst()))
+            }
+            selection = .preferred(primary: primary, fallback: fallback)
         }
         // Without a download behind it the choice has nothing else to apply to, so it is always remembered.
         onConfirm(selection, presentation.offersRemember ? remember : true)

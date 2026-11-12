@@ -1,4 +1,9 @@
 {
+  "%lld selected positions need another edition or will be skipped.": {
+    "description": "Aggregate unresolved download positions. Does not claim source deletion.",
+    "one": "%lld selected position needs another edition or will be skipped.",
+    "other": "%lld selected positions need another edition or will be skipped."
+  },
   "%@ has %lld new chapters.": {
     "one": "%1$@ has %2$lld new chapter.",
     "other": "%1$@ has %2$lld new chapters."

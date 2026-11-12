@@ -58,6 +58,8 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     private var storedKeys = Set<String>()
     private var preferenceIdentity: MediaIdentity?
     private var requestedSavedOnly: SavedOnlyRequest?
+    /// Saved-only snapshots whose metadata still belongs to this exact source series.
+    private var policySavedOnlyChapters: [Chapter] = []
 
     private var preferenceTask: Task<Void, Never>?
     private var coverageTask: Task<Void, Never>?
@@ -83,6 +85,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         let identity: MediaIdentity
         let generation: Int
         let catalogDigest: String
+        let sourceEpoch: String
     }
 
     init(
@@ -229,6 +232,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         preferenceIdentity = nil
         coverageBasis = nil
         savedOnlyChapters = []
+        policySavedOnlyChapters = []
         requestedSavedOnly = nil
         states = [:]
         statesIdentity = nil
@@ -263,6 +267,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         preferenceTask?.cancel()
         remembered = .unknown
         let downloads = downloads
+        let savedGeneration = savedScopeGeneration
         preferenceTask = Task { [weak self] in
             // Only a stored choice this build cannot read is "unreadable". Any other failure is a read that did
             // not happen: the state stays unknown, and the next preset reads again.
@@ -278,7 +283,9 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             } catch {
                 result = nil
             }
-            guard let self, !Task.isCancelled, self.host?.batchIdentity == identity else { return }
+            guard let self, !Task.isCancelled, self.host?.batchIdentity == identity,
+                  self.host?.batchIsSaved == true,
+                  self.savedScopeGeneration == savedGeneration else { return }
             self.preferenceTask = nil
             // A choice made while the read ran is newer than what it found.
             if self.remembered == .unknown, let result { self.remembered = result }
@@ -319,6 +326,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         let missing = Set(states.filter { $0.value == .downloaded }.keys).subtracting(listedKeys)
         let remaining = savedOnlyChapters.filter { missing.contains($0.key) }
         if remaining.count != savedOnlyChapters.count { savedOnlyChapters = remaining }
+        policySavedOnlyChapters.removeAll { !missing.contains($0.key) }
         let request = SavedOnlyRequest(identity: identity, missing: missing)
         guard request != requestedSavedOnly else { return }
         requestedSavedOnly = request
@@ -338,6 +346,15 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
                 listedKeys: Set(host.batchChapters.map(\.key)),
                 inventory: records.filter { missing.contains($0.chapterKey) }
             )
+            self.policySavedOnlyChapters = SavedChapterMerge.savedOnly(
+                listedKeys: Set(host.batchChapters.map(\.key)),
+                inventory: records.filter { record in
+                    guard missing.contains(record.chapterKey) else { return false }
+                    guard let data = record.originIdentity else { return true }
+                    guard let origin = try? JSONDecoder().decode(OfflineOriginIdentity.self, from: data) else { return false }
+                    return origin.pluginId == identity.pluginId && origin.canonicalMediaId == identity.canonicalMediaId
+                }
+            )
         }
     }
 
@@ -350,8 +367,12 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     }
 
     private func currentBatchScope() -> BatchScope? {
-        guard let host, host.batchIsSaved else { return nil }
-        return BatchScope(identity: host.batchIdentity, generation: scopeGeneration, catalogDigest: catalogDigest)
+        guard let host, host.batchIsSaved,
+              let epoch = try? downloads.editionPreferenceEpoch(for: host.batchIdentity.pluginId) else { return nil }
+        return BatchScope(
+            identity: host.batchIdentity, generation: scopeGeneration,
+            catalogDigest: catalogDigest, sourceEpoch: epoch
+        )
     }
 
     private func isCurrent(_ scope: BatchScope) -> Bool {
@@ -359,13 +380,20 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             && host?.batchIsSaved == true
             && scopeGeneration == scope.generation
             && catalogDigest == scope.catalogDigest
+            && (try? downloads.editionPreferenceEpoch(for: scope.identity.pluginId)) == scope.sourceEpoch
+    }
+
+    private func ownsChooser(_ id: UUID?) -> Bool {
+        guard let id else { return true }
+        guard case .chooser(let current)? = sheet else { return false }
+        return current.id == id
     }
 
     private func resolveSelection(
         _ selection: EditionSelection,
         chapters: [Chapter]? = nil
     ) -> ResolvedEditionSelection? {
-        guard case .scanlators = selection else { return selection.resolve(in: []) }
+        if selection.references.isEmpty { return selection.resolve(in: []) }
         let catalog = chapters ?? host?.batchChapters ?? []
         return ScanlatorCatalogIndex(
             catalog,
@@ -385,11 +413,12 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         guard showsControls, !isEnqueuing, let scope = currentBatchScope() else { return Task {} }
         return Task { [weak self] in
             await self?.ensurePreferenceRead()
+            await self?.savedOnlyTask?.value
             guard let self, self.isCurrent(scope), self.showsControls, !self.isEnqueuing else { return }
             switch self.remembered {
             case .chosen(let selection):
                 let resolution = self.resolveSelection(selection)
-                if case .scanlators = selection, resolution == nil {
+                if resolution == nil {
                     self.sheet = .chooser(self.makeChooser(preset: preset, problem: .needsReview, scope: scope))
                 } else if let resolution {
                     await self.resolveDownload(
@@ -435,7 +464,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             }
             let resolution = self.resolveSelection(self.rememberedSelection)
             let unresolved: Bool
-            if case .scanlators = self.rememberedSelection {
+            if !self.rememberedSelection.references.isEmpty {
                 unresolved = resolution == nil
             } else {
                 unresolved = false
@@ -452,7 +481,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     /// Applies the scanlators the user chose and continues with the preset that asked for the choice. With
     /// `remember` the choice is stored for the series first; without it, the choice applies to this batch only
     /// and nothing else changes. A choice made without a preset has no batch to apply to, so it is always
-    /// remembered. A choice that cannot be stored still applies to this batch, and says so.
+    /// remembered. A failed save leaves the draft editable; batch-only use is a separate explicit choice.
     func applyEditionChoice(
         _ selection: EditionSelection,
         remember: Bool,
@@ -465,7 +494,9 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
                   presentation.id == chooserID,
                   presentation.identity == scope.identity,
                   presentation.scopeGeneration == scope.generation,
-                  presentation.catalogDigest == scope.catalogDigest else { return Task {} }
+                  presentation.catalogDigest == scope.catalogDigest,
+                  presentation.sourceEpoch == scope.sourceEpoch,
+                  presentation.policy == remembered else { return Task {} }
         }
         guard let resolution = resolveSelection(selection) else { return Task {} }
         let reviewedSelection = resolution.selection
@@ -492,10 +523,20 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             let store = remember || preset == nil
             if store {
                 do {
-                    try await downloads.setEditionPreference(reviewedSelection, for: scope.identity)
+                    try await downloads.setEditionPreference(
+                        reviewedSelection, for: scope.identity, sourceEpoch: scope.sourceEpoch
+                    )
                 } catch {
                     storeFailed = true
                 }
+            }
+            // A write already admitted to the store can finish after dismissal, a catalog refresh or a source
+            // change. The database is the authority, so a stale sheet reloads it for the series that is saved
+            // and shown now. It never installs the sheet's own choice, and a removed series is not reloaded.
+            if store, !storeFailed,
+               self.host?.batchIsSaved == true, self.host?.batchIdentity == scope.identity,
+               self.choiceOperationID != operationID || !self.isCurrent(scope) || !self.ownsChooser(chooserID) {
+                self.loadPreference(force: true)
             }
             guard self.choiceOperationID == operationID,
                   self.isCurrent(scope),
@@ -506,6 +547,10 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             if store, !storeFailed { self.remembered = .chosen(reviewedSelection) }
             if storeFailed {
                 self.host?.presentBatchMessage(preset == nil ? .editionChoiceNotSaved : .editionChoiceNotRemembered)
+                self.sheet = .chooser(self.makeChooser(
+                    preset: preset, problem: nil, initialSelection: reviewedSelection, scope: scope
+                ))
+                return
             }
             if let preset {
                 await self.resolveDownload(
@@ -533,12 +578,21 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             sheet = nil
             return Task {}
         }
+        guard (try? downloads.editionPreferenceEpoch(for: preview.identity.pluginId)) == preview.sourceEpoch else {
+            sheet = nil
+            return Task {}
+        }
+        guard preview.policy == remembered else {
+            sheet = nil
+            return Task {}
+        }
         guard preview.catalogDigest == catalogDigest else {
             revalidatePreview()
             return Task {}
         }
         let scope = BatchScope(
-            identity: preview.identity, generation: preview.scopeGeneration, catalogDigest: preview.catalogDigest
+            identity: preview.identity, generation: preview.scopeGeneration,
+            catalogDigest: preview.catalogDigest, sourceEpoch: preview.sourceEpoch
         )
         guard isCurrent(scope) else {
             sheet = nil
@@ -567,6 +621,17 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         isApplyingChoice = false
     }
 
+    /// Editing fallback is a separate deliberate save, not promotion of checked exact uploads.
+    func editFallbackOrder(previewID: UUID) {
+        guard case .preview(let preview)? = sheet, preview.id == previewID,
+              let scope = currentBatchScope(), preview.identity == scope.identity,
+              preview.catalogDigest == scope.catalogDigest, preview.sourceEpoch == scope.sourceEpoch,
+              preview.policy == remembered else { return }
+        sheet = .chooser(makeChooser(
+            preset: preview.preset, problem: nil, initialSelection: preview.selection, scope: scope
+        ))
+    }
+
     // MARK: - Planning
 
     private struct PlannedDownload {
@@ -580,13 +645,38 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         resolvedSelection: ResolvedEditionSelection,
         identity: MediaIdentity
     ) -> PlannedDownload {
-        let chapters = host?.batchChapters ?? []
-        let rows = chapters.map { chapter in
+        var chapters = host?.batchChapters ?? []
+        var rows = chapters.map { chapter in
             DownloadPlanRow(
                 facts: ChapterFacts(chapter),
                 isRead: progress.isRead(media: identity, chapterID: chapter.key, chapterNumber: chapter.chapterNumber),
                 stored: StoredEditionState(states[chapter.key])
             )
+        }
+        // A committed permitted copy can satisfy a current proven unit even when no longer listed.
+        // Historical source order is never compared with the current response's order.
+        if case .preferred = selection {
+            var liveUnits: [ScanlatorUTF8: ChapterFacts] = [:]
+            var listedKeys = Set(chapters.map { ScanlatorUTF8(value: $0.key) })
+            for row in rows {
+                if let unit = row.facts.sourceLogicalUnitID { liveUnits[ScanlatorUTF8(value: unit)] = row.facts }
+            }
+            for saved in policySavedOnlyChapters where states[saved.key] == .downloaded {
+                let savedFacts = ChapterFacts(saved)
+                guard let unit = savedFacts.sourceLogicalUnitID,
+                      let live = liveUnits[ScanlatorUTF8(value: unit)],
+                      listedKeys.insert(ScanlatorUTF8(value: saved.key)).inserted else { continue }
+                chapters.append(saved)
+                rows.append(DownloadPlanRow(
+                    facts: ChapterFacts(
+                        key: saved.key, number: live.number, volume: live.volume,
+                        scanlator: saved.scanlator, scanlatorID: saved.scanlatorID,
+                        logicalUnitID: unit, readingOrder: live.readingOrder
+                    ),
+                    isRead: progress.isRead(media: identity, chapterID: saved.key, chapterNumber: saved.chapterNumber),
+                    stored: .verified
+                ))
+            }
         }
         let plan = DownloadPresetResolver.plan(
             rows: rows,
@@ -662,12 +752,15 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             identity: scope.identity,
             scopeGeneration: scope.generation,
             catalogDigest: scope.catalogDigest,
+            sourceEpoch: scope.sourceEpoch,
+            policy: remembered,
             toQueue: rows(plan.toQueue),
             satisfied: rows(plan.satisfied),
             damaged: rows(plan.damaged),
             locked: rows(plan.locked),
             alternatives: rows(plan.alternatives),
             skippedReadCount: plan.skippedReadCount,
+            missingPositionCount: plan.missingPositionCount,
             issues: plan.issues,
             listChanged: listChanged
         )
@@ -681,7 +774,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             return
         }
         guard preview.catalogDigest != catalogDigest else { return }
-        let scope = BatchScope(identity: host.batchIdentity, generation: scopeGeneration, catalogDigest: catalogDigest)
+        guard let scope = currentBatchScope() else { sheet = nil; return }
         guard let resolution = resolveSelection(preview.selection) else {
             sheet = .chooser(
                 makeChooser(
@@ -729,6 +822,8 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             identity: scope.identity,
             scopeGeneration: scope.generation,
             catalogDigest: scope.catalogDigest,
+            sourceEpoch: scope.sourceEpoch,
+            policy: remembered,
             options: scanlatorOptions(),
             initialSelection: initialSelection ?? resolvedSelection?.selection ?? rememberedSelection,
             remember: problem != .readFailed,

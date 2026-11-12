@@ -487,7 +487,10 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
         return storedPreferences[media]
     }
 
-    func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity) async throws {
+    var policyEpoch = "test-policy-epoch"
+    func editionPreferenceEpoch(for pluginID: String) throws -> String { policyEpoch }
+
+    func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity, sourceEpoch: String) async throws {
         preferenceWriteCount += 1
         if holdsPreferenceWrites {
             await withCheckedContinuation { continuation in
@@ -498,6 +501,7 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
             }
         }
         if let preferenceWriteFailure { throw preferenceWriteFailure }
+        guard sourceEpoch == policyEpoch else { throw SeriesEditionPreferenceError.sourceChanged }
         storedPreferences[media] = selection
     }
 

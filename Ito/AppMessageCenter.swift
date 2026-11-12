@@ -363,8 +363,8 @@ extension AppMessageKind {
                     comment: "Series details: the chosen scanlators could not be remembered for this series."
                 ),
                 detail: String(
-                    localized: "It applies to this download only.",
-                    comment: "Series details: detail when the chosen scanlators could not be remembered for the series, so the choice applies to the current download only."
+                    localized: "Nothing was queued. Try again, or turn off Remember to use this choice for this batch only.",
+                    comment: "Edition policy save failed. Batch-only authorization requires a separate explicit confirmation."
                 )
             )
         case .mediaDetailEditionChoiceNotSaved:

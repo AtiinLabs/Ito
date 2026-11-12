@@ -96,6 +96,8 @@ nonisolated enum EditionPositionResolver {
                     scanlator: facts[index].scanlator,
                     groupID: facts[index].scanlatorID
                 ) else { return nil }
+                // A fallback group substitutes only inside a position the source proved with a logical unit ID.
+                if case .preferred? = selection?.selection, case .exact = position.key, rank > 0 { return nil }
                 return (index, rank, offset)
             }
             let permitted = ranked

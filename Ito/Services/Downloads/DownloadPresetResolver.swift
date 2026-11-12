@@ -54,6 +54,7 @@ nonisolated enum DownloadPlanIssue: Hashable, Sendable {
     /// may fill the gap.
     case selectionExhausted
     case nothingToDo
+    case preferredUnavailable
 }
 
 /// The outcome of one preset over one catalog. `Element` is an exact catalog row.
@@ -71,6 +72,8 @@ nonisolated struct DownloadPlan<Element: Sendable>: Sendable {
     var alternatives: [Element] = []
     /// Rows the read markers skipped inside the window (Next presets and Unread).
     var skippedReadCount = 0
+    /// Unresolved positions in this action's window, aggregated into one decision.
+    var missingPositionCount = 0
     var issues: Set<DownloadPlanIssue> = []
     /// Whether the action must show a preview and wait for the user instead of queueing at once.
     var requiresPreview = false
@@ -83,6 +86,7 @@ nonisolated struct DownloadPlan<Element: Sendable>: Sendable {
             locked: locked.map(transform),
             alternatives: alternatives.map(transform),
             skippedReadCount: skippedReadCount,
+            missingPositionCount: missingPositionCount,
             issues: issues,
             requiresPreview: requiresPreview
         )
@@ -135,18 +139,11 @@ nonisolated enum DownloadPresetResolver {
         }
         let catalogRows = catalog.map { rows[$0] }
 
-        let selectionResolution: ResolvedEditionSelection?
-        if let resolvedSelection {
-            selectionResolution = resolvedSelection
-        } else if case .scanlators = selection {
-            selectionResolution = ScanlatorCatalogIndex(
-                catalogRows,
-                id: { $0.facts.scanlatorID },
-                name: { $0.facts.scanlator }
-            ).resolve(selection)
-        } else {
-            selectionResolution = selection.resolve(in: [])
-        }
+        let selectionResolution = resolvedSelection ?? ScanlatorCatalogIndex(
+            catalogRows,
+            id: { $0.facts.scanlatorID },
+            name: { $0.facts.scanlator }
+        ).resolve(selection)
 
         // 1. Positions over the whole catalog, then the permitted rows of each. From here on, indices are
         //    offsets into `catalogRows`.
@@ -163,7 +160,9 @@ nonisolated enum DownloadPresetResolver {
         let isRead = positions.map { position in position.members.contains { catalogRows[$0].isRead } }
 
         // 2. The positions this selection can supply, in reading order.
-        let permittedPositions = positions.indices.filter { positions[$0].hasPermitted }
+        let includesMissing: Bool
+        if case .preferred = selection { includesMissing = true } else { includesMissing = false }
+        let permittedPositions = positions.indices.filter { includesMissing || positions[$0].hasPermitted }
         let ordering = ChapterReadingOrder.order(
             positions: permittedPositions.map { position in
                 positions[position].rankedMembers.map { catalogRows[$0].facts }
@@ -185,6 +184,13 @@ nonisolated enum DownloadPresetResolver {
                 skippingReadRows ? rows.filter { !catalogRows[$0].isRead } : rows
             }
             plan.locked += unread(resolved.locked)
+            if !resolved.hasPermitted {
+                plan.missingPositionCount += 1
+                placed.append(position)
+                taken += 1
+                lastTaken = position
+                return
+            }
             guard resolved.isOccupied else { return }
             plan.toQueue += unread(resolved.toQueue)
             plan.satisfied += unread(resolved.satisfied)
@@ -260,20 +266,28 @@ nonisolated enum DownloadPresetResolver {
             taken: taken,
             lastTaken: lastTaken,
             anchorPosition: anchorPosition,
-            firstUnreadExamined: firstUnreadExamined
+            firstUnreadExamined: firstUnreadExamined,
+            includeUnresolvedPositions: includesMissing && selectionResolution != nil
         )
 
         if ordering.confidence == .ambiguous { plan.issues.insert(.orderingAmbiguous) }
         if !plan.locked.isEmpty { plan.issues.insert(.lockedGap) }
+        if plan.missingPositionCount > 0 { plan.issues.insert(.preferredUnavailable) }
         if !plan.damaged.isEmpty { plan.issues.insert(.damagedCopies) }
         if plan.toQueue.isEmpty { plan.issues.insert(.nothingToDo) }
         if hasAlternativeUploads(rows: catalogRows, positions: plan.toQueue + plan.satisfied + plan.damaged) {
             plan.issues.insert(.alternativeUploads)
         }
 
+        let usesFallback = plan.toQueue.contains { index in
+            guard case .preferred = selection else { return false }
+            return (selectionResolution?.rank(
+                scanlator: catalogRows[index].facts.scanlator, groupID: catalogRows[index].facts.scanlatorID
+            ) ?? 0) > 0
+        }
         // The preview rules: any issue but nothingToDo, a large Unread or All, or a very large batch.
         let isBulk = preset == .unread || preset == .all
-        plan.requiresPreview = !plan.issues.subtracting([.nothingToDo]).isEmpty
+        plan.requiresPreview = usesFallback || !plan.issues.subtracting([.nothingToDo]).isEmpty
             || (isBulk && plan.toQueue.count > largeBatchThreshold)
             || plan.toQueue.count > previewCeiling
         return plan.map { catalog[$0] }
@@ -312,8 +326,11 @@ nonisolated enum DownloadPresetResolver {
         taken: Int,
         lastTaken: Int?,
         anchorPosition: Int?,
-        firstUnreadExamined: Int?
+        firstUnreadExamined: Int?,
+        includeUnresolvedPositions: Bool
     ) -> [Int] {
+        // An unresolved strict group identity is not permission to offer a whole replacement catalog.
+        guard includeUnresolvedPositions || positions.contains(where: \.hasPermitted) else { return [] }
         // Order over every position, permitted or not: a range needs both kinds.
         let fullOrder = ChapterReadingOrder.order(
             positions: positions.map { position in position.rankedMembers.map { rows[$0].facts } }
@@ -360,14 +377,22 @@ nonisolated enum DownloadPresetResolver {
             return result
         }
 
-        // Unread and All: positions between the first and last one taken.
+        // Preferred policies retain unresolved positions for one aggregate review. Legacy strict sets
+        // retain their existing window: a wholly missing set never offers another group's catalog.
         let placedOffsets = placed.map { offsets[$0] }
-        guard let lower = placedOffsets.min(), let upper = placedOffsets.max() else { return [] }
+        let lower = placedOffsets.min()
+        let upper = placedOffsets.max()
         for position in fullOrder {
-            let candidateRows = candidates(position)
-            guard !candidateRows.isEmpty else { continue }
-            if placedSet.contains(position) || (offsets[position] > lower && offsets[position] < upper) {
-                result += candidateRows
+            let inWindow: Bool
+            if includeUnresolvedPositions {
+                inWindow = true
+            } else if let lower, let upper {
+                inWindow = (lower...upper).contains(offsets[position])
+            } else {
+                inWindow = false
+            }
+            if inWindow, preset == .all || !isRead[position] {
+                result += candidates(position)
             }
         }
         return result

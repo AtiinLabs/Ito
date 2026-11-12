@@ -218,11 +218,24 @@ final class DownloadCenter: ObservableObject {
         try await dbPool.read { db in try SeriesEditionPreferenceRecord.selection(for: media, in: db) }
     }
 
+    /// The source's current epoch: a settings or credential change rotates it. A reviewed policy choice is
+    /// stored only while the epoch it was reviewed under is still current.
+    func editionPreferenceEpoch(for pluginID: String) throws -> String {
+        try captureEpoch(pluginID)
+    }
+
     /// Remembers the scanlators chosen for a series, replacing an earlier choice. Throws when it could not
-    /// be written.
-    func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity) async throws {
+    /// be written, when the series is no longer saved, or when `sourceEpoch` is no longer the source's.
+    func setEditionPreference(
+        _ selection: EditionSelection,
+        for media: MediaIdentity,
+        sourceEpoch: String
+    ) async throws {
         let now = Date()
         try await dbPool.write { db in
+            guard try PluginCompletionScope.current(pluginID: media.pluginId, in: db) == sourceEpoch else {
+                throw SeriesEditionPreferenceError.sourceChanged
+            }
             let candidates = ImportedMediaIdentity.localItemIDs(
                 pluginId: media.pluginId,
                 canonicalMediaId: media.canonicalMediaId,

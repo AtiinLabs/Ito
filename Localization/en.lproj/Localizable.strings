@@ -1,3 +1,40 @@
+/* Select one source-ranked visible upload per proven reading position, not every upload. */
+"Follow the source's preferred edition" = "Follow the source's preferred edition";
+/* Choose the translation group normally used for this series. */
+"Choose a preferred group" = "Choose a preferred group";
+/* Legacy strict allowed set; its order is not automatic fallback authorization. */
+"Selected groups only" = "Selected groups only";
+/* Advanced action: download every exact upload, including multiple translations of one chapter. */
+"Download all editions" = "Download all editions";
+/* Leave positions unavailable when the preferred group is missing. */
+"Strict selection" = "Strict selection";
+/* Require batch consent before using another group. */
+"Ask before switching" = "Ask before switching";
+/* Use only the explicitly ordered fallback groups. */
+"Use approved groups in order" = "Use approved groups in order";
+/* Advanced explicit permission to use any eligible visible group. */
+"Any available group" = "Any available group";
+/* Fallback policy for a missing preferred edition. */
+"When unavailable" = "When unavailable";
+/* The first selected group is the primary edition choice. */
+"Preferred group" = "Preferred group";
+/* Move an approved fallback group earlier in priority order. */
+"Move earlier" = "Move earlier";
+/* Approved fallback has no unlisted final fallback. */
+"Only these groups can be used automatically, in the order shown." = "Only these groups can be used automatically, in the order shown.";
+/* Some positions are not currently offered by the preferred group. */
+"Preferred edition unavailable" = "Preferred edition unavailable";
+/* Tick exact alternatives below for this batch only; does not remember fallback permission. */
+"Use selected alternatives this time" = "Use selected alternatives this time";
+/* Open the explicit ordered fallback policy editor, with optional Remember. */
+"Edit fallback order" = "Edit fallback order";
+/* Confirm only the permitted available chapters and leave missing positions unresolved. */
+"Keep selection" = "Keep selection";
+/* Compatibility key-or-number read markers, not offline coverage. */
+"Chapters marked read are skipped, including other editions with the same chapter number." = "Chapters marked read are skipped, including other editions with the same chapter number.";
+/* Edition policy save failed. Batch-only authorization requires a separate explicit confirmation. */
+"Nothing was queued. Try again, or turn off Remember to use this choice for this batch only." = "Nothing was queued. Try again, or turn off Remember to use this choice for this batch only.";
+
 /* Subtitle track: language, burned into the video */
 "%@ (Hardsub)" = "%@ (Hardsub)";
 
