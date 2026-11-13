@@ -422,10 +422,18 @@ public class UpdateManager: ObservableObject {
                 // A source that refuses or fails a request can still answer with an empty list.
                 // That is not evidence its chapters are gone, and taking it as the new baseline
                 // would report every chapter as new on the next real answer.
-                let refusedEmpty = update.freshCount == 0 && (oldCount ?? 0) > 0
-                let delta = oldCount.map { max(0, update.freshCount - $0) } ?? 0
+                let refusedEmpty = update.freshCount <= 0
+                    && (dbItem.effectiveType != .anime || (oldCount ?? 0) > 0)
+                let matchedBasis = dbItem.effectiveType == .anime
+                    || dbItem.knownChapterCountBasis == .exactChapterKeys
+                let delta = !refusedEmpty && matchedBasis
+                    ? oldCount.map { max(0, update.freshCount - $0) } ?? 0
+                    : 0
                 if !refusedEmpty {
                     dbItem.knownChapterCount = update.freshCount
+                    if dbItem.effectiveType != .anime {
+                        dbItem.knownChapterCountBasis = .exactChapterKeys
+                    }
                     if let status = update.status {
                         dbItem.status = status
                     }
@@ -493,6 +501,7 @@ public class UpdateManager: ObservableObject {
     }
 
     public func advanceBaseline(media: MediaIdentity, knownChapterCount: Int) async throws {
+        guard knownChapterCount > 0 else { return }
         try await dbPool.write { db in
             let candidateIDs = ImportedMediaIdentity.localItemIDs(
                 pluginId: media.pluginId,
@@ -504,6 +513,9 @@ public class UpdateManager: ObservableObject {
                       item.pluginId == media.pluginId,
                       item.effectiveType == media.mediaKind else { continue }
                 item.knownChapterCount = knownChapterCount
+                if item.effectiveType != .anime {
+                    item.knownChapterCountBasis = .exactChapterKeys
+                }
                 try item.update(db)
                 break
             }

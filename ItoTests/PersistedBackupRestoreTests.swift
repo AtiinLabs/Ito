@@ -33,6 +33,7 @@ struct PersistedBackupRestoreTests {
             #expect(row.pluginType == fixture.kind)
             #expect(row.rawPayload == (try fixture.payload()))
             #expect(row.knownChapterCount == (fixture.kind == .manga ? 5 : fixture.kind == .novel ? 4 : 3))
+            #expect(row.knownChapterCountBasis == nil, "Legacy backups must not claim the exact-key basis")
             PersistedExpectations.check(try await JSONDeferredPluginPayloadDecoder().decode(row), fixture)
         }
         #expect(rows["manga-abi1"]?.anilistId == 4242)
@@ -72,6 +73,57 @@ struct PersistedBackupRestoreTests {
             }
         }
         #expect(counts == [0, 0, 0])
+    }
+
+    @Test(arguments: [BackupRestoreMode.merge, .wipe])
+    func exactCountBasisRoundTripsThroughExportAndRestore(mode: BackupRestoreMode) async throws {
+        let source = try TestDatabase()
+        defer { source.cleanup() }
+        try await source.dbPool.write { db in
+            // An installed app has every catalogued preference; export validates the complete catalog.
+            for entry in AppPreferenceCatalogEntry.allCases {
+                try AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON).insert(db)
+            }
+        }
+        let library = LibraryManager(dbPool: source.dbPool)
+        let itemID = try await library.saveMangaDurably(
+            manga: Manga(key: "editions", title: "Editions", chapters: [
+                Chapter(key: "a", chapter: 1), Chapter(key: "b", chapter: 1)
+            ]),
+            pluginId: "source"
+        )
+        let url = source.databaseURL.deletingLastPathComponent().appendingPathComponent("basis.itobackup")
+        try await BackupExportOperation(
+            dbPool: source.dbPool, sourceDatabaseURL: source.databaseURL, readinessGate: {}
+        ).export(to: url)
+        let target = try TestDatabase()
+        defer { target.cleanup() }
+        let manager = try Self.makeManager(target: target)
+        _ = try await manager.restoreBackup(from: url, mode: mode)
+        let restored = try await target.dbPool.read { db in
+            try #require(try Ito.LibraryItem.fetchOne(db, key: itemID))
+        }
+        #expect(restored.knownChapterCount == 2)
+        #expect(restored.knownChapterCountBasis == .exactChapterKeys)
+    }
+
+    @Test func legacyAndUnknownCountBasisDecodeConservatively() throws {
+        let item = Ito.LibraryItem(
+            id: "legacy", title: "Legacy", coverUrl: nil, pluginId: "source",
+            isAnime: false, pluginType: .manga, rawPayload: Data(), anilistId: nil,
+            knownChapterCount: 4, knownChapterCountBasis: .exactChapterKeys
+        )
+        let encoded = try JSONEncoder().encode(item)
+        #expect(try JSONDecoder().decode(Ito.LibraryItem.self, from: encoded).knownChapterCountBasis == .exactChapterKeys)
+        var fields = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        fields.removeValue(forKey: "knownChapterCountBasis")
+        let legacy = try JSONDecoder().decode(Ito.LibraryItem.self, from: JSONSerialization.data(withJSONObject: fields))
+        #expect(legacy.knownChapterCount == 4)
+        #expect(legacy.knownChapterCountBasis == nil)
+        fields["knownChapterCountBasis"] = "future-identity"
+        let unknown = try JSONDecoder().decode(Ito.LibraryItem.self, from: JSONSerialization.data(withJSONObject: fields))
+        #expect(unknown.knownChapterCountBasis == .unknown)
+        #expect(unknown != item)
     }
 
     // MARK: - Helpers

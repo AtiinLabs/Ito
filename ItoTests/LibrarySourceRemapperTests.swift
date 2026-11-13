@@ -30,7 +30,8 @@ struct LibrarySourceRemapperTests {
             status: "reading",
             lastCheckedAt: checkedAt,
             lastUpdatedAt: updatedAt,
-            knownChapterCount: 17
+            knownChapterCount: 17,
+            knownChapterCountBasis: .exactChapterKeys
         )
         let untouched = LibraryItem(
             id: untouchedId,
@@ -144,6 +145,7 @@ struct LibrarySourceRemapperTests {
             #expect(destination.lastCheckedAt == checkedAt)
             #expect(destination.lastUpdatedAt == updatedAt)
             #expect(destination.knownChapterCount == source.knownChapterCount)
+            #expect(destination.knownChapterCountBasis == source.knownChapterCountBasis)
             #expect(persistedUntouched == untouched)
 
             let links = try ItemCategoryLink
