@@ -21,6 +21,7 @@ nonisolated public struct BackupExportOperation: Sendable {
         case invalidCapabilities
         case integrityCheckFailed(String)
         case foreignKeyCheckFailed
+        case invalidThumbnail
     }
 
     public enum SafetyError: Error, Equatable, Sendable {
@@ -52,7 +53,6 @@ nonisolated public struct BackupExportOperation: Sendable {
         DownloadSuppressionRecord.databaseTableName,
         DownloadStoreRecord.databaseTableName,
         LibrarySnapshotStateRecord.databaseTableName,
-        LibraryCoverThumbnailRecord.databaseTableName,
         SeriesEditionPreferenceRecord.databaseTableName
     ]
 
@@ -93,8 +93,6 @@ nonisolated public struct BackupExportOperation: Sendable {
             "Installation-local binding between the database and its offline media directory.",
         LibrarySnapshotStateRecord.databaseTableName:
             "Installation-local freshness of saved series details; a restored payload has unknown age.",
-        LibraryCoverThumbnailRecord.databaseTableName:
-            "Installation-local cover thumbnails regenerated from the saved cover address.",
         SeriesEditionPreferenceRecord.databaseTableName:
             "Installation-local scanlator choices for downloads; joins backups with automatic download rules."
     ]
@@ -105,6 +103,7 @@ nonisolated public struct BackupExportOperation: Sendable {
             LibraryItem.databaseTableName,
             ItemCategoryLink.databaseTableName
         ],
+        .savedLibraryThumbnails: [LibraryCoverThumbnailRecord.databaseTableName],
         .readingHistory: [ReadingHistoryRecord.databaseTableName],
         .sourceMappings: [SourceMappingRecord.databaseTableName],
         .scalarAppPreferences: [AppPreference.databaseTableName],
@@ -177,7 +176,7 @@ nonisolated public struct BackupExportOperation: Sendable {
         stagingDatabase = database
         try dbPool.backup(to: database)
         try faultHandler(.didCreateSnapshot)
-
+        try Self.selectPortableThumbnails(in: database)
         let expectedCounts = try await database.read { db in
             try expectedDurableCounts(db)
         }
@@ -298,6 +297,8 @@ nonisolated public struct BackupExportOperation: Sendable {
             }
             try Self.validateScalarPreferences(in: db)
 
+            try Self.validateThumbnails(in: db)
+
             let metadata = try BackupMetadataRecord.fetchAll(db)
             guard metadata.count == 1,
                   metadata[0].id == 1,
@@ -368,6 +369,58 @@ nonisolated public struct BackupExportOperation: Sendable {
             }
         }
         return counts
+    }
+
+    /// Keeps, newest first, the thumbnails that suit a backup until the byte budget is spent, and drops the
+    /// rest from the copy. A thumbnail is a cache of its cover, so one that is malformed, stale or over budget
+    /// is left out rather than failing the backup; this runs before the expected counts are taken.
+    private static func selectPortableThumbnails(in database: DatabaseQueue) throws {
+        try database.write { db in
+            let coverURLs = try coverURLsByItemID(in: db)
+            var keptBytes = 0
+            var dropped: [String] = []
+            let thumbnails = try LibraryCoverThumbnailRecord.fetchCursor(
+                db,
+                sql: "SELECT * FROM libraryCoverThumbnail ORDER BY storedAt DESC, libraryItemId"
+            )
+            while let thumbnail = try thumbnails.next() {
+                let fits = keptBytes + thumbnail.imageData.count
+                    <= LibraryCoverThumbnailRecord.maximumPortableAggregateByteCount
+                if fits, thumbnail.isPortable(coverUrl: coverURLs[thumbnail.libraryItemId]) {
+                    keptBytes += thumbnail.imageData.count
+                } else {
+                    dropped.append(thumbnail.libraryItemId)
+                }
+            }
+            _ = try LibraryCoverThumbnailRecord.deleteAll(db, keys: dropped)
+        }
+    }
+
+    private static func validateThumbnails(in db: Database) throws {
+        let coverURLs = try coverURLsByItemID(in: db)
+        var bytes = 0
+        let thumbnails = try LibraryCoverThumbnailRecord.fetchCursor(db)
+        while let thumbnail = try thumbnails.next() {
+            bytes += thumbnail.imageData.count
+            guard bytes <= LibraryCoverThumbnailRecord.maximumPortableAggregateByteCount,
+                  thumbnail.isPortable(coverUrl: coverURLs[thumbnail.libraryItemId])
+            else {
+                throw ValidationError.invalidThumbnail
+            }
+        }
+    }
+
+    /// Only the cover address of each Library item: a thumbnail is checked against it, so the items' saved
+    /// payloads are never loaded for this.
+    private static func coverURLsByItemID(in db: Database) throws -> [String: String] {
+        var coverURLs: [String: String] = [:]
+        let rows = try Row.fetchCursor(db, sql: "SELECT id, coverUrl FROM libraryItem WHERE coverUrl IS NOT NULL")
+        while let row = try rows.next() {
+            let id: String = row["id"]
+            let coverUrl: String = row["coverUrl"]
+            coverURLs[id] = coverUrl
+        }
+        return coverURLs
     }
 
     private static func validateScalarPreferences(in db: Database) throws {

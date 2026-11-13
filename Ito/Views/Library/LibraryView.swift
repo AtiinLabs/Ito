@@ -642,6 +642,7 @@ struct LibraryItemView: View {
                         )
                         .padding(4)
                         .transition(.scale.combined(with: .opacity))
+                        .accessibilityLabel(updateBadgeAccessibilityLabel)
                 }
             }
         }
