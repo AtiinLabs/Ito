@@ -393,7 +393,8 @@ struct LibraryDownloadIndicatorTests {
         #expect(harness.root.itemIDs == ["series-2"])
         #expect(try await fixture.offline.rowCount("downloadedChapter") == 1)
         #expect(try await fixture.offline.rowCount("downloadJob") == 0)
-        #expect(try await fixture.offline.rowCount("downloadSuppression") == 2)
+        // Explicit deletion also suppresses queued-only a3, so automation cannot resurrect it.
+        #expect(try await fixture.offline.rowCount("downloadSuppression") == 3)
         let remaining = try await store.verifiedEdition(for: OfflineChapterEdition(
             pluginId: DownloadWorkerFixture.plugin, mediaKind: .manga, canonicalMediaId: "series-2", chapterKey: "b1"
         ))
