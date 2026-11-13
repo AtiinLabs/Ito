@@ -174,13 +174,22 @@ final class ReaderGroupSwitchConsentTests: XCTestCase {
         XCTAssertEqual(subject.loader.callCount(for: "b"), 1)
     }
 
-    func testIDComparisonNeverUsesSharedLabelNumberOrTitle() {
-        XCTAssertFalse(ReaderContinuationGroup(a).matches(ReaderContinuationGroup(Chapter(
+    func testIDComparisonNeverUsesSharedLabelNumberOrTitleAndLegacyNameRuleIsSymmetric() {
+        let sameNameOtherID = ReaderContinuationGroup(Chapter(
             key: "other", title: a.title, chapter: 1, scanlator: "A", scanlatorID: "different"
-        ))))
-        XCTAssertFalse(ReaderContinuationGroup(a).matches(ReaderContinuationGroup(Chapter(key: "idless", scanlator: "A"))))
+        ))
+        XCTAssertFalse(ReaderContinuationGroup(a).matches(sameNameOtherID))
+        XCTAssertFalse(sameNameOtherID.matches(ReaderContinuationGroup(a)))
+        // Without an ID on either side the legacy name decides, the same in both directions.
+        let idless = ReaderContinuationGroup(Chapter(key: "idless", scanlator: "A"))
+        XCTAssertTrue(ReaderContinuationGroup(a).matches(idless))
+        XCTAssertTrue(idless.matches(ReaderContinuationGroup(a)))
+        let idlessOtherName = ReaderContinuationGroup(Chapter(key: "idless", scanlator: "Renamed"))
+        XCTAssertFalse(ReaderContinuationGroup(a).matches(idlessOtherName))
+        XCTAssertFalse(idlessOtherName.matches(ReaderContinuationGroup(a)))
         XCTAssertTrue(ReaderContinuationGroup(id: nil, name: "Legacy").matches(.init(id: nil, name: "Legacy")))
         XCTAssertFalse(ReaderContinuationGroup(id: nil, name: "Legacy").matches(.init(id: nil, name: "Renamed")))
+        XCTAssertTrue(ReaderContinuationGroup(id: nil, name: "").matches(.init(id: nil, name: nil)))
     }
 
     func testHistoryReferenceExactKeyWinsRenameAndMissingExactKeyRequiresUniqueRecordedID() {
@@ -304,5 +313,192 @@ final class ReaderGroupSwitchConsentTests: XCTestCase {
             boundaryLabel(manga([a, other, renamed], enabled: false).viewModel.boundaryAfter(a)),
             "chapter:x"
         )
+    }
+
+    // MARK: - Mid-session toggling, saved-only epoch, duplicate History uploads
+
+    func testTogglingOnMidSessionDropsLoadedAheadChaptersAndOffLetsThemLoadAgain() async throws {
+        let subject = manga([a, b], enabled: false, viewer: .Vertical)
+        subject.loader.enqueue(.pages(pages), for: "a")
+        subject.loader.enqueue(.pages(pages), for: "b")
+        subject.loader.enqueue(.pages(pages), for: "b")
+        subject.viewModel.start()
+        await subject.viewModel.waitForTestingOperations()
+        subject.viewModel.appendNextChapter()
+        await subject.viewModel.waitForTestingOperations()
+        XCTAssertEqual(subject.viewModel.segments.map(\.chapter.key), ["a", "b"])
+
+        subject.viewModel.setAskBeforeSwitchingGroups(true)
+        await subject.viewModel.waitForTestingOperations()
+        XCTAssertEqual(subject.viewModel.segments.map(\.chapter.key), ["a"], "Unapproved ahead chapters are dropped")
+        subject.viewModel.appendNextChapter()
+        await subject.viewModel.waitForTestingOperations()
+        XCTAssertEqual(subject.loader.callCount(for: "b"), 1, "Nothing loads across the group while on")
+
+        subject.viewModel.setAskBeforeSwitchingGroups(false)
+        await subject.viewModel.waitForTestingOperations()
+        subject.viewModel.appendNextChapter()
+        await subject.viewModel.waitForTestingOperations()
+        XCTAssertEqual(subject.viewModel.segments.map(\.chapter.key), ["a", "b"])
+        XCTAssertEqual(subject.loader.callCount(for: "b"), 2)
+    }
+
+    func testTogglingMidSessionDismissesAPendingPromptAndRestoresOrStopsPagedPrefetch() async throws {
+        let subject = manga([a, b], enabled: false)
+        subject.loader.enqueue(.pages(pages), for: "a")
+        subject.loader.enqueue(.pages(pages), for: "b")
+        subject.viewModel.start()
+        await subject.viewModel.waitForTestingOperations()
+        XCTAssertEqual(subject.loader.callCount(for: "b"), 1)
+        XCTAssertNotNil(subject.viewModel.prefetchedChapters["b"])
+
+        subject.viewModel.setAskBeforeSwitchingGroups(true)
+        await subject.viewModel.waitForTestingOperations()
+        XCTAssertNil(subject.viewModel.prefetchedChapters["b"], "A neighbor needing consent is no longer held")
+        subject.viewModel.goToNextChapter()
+        XCTAssertNotNil(subject.viewModel.groupSwitchConsent)
+
+        subject.viewModel.setAskBeforeSwitchingGroups(false)
+        XCTAssertNil(subject.viewModel.groupSwitchConsent, "Turning it off dismisses the prompt")
+        await subject.viewModel.waitForTestingOperations()
+        subject.viewModel.goToNextChapter()
+        XCTAssertEqual(subject.viewModel.currentChapter.key, "b")
+    }
+
+    func testNovelTogglingMidSessionDropsAheadChaptersDismissesPromptAndOffAllowsThemAgain() async throws {
+        let subject = novel([a, b], enabled: false)
+        subject.loader.enqueue(.pages(pages), for: "a")
+        subject.loader.enqueue(.pages(pages), for: "b")
+        subject.loader.enqueue(.pages(pages), for: "b")
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+        subject.viewModel.loadNextChapter(trigger: .seamless)
+        await subject.viewModel.waitForAllOperationsForTesting()
+        XCTAssertEqual(subject.viewModel.loadedChapters.map(\.chapter.key), ["a", "b"])
+
+        subject.viewModel.setAskBeforeSwitchingGroups(true)
+        await subject.viewModel.waitForAllOperationsForTesting()
+        XCTAssertEqual(subject.viewModel.loadedChapters.map(\.chapter.key), ["a"])
+        subject.viewModel.goToNextChapter()
+        XCTAssertNotNil(subject.viewModel.groupSwitchConsent)
+
+        subject.viewModel.setAskBeforeSwitchingGroups(false)
+        XCTAssertNil(subject.viewModel.groupSwitchConsent)
+        await subject.viewModel.waitForAllOperationsForTesting()
+        subject.viewModel.loadNextChapter(trigger: .seamless)
+        await subject.viewModel.waitForAllOperationsForTesting()
+        XCTAssertEqual(subject.viewModel.loadedChapters.map(\.chapter.key), ["a", "b"])
+    }
+
+    func testSavedOnlyReaderConsentNeedsAndUsesARealVerifiedEpoch() async throws {
+        let subject = makeMangaReaderSubject(
+            manga: Manga(key: "series", title: "Series", chapters: [a, b]),
+            initialChapter: a, isSavedOnly: true
+        )
+        subject.settings.askBeforeSwitchingGroups = true
+        subject.loader.enqueue(.pages(pages), for: "b")
+        subject.viewModel.goToNextChapter()
+        let pending = try XCTUnwrap(subject.viewModel.groupSwitchConsent)
+        XCTAssertEqual(pending.sourceContext.originatingEpoch, "epoch")
+        subject.viewModel.confirmGroupSwitch(pending.id)
+        XCTAssertEqual(subject.viewModel.currentChapter.key, "b")
+
+        let unverified = makeMangaReaderSubject(
+            manga: Manga(key: "series", title: "Series", chapters: [a, b]),
+            initialChapter: a, isSavedOnly: true
+        )
+        unverified.settings.askBeforeSwitchingGroups = true
+        unverified.progress.originatingEpoch = nil
+        unverified.viewModel.goToNextChapter()
+        unverified.viewModel.confirmGroupSwitch(try XCTUnwrap(unverified.viewModel.groupSwitchConsent).id)
+        XCTAssertEqual(unverified.viewModel.currentChapter.key, "a", "A saved-only series is no exception to a verified scope")
+        XCTAssertEqual(unverified.loader.callCount(for: "b"), 0)
+    }
+
+    func testPromptAndConfirmReadTheScopeAndNeverCaptureIt() async throws {
+        let subject = manga([a, b], enabled: true)
+        let captured = subject.progress.capturedContexts.count
+        subject.viewModel.goToNextChapter()
+        subject.viewModel.confirmGroupSwitch(try XCTUnwrap(subject.viewModel.groupSwitchConsent).id)
+        XCTAssertEqual(subject.progress.capturedContexts.count, captured, "A capture is a database write")
+        XCTAssertEqual(subject.viewModel.currentChapter.key, "b")
+    }
+
+    func testHistoryReferenceWithoutGroupIDAndTwoSameNameUploadsIsUnavailable() {
+        let reference = MediaDetailChapterReference(key: "gone", number: 1, volume: nil, scanlator: "Same")
+        let one = Chapter(key: "one", chapter: 1, scanlator: "Same", scanlatorID: "id-1")
+        let two = Chapter(key: "two", chapter: 1, scanlator: "Same", scanlatorID: "id-2")
+        switch MediaDetailOpenIntent.target(for: reference, in: [one, two]) {
+        case .unavailable: break
+        default: XCTFail("Two same-named uploads without a recorded ID are ambiguous")
+        }
+        switch MediaDetailOpenIntent.target(for: reference, in: [one]) {
+        case .open(let chapter): XCTAssertEqual(chapter.key, "one")
+        default: XCTFail("A single same-named upload is the recorded group's")
+        }
+    }
+
+    func testStaleMangaConsentCannotAuthorizeANewSessionEvenIfThePromptIsDeliveredLate() throws {
+        let subject = manga([a, b], enabled: true)
+        subject.viewModel.goToNextChapter()
+        let stale = try XCTUnwrap(subject.viewModel.groupSwitchConsent)
+        subject.viewModel.disappear()
+        subject.viewModel.appear()
+        // Model a late presentation delivery; keep every other binding current so the session
+        // check, not the absence of a pending prompt, is what must refuse it.
+        subject.viewModel.setGroupSwitchConsent(stale)
+        XCTAssertNotEqual(stale.session, subject.viewModel.sessionID)
+        subject.viewModel.confirmGroupSwitch(stale.id)
+        XCTAssertEqual(subject.viewModel.currentChapter.key, "a")
+        XCTAssertEqual(subject.loader.callCount(for: "b"), 0)
+    }
+
+    func testStaleNovelConsentCannotAuthorizeANewSessionEvenIfThePromptIsDeliveredLate() throws {
+        let subject = novel([a, b], enabled: true)
+        subject.viewModel.goToNextChapter()
+        let stale = try XCTUnwrap(subject.viewModel.groupSwitchConsent)
+        subject.viewModel.disappear()
+        subject.viewModel.appear()
+        subject.viewModel.setGroupSwitchConsent(stale)
+        XCTAssertNotEqual(stale.session, subject.viewModel.sessionID)
+        subject.viewModel.confirmGroupSwitch(stale.id)
+        XCTAssertEqual(subject.viewModel.currentChapter.key, "a")
+        XCTAssertEqual(subject.loader.callCount(for: "b"), 0)
+    }
+    func testNovelEnablingConsentCancelsAnInFlightUnapprovedAppendAndItsLateResultCannotPublish() async {
+        let subject = novel([a, b], enabled: false)
+        subject.loader.enqueue(.pages(pages), for: "a")
+        subject.loader.enqueue(.suspended, for: "b")
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+        subject.viewModel.loadNextChapter(trigger: .seamless)
+        await subject.loader.waitForPendingCount(1, for: "b")
+        subject.viewModel.setAskBeforeSwitchingGroups(true)
+        await subject.viewModel.waitForContinuationSettingForTesting()
+        XCTAssertFalse(subject.viewModel.isLoadingNext)
+        subject.loader.resolveFirst(for: "b", with: .success(pages))
+        await subject.viewModel.waitForAllOperationsForTesting()
+        XCTAssertEqual(subject.viewModel.loadedChapters.map(\.chapter.key), ["a"])
+        XCTAssertNil(subject.viewModel.groupSwitchConsent)
+    }
+
+    func testMangaEnablingConsentCancelsAnInFlightUnapprovedAppendAndItsLateResultCannotPublish() async {
+        let subject = manga([a, b], enabled: false, viewer: .Vertical)
+        subject.loader.enqueue(.pages(pages), for: "a")
+        subject.loader.enqueue(.suspended, for: "b")
+        subject.viewModel.start()
+        await subject.viewModel.waitForTestingOperations()
+        subject.viewModel.appendNextChapter()
+        await subject.loader.waitForPendingCount(1, for: "b")
+        let oldAppend = subject.viewModel.appendTaskForTesting
+        subject.viewModel.setAskBeforeSwitchingGroups(true)
+        // The settings write joins first and retires the suspended append.
+        await subject.viewModel.waitForTestingOperations()
+        XCTAssertFalse(subject.viewModel.loadingNextChapter)
+        subject.loader.resolveFirst(for: "b", with: .success(pages))
+        await oldAppend?.value
+        await subject.viewModel.waitForTestingOperations()
+        XCTAssertEqual(subject.viewModel.segments.map(\.chapter.key), ["a"])
+        XCTAssertNil(subject.viewModel.groupSwitchConsent)
     }
 }

@@ -81,10 +81,11 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             }
             .alert(
                 String(localized: "Switch groups?", comment: "Reader consent title: open one exact upload from another translation group"),
-                isPresented: Binding(get: { viewModel.groupSwitchConsent != nil }, set: { if !$0 { viewModel.cancelGroupSwitch() } }),
+                // The buttons decide: a setter that cancelled could run before Continue's action.
+                isPresented: Binding(get: { viewModel.groupSwitchConsent != nil }, set: { _ in }),
                 presenting: viewModel.groupSwitchConsent
             ) { consent in
-                Button("Continue", role: nil) { viewModel.confirmGroupSwitch(consent.id) }
+                Button(String(localized: "Open This Upload", comment: "Reader consent alert button: opens the one upload from another translation group, for this reading only")) { viewModel.confirmGroupSwitch(consent.id) }
                 Button("Cancel", role: .cancel) { viewModel.cancelGroupSwitch() }
             } message: { consent in
                 Text(consent.message)

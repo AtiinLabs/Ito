@@ -33,19 +33,14 @@ extension MediaDetailOpenIntent {
         }
     }
 
-    /// What to open in `chapters`, given what the series' Resume would open; nil when there is
-    /// nothing to open, such as an empty chapter list.
-    func target<Chapter: ChapterDisplayable>(in chapters: [Chapter], resume: Chapter?) -> Target<Chapter>? {
-        let chapter: Chapter
-        switch self {
-        case .resume:
-            guard let resume else { return nil }
-            chapter = resume
-        case .chapter(let reference):
-            guard let match = chapters.chapter(matching: reference) else { return .unavailable }
-            chapter = match
-        }
-        return chapter.isPaywalled ? .locked : .open(chapter)
+    /// What to open in `chapters` for a recorded chapter. A Resume intent never comes here: it opens
+    /// through the screen's own Resume.
+    static func target<Chapter: ChapterDisplayable>(
+        for reference: MediaDetailChapterReference,
+        in chapters: [Chapter]
+    ) -> Target<Chapter> {
+        guard let match = chapters.chapter(matching: reference) else { return .unavailable }
+        return match.isPaywalled ? .locked : .open(match)
     }
 }
 

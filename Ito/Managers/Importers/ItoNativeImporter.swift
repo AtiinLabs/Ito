@@ -519,11 +519,10 @@ public struct ItoNativeImporter: BackupImporter {
         for capability in backup.capabilities {
             if capability.component == .scalarAppPreferences,
                capability.representation == .representedNonempty {
-                let catalogKeys = Set(AppPreferenceCatalogEntry.allCases.map(\.rawValue))
                 let preferenceKeys = Set(backup.preferences.map(\.key))
-                guard backup.preferences.count == catalogKeys.count,
-                      preferenceKeys == catalogKeys,
-                      Set(backup.representedPreferenceKeys) == catalogKeys else {
+                guard backup.preferences.count == preferenceKeys.count,
+                      AppPreferenceCatalogEntry.isCompleteBackupKeySet(preferenceKeys),
+                      Set(backup.representedPreferenceKeys) == preferenceKeys else {
                     throw invalidCapability(
                         component: .scalarAppPreferences,
                         code: "incompletePreferenceCatalog"

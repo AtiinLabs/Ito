@@ -198,6 +198,18 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
 
     public var materializesDefaultWhenAbsent: Bool { true }
 
+    /// Entries added after the first complete-catalog backups were written are optional in a backup:
+    /// an older backup is still complete for the catalog it was written against. Restore leaves the
+    /// absent entry to the local value (merge) or its default (wipe).
+    public var isRequiredInBackups: Bool { self != .askBeforeSwitchingGroups }
+
+    /// Whether `keys` is a complete scalar-preference set: every required entry, nothing unknown.
+    public static func isCompleteBackupKeySet(_ keys: Set<String>) -> Bool {
+        let catalog = Set(allCases.map(\.rawValue))
+        let required = Set(allCases.filter(\.isRequiredInBackups).map(\.rawValue))
+        return keys.isSubset(of: catalog) && required.isSubset(of: keys)
+    }
+
     public func canonicalJSON(forLegacyValue value: Any) -> Data? {
         guard acceptsLegacyValue(value) else { return nil }
 

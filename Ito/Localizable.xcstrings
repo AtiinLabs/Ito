@@ -928,7 +928,7 @@
 
     },
     "Ask before switching groups" : {
-      "comment" : "Reader setting, off by default: require confirmation before Next or Resume opens another translation group's upload"
+      "comment" : "Reader setting, off by default: require confirmation before Next, Previous or Resume opens another translation group's upload"
     },
     "Ask on Discord" : {
 
@@ -1225,8 +1225,11 @@
     "Continue from %@" : {
 
     },
+    "Continue in Another Group" : {
+      "comment" : "Novel reader button after the last loaded chapter: asks whether to open the next chapter, which belongs to another translation group"
+    },
     "Continue to %@ from %@ for this reading only?" : {
-      "comment" : "Consent to one exact upload. Title and translation group name are untranslated source content. No saved preference or historical link changes.",
+      "comment" : "Reader consent alert message. %1$@ is the chapter title and %2$@ the translation group name, both untranslated source content ('Unnamed group' stands in when the source names none). Opening is for this reading only: no saved preference or history link changes.",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1235,6 +1238,20 @@
           }
         }
       }
+    },
+    "Continue to Chapter %@ from %@ for this reading only?" : {
+      "comment" : "Reader consent alert message for a chapter without a title. %1$@ is the chapter number and %2$@ the translation group name, untranslated source content ('Unnamed group' stands in when the source names none). Opening is for this reading only: no saved preference or history link changes.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Continue to Chapter %1$@ from %2$@ for this reading only?"
+          }
+        }
+      }
+    },
+    "Continue to an unnamed chapter from %@ for this reading only?" : {
+      "comment" : "Reader consent alert message for a chapter with neither title nor number. %1$@ is the translation group name, untranslated source content ('Unnamed group' stands in when the source names none). Opening is for this reading only: no saved preference or history link changes."
     },
     "Cookies, website data and Cloudflare clearance were removed." : {
 
@@ -2517,6 +2534,9 @@
     },
     "Open Settings" : {
 
+    },
+    "Open This Upload" : {
+      "comment" : "Reader consent alert button: opens the one upload from another translation group, for this reading only"
     },
     "Opens the series" : {
       "comment" : "History: accessibility hint of a series row"
@@ -3994,7 +4014,7 @@
 
     },
     "Unnamed group" : {
-      "comment" : "Reader consent: the source supplies no translation group name"
+      "comment" : "Reader consent: shown in place of the group name when the source supplies none"
     },
     "Unread/Unwatched" : {
 

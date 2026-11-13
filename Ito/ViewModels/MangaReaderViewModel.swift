@@ -14,14 +14,14 @@ final class MangaReaderViewModel: ObservableObject {
     @Published private(set) var loadPhase: MangaReaderLoadPhase = .idle
     @Published private(set) var overrideViewer: Manga.Viewer = .Default
     @Published private(set) var preloadImageCount: Int
-    @Published var groupSwitchConsent: ReaderGroupSwitchConsent<Manga.Chapter>?
+    @Published private(set) var groupSwitchConsent: ReaderGroupSwitchConsent<Manga.Chapter>?
     var askBeforeSwitchingGroups: Bool { dependencies.settings.askBeforeSwitchingGroups }
 
     @Published private(set) var pagedPages: [Page] = [] {
         didSet { retainImageRequestsForChapterWindow() }
     }
     @Published private(set) var pagedIndex = 0
-    @Published var prefetchedChapters: [String: [Page]] = [:] {
+    @Published private(set) var prefetchedChapters: [String: [Page]] = [:] {
         didSet { retainImageRequestsForChapterWindow() }
     }
 
@@ -53,7 +53,7 @@ final class MangaReaderViewModel: ObservableObject {
     let imageSession: ReaderPageImageSession
     let mediaIdentity: MediaIdentity
     /// Captured once per reader session; every chapter in the session shares it.
-    private let completionContext: PluginCompletionContext
+    let completionContext: PluginCompletionContext
 
     private(set) var isActive = true
     private var hasPresentedPresence = false
@@ -380,6 +380,15 @@ final class MangaReaderViewModel: ObservableObject {
         }
     }
 
+    func setGroupSwitchConsent(_ consent: ReaderGroupSwitchConsent<Manga.Chapter>?) { groupSwitchConsent = consent }
+
+    /// Opens the one neighbor the user approved, in the reader's current mode.
+    func openApprovedGroupSwitch(_ chapter: Manga.Chapter, opensAtEnd: Bool) {
+        if isPaged { pagedGoToChapter(chapter, opensAtEnd: opensAtEnd) } else { continuousGoToChapter(chapter) }
+    }
+
+    func cachePrefetchedChapter(_ pages: [Page], for key: String) { prefetchedChapters[key] = pages }
+
     func setAskBeforeSwitchingGroups(_ value: Bool) {
         groupSwitchConsent = nil
         let settings = dependencies.settings
@@ -473,7 +482,7 @@ final class MangaReaderViewModel: ObservableObject {
         }
     }
 
-    func pagedGoToChapter(_ chapter: Manga.Chapter, opensAtEnd: Bool = false) {
+    private func pagedGoToChapter(_ chapter: Manga.Chapter, opensAtEnd: Bool = false) {
         invalidateContentOperations()
         changeCurrentChapter(to: chapter)
         if let cached = prefetchedChapters[chapter.key] {
@@ -496,7 +505,7 @@ final class MangaReaderViewModel: ObservableObject {
         }
     }
 
-    func continuousGoToChapter(_ chapter: Manga.Chapter) {
+    private func continuousGoToChapter(_ chapter: Manga.Chapter) {
         // Already loaded: scroll to it rather than throwing the loaded chapters away.
         if let first = flatPages.first(where: { $0.chapter.key == chapter.key }) {
             scrollTarget = MangaScrollRequest(pageID: first.id, animated: false)
@@ -1106,7 +1115,9 @@ final class MangaReaderViewModel: ObservableObject {
     }
 
 #if DEBUG
+    var appendTaskForTesting: Task<Void, Never>? { appendTask }
     func waitForTestingOperations() async {
+        await settingsWriteTask?.value
         await mainLoadTask?.value
         await adjacentPrefetchTask?.value
         await appendTask?.value

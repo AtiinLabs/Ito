@@ -6,8 +6,9 @@ import ito_runner
 /// starting a load that must fail. Bound to one series.
 @MainActor
 protocol ReaderOfflineAvailability: AnyObject {
-    /// Whether offline chapters exist on this build. When false the reader behaves as it did before they
-    /// existed: nothing it shows or does changes with stored copies or the network.
+    /// Whether offline chapters exist on this build. When false, stored copies and the network change
+    /// nothing a reader shows or does, with one exception: a source lock (`locked`) is still reported
+    /// as a boundary instead of ending the reader.
     var isAvailable: Bool { get }
     /// Whether the system reports no network.
     var isOffline: Bool { get }
@@ -26,7 +27,6 @@ final class ReaderOfflineContext {
     private let isSavedOnly: Bool
     private let downloadedCopy: (any DownloadedCopyReopening)?
     private var subscription: AnyCancellable?
-    var isLocalOnly: Bool { isSavedOnly }
 
     init(
         availability: any ReaderOfflineAvailability = UnavailableReaderOfflineAvailability(),
@@ -82,8 +82,9 @@ final class ReaderOfflineContext {
     }
 }
 
-/// No offline store: nothing is verified, the device is never offline, and readers behave as they did
-/// before downloads existed.
+/// No offline store: nothing is verified and the device is never offline, so stored copies and the
+/// network change nothing. A reader keeps its earlier behavior at a neighbor of the other format
+/// (it ends there), but a source lock is still reported as a lock rather than as the end.
 @MainActor
 final class UnavailableReaderOfflineAvailability: ReaderOfflineAvailability {
     let isAvailable = false

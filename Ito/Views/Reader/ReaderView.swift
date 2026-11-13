@@ -51,10 +51,11 @@ struct ReaderView: View {
         }
         .alert(
             String(localized: "Switch groups?", comment: "Reader consent title: open one exact upload from another translation group"),
-            isPresented: Binding(get: { viewModel.groupSwitchConsent != nil }, set: { if !$0 { viewModel.cancelGroupSwitch() } }),
+            // The buttons decide: a setter that cancelled could run before Continue's action.
+            isPresented: Binding(get: { viewModel.groupSwitchConsent != nil }, set: { _ in }),
             presenting: viewModel.groupSwitchConsent
         ) { consent in
-            Button("Continue", role: nil) { viewModel.confirmGroupSwitch(consent.id) }
+            Button(String(localized: "Open This Upload", comment: "Reader consent alert button: opens the one upload from another translation group, for this reading only")) { viewModel.confirmGroupSwitch(consent.id) }
             Button("Cancel", role: .cancel) { viewModel.cancelGroupSwitch() }
         } message: { consent in
             Text(consent.message)
@@ -245,6 +246,7 @@ struct ReaderView: View {
         .frame(maxWidth: .infinity, minHeight: 400, maxHeight: .infinity, alignment: .center)
         .padding(40)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(notice.requestsGroupConsent ? .isButton : [])
         .contentShape(Rectangle())
         .onTapGesture {
             if notice.requestsGroupConsent {
@@ -339,7 +341,7 @@ struct ReaderSettingsView: View {
                 Section {
                     Toggle(isOn: $askBeforeSwitchingGroups) {
                         Text("Ask before switching groups",
-                             comment: "Reader setting, off by default: require confirmation before Next or Resume opens another translation group's upload")
+                             comment: "Reader setting, off by default: require confirmation before Next, Previous or Resume opens another translation group's upload")
                     }
                 }
 

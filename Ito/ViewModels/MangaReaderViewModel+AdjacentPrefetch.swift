@@ -58,7 +58,7 @@ extension MangaReaderViewModel {
                         )
                         return
                     }
-                    self?.prefetchedChapters[chapter.key] = ReaderPageOrdering.ascending(pages)
+                    self?.cachePrefetchedChapter(ReaderPageOrdering.ascending(pages), for: chapter.key)
                 } catch {
                     hadFailure = true
                 }

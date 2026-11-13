@@ -92,6 +92,78 @@ extension MediaDetailViewModelTests {
         guard case .pages(_, _, _, _, let chapter) = subject.viewModel.readerDestination else { return XCTFail("Expected historical group's reader") }
         XCTAssertEqual(chapter.key, "renamed")
     }
+
+    func testResumeWhoseRecordedGroupUploadIsLockedPresentsTheLockedMessageNotAPrompt() async {
+        let history = SuspendedContinuationHistory()
+        let base = Chapter(key: "base", chapter: 1, scanlator: "Other", scanlatorID: "other-id")
+        let open = Chapter(key: "open", chapter: 2, scanlator: "Other", scanlatorID: "other-id")
+        var locked = Chapter(key: "locked", chapter: 2, scanlator: "Recorded", scanlatorID: "recorded-id")
+        locked.paywalled = true
+        let subject = makeMangaSubject(media: manga(chapters: [base, open, locked]), history: history)
+        subject.settings.askBeforeSwitchingGroups = true
+        let identity = subject.viewModel.mediaIdentity
+        subject.progress.readChapterIDs[identity] = ["base"]
+        subject.progress.lastRead[identity] = "unlisted-last"
+        subject.viewModel.resumeReading(continuation: true)
+        await history.waitForRequest()
+        XCTAssertTrue(subject.messages.messages.isEmpty, "The earlier candidate was open: the History lookup decides")
+        let response = subject.viewModel.continuationTaskForTesting
+        history.resolve(.init(id: "recorded-id", name: "Recorded"))
+        await response?.value
+        XCTAssertEqual(subject.messages.messages, [.chapterLocked(isEpisode: false)])
+        XCTAssertNil(subject.viewModel.groupSwitchConsent)
+        XCTAssertNil(subject.viewModel.readerDestination)
+    }
+
+    func testHistoryResumeIntentWithTheSettingOnOpensTheSameGroupAndAsksForAnotherOne() async throws {
+        let a1 = Chapter(key: "a1", chapter: 1, scanlator: "A", scanlatorID: "a-id")
+        let a2 = Chapter(key: "a2", chapter: 2, scanlator: "A", scanlatorID: "a-id")
+        let b2 = Chapter(key: "b2", chapter: 2, scanlator: "B", scanlatorID: "b-id")
+        for (group, expectsPrompt) in [("A", false), ("C", true)] {
+            let media = manga(chapters: [a1, a2, b2])
+            let subject = makeMangaSubject(
+                media: media,
+                openIntent: .resume(preferredScanlator: group, preferredScanlatorID: group.lowercased() + "-id")
+            )
+            subject.settings.askBeforeSwitchingGroups = true
+            let identity = subject.viewModel.mediaIdentity
+            subject.progress.readChapterIDs[identity] = ["a1"]
+            subject.progress.lastRead[identity] = "elsewhere"
+            subject.route.loadResponses = [.value(media)]
+            await subject.viewModel.refresh()
+            await subject.viewModel.waitForContinuationForTesting()
+            if expectsPrompt {
+                XCTAssertNil(subject.viewModel.readerDestination, "Another group waits for consent")
+                subject.viewModel.confirmGroupSwitch(try XCTUnwrap(subject.viewModel.groupSwitchConsent).id)
+            } else {
+                XCTAssertNil(subject.viewModel.groupSwitchConsent)
+            }
+            guard case .pages(_, _, _, _, let chapter) = subject.viewModel.readerDestination else { return XCTFail("Expected reader") }
+            if expectsPrompt {
+                XCTAssertTrue(["a2", "b2"].contains(chapter.key), "Only the exact approved candidate opens")
+            } else {
+                XCTAssertEqual(chapter.key, "a2")
+            }
+        }
+    }
+
+    func testConfirmationNeedsTheSameNonNilScopeAsThePrompt() async throws {
+        let a = Chapter(key: "a", chapter: 1, scanlator: "A", scanlatorID: "a-id")
+        let b = Chapter(key: "b", chapter: 2, scanlator: "B", scanlatorID: "b-id")
+        for scope in [Optional("changed"), nil] {
+            let subject = makeMangaSubject(media: manga(chapters: [a, b]))
+            subject.settings.askBeforeSwitchingGroups = true
+            let identity = subject.viewModel.mediaIdentity
+            subject.progress.lastRead[identity] = "a"
+            subject.progress.readChapterIDs[identity] = ["a"]
+            subject.viewModel.resumeReading()
+            await subject.viewModel.waitForContinuationForTesting()
+            let pending = try XCTUnwrap(subject.viewModel.groupSwitchConsent)
+            subject.progress.scopeEpoch = scope
+            subject.viewModel.confirmGroupSwitch(pending.id)
+            XCTAssertNil(subject.viewModel.readerDestination, "A changed or unverified scope refuses the confirmation")
+        }
+    }
 }
 
 @MainActor

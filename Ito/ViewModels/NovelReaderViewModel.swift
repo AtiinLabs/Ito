@@ -50,7 +50,7 @@ final class NovelReaderViewModel: ObservableObject {
     let offline: ReaderOfflineContext
 
     @Published private(set) var currentChapter: Novel.Chapter
-    @Published var loadedChapters: [NovelLoadedChapter] = [] {
+    @Published private(set) var loadedChapters: [NovelLoadedChapter] = [] {
         didSet {
             let ids = Set(loadedChapters.map(\.id))
             visibleBlocks = visibleBlocks.filter { ids.contains($0.chapterID) }
@@ -78,7 +78,7 @@ final class NovelReaderViewModel: ObservableObject {
     let dependencies: PreparedNovelReaderDependencies
     let mediaIdentity: MediaIdentity
     /// Captured once per reader session; every chapter in the session shares it.
-    private let completionContext: PluginCompletionContext
+    let completionContext: PluginCompletionContext
 
     private(set) var isActive = true
     private var hasPresentedPresence = false
@@ -115,7 +115,7 @@ final class NovelReaderViewModel: ObservableObject {
 
     nonisolated deinit {}
 
-    @Published var groupSwitchConsent: ReaderGroupSwitchConsent<Novel.Chapter>?
+    @Published private(set) var groupSwitchConsent: ReaderGroupSwitchConsent<Novel.Chapter>?
     var askBeforeSwitchingGroups: Bool { dependencies.settings.askBeforeSwitchingGroups }
 
     init(
@@ -234,30 +234,24 @@ final class NovelReaderViewModel: ObservableObject {
     /// Stop at the immediate neighbor when it uses the other reader.
     func chapterAfter(_ chapter: Novel.Chapter) -> Novel.Chapter? {
         ReaderChapterOrdering.boundary(after: chapter, in: entry.chapters)
-            .requiringGroupConsent(from: chapter, enabled: dependencies.settings.askBeforeSwitchingGroups)
-            .chapter.flatMap(textChapter)
+            .requiringGroupConsent(from: chapter, enabled: askBeforeSwitchingGroups).chapter.flatMap(textChapter)
     }
 
     func chapterBefore(_ chapter: Novel.Chapter) -> Novel.Chapter? {
         ReaderChapterOrdering.boundary(before: chapter, in: entry.chapters)
-            .requiringGroupConsent(from: chapter, enabled: dependencies.settings.askBeforeSwitchingGroups)
-            .chapter.flatMap(textChapter)
+            .requiringGroupConsent(from: chapter, enabled: askBeforeSwitchingGroups).chapter.flatMap(textChapter)
     }
 
     /// What follows `chapter` for this reader: a chapter it can open, or why it stops. With the
     /// continuation setting on, another group's upload is a consent boundary, not an open chapter.
     func boundaryAfter(_ chapter: Novel.Chapter) -> ReaderChapterBoundary<Novel.Chapter> {
-        offline.resolving(
-            ReaderChapterOrdering.boundary(after: chapter, in: entry.chapters),
-            opensHere: { textChapter($0) != nil }
-        ).requiringGroupConsent(from: chapter, enabled: dependencies.settings.askBeforeSwitchingGroups)
+        offline.resolving(ReaderChapterOrdering.boundary(after: chapter, in: entry.chapters), opensHere: { textChapter($0) != nil })
+            .requiringGroupConsent(from: chapter, enabled: askBeforeSwitchingGroups)
     }
 
     func boundaryBefore(_ chapter: Novel.Chapter) -> ReaderChapterBoundary<Novel.Chapter> {
-        offline.resolving(
-            ReaderChapterOrdering.boundary(before: chapter, in: entry.chapters),
-            opensHere: { textChapter($0) != nil }
-        ).requiringGroupConsent(from: chapter, enabled: dependencies.settings.askBeforeSwitchingGroups)
+        offline.resolving(ReaderChapterOrdering.boundary(before: chapter, in: entry.chapters), opensHere: { textChapter($0) != nil })
+            .requiringGroupConsent(from: chapter, enabled: askBeforeSwitchingGroups)
     }
 
     private func textChapter(_ chapter: Novel.Chapter) -> Novel.Chapter? {
@@ -274,6 +268,17 @@ final class NovelReaderViewModel: ObservableObject {
     }
 
     var continuationSettingsTask: Task<Void, Never>?
+
+    func setGroupSwitchConsent(_ consent: ReaderGroupSwitchConsent<Novel.Chapter>?) { groupSwitchConsent = consent }
+
+    /// Drops what is loaded past the first change of group after the current chapter.
+    func dropLoadedChaptersAcrossGroupBoundary() {
+        guard let index = loadedChapters.firstIndex(where: { $0.chapter.key == currentChapter.key }),
+              let boundary = loadedChapters.indices.dropFirst(index + 1).first(where: {
+                  !ReaderContinuationGroup(loadedChapters[$0 - 1].chapter).matches(ReaderContinuationGroup(loadedChapters[$0].chapter))
+              }) else { return }
+        loadedChapters.removeSubrange(boundary...)
+    }
 
     func goToPreviousChapter() {
         if boundaryBefore(currentChapter).needsGroupConsent {
@@ -1093,6 +1098,7 @@ final class NovelReaderViewModel: ObservableObject {
     }
 
     func waitForAllOperationsForTesting() async {
+        await continuationSettingsTask?.value
         while !testingOperationTasks.isEmpty {
             let tasks = Array(testingOperationTasks.values)
             for task in tasks {

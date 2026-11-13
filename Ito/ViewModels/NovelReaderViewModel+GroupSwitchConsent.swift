@@ -3,7 +3,9 @@ import Foundation
 import ito_runner
 
 /// Consent to open one neighbor that belongs to another translation group, kept out of the main file.
-/// It authorizes one exact transition in the current reader session and writes nothing.
+/// It authorizes one exact transition in the current reader session and writes nothing: the source
+/// scope is only read, never captured, and must be the session's verified scope both when asked and
+/// when confirmed.
 extension NovelReaderViewModel {
     /// Asks to open the one neighbor of another group. The text view's own prompt asks about the
     /// last loaded chapter; every other caller asks about the current one.
@@ -13,28 +15,35 @@ extension NovelReaderViewModel {
     ) {
         guard isActive else { return }
         let origin = atLoadedEdge && direction == .next ? (loadedChapters.last?.chapter ?? currentChapter) : currentChapter
-        guard let candidate = groupConsentCandidate(after: origin, direction: direction) else { return }
-        groupSwitchConsent = ReaderGroupSwitchConsent(
+        guard let epoch = completionContext.originatingEpoch,
+              let candidate = groupConsentCandidate(after: origin, direction: direction) else { return }
+        setGroupSwitchConsent(ReaderGroupSwitchConsent(
             chapter: candidate, originKey: origin.key, session: sessionID,
             settingsRevision: dependencies.settings.readerContinuationSettingsRevision,
-            sourceContext: dependencies.progress.captureCompletionContext(media: mediaIdentity, mediaKey: entry.key),
+            sourceContext: PluginCompletionContext(media: mediaIdentity, mediaKey: entry.key, originatingEpoch: epoch),
             direction: direction
-        )
+        ))
     }
 
-    func cancelGroupSwitch() { groupSwitchConsent = nil }
+    func cancelGroupSwitch() { setGroupSwitchConsent(nil) }
 
     func confirmGroupSwitch(_ consentID: UUID) {
         guard let consent = groupSwitchConsent, consent.id == consentID else { return }
-        groupSwitchConsent = nil
+        setGroupSwitchConsent(nil)
         guard isActive, consent.session == sessionID,
               consent.settingsRevision == dependencies.settings.readerContinuationSettingsRevision,
-              consent.sourceContext.originatingEpoch != nil || offline.isLocalOnly,
-              consent.sourceContext == dependencies.progress.captureCompletionContext(media: mediaIdentity, mediaKey: entry.key),
+              let epoch = consent.sourceContext.originatingEpoch,
+              epoch == completionContext.originatingEpoch,
+              epoch == currentSourceEpoch,
               let origin = consentOrigin(key: consent.originKey, direction: consent.direction),
               let candidate = groupConsentCandidate(after: origin, direction: consent.direction),
               NovelChapterToken(candidate) == NovelChapterToken(consent.chapter) else { return }
         goToChapter(candidate)
+    }
+
+    /// A read of the source's current scope; nil when it cannot be verified.
+    private var currentSourceEpoch: String? {
+        dependencies.progress.currentCompletionEpoch(media: mediaIdentity, mediaKey: entry.key)
     }
 
     private func groupConsentCandidate(
@@ -57,7 +66,7 @@ extension NovelReaderViewModel {
     }
 
     func setAskBeforeSwitchingGroups(_ value: Bool) {
-        groupSwitchConsent = nil
+        setGroupSwitchConsent(nil)
         let settings = dependencies.settings
         let session = sessionID
         let preceding = continuationSettingsTask
@@ -75,13 +84,11 @@ extension NovelReaderViewModel {
             if let operationID = self.appendOperationID {
                 self.finishAppend(operationID: operationID, outcome: .cancelled)
             }
-            if value, let index = self.loadedChapters.firstIndex(where: { $0.chapter.key == self.currentChapter.key }),
-               let boundary = self.loadedChapters.indices.dropFirst(index + 1).first(where: {
-                   !ReaderContinuationGroup(self.loadedChapters[$0 - 1].chapter).matches(ReaderContinuationGroup(self.loadedChapters[$0].chapter))
-               }) {
-                self.loadedChapters.removeSubrange(boundary...)
-            }
+            if value { self.dropLoadedChaptersAcrossGroupBoundary() }
             self.objectWillChange.send()
         }
     }
+    #if DEBUG
+    func waitForContinuationSettingForTesting() async { await continuationSettingsTask?.value }
+    #endif
 }

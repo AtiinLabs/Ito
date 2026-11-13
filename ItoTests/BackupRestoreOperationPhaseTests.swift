@@ -715,6 +715,35 @@ struct BackupRestoreOperationPhaseTests {
         #expect(preferences.1 == unknown)
     }
 
+    @Test func earlierTwentyKeyCatalogKeepsLocalNewKeyOnMergeAndDefaultsItOnWipe() async throws {
+        for mode in [BackupRestoreMode.merge, .wipe] {
+            let database = try TestDatabase()
+            defer { database.cleanup() }
+            let local = try AppPreference(key: AppPreferenceCatalog.askBeforeSwitchingGroups, value: true)
+            try await database.dbPool.write { db in try local.insert(db) }
+            let legacy = AppPreferenceCatalogEntry.allCases
+                .filter { $0 != .askBeforeSwitchingGroups }
+                .map { AppPreference(key: $0.rawValue, value: $0.canonicalDefaultJSON) }
+            let source = try TestDatabase()
+            defer { source.cleanup() }
+            try await source.dbPool.write { db in
+                try db.execute(sql: "DELETE FROM libraryCategory")
+                try BackupMetadataRecord(formatVersion: 1, createdAt: Date(timeIntervalSince1970: 1)).insert(db)
+                try BackupCapabilityRecord(component: .scalarAppPreferences, representation: .representedNonempty).insert(db)
+                for preference in legacy { try preference.insert(db) }
+            }
+            let backup = try await ItoNativeImporter().parse(url: source.databaseURL)
+
+            _ = try await operation(database).restore(backup, mode: mode, operationId: "legacy-\(mode)")
+
+            let rows = try await database.dbPool.read { db in try AppPreference.fetchAll(db) }
+            #expect(Set(rows.map(\.key)) == Set(legacy.map(\.key)).union(mode == .merge ? [local.key] : []))
+            if mode == .merge {
+                #expect(rows.first { $0.key == local.key } == local)
+            }
+        }
+    }
+
     @Test func writerSnapshotCannotChangeBetweenPreflightAndTransaction() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }

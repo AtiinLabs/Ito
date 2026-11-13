@@ -40,10 +40,11 @@ struct NovelReaderView: View {
         }
         .alert(
             String(localized: "Switch groups?", comment: "Reader consent title: open one exact upload from another translation group"),
-            isPresented: Binding(get: { viewModel.groupSwitchConsent != nil }, set: { if !$0 { viewModel.cancelGroupSwitch() } }),
+            // The buttons decide: a setter that cancelled could run before Continue's action.
+            isPresented: Binding(get: { viewModel.groupSwitchConsent != nil }, set: { _ in }),
             presenting: viewModel.groupSwitchConsent
         ) { consent in
-            Button("Continue", role: nil) { viewModel.confirmGroupSwitch(consent.id) }
+            Button(String(localized: "Open This Upload", comment: "Reader consent alert button: opens the one upload from another translation group, for this reading only")) { viewModel.confirmGroupSwitch(consent.id) }
             Button("Cancel", role: .cancel) { viewModel.cancelGroupSwitch() }
         } message: { consent in
             Text(consent.message)
@@ -159,7 +160,8 @@ struct NovelReaderView: View {
                         offset: offset,
                         reachedEnd: isLast
                     )
-                }
+                },
+                onBoundaryNoticeTap: { viewModel.requestGroupSwitch(.next, atLoadedEdge: true) }
             )
             .simultaneousGesture(toggleUIGesture)
         } else {
@@ -250,7 +252,9 @@ struct NovelReaderView: View {
                             .opacity(0.7)
                     }
                     if boundary.needsGroupConsent {
-                        Button("Continue") { viewModel.requestGroupSwitch(.next, atLoadedEdge: true) }
+                        Button(String(localized: "Continue in Another Group", comment: "Novel reader button after the last loaded chapter: asks whether to open the next chapter, which belongs to another translation group")) {
+                            viewModel.requestGroupSwitch(.next, atLoadedEdge: true)
+                        }
                     }
                 }
                 .multilineTextAlignment(.center)
@@ -979,7 +983,7 @@ struct NovelReaderSettingsView: View {
 
             Toggle(isOn: $askBeforeSwitchingGroups) {
                 Text("Ask before switching groups",
-                     comment: "Reader setting, off by default: require confirmation before Next or Resume opens another translation group's upload")
+                     comment: "Reader setting, off by default: require confirmation before Next, Previous or Resume opens another translation group's upload")
             }
             .padding()
             HStack {

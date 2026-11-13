@@ -382,9 +382,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         }
         if backup.metadata != nil,
            backup.representation(of: .scalarAppPreferences) == .representedNonempty {
-            let catalog = Set(AppPreferenceCatalogEntry.allCases.map(\.rawValue))
-            guard preferenceKeys == catalog,
-                  Set(backup.preferences.map(\.key)) == catalog else {
+            guard AppPreferenceCatalogEntry.isCompleteBackupKeySet(preferenceKeys),
+                  Set(backup.preferences.map(\.key)) == preferenceKeys else {
                 throw rejection(
                     .invalidCapabilityMetadata(
                         component: .scalarAppPreferences,
@@ -1975,15 +1974,6 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         if let disposition = disposition(for: history, library: library) {
             result.libraryItemId = disposition.targetId
             result.mediaKey = disposition.targetId
-            let targetIdentity = remappedIdentity(
-                pluginId: history.pluginId,
-                canonicalMediaId: history.mediaKey,
-                mediaKind: history.mediaKind,
-                library: library
-            )
-            if targetIdentity.pluginId != history.pluginId {
-                result.scanlatorID = nil
-            }
         }
         return result
     }

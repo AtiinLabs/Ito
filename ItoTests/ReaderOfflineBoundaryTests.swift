@@ -78,7 +78,7 @@ struct ReaderChapterBoundaryTests {
 
     // MARK: - Ordering
 
-    @Test func orderingReportsALockedNeighborBeforeTheLockFilterAndTheWrappersStayUnchanged() {
+    @Test func orderingReportsALockedNeighborBeforeTheLockFilter() {
         let after = ReaderChapterOrdering.boundary(after: Self.t2, in: Self.all, preferredScanlator: nil)
         let before = ReaderChapterOrdering.boundary(before: Self.p4, in: Self.all, preferredScanlator: nil)
         let end = ReaderChapterOrdering.boundary(after: Self.p5, in: Self.all, preferredScanlator: nil)
@@ -86,14 +86,14 @@ struct ReaderChapterBoundaryTests {
         #expect(label(after) == "locked:p3")
         #expect(label(before) == "locked:p3")
         #expect(label(end) == "end")
-        // The wrappers still stop at a lock instead of reaching past it.
-        #expect(ReaderChapterOrdering.mangaChapter(after: Self.t2, in: Self.all, preferredScanlator: nil) == nil)
-        #expect(ReaderChapterOrdering.mangaChapter(after: Self.p4, in: Self.all, preferredScanlator: nil)?.key == "p5")
+        // An openable chapter is only ever exposed when it is not locked: a lock never reaches past itself.
+        #expect(ReaderChapterOrdering.boundary(after: Self.t2, in: Self.all, preferredScanlator: nil).chapter == nil)
+        #expect(ReaderChapterOrdering.boundary(after: Self.p4, in: Self.all, preferredScanlator: nil).chapter?.key == "p5")
 
         #expect(label(ReaderChapterOrdering.boundary(after: Self.i2, in: Self.allText)) == "locked:x3")
         #expect(label(ReaderChapterOrdering.boundary(before: Self.x4, in: Self.allText)) == "locked:x3")
         #expect(label(ReaderChapterOrdering.boundary(after: Self.x5, in: Self.allText)) == "end")
-        #expect(ReaderChapterOrdering.novelChapter(after: Self.i2, in: Self.allText) == nil)
+        #expect(ReaderChapterOrdering.boundary(after: Self.i2, in: Self.allText).chapter == nil)
     }
 
     // MARK: - Page reader

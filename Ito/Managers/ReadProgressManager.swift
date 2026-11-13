@@ -39,6 +39,18 @@ public final class ReadProgressManager: ObservableObject, PluginCompletionScopeC
             ?? PluginCompletionContext(media: media, mediaKey: mediaKey, originatingEpoch: nil)
     }
 
+    func currentCompletionEpoch(media: MediaIdentity, mediaKey: String) -> String? {
+        completionStore?.currentScopeEpoch(pluginID: media.pluginId)
+    }
+
+    func verifiedCompletionEpoch(media: MediaIdentity, mediaKey: String) async -> String? {
+        guard let store = completionStore else { return nil }
+        let pluginID = media.pluginId
+        return await Task.detached {
+            store.currentScopeEpoch(pluginID: pluginID) ?? (try? store.captureScopeEpoch(pluginID: pluginID))
+        }.value
+    }
+
     public func reload() async throws {
         let snapshot = try await dbPool.read { db in
             let keys = try ReadProgressKeyRecord.fetchAll(db)

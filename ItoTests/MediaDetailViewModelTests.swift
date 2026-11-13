@@ -1002,7 +1002,8 @@ final class MediaDetailViewModelTests: XCTestCase {
         customCategories: Bool = false,
         alwaysShowCategoryPicker: Bool = false,
         autoSyncTrackersToLocal: Bool = true,
-        history: (any MediaDetailHistoryReading)? = nil
+        history: (any MediaDetailHistoryReading)? = nil,
+        openIntent: MediaDetailOpenIntent? = nil
     ) -> MangaSubject {
         let media = providedMedia ?? manga()
         let state = explicitState ?? MediaDetailLibraryState(
@@ -1056,7 +1057,8 @@ final class MediaDetailViewModelTests: XCTestCase {
                 history: history
             ),
             messagePresenter: messages,
-            presentationLogger: PresentationEventCaptureSpy()
+            presentationLogger: PresentationEventCaptureSpy(),
+            openIntent: openIntent
         )
         return MangaSubject(
             viewModel: viewModel,

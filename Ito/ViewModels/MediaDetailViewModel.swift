@@ -40,10 +40,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     @Published private(set) var media: M {
-        didSet {
-            cancelGroupSwitch()
-            downloadBatch.mediaDidChange()
-        }
+        didSet { cancelGroupSwitch(); downloadBatch.mediaDidChange() }
     }
     @Published private(set) var detailLoadState: DetailLoadState = .idle
     @Published var sortOrder: ChapterSortOrder = .descending
@@ -116,11 +113,10 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     private var pendingOpenIntent: MediaDetailOpenIntent?
     /// The group History last saw for this series, used when the series' own record cannot name
     /// one (such as after it moved to another source).
-    var historyScanlator: String?
-    var historyScanlatorID: String?
-    @Published var groupSwitchConsent: ReaderGroupSwitchConsent<M.Chapter>?
-    var continuationSession = UUID()
-    var resumeTask: Task<Void, Never>?
+    private(set) var historyScanlator: String?
+    private(set) var historyScanlatorID: String?
+    @Published private(set) var groupSwitchConsent: ReaderGroupSwitchConsent<M.Chapter>?
+    let resume = ResumeContinuation()
     private var isAppeared = false
     private var cancellables = Set<AnyCancellable>()
 
@@ -427,6 +423,13 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
                 }
             }
         }
+    }
+
+    func setGroupSwitchConsent(_ consent: ReaderGroupSwitchConsent<M.Chapter>?) { groupSwitchConsent = consent }
+
+    func cancelGroupSwitch() {
+        groupSwitchConsent = nil
+        resume.cancel()
     }
 
     func selectChapter(_ chapter: M.Chapter) {
@@ -909,16 +912,15 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         pendingOpenIntent = nil
         historyScanlator = intent.preferredScanlator
         historyScanlatorID = intent.preferredScanlatorID
-        if case .resume = intent {
+        switch intent {
+        case .resume:
             resumeReading(continuation: true)
-            return
-        }
-        let isEpisode = media.mediaKind == .anime
-        switch intent.target(in: media.chapterList ?? [], resume: resumeTarget?.continuationChapter) {
-        case .open(let chapter): selectChapter(chapter)
-        case .locked: messagePresenter.present(.chapterLocked(isEpisode: isEpisode))
-        case .unavailable: messagePresenter.present(.chapterUnavailable(isEpisode: isEpisode))
-        case nil: break
+        case .chapter(let reference):
+            switch MediaDetailOpenIntent.target(for: reference, in: media.chapterList ?? []) {
+            case .open(let chapter): selectChapter(chapter)
+            case .locked: messagePresenter.present(.chapterLocked(isEpisode: media.mediaKind == .anime))
+            case .unavailable: messagePresenter.present(.chapterUnavailable(isEpisode: media.mediaKind == .anime))
+            }
         }
     }
 

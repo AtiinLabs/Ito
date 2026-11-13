@@ -26,6 +26,11 @@ nonisolated final class PluginCompletionStore: Sendable {
         return PluginCompletionContext(media: media, mediaKey: mediaKey, originatingEpoch: epoch)
     }
 
+    /// The source's current epoch if one was ever captured; a read, never a capture or write.
+    func currentScopeEpoch(pluginID: String) -> String? {
+        try? dbPool.read { db in try PluginCompletionScope.current(pluginID: pluginID, in: db) }
+    }
+
     /// The source's current completion epoch, read the way a completion intent captures it. Downloads
     /// freeze it at enqueue and compare it before every attempt and at commit, so a settings or
     /// credential change rotates it and pauses the queue.

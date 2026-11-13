@@ -170,6 +170,9 @@ final class NovelReaderProgressFake: NovelReaderProgressTracking {
         return context
     }
 
+    /// Read-only, like production: it never records a capture.
+    func currentCompletionEpoch(media: MediaIdentity, mediaKey: String) -> String? { originatingEpoch }
+
     func markNovelChapterRead(
         context: PluginCompletionContext,
         chapterID: String,
