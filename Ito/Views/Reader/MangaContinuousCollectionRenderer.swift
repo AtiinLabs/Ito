@@ -735,10 +735,13 @@ final class MangaContinuousCollectionViewController: UIViewController,
         }
         let viewport = documentViewport
         guard frame.maxY - viewport.maxY <= viewport.height * Self.appendDistanceInViewports else { return }
+        // Looking ahead within a viewport is speculative. Only actually reaching the chapter's end is
+        // interactive continuation, which remains available when speculative work is effectively zero.
+        let trigger: MangaReaderViewModel.ChapterAppendTrigger = frame.maxY > viewport.maxY ? .speculative : .reader
         let revision = snapshot.revision
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.isInvalidated, self.snapshot?.revision == revision else { return }
-            self.viewModel.appendNextChapter()
+            self.viewModel.appendNextChapter(trigger: trigger)
         }
     }
 

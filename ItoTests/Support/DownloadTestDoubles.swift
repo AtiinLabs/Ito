@@ -406,6 +406,7 @@ final class DownloadWorkerFixture {
     let protectedEvents = PassthroughSubject<Void, Never>()
     /// The host contexts every scripted export of this fixture records through.
     let networkContexts: PluginNetworkContexts
+    private let scopeObservation: PluginNetworkScopeObservation
     let coordinator: DownloadQueueCoordinator
     let center: DownloadCenter
 
@@ -422,6 +423,8 @@ final class DownloadWorkerFixture {
         networkContexts = PluginNetworkContexts(
             epochs: [Self.plugin: OfflineStoreFixture.epoch], policy: NetworkPolicyCenter(path: path)
         )
+        scopeObservation = PluginNetworkScopeObservation(contexts: networkContexts)
+        offline.database.dbPool.add(transactionObserver: scopeObservation, extent: .observerLifetime)
         fetcher = ScriptedAssetFetcher()
         source = ScriptedSourceState(pages: pages)
         runtimes = ScriptedRuntimeProvider(source: source)

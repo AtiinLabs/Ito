@@ -47,28 +47,30 @@ final class MangaReaderViewModel: ObservableObject {
     private(set) var markedChapterKeys: Set<String> = []
 
     let dependencies: PreparedMangaReaderDependencies
-    private let imagePrefetcher: any MangaReaderImagePrefetching
+    let imagePrefetcher: any MangaReaderImagePrefetching
     let imageSession: ReaderPageImageSession
     let mediaIdentity: MediaIdentity
     /// Captured once per reader session; every chapter in the session shares it.
     private let completionContext: PluginCompletionContext
 
-    private var isActive = true
+    private(set) var isActive = true
     private var hasPresentedPresence = false
-    private var sessionID = UUID()
-    private var contentGeneration: UInt64 = 0
+    private(set) var sessionID = UUID()
+    private(set) var contentGeneration: UInt64 = 0
 
     private var networkSubscription: AnyCancellable?
     private var mainLoadTask: Task<Void, Never>?
     private var mainLoadOperationID: UUID?
     private var adjacentPrefetchTask: Task<Void, Never>?
     private var adjacentPrefetchOperationID: UUID?
+    private var adjacentPrefetchEpoch: NetworkPrefetchEpoch?
     /// The neighbors the last prefetch was started for.
     private var adjacentPrefetchKeys: Set<String> = []
     /// A boundary changed while the reader was inactive; `appear()` applies it.
     private var offlineChangeWaiting = false
-    private var appendTask: Task<Void, Never>?
-    private var appendOperationID: UUID?
+    private(set) var appendTask: Task<Void, Never>?
+    private(set) var appendOperationID: UUID?
+    private(set) var appendPrefetchEpoch: NetworkPrefetchEpoch?
     private var prependTask: Task<Void, Never>?
     private var prependOperationID: UUID?
     /// A chapter-window trim that waited for the viewport to stop moving.
@@ -121,6 +123,7 @@ final class MangaReaderViewModel: ObservableObject {
                 self.adjacentPrefetchOperationID = nil
                 self.adjacentPrefetchTask?.cancel()
                 self.beginAdjacentChapterPrefetch()
+                self.cancelSpeculativeAppendIfNeeded()
             }
         }
     }
@@ -639,6 +642,7 @@ final class MangaReaderViewModel: ObservableObject {
         let generation = contentGeneration
         let loader = pageLoader
         let entry = entry
+        adjacentPrefetchEpoch = dependencies.settings.mangaReaderPrefetchEpoch
         adjacentPrefetchOperationID = operationID
         logStarted(kind: .chapterPrefetch, operationID: operationID)
         let operation = PluginNetworkOperation(purpose: .prefetch, operationID: operationID)
@@ -691,6 +695,7 @@ final class MangaReaderViewModel: ObservableObject {
     ) -> Bool {
         isActive
             && dependencies.settings.mangaReaderAdjacentPrefetchCount > 0
+            && adjacentPrefetchEpoch == dependencies.settings.mangaReaderPrefetchEpoch
             && isPaged
             && sessionID == session
             && contentGeneration == generation
@@ -719,7 +724,8 @@ final class MangaReaderViewModel: ObservableObject {
         appendNextChapter()
     }
 
-    func appendNextChapter() {
+    func appendNextChapter(trigger: ChapterAppendTrigger = .reader) {
+        guard trigger == .reader || dependencies.settings.mangaReaderAdjacentPrefetchCount > 0 else { return }
         guard isActive,
               !loadingNextChapter,
               !appendFailed,
@@ -736,10 +742,19 @@ final class MangaReaderViewModel: ObservableObject {
         let loader = pageLoader
         let entry = entry
         appendOperationID = operationID
+        appendPrefetchEpoch = trigger == .speculative ? dependencies.settings.mangaReaderPrefetchEpoch : nil
         logStarted(kind: .chapterAppend, operationID: operationID)
-        let operation = PluginNetworkOperation(purpose: .foregroundReading, operationID: operationID)
+        let operation = PluginNetworkOperation(
+            purpose: trigger == .speculative ? .prefetch : .foregroundReading, operationID: operationID
+        )
 
         appendTask = Task { @MainActor [weak self, loader, entry] in
+            guard self?.isCurrentAppend(
+                boundary: boundary, operationID: operationID, session: session, generation: generation
+            ) == true else {
+                self?.finishAppend(operationID: operationID, outcome: .ignoredStale)
+                return
+            }
             do {
                 let pages = try await loader.pages(for: entry, chapter: chapter, operation: operation)
                 self?.completeAppend(
@@ -775,6 +790,7 @@ final class MangaReaderViewModel: ObservableObject {
             generation: generation
         ) else {
             logFinished(kind: .chapterAppend, operationID: operationID, outcome: .ignoredStale)
+            finishAppend(operationID: operationID, outcome: .ignoredStale)
             return
         }
         let sorted = ReaderPageOrdering.ascending(pages)
@@ -797,37 +813,25 @@ final class MangaReaderViewModel: ObservableObject {
         generation: UInt64
     ) {
         guard isActive,
+              speculativeAppendAdmitted,
               sessionID == session,
               contentGeneration == generation,
               appendOperationID == operationID else {
             logFinished(kind: .chapterAppend, operationID: operationID, outcome: .ignoredStale)
+            finishAppend(operationID: operationID, outcome: .ignoredStale)
             return
         }
         appendFailed = true
         finishAppend(operationID: operationID, outcome: .failed(.pluginExecution))
     }
 
-    private func finishAppend(operationID: UUID, outcome: PresentationEventOutcome) {
+    func finishAppend(operationID: UUID, outcome: PresentationEventOutcome) {
         guard appendOperationID == operationID else { return }
         appendTask = nil
         appendOperationID = nil
+        appendPrefetchEpoch = nil
         loadingNextChapter = false
         logFinished(kind: .chapterAppend, operationID: operationID, outcome: outcome)
-    }
-
-    private func isCurrentAppend(
-        boundary: ChapterToken,
-        operationID: UUID,
-        session: UUID,
-        generation: UInt64
-    ) -> Bool {
-        isActive
-            && !isPaged
-            && sessionID == session
-            && contentGeneration == generation
-            && appendOperationID == operationID
-            && segments.last.map(ChapterToken.init) == boundary
-            && !Task.isCancelled
     }
 
     func prependPreviousChapter() {
@@ -1093,42 +1097,6 @@ final class MangaReaderViewModel: ObservableObject {
         logFinished(kind: .chapterEffects, operationID: operationID, outcome: outcome)
     }
 
-    // MARK: - Image prefetch
-
-    /// Starts at the page being shown: turning to a page still downloading must not drop its
-    /// prefetch, which would cancel the download just before the page's view asks for it.
-    private func prefetchPagedImages(around index: Int) {
-        let count = dependencies.settings.mangaReaderEffectivePreloadImageCount
-        preload(Self.pagesToPreload(after: index - 1, count: count > 0 ? count + 1 : 0, in: pagedPages) { $0 })
-    }
-
-    private func prefetchContinuousImages(around index: Int, allPages: [FlatPage]) {
-        preload(Self.pagesToPreload(after: index, count: dependencies.settings.mangaReaderEffectivePreloadImageCount, in: allPages) { $0.page })
-    }
-
-    private func preload(_ pages: [Page]) {
-        guard !pages.isEmpty, dependencies.settings.mangaReaderEffectivePreloadImageCount > 0 else {
-            imagePrefetcher.stopPrefetching()
-            return
-        }
-        imagePrefetcher.prefetch(pages)
-    }
-
-    // MARK: - Discord presence
-
-    private func presentPresence(for chapter: Manga.Chapter, resetTimer: Bool) {
-        guard isActive else { return }
-        dependencies.presence.presentMangaReaderPresence(
-            Self.presence(
-                entry: entry,
-                chapter: chapter,
-                anilistID: dependencies.tracker.anilistID(for: mediaIdentity),
-                pluginName: dependencies.pluginMetadata.displayName(for: pluginID),
-                resetTimer: resetTimer
-            )
-        )
-    }
-
     // MARK: - Operation invalidation and logging
 
     private func invalidateContentOperations() {
@@ -1146,6 +1114,7 @@ final class MangaReaderViewModel: ObservableObject {
         appendTask?.cancel()
         appendTask = nil
         appendOperationID = nil
+        appendPrefetchEpoch = nil
         prependTask?.cancel()
         prependTask = nil
         prependOperationID = nil

@@ -5,6 +5,37 @@ import Testing
 
 @MainActor
 struct NetworkPreferenceMigrationTests {
+    @Test(arguments: [BackupRestoreMode.merge, .wipe])
+    func olderCompleteScalarCatalogRestoresThroughComponentOperation(mode: BackupRestoreMode) async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let settings = AppSettingsStore(dbPool: database.dbPool)
+        try await settings.reload()
+        try await settings.set(.allowMetered, for: AppPreferenceCatalog.networkDownloadMode)
+        try await settings.set(.one, for: AppPreferenceCatalog.adjacentChapterPrefetchCount)
+        try await settings.set(.ten, for: AppPreferenceCatalog.preloadImageCount)
+        let olderPreferences = AppPreferenceCatalogEntry.allCases.filter(\.hasLegacyDefaultsSource).map { entry in
+            AppPreference(key: entry.rawValue, value: entry == .preloadImageCount ? Data("0".utf8) : entry.canonicalDefaultJSON)
+        }
+        let backup = ImportedBackup(
+            metadata: BackupMetadataRecord(formatVersion: 1, createdAt: Date(timeIntervalSince1970: 1)),
+            capabilities: [BackupCapabilityRecord(component: .scalarAppPreferences, representation: .representedNonempty)],
+            preferences: olderPreferences
+        )
+        let operation = ComponentAwareBackupRestoreOperation(dbPool: database.dbPool, standardApplicationDomain: "test.app")
+        _ = try await operation.restore(backup, mode: mode, operationId: UUID().uuidString)
+        try await settings.reloadAfterRestore()
+        if mode == .wipe {
+            #expect(settings.preloadImageCount == .none)
+            #expect(settings.adjacentChapterPrefetchCount == .none)
+            #expect(settings.networkDownloadMode == .unmeteredOnly)
+        } else {
+            #expect(settings.preloadImageCount == .ten)
+            #expect(settings.adjacentChapterPrefetchCount == .one)
+            #expect(settings.networkDownloadMode == .allowMetered)
+        }
+    }
+
     @Test func legacyAdoptionRunsBeforeAdjacentDerivation() throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
@@ -20,11 +51,11 @@ struct NetworkPreferenceMigrationTests {
         try migrator.migrate()
         try migrator.migrate()
         try database.dbPool.read { db in
-            let adjacent = try #require(AppPreference.fetchOne(db, key: AppPreferenceKeys.adjacentChapterPrefetchCount))
+            let adjacent = try #require(try AppPreference.fetchOne(db, key: AppPreferenceKeys.adjacentChapterPrefetchCount))
             #expect(try adjacent.decodedValue(for: AppPreferenceCatalog.adjacentChapterPrefetchCount) == .none)
-            let novel = try #require(AppPreference.fetchOne(db, key: AppPreferenceKeys.novelPrefetchChapters))
+            let novel = try #require(try AppPreference.fetchOne(db, key: AppPreferenceKeys.novelPrefetchChapters))
             #expect(try !novel.decodedValue(for: AppPreferenceCatalog.novelPrefetchChapters))
-            let wifi = try #require(AppPreference.fetchOne(db, key: AppPreferenceKeys.wifiOnlyUpdates))
+            let wifi = try #require(try AppPreference.fetchOne(db, key: AppPreferenceKeys.wifiOnlyUpdates))
             #expect(try !wifi.decodedValue(for: AppPreferenceCatalog.wifiOnlyUpdates))
         }
     }

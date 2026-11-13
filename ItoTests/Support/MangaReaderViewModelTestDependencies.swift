@@ -233,6 +233,21 @@ final class MangaReaderTrackerFake: MangaReaderTrackerUpdating {
 @MainActor
 final class MangaReaderSettingsFake: MangaReaderSettingsAccessing {
     var mangaReaderPreloadImageCount: Int
+    /// Deliberately has no change publisher: tests revoke before the queued UI invalidation can run.
+    var policyPath = NetworkPathSnapshot(status: .satisfied) {
+        didSet { pathGeneration += 1 }
+    }
+    private var pathGeneration: UInt64 = 0
+    var mangaReaderPrefetchEpoch: NetworkPrefetchEpoch {
+        .init(policyRevision: UInt64(mangaReaderPreloadImageCount), pathGeneration: pathGeneration)
+    }
+    private var effective: NetworkEffectiveProjection {
+        var configuration = NetworkPolicyConfiguration.defaults
+        configuration.preloadImageCount = mangaReaderPreloadImageCount
+        return NetworkPolicy.projection(configuration: configuration, path: policyPath)
+    }
+    var mangaReaderEffectivePreloadImageCount: Int { effective.imagePreloadCount }
+    var mangaReaderAdjacentPrefetchCount: Int { effective.adjacentChapterPrefetch }
     var error: (any Error)?
     private(set) var writtenValues: [Int] = []
 

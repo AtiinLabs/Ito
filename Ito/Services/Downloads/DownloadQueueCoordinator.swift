@@ -121,7 +121,8 @@ final class DownloadQueueCoordinator {
                 Task { @MainActor in self?.pathChanged() }
             }
             .store(in: &subscriptions)
-        contexts.policy.revisions
+        contexts.policy.changes
+            .merge(with: contexts.scopeChanges)
             .sink { @Sendable [weak self] _ in
                 Task { @MainActor in self?.policyChanged() }
             }
@@ -196,6 +197,9 @@ final class DownloadQueueCoordinator {
         // Every metered-data consent was minted in the foreground, so leaving it ends them all, whether or not an
         // attempt is still finishing.
         contexts.policy.enterBackground()
+        // Revoking foreground consent is not extended by an OS execution-time grant.
+        // Re-evaluate synchronously before any continuation can resume on the main actor.
+        cancelRunningIfNotAdmitted()
         guard let retired = loopTask else { return }
         guard running != nil else {
             suspend()
@@ -307,8 +311,12 @@ final class DownloadQueueCoordinator {
     }
 
     private func cancelRunningIfNotAdmitted() {
-        guard let running, case .wait(let wait) = running.gate.admission() else { return }
-        running.cancel(.waiting(wait.waitingReason))
+        guard let running else { return }
+        if case .wait(let wait) = running.gate.admission() {
+            running.cancel(.waiting(wait.waitingReason))
+        } else if !running.gate.authorityIsCurrent {
+            running.cancel(.queued)
+        }
     }
 
     private func protectedDataChanged() {
@@ -332,12 +340,14 @@ final class DownloadQueueCoordinator {
 
     /// The gate that decides one job's transfers: the live policy, the observed path and, for the job's batch, its
     /// consent. Every admission reads the consent again, so one that expired stops the next transfer.
-    private func admissionGate(for job: DownloadJobRecord) -> NetworkPathAdmissionGate {
+    private func admissionGate(for job: DownloadJobRecord, operation: PluginNetworkOperation) -> NetworkPathAdmissionGate {
         NetworkPathAdmissionGate(
             observer: path,
             policy: contexts.policy,
             intent: .manualBulkDownload,
-            consent: UUID(uuidString: job.batchId).map { contexts.consentBinding(batchID: $0, pluginID: job.pluginId) }
+            consent: UUID(uuidString: job.batchId).map { contexts.consentBinding(batchID: $0, pluginID: job.pluginId) },
+            operation: operation,
+            authorizationScope: job.sourceEpoch.flatMap(PluginNetworkScopeID.uuid(epoch:))
         )
     }
 
@@ -373,7 +383,17 @@ final class DownloadQueueCoordinator {
     private func runOne(_ work: DownloadJobWork, generation: Int) async -> Step {
         let job = work.job
         guard isCurrent(generation) else { return .blocked }
-        let gate = admissionGate(for: job)
+        var operation = PluginNetworkOperation(
+            purpose: .manualBulkDownload, operationID: UUID(), batchID: UUID(uuidString: job.batchId),
+            policyRevision: contexts.policy.revision
+        )
+        if let batchID = operation.batchID,
+           job.sourceEpoch.flatMap(PluginNetworkScopeID.uuid(epoch:)) == contexts.liveScope(pluginID: job.pluginId) {
+            operation.scopedGrant = contexts.policy.authorizeBatchOperation(
+                contexts.consentBinding(batchID: batchID, pluginID: job.pluginId), operationID: operation.operationID
+            )
+        }
+        let gate = admissionGate(for: job, operation: operation)
         let current = RunningAttempt(jobID: job.id, edition: job.edition, gate: gate)
         running = current
         defer {
@@ -406,12 +426,6 @@ final class DownloadQueueCoordinator {
             return wait.isBatchSpecific ? .proceeded : .blocked
         }
 
-        // One operation per attempt: the runner loads and every export of the attempt share its ID and batch.
-        let operation = PluginNetworkOperation(
-            purpose: .manualBulkDownload,
-            operationID: UUID(),
-            batchID: UUID(uuidString: job.batchId)
-        )
         let runtime: DownloadPluginRuntime
         do {
             runtime = try await runtimes.makeDownloadRuntime(

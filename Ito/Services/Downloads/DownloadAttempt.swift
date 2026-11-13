@@ -124,6 +124,7 @@ actor DownloadAttempt {
             let (input, pageBytes) = try await materialize(page)
             do {
                 try Task.checkCancellation()
+                try requirePolicyCurrent()
                 try await staging.append(input)
             } catch {
                 Self.discardTemporaryFile(input)
@@ -135,10 +136,12 @@ actor DownloadAttempt {
 
         try throwIfDenied()
         try requirePluginCurrent()
+        try requirePolicyCurrent()
         let isPluginCurrent = runtime.isPluginCurrent
         let isTrustCurrent = runtime.isTrustCurrent
+        let admission = admission
         return DownloadAttemptCompletion(staging: staging) { _ in
-            isPluginCurrent() && isTrustCurrent()
+            isPluginCurrent() && isTrustCurrent() && admission.authorityIsCurrent && admission.admission() == .allow
         }
     }
 
@@ -147,10 +150,17 @@ actor DownloadAttempt {
         try Task.checkCancellation()
         try throwIfDenied()
         try requirePluginCurrent()
+        try requirePolicyCurrent()
+        try await store.ensureCapacityForNextAsset()
+    }
+
+    private func requirePolicyCurrent() throws {
+        guard admission.authorityIsCurrent else {
+            throw DownloadAttemptFailure(outcome: .queued)
+        }
         if case .wait(let wait) = admission.admission() {
             throw DownloadAttemptFailure(outcome: .waiting(wait.waitingReason))
         }
-        try await store.ensureCapacityForNextAsset()
     }
 
     private func throwIfDenied() throws {
