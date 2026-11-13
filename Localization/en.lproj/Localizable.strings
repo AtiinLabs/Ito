@@ -215,6 +215,9 @@ Downloads queue: cancel one job */
 /* Downloads manager: cancel the selected queued or running downloads */
 "Cancel Downloads" = "Cancel Downloads";
 
+/* Chapter menu: stop a replacement of this saved chapter, or dismiss its ended record. The saved copy stays. */
+"Cancel Replacement" = "Cancel Replacement";
+
 /* Series status */
 "Cancelled" = "Cancelled";
 
@@ -438,6 +441,9 @@ Confirm permanent deletion of selected downloads */
 /* Download preview footer: a damaged copy must be deleted before the chapter can be downloaded again. */
 "Delete damaged downloads to download them again." = "Delete damaged downloads to download them again.";
 
+/* Series details: what to do when a saved chapter cannot be replaced. */
+"Delete the saved copy and download the chapter again." = "Delete the saved copy and download the chapter again.";
+
 /* Downloads manager deletion failed or its cleanup failed after removing inventory. Never claims rollback. */
 "Deletion couldn't be completed for: %@. Check the list; some downloads may already have been removed." = "Deletion couldn't be completed for: %@. Check the list; some downloads may already have been removed.";
 
@@ -473,6 +479,9 @@ Confirm permanent deletion of selected downloads */
 
 /* Chapter menu: save this chapter for offline reading */
 "Download" = "Download";
+
+/* Manual refresh; source revision is unchanged or unknown */
+"Download again" = "Download again";
 
 /* Accessibility label of the menu that queues several chapters for offline reading. */
 "Download chapters" = "Download chapters";
@@ -1393,7 +1402,23 @@ History: the page a chapter was left on */
 
 "Repeating" = "Repeating";
 
+/* Chapter menu: manually replace the exact saved copy after confirmation
+Manual replacement confirmation title */
+"Replace download" = "Replace download";
+
 "Replaced" = "Replaced";
+
+/* Chapter download status: a replacement of a saved chapter failed. The saved copy stays available. */
+"Replacement failed" = "Replacement failed";
+
+/* Chapter download status: the app restarted before a replacement was verified. The saved copy is kept; replace it again to fetch the chapter. */
+"Replacement interrupted" = "Replacement interrupted";
+
+/* Chapter download status: the saved copy or its source changed after a replacement was confirmed. The saved copy is kept; replace it again to review the chapter. */
+"Replacement no longer applies" = "Replacement no longer applies";
+
+/* Chapter download status: a replacement of a saved chapter is queued or running. The saved copy stays available. */
+"Replacing download" = "Replacing download";
 
 "Report on GitHub" = "Report on GitHub";
 
@@ -1484,6 +1509,9 @@ Downloads queue: retry a failed or paused job */
 "Saved" = "Saved";
 
 "Saved Source • %@ • Confirmed" = "Saved Source • %@ • Confirmed";
+
+/* Manual replacement confirmation. The chapter titles, group names and revisions are untranslated source data; each one is shown as its own value. */
+"Saved copy: %@, group %@, revision %@.\nNew copy: %@, group %@, revision %@.\nThe saved copy stays available until the new copy is verified. If a revision is unknown, this is a manual refresh, not evidence of newer content. Downloads wait on metered networks and in Low Data Mode." = "Saved copy: %1$@, group %2$@, revision %3$@.\nNew copy: %4$@, group %5$@, revision %6$@.\nThe saved copy stays available until the new copy is verified. If a revision is unknown, this is a manual refresh, not evidence of newer content. Downloads wait on metered networks and in Low Data Mode.";
 
 "Saved credentials are currently unavailable." = "Saved credentials are currently unavailable.";
 
@@ -1701,6 +1729,9 @@ Downloads queue: retry a failed or paused job */
 "Source" = "Source";
 
 "Source Settings" = "Source Settings";
+
+/* Chapter download status: the source's chapter changed after a replacement was confirmed. The saved copy is kept; replace it again to review the chapter. */
+"Source chapter changed" = "Source chapter changed";
 
 "Source home" = "Source home";
 
@@ -1999,6 +2030,9 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 
 "This control type is not supported." = "This control type is not supported.";
 
+/* Series details: a saved chapter cannot be replaced, because its source settings changed after it was saved or it was saved under another series. */
+"This copy can't be replaced." = "This copy can't be replaced.";
+
 "This episode is locked on the source." = "This episode is locked on the source.";
 
 "This extension requires Ito %@ or later." = "This extension requires Ito %@ or later.";
@@ -2149,6 +2183,12 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 "Unknown Plugin" = "Unknown Plugin";
 
 "Unknown Repository" = "Unknown Repository";
+
+/* Replacement confirmation: the source gave this chapter no scanlator group */
+"Unknown group" = "Unknown group";
+
+/* Replacement confirmation: the source does not provide a revision for this chapter */
+"Unknown revision" = "Unknown revision";
 
 /* Reader failure: the offline copy is stored under data protection and the device is locked. */
 "Unlock your device to read this chapter." = "Unlock your device to read this chapter.";

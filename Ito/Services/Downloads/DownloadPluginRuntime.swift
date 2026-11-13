@@ -4,9 +4,23 @@ import ito_runner
 /// Lists the pages of one chapter. `ItoRunner` provides it; tests substitute a fake.
 nonisolated protocol ChapterPageProviding: Sendable {
     func getChapterPages(entry: MediaEntry, chapter: Chapter, context: NetworkOperationContext) async throws -> [Page]
+    /// Re-reads the exact target on the same dedicated runtime. Nil is unconfirmed, not missing.
+    func replacementChapter(entry: MediaEntry, key: String, context: NetworkOperationContext) async throws -> Chapter?
 }
 
-extension ItoRunner: ChapterPageProviding {}
+extension ItoRunner: ChapterPageProviding {
+    func replacementChapter(entry: MediaEntry, key: String, context: NetworkOperationContext) async throws -> Chapter? {
+        let updated = try await getMediaUpdate(entry, needsDetails: false, needsUnits: true, context: context)
+        let chapters: [Chapter]?
+        switch updated {
+        case .manga(let manga): chapters = manga.chapters
+        case .novel(let novel): chapters = novel.chapters
+        case .anime: chapters = nil
+        }
+        let matches = chapters?.filter { $0.key == key } ?? []
+        return matches.count == 1 ? matches[0] : nil
+    }
+}
 
 /// Builds the runtime one download attempt runs on. `PluginManager` provides it; tests substitute a fake.
 /// Every runner of the attempt runs under the same `operation` and `frozenScope` (the job's source epoch).

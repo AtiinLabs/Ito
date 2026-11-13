@@ -6,6 +6,78 @@ import Testing
 
 @MainActor
 struct DownloadAttemptTests {
+    @Test func manualReplacementPublishesThroughCenterAndWorker() async throws {
+        let fixture = try DownloadWorkerFixture()
+        let old = try await fixture.offline.publishedEdition(fixture.store)
+        let preview = try await fixture.confirmablePreview()
+        #expect(!preview.hasChangedRevision)
+        #expect(await fixture.center.replace(preview) == .queued)
+        await fixture.startWorker()
+        await fixture.coordinator.untilIdle()
+        let copy = try #require(try await fixture.copy())
+        #expect(copy.versionId != old)
+        #expect(try await fixture.job() == nil)
+        #expect(!fixture.offline.fileSystem.exists(fixture.offline.versionURL(old)))
+    }
+
+    @Test(arguments: [false, true])
+    func replacementRechecksRevisionAfterHeldAcquisition(delete: Bool) async throws {
+        let fixture = try DownloadWorkerFixture()
+        let old = try await fixture.offline.publishedEdition(fixture.store)
+        let preview = try await fixture.confirmablePreview()
+        #expect(await fixture.center.replace(preview) == .queued)
+        let gate = DownloadTestGate()
+        fixture.source.setListingGate(gate)
+        await fixture.startWorker()
+        await gate.awaitArrival()
+        if delete {
+            try await fixture.center.delete(fixture.edition())
+        } else {
+            fixture.source.setReplacementTarget(Chapter(key: "chapter-1", revision: "changed"))
+        }
+        await gate.release()
+        await fixture.coordinator.untilIdle()
+        if delete {
+            #expect(try await fixture.copy() == nil)
+            #expect(try await fixture.offline.rowCount("downloadReplacementIntent") == 0)
+            #expect(try await fixture.offline.rowCount("downloadSuppression") == 1)
+        } else {
+            #expect(try await fixture.copy()?.versionId == old)
+            #expect(try await fixture.job()?.state == .failed)
+            #expect(try await fixture.job()?.failureReason == .replacementContentChanged)
+            #expect(try await fixture.offline.rowCount("downloadReplacementIntent") == 0)
+            #expect(fixture.offline.fileSystem.exists(fixture.offline.versionURL(old)))
+        }
+    }
+
+    /// A confirmation the source no longer supports ends the replacement as a terminal failure that Retry cannot
+    /// revive. The saved copy and its files are kept.
+    @Test(arguments: ["missing", "ambiguous", "scanlator", "locked", "revision"])
+    func aTargetThatNoLongerMatchesEndsTheReplacementAndKeepsTheSavedCopy(_ change: String) async throws {
+        let fixture = try DownloadWorkerFixture()
+        let old = try await fixture.offline.publishedEdition(fixture.store)
+        let preview = try await fixture.confirmablePreview()
+        #expect(await fixture.center.replace(preview) == .queued)
+        let target: Chapter?
+        switch change {
+        case "missing", "ambiguous": target = nil
+        case "scanlator": target = Chapter(key: "chapter-1", scanlator: "Another group")
+        case "locked": target = Chapter(key: "chapter-1", paywalled: true)
+        default: target = Chapter(key: "chapter-1", revision: "changed")
+        }
+        fixture.source.setReplacementTarget(target)
+
+        await fixture.startWorker()
+        await fixture.coordinator.untilIdle()
+
+        let ended = try #require(try await fixture.job())
+        #expect(ended.state == .failed)
+        #expect(ended.failureReason == .replacementContentChanged)
+        #expect(try await fixture.offline.rowCount("downloadReplacementIntent") == 0)
+        #expect(try await fixture.copy()?.versionId == old)
+        #expect(fixture.offline.fileSystem.exists(fixture.offline.versionURL(old)))
+    }
+
     @Test func aPublishedChapterKeepsItsTextAndImagePagesInOrder() async throws {
         let pages = [
             Page(index: 0, content: .text("First line")),

@@ -119,6 +119,13 @@ struct DurableStateSchemaTests {
                 primaryKey: ["id"],
                 nullable: ["sourceEpoch", "waitingReason", "failureReason", "stagingVersionId"]
             ),
+            "downloadReplacementIntent": .init(
+                columns: [
+                    "jobId", "expectedVersionId", "expectedRevision", "targetRevision", "sourceEpoch", "authorizationId"
+                ],
+                primaryKey: ["jobId"],
+                nullable: ["expectedRevision", "targetRevision"]
+            ),
             "downloadBatch": .init(
                 columns: [
                     "id", "pluginId", "mediaKind", "canonicalMediaId", "preset", "selection", "catalogDigest",
@@ -230,6 +237,10 @@ struct DurableStateSchemaTests {
             #expect(jobForeignKey.destinationColumns == ["id"])
             // A batch cannot disappear under its jobs: the store deletes it only with its last job.
             #expect(try foreignKeyDeleteAction(table: "downloadJob", in: db) == "NO ACTION")
+            let replacementForeignKey = try #require(db.foreignKeys(on: "downloadReplacementIntent").first)
+            #expect(replacementForeignKey.destinationTable == "downloadJob")
+            #expect(replacementForeignKey.originColumns == ["jobId"])
+            #expect(try foreignKeyDeleteAction(table: "downloadReplacementIntent", in: db) == "CASCADE")
 
             // A cover thumbnail belongs to its Library item and goes with it.
             let thumbnailForeignKey = try #require(db.foreignKeys(on: "libraryCoverThumbnail").first)

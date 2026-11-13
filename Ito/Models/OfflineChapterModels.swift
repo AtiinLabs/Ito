@@ -176,6 +176,24 @@ nonisolated enum DownloadFailureReason: String, Codable, CaseIterable, Equatable
     case requiresInteractiveSource
     case integrityMismatch
     case fileSystem
+    case replacementStale
+    case replacementContentChanged
+    case replacementInterrupted
+}
+
+nonisolated extension DownloadFailureReason {
+    /// The three ends of a confirmed replacement. The job stays as a failure that Retry cannot revive, its
+    /// intent is removed with it, and the saved copy stays readable.
+    var endsReplacement: Bool {
+        switch self {
+        case .replacementStale, .replacementContentChanged, .replacementInterrupted:
+            true
+        case .sourceError, .network, .httpStatus, .emptyChapter, .tooManyPages, .assetTooLarge,
+             .unsupportedImageFormat, .unsupportedPageLocator, .requiresInteractiveSource,
+             .integrityMismatch, .fileSystem:
+            false
+        }
+    }
 }
 
 /// One queued, waiting, downloading or failed chapter. Removed on commit, cancel or delete. The frozen

@@ -403,7 +403,7 @@ struct OfflineChapterStoreBatchTests {
 
     // MARK: - Bulk delete
 
-    @Test func bulkDeleteRemovesCopiesAndJobsTogetherAndSuppressesOnlyDeletedCopies() async throws {
+    @Test func bulkDeleteRemovesCopiesAndJobsTogetherAndSuppressesAllDeletedEditions() async throws {
         let fixture = try OfflineStoreFixture()
         let store = fixture.makeStore()
         _ = try await fixture.publishedEdition(store, chapterKey: "a")
@@ -423,9 +423,9 @@ struct OfflineChapterStoreBatchTests {
         #expect(try await store.jobs().isEmpty)
         #expect(try await fixture.rowCount("downloadBatch") == 0)
         let suppressed = try await fixture.database.dbPool.read { db in
-            try DownloadSuppressionRecord.fetchAll(db).map(\.chapterKey)
+            try DownloadSuppressionRecord.fetchAll(db).map(\.chapterKey).sorted()
         }
-        #expect(suppressed == ["a"])
+        #expect(suppressed == ["a", "q1", "q2"])
         #expect(!fixture.fileSystem.exists(attempt.directory))
         #expect(try await store.publish(attempt, commitGuard: { _ in true }) == .refused(.jobGone))
         try await fixture.assertInvariants(store)
@@ -461,7 +461,7 @@ struct OfflineChapterStoreBatchTests {
         let suppressed = try await fixture.database.dbPool.read { db in
             try DownloadSuppressionRecord.fetchAll(db).map(\.chapterKey).sorted()
         }
-        #expect(suppressed == ["a", "b"])
+        #expect(suppressed == ["a", "b", "q"])
         try await fixture.assertInvariants(store)
     }
 

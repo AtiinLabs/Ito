@@ -123,3 +123,7 @@ Do not add unavailable signing credentials to the unsigned workflows.
 For a stable release, mark the release unavailable or publish a newer patch version; do not move or reuse a `v*` tag. Remove an unsafe version from the matching source JSON on `gh-pages` if necessary.
 
 Dev releases are temporary and automatically pruned.
+
+## Manual offline replacement candidate
+
+See [Offline chapter replacement](OFFLINE_DOWNLOADS.md) for the v24 schema, conservative recovery and release acceptance suites. Replacement is manual-only: do not advertise automatic refreshing or guaranteed newer content for unknown source revisions. Verify localization after the clean simulator build and retain lease/delete/recovery race coverage before publication.
