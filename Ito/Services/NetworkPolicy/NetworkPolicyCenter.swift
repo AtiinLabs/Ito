@@ -1,6 +1,12 @@
 import Combine
 import Foundation
 
+/// Captured by speculative work before scheduling; a revoke-and-allow sequence cannot revive that work.
+nonisolated struct NetworkPrefetchEpoch: Equatable, Sendable {
+    let policyRevision: UInt64
+    let pathGeneration: UInt64
+}
+
 /// Names the batch a consent is asked for and how to read the batch's source scope now. The scope is read
 /// again on every admission, so a rotated source epoch refuses at once.
 nonisolated struct NetworkConsentBinding: Sendable {
@@ -21,6 +27,10 @@ nonisolated struct NetworkConsentBinding: Sendable {
 /// class changes, the policy changes, or the source scope changes. A UUID reference to it may travel in a host
 /// context, but the reference alone is never authority.
 nonisolated final class NetworkPolicyCenter: @unchecked Sendable {
+    var prefetchEpoch: NetworkPrefetchEpoch {
+        lock.withLock { NetworkPrefetchEpoch(policyRevision: currentRevision, pathGeneration: currentPathGeneration) }
+    }
+
     struct Confirmation: Equatable, Sendable {
         fileprivate let revision: UInt64
         fileprivate let pathGeneration: UInt64
@@ -42,6 +52,10 @@ nonisolated final class NetworkPolicyCenter: @unchecked Sendable {
         let pathGeneration: UInt64
         let path: NetworkPathSnapshot
         let foregroundSession: UUID
+        /// The enqueue-confirmation root is the immutable batch ID. Only scheduler-registered attempts
+        /// descended from that root may use this reference; later grants never inherit this set.
+        let originatingOperationID: UUID
+        var allowedOperations: Set<UUID>
     }
 
     private let lock = NSLock()
@@ -133,10 +147,13 @@ nonisolated final class NetworkPolicyCenter: @unchecked Sendable {
 
     /// Ends the foreground session. Every consent was minted in one, so every consent expires.
     func enterBackground() {
-        lock.withLock {
+        let changed = lock.withLock {
+            let changed = foregroundSession != nil || !grants.isEmpty
             foregroundSession = nil
             grants = [:]
+            return changed
         }
+        if changed { changeSubject.send(()) }
     }
 
     var isForeground: Bool {
@@ -181,7 +198,9 @@ nonisolated final class NetworkPolicyCenter: @unchecked Sendable {
                 policyRevision: currentRevision,
                 pathGeneration: currentPathGeneration,
                 path: snapshot,
-                foregroundSession: session
+                foregroundSession: session,
+                originatingOperationID: binding.batchID,
+                allowedOperations: []
             )
             grants[binding.batchID] = grant
             return grant.reference
@@ -192,6 +211,35 @@ nonisolated final class NetworkPolicyCenter: @unchecked Sendable {
     /// validity; every admission validates.
     func consentReference(forBatch batchID: UUID) -> UUID? {
         lock.withLock { grants[batchID]?.reference }
+    }
+
+    /// Registers a trusted scheduler attempt as a descendant of this exact confirmed batch.
+    /// The returned reference is captured once by the operation, never looked up again by context creation.
+    func authorizeBatchOperation(_ binding: NetworkConsentBinding, operationID: UUID) -> UUID? {
+        guard hasValidConsent(binding) else { return nil }
+        return lock.withLock {
+            guard var grant = grants[binding.batchID], grant.originatingOperationID == binding.batchID else { return nil }
+            grant.allowedOperations.insert(operationID)
+            grants[binding.batchID] = grant
+            return grant.reference
+        }
+    }
+
+    /// Transport admission validates the request's immutable reference and lineage, not just the batch's
+    /// newest grant. A nil, revoked or replaced reference cannot borrow another attempt's authorization.
+    func hasValidConsent(
+        _ binding: NetworkConsentBinding,
+        reference: UUID?,
+        operationID: UUID,
+        authorizationScope: UUID
+    ) -> Bool {
+        guard let reference, authorizationScope == binding.liveAuthorizationScope(),
+              hasValidConsent(binding) else { return false }
+        return lock.withLock {
+            guard let grant = grants[binding.batchID] else { return false }
+            return grant.reference == reference && grant.authorizationScope == authorizationScope
+                && grant.originatingOperationID == binding.batchID && grant.allowedOperations.contains(operationID)
+        }
     }
 
     /// Whether `binding`'s batch holds a consent that is still valid on every binding, read against the path the
@@ -215,12 +263,18 @@ nonisolated final class NetworkPolicyCenter: @unchecked Sendable {
 
     /// Ends the consent of a batch that finished or was cancelled.
     func revokeConsent(forBatch batchID: UUID) {
-        lock.withLock { grants[batchID] = nil }
+        let changed = lock.withLock { grants.removeValue(forKey: batchID) != nil }
+        if changed { changeSubject.send(()) }
     }
 
     /// Ends every consent.
     func revokeAllConsent() {
-        lock.withLock { grants = [:] }
+        let changed = lock.withLock {
+            let changed = !grants.isEmpty
+            grants = [:]
+            return changed
+        }
+        if changed { changeSubject.send(()) }
     }
 
     var hasAnyConsent: Bool {

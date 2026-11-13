@@ -52,8 +52,12 @@ final class NetworkSettingsViewModel: ObservableObject {
         guard !isClearingSiteData else { return }
         isClearingSiteData = true
         defer { isClearingSiteData = false }
-        do { try await siteDataClearer.clearSiteData(); alert = .siteDataCleared }
-        catch { alert = .siteDataClearFailed }
+        do {
+            try await siteDataClearer.clearSiteData()
+            alert = .siteDataCleared
+        } catch {
+            alert = .siteDataClearFailed
+        }
     }
 
     func dismissAlert() { alert = nil }

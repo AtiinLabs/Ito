@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import GRDB
 import ito_runner
@@ -8,6 +9,9 @@ nonisolated public struct PluginNetworkOperation: Sendable, Equatable {
     let purpose: NetworkOperationContext.Purpose
     let operationID: UUID
     var batchID: UUID?
+    /// Captured by the initiating scheduler; context construction never borrows a replacement grant.
+    var scopedGrant: UUID?
+    var policyRevision: UInt64?
 }
 
 /// Builds the host context for one runner export. Synchronous and lock-protected, so it can be read
@@ -18,6 +22,8 @@ nonisolated public struct PluginNetworkOperation: Sendable, Equatable {
 /// rotates an epoch. Frozen operations (downloads, completion) pass the epoch they captured instead.
 nonisolated final class PluginNetworkContexts: @unchecked Sendable {
     private let lock = NSLock()
+    private let scopeChangeSubject = PassthroughSubject<Void, Never>()
+    var scopeChanges: AnyPublisher<Void, Never> { scopeChangeSubject.eraseToAnyPublisher() }
     private var epochScopes: [String: UUID] = [:]
     /// Scopes handed out for plugins without a committed epoch. Stable until the next mirror refresh,
     /// so repeated lookups agree; never derived from credentials.
@@ -34,9 +40,16 @@ nonisolated final class PluginNetworkContexts: @unchecked Sendable {
     /// Replaces the mirror with the committed epochs, keyed by plugin ID. Called from the commit that
     /// wrote them, so a lookup after the write returns sees the new scope.
     func replaceEpochs(_ epochs: [String: String]) {
-        lock.withLock {
-            epochScopes = epochs.compactMapValues(PluginNetworkScopeID.uuid(epoch:))
+        let changed = lock.withLock {
+            let replacement = epochs.compactMapValues(PluginNetworkScopeID.uuid(epoch:))
+            let changed = epochScopes != replacement || !ephemeralScopes.isEmpty
+            epochScopes = replacement
             ephemeralScopes = [:]
+            return changed
+        }
+        if changed {
+            policy.revokeAllConsent()
+            scopeChangeSubject.send(())
         }
     }
 
@@ -62,10 +75,9 @@ nonisolated final class PluginNetworkContexts: @unchecked Sendable {
             authorizationScope: scope,
             operationID: operation.operationID,
             batchID: operation.batchID,
-            policyRevision: policy.revision,
+            policyRevision: operation.policyRevision ?? policy.revision,
             generation: UUID(),
-            scopedGrant: operation.purpose == .manualBulkDownload || operation.purpose == .automaticBulkDownload
-                ? operation.batchID.flatMap { policy.consentReference(forBatch: $0) } : nil
+            scopedGrant: operation.scopedGrant
         )
     }
 

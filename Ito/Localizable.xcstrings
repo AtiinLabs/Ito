@@ -1,28 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Use Metered Data?" : { "comment" : "Confirmation for one download batch on cellular or a hotspot" },
-    "Use Metered Data for This Batch" : { "comment" : "Grants cellular permission only to this exact download batch" },
-    "Queue and Wait for Wi-Fi" : { "comment" : "Queues downloads without cellular permission" },
-    "This batch may use cellular data or a personal hotspot while the app stays in the foreground. Other downloads and prefetching are not approved." : { "comment" : "Scope of temporary metered download permission" },
-    "Unmetered Only" : { "comment" : "Download mode that avoids cellular and hotspots" },
-    "Ask on Metered Networks" : { "comment" : "Download mode requiring batch confirmation on cellular" },
-    "Allow Metered Networks" : { "comment" : "Download mode permitting cellular and hotspots" },
-    "Available on this network" : { "comment" : "Effective network policy status" },
-    "Waiting for a network reading" : { "comment" : "No path observation yet" },
-    "Waiting for a connection" : { "comment" : "Effective network policy refusal" },
-    "Paused by Low Data Mode" : { "comment" : "Effective network policy refusal" },
-    "Requires confirmation for each batch" : { "comment" : "Metered download consent is batch-scoped" },
-    "Waiting for an unmetered network" : { "comment" : "Effective network policy refusal" },
-    "Download Network" : { "comment" : "Configured bulk download network mode" },
-    "Image Preload" : { "comment" : "Configured number of speculative reader images" },
-    "Adjacent Chapters" : { "comment" : "Number of neighbor manga chapter manifests to prefetch" },
-    "Prefetch Novel Chapters" : { "comment" : "Configured speculative novel chapter loading" },
-    "Adjacent prefetch is off while Image Preload is off." : { "comment" : "Explains effective restriction without changing configured adjacent amount" },
-    "Reader Prefetch" : { "comment" : "Network settings section for speculative reader work" },
-    "Reset Network and Prefetch Settings" : { "comment" : "Resets only five network and reader prefetch preferences" },
-    "Reset Network and Prefetch Settings?" : { "comment" : "Confirmation of scoped settings reset" },
-    "Restores network and prefetch defaults only. Credentials, cookies, site data and reading state are kept." : { "comment" : "Exact scope of network settings reset" },
     "" : {
 
     },
@@ -883,6 +861,12 @@
     "Adds this series to the list" : {
 
     },
+    "Adjacent Chapters" : {
+      "comment" : "Number of neighbor manga chapter manifests to prefetch"
+    },
+    "Adjacent prefetch is off while Image Preload is off." : {
+      "comment" : "Explains effective restriction without changing configured adjacent amount"
+    },
     "All" : {
       "comment" : "Filter chip: show every list\nHistory filter: every kind of media"
     },
@@ -903,6 +887,9 @@
     },
     "All-Time Popular" : {
 
+    },
+    "Allow Metered Networks" : {
+      "comment" : "Download mode permitting cellular and hotspots"
     },
     "Already added" : {
 
@@ -952,6 +939,9 @@
     "Ask on Discord" : {
 
     },
+    "Ask on Metered Networks" : {
+      "comment" : "Download mode requiring batch confirmation on cellular"
+    },
     "Audio" : {
       "comment" : "Audio track button when no track is selected"
     },
@@ -988,6 +978,9 @@
     },
     "Available Plugins" : {
 
+    },
+    "Available on this network" : {
+      "comment" : "Effective network policy status"
     },
     "A⁺" : {
       "shouldTranslate" : false
@@ -1520,6 +1513,9 @@
         }
       }
     },
+    "Download Network" : {
+      "comment" : "Configured bulk download network mode"
+    },
     "Download chapters" : {
       "comment" : "Accessibility label of the menu that queues several chapters for offline reading."
     },
@@ -1890,6 +1886,9 @@
     },
     "Image & Network Cache" : {
 
+    },
+    "Image Preload" : {
+      "comment" : "Configured number of speculative reader images"
     },
     "Import" : {
 
@@ -2581,6 +2580,9 @@
     "Paused after a restore" : {
       "comment" : "Chapter download status: the queue came from a restored backup. Retry to download again."
     },
+    "Paused by Low Data Mode" : {
+      "comment" : "Effective network policy refusal"
+    },
     "Paused in the background" : {
       "comment" : "Chapter download status: downloads run only while the app is open"
     },
@@ -2638,6 +2640,9 @@
     "Preferences" : {
 
     },
+    "Prefetch Novel Chapters" : {
+      "comment" : "Configured speculative novel chapter loading"
+    },
     "Preload Images" : {
 
     },
@@ -2673,6 +2678,9 @@
     },
     "Progress" : {
 
+    },
+    "Queue and Wait for Wi-Fi" : {
+      "comment" : "Queues downloads without cellular permission"
     },
     "Queued" : {
       "comment" : "Chapter download status: waiting for its turn"
@@ -2726,6 +2734,9 @@
     },
     "Read/Watched" : {
 
+    },
+    "Reader Prefetch" : {
+      "comment" : "Network settings section for speculative reader work"
     },
     "Reader Settings" : {
 
@@ -2891,6 +2902,9 @@
     "Requires a newer Ito" : {
 
     },
+    "Requires confirmation for each batch" : {
+      "comment" : "Metered download consent is batch-scoped"
+    },
     "Requires v%@" : {
 
     },
@@ -2899,6 +2913,12 @@
     },
     "Reset Filters" : {
 
+    },
+    "Reset Network and Prefetch Settings" : {
+      "comment" : "Resets only five network and reader prefetch preferences"
+    },
+    "Reset Network and Prefetch Settings?" : {
+      "comment" : "Confirmation of scoped settings reset"
     },
     "Resolve Conflicting Data" : {
 
@@ -2923,6 +2943,9 @@
     },
     "Restore report was already acknowledged." : {
 
+    },
+    "Restores network and prefetch defaults only. Credentials, cookies, site data and reading state are kept." : {
+      "comment" : "Exact scope of network settings reset"
     },
     "Resume" : {
 
@@ -3726,6 +3749,9 @@
     "This action is unsupported by the source." : {
 
     },
+    "This batch may use cellular data or a personal hotspot while the app stays in the foreground. Other downloads and prefetching are not approved." : {
+      "comment" : "Scope of temporary metered download permission"
+    },
     "This chapter can't be downloaded." : {
       "comment" : "Series details: the chapter is locked, or its source can't be saved for offline reading."
     },
@@ -3992,6 +4018,9 @@
     "Unmatched Sources" : {
 
     },
+    "Unmetered Only" : {
+      "comment" : "Download mode that avoids cellular and hotspots"
+    },
     "Unread/Unwatched" : {
 
     },
@@ -4036,6 +4065,12 @@
     },
     "Updating queued progress…" : {
 
+    },
+    "Use Metered Data for This Batch" : {
+      "comment" : "Grants cellular permission only to this exact download batch"
+    },
+    "Use Metered Data?" : {
+      "comment" : "Confirmation for one download batch on cellular or a hotspot"
     },
     "Use Selection" : {
       "comment" : "Button on the scanlator sheet: apply the choice and continue with the download."
@@ -4093,7 +4128,13 @@
       "comment" : "Chapter download status: downloads do not use cellular or other metered networks"
     },
     "Waiting for a connection" : {
-      "comment" : "Chapter download status"
+      "comment" : "Chapter download status\nEffective network policy refusal"
+    },
+    "Waiting for a network reading" : {
+      "comment" : "No path observation yet"
+    },
+    "Waiting for an unmetered network" : {
+      "comment" : "Effective network policy refusal"
     },
     "Waiting for free storage" : {
       "comment" : "Chapter download status"

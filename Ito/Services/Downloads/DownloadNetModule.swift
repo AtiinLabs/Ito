@@ -28,6 +28,7 @@ nonisolated extension DownloadAttemptOutcome {
 /// Whether the policy admits this attempt's bulk transfers right now.
 nonisolated protocol DownloadAdmissionGate: Sendable {
     func admission() -> NetworkDecision
+    var authorityIsCurrent: Bool { get }
     /// Whether an expensive, unconstrained path would be admitted now. The attempt's transport allows the system to
     /// use such a path only then.
     var allowsExpensiveTransport: Bool { get }
@@ -42,21 +43,55 @@ nonisolated struct NetworkPathAdmissionGate: DownloadAdmissionGate {
     var policy: NetworkPolicyCenter = NetworkPolicyCenter()
     var intent: NetworkIntent = .manualBulkDownload
     var consent: NetworkConsentBinding?
+    var operation: PluginNetworkOperation?
+    var authorizationScope: UUID?
+
+    private var hasRequestConsent: Bool {
+        guard let consent, let operation, let authorizationScope else { return false }
+        guard operation.purpose == .manualBulkDownload || operation.purpose == .automaticBulkDownload else { return false }
+        return policy.hasValidConsent(
+            consent, reference: operation.scopedGrant, operationID: operation.operationID,
+            authorizationScope: authorizationScope
+        )
+    }
+
+    var authorityIsCurrent: Bool {
+        guard let operation else { return true }
+        guard operation.policyRevision == nil || operation.policyRevision == policy.revision else { return false }
+        if let consent, authorizationScope != consent.liveAuthorizationScope() { return false }
+        return operation.scopedGrant == nil || hasRequestConsent
+    }
 
     func admission() -> NetworkDecision {
-        policy.decide(intent, path: observer.current, consent: consent)
+        NetworkPolicy.evaluate(intent, path: observer.current, configuration: policy.current, hasBatchConsent: hasRequestConsent)
     }
 
     var allowsExpensiveTransport: Bool {
-        policy.decide(intent, path: NetworkPathSnapshot(status: .satisfied, isExpensive: true), consent: consent) == .allow
+        NetworkPolicy.evaluate(
+            intent, path: NetworkPathSnapshot(status: .satisfied, isExpensive: true),
+            configuration: policy.current, hasBatchConsent: hasRequestConsent
+        ) == .allow
     }
 
     func isCurrent(_ context: NetworkOperationContext) -> Bool {
         guard context.policyRevision == policy.revision else { return false }
-        guard let consent else { return true }
-        return context.batchID == consent.batchID && context.sourceID == consent.sourceID
-            && (context.scopedGrant == nil || context.authorizationScope == consent.liveAuthorizationScope())
-            && (context.purpose == .manualBulkDownload || context.purpose == .automaticBulkDownload)
+        if let authorizationScope, context.authorizationScope != authorizationScope { return false }
+        if let consent {
+            guard context.batchID == consent.batchID, context.sourceID == consent.sourceID,
+                  context.authorizationScope == consent.liveAuthorizationScope() else { return false }
+        }
+        if let operation {
+            guard context.operationID == operation.operationID, context.purpose == operation.purpose,
+                  context.scopedGrant == operation.scopedGrant else { return false }
+        }
+        if context.scopedGrant != nil {
+            guard context.purpose == .manualBulkDownload || context.purpose == .automaticBulkDownload else { return false }
+            guard let consent, policy.hasValidConsent(
+                consent, reference: context.scopedGrant, operationID: context.operationID,
+                authorizationScope: context.authorizationScope
+            ) else { return false }
+        }
+        return true
     }
 }
 

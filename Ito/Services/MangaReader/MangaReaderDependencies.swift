@@ -103,6 +103,7 @@ protocol MangaReaderSettingsAccessing: AnyObject {
     var mangaReaderEffectivePreloadImageCount: Int { get }
     var mangaReaderAdjacentPrefetchCount: Int { get }
     var mangaReaderNetworkChanges: AnyPublisher<Void, Never> { get }
+    var mangaReaderPrefetchEpoch: NetworkPrefetchEpoch { get }
     func setMangaReaderPreloadImageCount(_ value: Int) async throws
 }
 
@@ -110,10 +111,12 @@ extension MangaReaderSettingsAccessing {
     var mangaReaderEffectivePreloadImageCount: Int { mangaReaderPreloadImageCount }
     var mangaReaderAdjacentPrefetchCount: Int { mangaReaderPreloadImageCount == 0 ? 0 : 2 }
     var mangaReaderNetworkChanges: AnyPublisher<Void, Never> { Empty().eraseToAnyPublisher() }
+    var mangaReaderPrefetchEpoch: NetworkPrefetchEpoch { .init(policyRevision: 0, pathGeneration: 0) }
 }
 
 extension AppSettingsStore: MangaReaderSettingsAccessing {
     var mangaReaderNetworkChanges: AnyPublisher<Void, Never> { networkPolicy.changes }
+    var mangaReaderPrefetchEpoch: NetworkPrefetchEpoch { networkPolicy.prefetchEpoch }
     var mangaReaderPreloadImageCount: Int {
         preloadImageCount.rawValue
     }
