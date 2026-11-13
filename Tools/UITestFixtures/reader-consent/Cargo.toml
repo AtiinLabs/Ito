@@ -1,0 +1,12 @@
+[package]
+name = "reader-consent"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# The ABI 3 SDK, pinned to a commit so builds are reproducible. Commit Cargo.lock as well.
+ito-rs = { git = "https://github.com/AtiinLabs/ito-rs", rev = "f15163e0e27d251fa3fffdd98e9f42204f52fedf" }
