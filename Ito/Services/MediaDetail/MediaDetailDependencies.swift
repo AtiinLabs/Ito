@@ -338,6 +338,11 @@ enum MediaDetailMessage: Equatable {
     case editionChoiceUnreadable
     /// Reading the stored choice failed this time. `reviewing` says the download goes on to a preview.
     case editionChoiceReadFailed(reviewing: Bool)
+    /// The source, catalog or edition policy changed after a choice or preview was shown, so nothing was
+    /// stored or queued and the user reviews again.
+    case editionChoiceChanged
+    /// The remembered preferred group has no chapters in the source's current list, so nothing was queued.
+    case preferredGroupNotListed
 }
 
 @MainActor
@@ -386,6 +391,10 @@ final class AppMessageMediaDetailPresenter: MediaDetailMessagePresenting {
             messageCenter.publish(.mediaDetailEditionChoiceUnreadable)
         case .editionChoiceReadFailed(let reviewing):
             messageCenter.publish(.mediaDetailEditionChoiceReadFailed(reviewing: reviewing))
+        case .editionChoiceChanged:
+            messageCenter.publish(.mediaDetailEditionChoiceChanged)
+        case .preferredGroupNotListed:
+            messageCenter.publish(.mediaDetailPreferredGroupNotListed)
         }
     }
 

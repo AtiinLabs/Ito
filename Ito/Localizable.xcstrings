@@ -36,7 +36,8 @@
     "%@ available" : {
       "comment" : "Download preview: free space on this device. The placeholder is a size such as 4.2 GB."
     },
-    "%@ has %lld new chapters." : {
+    "%@ has %lld new editions." : {
+      "comment" : "Manga/novel update-count heuristic: exact uploads, possibly alternate translations, not unique logical chapters.",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -44,13 +45,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%@ has %lld new chapter."
+                  "value" : "%@ has %lld new edition."
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%@ has %lld new chapters."
+                  "value" : "%@ has %lld new editions."
                 }
               }
             }
@@ -403,6 +404,52 @@
         }
       }
     },
+    "%lld edition updates" : {
+      "comment" : "Library manga/novel badge counts exact uploads, including alternate translations, not logical chapters.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld edition update"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld edition updates"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld episode updates" : {
+      "comment" : "Library update badge for anime; preserves numbered episode counting.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld episode update"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld episode updates"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld episodes" : {
       "localizations" : {
         "en" : {
@@ -717,6 +764,29 @@
         }
       }
     },
+    "%lld selected positions need another edition or will be skipped." : {
+      "comment" : "Aggregate unresolved download positions; count needs plural forms. Does not claim source deletion.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld selected position needs another edition or will be skipped."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld selected positions need another edition or will be skipped."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld sources need attention" : {
       "localizations" : {
         "en" : {
@@ -876,9 +946,6 @@
     "All sources resolved" : {
 
     },
-    "All uploads" : {
-      "comment" : "Scanlator choice: download every upload of every chapter. An advanced choice."
-    },
     "All-Time Popular" : {
 
     },
@@ -906,6 +973,17 @@
     "Anime" : {
       "comment" : "History filter\nHistory: kind of media"
     },
+    "Any available group" : {
+      "comment" : "Advanced explicit permission to use any eligible visible group.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Any available group"
+          }
+        }
+      }
+    },
     "App preferences" : {
 
     },
@@ -929,6 +1007,17 @@
     },
     "Ask before switching groups" : {
       "comment" : "Reader setting, off by default: require confirmation before Next, Previous or Resume opens another translation group's upload"
+    },
+    "Ask before switching" : {
+      "comment" : "Require batch consent before using another group.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask before switching"
+          }
+        }
+      }
     },
     "Ask on Discord" : {
 
@@ -1080,8 +1169,16 @@
     "Chapters" : {
 
     },
-    "Chapters marked read are skipped." : {
-      "comment" : "Download preview footer: read chapters are not downloaded by this preset."
+    "Chapters marked read are skipped, including other editions with the same chapter number." : {
+      "comment" : "Compatibility key-or-number read markers, not offline coverage.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chapters marked read are skipped, including other editions with the same chapter number."
+          }
+        }
+      }
     },
     "Check AniList Discord Status" : {
 
@@ -1129,11 +1226,19 @@
     "Choose a list status before adding this entry to MyAnimeList." : {
 
     },
+    "Choose a preferred group" : {
+      "comment" : "Choose the translation group normally used for this series.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a preferred group"
+          }
+        }
+      }
+    },
     "Choose a valid score for your scoring format." : {
 
-    },
-    "Choose scanlators" : {
-      "comment" : "Scanlator choice: download only chapters from the scanlators the user ticks."
     },
     "Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports." : {
 
@@ -1526,6 +1631,17 @@
         }
       }
     },
+    "Download all editions" : {
+      "comment" : "Advanced action: download every exact upload, including multiple translations of one chapter.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download all editions"
+          }
+        }
+      }
+    },
     "Download chapters" : {
       "comment" : "Accessibility label of the menu that queues several chapters for offline reading."
     },
@@ -1586,7 +1702,7 @@
       "comment" : "Downloads manager bulk Retry failure"
     },
     "Downloads every upload, including several translations of the same chapter." : {
-      "comment" : "Footer under the All uploads scanlator choice."
+      "comment" : "Footer under the Download all editions choice."
     },
     "Downloads not deleted" : {
       "comment" : "Library: a series was removed from the Library, but its saved chapters could not be deleted."
@@ -1616,6 +1732,20 @@
     },
     "Edit List" : {
 
+    },
+    "Edit fallback order" : {
+      "comment" : "Open the explicit ordered fallback policy editor, with optional Remember.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit fallback order"
+          }
+        }
+      }
+    },
+    "Edition choice changed" : {
+      "comment" : "Series details: a download choice or preview was made under a source, chapter list or edition policy that has since changed, so nothing was saved or queued."
     },
     "Empty source label" : {
       "comment" : "Distinguishes an explicitly empty source-provided group name from no group name."
@@ -1819,8 +1949,16 @@
     "Finished" : {
       "comment" : "Series status: complete"
     },
-    "Follow the source's list" : {
-      "comment" : "Scanlator choice: download whatever the source lists, from every scanlator it shows."
+    "Follow the source's preferred edition" : {
+      "comment" : "Let the source choose which visible upload to download. Uploads form one reading position only when the source supplies a shared logical-unit ID; otherwise each listed upload is separate.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Follow the source's preferred edition"
+          }
+        }
+      }
     },
     "Format" : {
 
@@ -1954,9 +2092,6 @@
     "Invalid URL" : {
 
     },
-    "It applies to this download only." : {
-      "comment" : "Series details: detail when the chosen scanlators could not be remembered for the series, so the choice applies to the current download only."
-    },
     "Items only in this list move to %@. Nothing is removed from your library." : {
 
     },
@@ -1995,6 +2130,17 @@
     },
     "Keep All Local" : {
 
+    },
+    "Keep selection" : {
+      "comment" : "Confirm only the permitted available chapters and leave missing positions unresolved.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep selection"
+          }
+        }
+      }
     },
     "Key: %@" : {
 
@@ -2277,6 +2423,17 @@
     "Move" : {
 
     },
+    "Move earlier" : {
+      "comment" : "Move an approved fallback group earlier in priority order.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move earlier"
+          }
+        }
+      }
+    },
     "Movie" : {
       "comment" : "Anime format: movie"
     },
@@ -2472,6 +2629,17 @@
     "Nothing to download." : {
       "comment" : "Download preview: no chapter would be queued."
     },
+    "Nothing was queued. Try again, or turn off Remember to use this choice for this batch only." : {
+      "comment" : "Edition policy save failed. Batch-only authorization requires a separate explicit confirmation.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing was queued. Try again, or turn off Remember to use this choice for this batch only."
+          }
+        }
+      }
+    },
     "Notification permission was denied, but the preference could not be disabled. Please try again." : {
 
     },
@@ -2519,6 +2687,9 @@
     },
     "Ongoing" : {
 
+    },
+    "Only these groups are offered as fallbacks, in the order shown. You review them before anything is queued." : {
+      "comment" : "Approved fallback has no unlisted final fallback, and a fallback is always shown in a preview before it is queued."
     },
     "Open" : {
 
@@ -2649,6 +2820,31 @@
     },
     "Preferences" : {
 
+    },
+    "Preferred edition unavailable" : {
+      "comment" : "Some positions are not currently offered by the preferred group.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preferred edition unavailable"
+          }
+        }
+      }
+    },
+    "Preferred group" : {
+      "comment" : "The first selected group is the primary edition choice.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preferred group"
+          }
+        }
+      }
+    },
+    "Preferred group not listed" : {
+      "comment" : "Series details: the group chosen for this series has no chapters in the source's current list, so nothing was queued. Does not claim the group stopped publishing."
     },
     "Preload Images" : {
 
@@ -3019,6 +3215,9 @@
         }
       }
     },
+    "Saved cover thumbnails" : {
+      "comment" : "Backup restore report: the component containing bounded cover images saved with library items."
+    },
     "Saved credentials are currently unavailable." : {
 
     },
@@ -3206,6 +3405,17 @@
     },
     "Selected" : {
 
+    },
+    "Selected groups only" : {
+      "comment" : "Strict allowed set: only the ticked groups are used. Their order is not a fallback order and never authorizes another group.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected groups only"
+          }
+        }
+      }
     },
     "Selection limit reached." : {
 
@@ -3419,6 +3629,17 @@
     },
     "Storage" : {
 
+    },
+    "Strict selection" : {
+      "comment" : "Leave positions unavailable when the preferred group is missing.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Strict selection"
+          }
+        }
+      }
     },
     "Subtitles" : {
       "comment" : "Subtitle button when no subtitle is selected"
@@ -3708,11 +3929,23 @@
     "The source stopped unexpectedly. Try again." : {
 
     },
+    "The source took too long to respond. Try again." : {
+      "comment" : "Error: a network request the source made did not finish in time"
+    },
     "The source was saved, but could not be opened. Try Open again." : {
 
     },
+    "The source's current list has no chapters from it. Choose another group to continue." : {
+      "comment" : "Series details: detail when the preferred group is absent from the current chapter list; the user may change the group in the scanlator choice."
+    },
     "The source's web page failed: %@" : {
 
+    },
+    "The source, chapter list or edition choice changed. Review again." : {
+      "comment" : "Series details: detail when a draft was invalidated before confirmation because the source, chapter list or edition policy changed; no changed plan was submitted automatically."
+    },
+    "The source's web page took too long to respond. Try again." : {
+      "comment" : "Error: a web page the source loaded did not respond in time"
     },
     "The specified HTTP header is prohibited." : {
 
@@ -4058,11 +4291,45 @@
     "Updating queued progress…" : {
 
     },
+    "Use %lld selected alternatives this time" : {
+      "comment" : "Confirm exact alternatives ticked in the preview for this batch only; does not remember fallback permission. The placeholder is the number ticked and needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Use %lld selected alternative this time"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Use %lld selected alternatives this time"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Use Selection" : {
       "comment" : "Button on the scanlator sheet: apply the choice and continue with the download."
     },
     "Use a Personal Access Token" : {
 
+    },
+    "Use approved groups in order" : {
+      "comment" : "Use only the explicitly ordered fallback groups.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use approved groups in order"
+          }
+        }
+      }
     },
     "Use this when a source stays blocked by Cloudflare or a website login stops working." : {
 
@@ -4175,6 +4442,17 @@
     },
     "When on, saving a new series opens the list picker instead of saving to Uncategorized. Only applies when you have at least one list of your own." : {
 
+    },
+    "When unavailable" : {
+      "comment" : "Fallback policy for a missing preferred edition.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When unavailable"
+          }
+        }
+      }
     },
     "When updating or tracking a series, automatically mark all previous chapters or episodes as read/watched in your local library." : {
 

@@ -199,7 +199,8 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                     status: source.status,
                     lastCheckedAt: source.lastCheckedAt,
                     lastUpdatedAt: source.lastUpdatedAt,
-                    knownChapterCount: source.knownChapterCount
+                    knownChapterCount: source.knownChapterCount,
+                    knownChapterCountBasis: source.knownChapterCountBasis
                 )
                 try destination.insert(db)
             }
@@ -425,7 +426,8 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                 status: source.status,
                 lastCheckedAt: source.lastCheckedAt,
                 lastUpdatedAt: source.lastUpdatedAt,
-                knownChapterCount: source.knownChapterCount
+                knownChapterCount: source.knownChapterCount,
+                knownChapterCountBasis: source.knownChapterCountBasis
             ).insert(db)
 
             try db.execute(
