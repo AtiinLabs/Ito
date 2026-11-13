@@ -123,7 +123,7 @@ struct PersistedBackupRestoreTests {
         fields["knownChapterCountBasis"] = "future-identity"
         let unknown = try JSONDecoder().decode(Ito.LibraryItem.self, from: JSONSerialization.data(withJSONObject: fields))
         #expect(unknown.knownChapterCountBasis == .unknown)
-        #expect(unknown != item)
+        #expect(unknown == item, "Count basis is metadata, not Library item identity")
     }
 
     // MARK: - Helpers

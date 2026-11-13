@@ -102,15 +102,14 @@ public struct LibraryItem: Codable, Identifiable, Hashable, Sendable, FetchableR
         public static let knownChapterCountBasis = Column(CodingKeys.knownChapterCountBasis)
     }
 
+    // Identity only: mutable update-count metadata, including its basis, is not identity.
     public static func == (lhs: LibraryItem, rhs: LibraryItem) -> Bool {
         return lhs.id == rhs.id && lhs.anilistId == rhs.anilistId
-            && lhs.knownChapterCountBasis == rhs.knownChapterCountBasis
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(id)
         hasher.combine(anilistId)
-        hasher.combine(knownChapterCountBasis)
     }
 }
 

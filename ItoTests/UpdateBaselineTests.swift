@@ -365,16 +365,37 @@ struct UpdateBaselineTests {
         #expect(manager.badgeCount(for: item.mediaIdentity) == 4)
     }
 
-    @Test func failedAndEmptyRefreshesDoNotSeedLegacyBasis() async throws {
+    @Test func failedRefreshAndEmptyAnswerNeverSeedTheBasis() async throws {
         let (database, manager, item) = try await makeSubject(knownCount: nil, basis: nil)
         defer { database.cleanup() }
         #expect(await manager.processUpdate(for: item) { throw StubError.fetchFailed } == nil)
-        #expect(await successfulUpdate(manager, item: item, freshCount: 0) == 0)
-        let unchanged = try await persistedItem(database, id: item.id)
-        #expect(unchanged.knownChapterCount == nil)
-        #expect(unchanged.knownChapterCountBasis == nil)
+        let failed = try await persistedItem(database, id: item.id)
+        #expect(failed.knownChapterCount == nil)
+        #expect(failed.knownChapterCountBasis == nil)
+
+        // With no known nonempty baseline an empty answer is recorded as it always was
+        // (count 0, status), but it does not establish the exact-key basis.
+        #expect(await successfulUpdate(manager, item: item, freshCount: 0, status: "completed") == 0)
+        let empty = try await persistedItem(database, id: item.id)
+        #expect(empty.knownChapterCount == 0)
+        #expect(empty.status == "completed")
+        #expect(empty.knownChapterCountBasis == nil)
+
         #expect(await successfulUpdate(manager, item: item, freshCount: 8) == 0)
-        #expect(try await persistedItem(database, id: item.id).knownChapterCountBasis == .exactChapterKeys)
+        let seeded = try await persistedItem(database, id: item.id)
+        #expect(seeded.knownChapterCount == 8)
+        #expect(seeded.knownChapterCountBasis == .exactChapterKeys)
+    }
+
+    @Test(arguments: [ChapterCountBasis?.none, .some(.unknown), .some(.exactChapterKeys)])
+    func emptyAnswerNeverReplacesAKnownNonemptyBaselineOrItsStatus(basis: ChapterCountBasis?) async throws {
+        let (database, manager, item) = try await makeSubject(knownCount: 12, status: "ongoing", basis: basis)
+        defer { database.cleanup() }
+        #expect(await successfulUpdate(manager, item: item, freshCount: 0, status: "completed") == 0)
+        let kept = try await persistedItem(database, id: item.id)
+        #expect(kept.knownChapterCount == 12)
+        #expect(kept.status == "ongoing")
+        #expect(kept.knownChapterCountBasis == basis)
     }
 
     @Test func detailAcknowledgmentSetsBasisAndClearsBadge() async throws {

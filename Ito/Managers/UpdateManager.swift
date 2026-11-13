@@ -420,10 +420,10 @@ public class UpdateManager: ObservableObject {
 
                 let oldCount = dbItem.knownChapterCount
                 // A source that refuses or fails a request can still answer with an empty list.
-                // That is not evidence its chapters are gone, and taking it as the new baseline
-                // would report every chapter as new on the next real answer.
-                let refusedEmpty = update.freshCount <= 0
-                    && (dbItem.effectiveType != .anime || (oldCount ?? 0) > 0)
+                // That is not evidence its chapters are gone: it never replaces a known nonempty
+                // baseline (or its status) and never establishes the exact-key basis. With no
+                // known nonempty baseline an empty answer is recorded as before (count 0, status).
+                let refusedEmpty = update.freshCount == 0 && (oldCount ?? 0) > 0
                 let matchedBasis = dbItem.effectiveType == .anime
                     || dbItem.knownChapterCountBasis == .exactChapterKeys
                 let delta = !refusedEmpty && matchedBasis
@@ -431,7 +431,7 @@ public class UpdateManager: ObservableObject {
                     : 0
                 if !refusedEmpty {
                     dbItem.knownChapterCount = update.freshCount
-                    if dbItem.effectiveType != .anime {
+                    if dbItem.effectiveType != .anime && update.freshCount > 0 {
                         dbItem.knownChapterCountBasis = .exactChapterKeys
                     }
                     if let status = update.status {
