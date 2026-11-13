@@ -21,6 +21,12 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
     private let runnerEvictor: (@Sendable (String, any PluginImageRunner) async -> Void)?
     private let imageTransport: PluginImageTransport
 
+    /// Whether `url` is a remote HTTP(S) destination the network policy governs. A local or app scheme is not.
+    private static func isRemote(_ url: URL?) -> Bool {
+        guard let scheme = url?.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
+    }
+
     public convenience init(
         configuration: URLSessionConfiguration = .default,
         pluginManager: PluginManager
@@ -48,7 +54,7 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
         runnerProvider: @escaping @Sendable (String) async throws -> any PluginImageRunner,
         runnerEvictor: (@Sendable (String, any PluginImageRunner) async -> Void)? = nil
     ) {
-        self.defaultLoader = defaultLoader ?? DataLoader(configuration: configuration)
+        self.defaultLoader = defaultLoader ?? PolicyDataLoader(configuration: configuration)
         self.runnerProvider = runnerProvider
         self.runnerEvictor = runnerEvictor
         self.networkContexts = contexts
@@ -56,12 +62,23 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
     }
 
     public func loadData(with request: URLRequest, didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void, completion: @escaping @Sendable (Error?) -> Void) -> Cancellable {
+        let mark = ImageRequestPurpose.marked(on: request)
         guard let url = request.url, url.scheme == "ito" else {
-            // Pass-through to default URLSession loader. The reader's purpose mark stays on this side.
-            return defaultLoader.loadData(with: ImageRequestPurpose.unmarked(request), didReceiveData: didReceiveData, completion: completion)
+            // The reader's purpose mark stays on this side. A remote request is admitted under the purpose it was
+            // marked with (an unmarked one is a cover image) before any byte is requested.
+            let forwarded = ImageRequestPurpose.unmarked(request)
+            guard Self.isRemote(request.url) else {
+                return defaultLoader.loadData(with: forwarded, didReceiveData: didReceiveData, completion: completion)
+            }
+            let authority = NetworkRequestAuthority.appOwned(
+                contexts: networkContexts,
+                purpose: mark?.networkPurpose ?? .coverImage
+            )
+            return admittedTransfer(forwarded, authority: authority, didReceiveData: didReceiveData, completion: completion)
         }
 
-        let cancellationLatch = CancellationLatch()
+        let admission = startAuthority(for: url, mark: mark)
+        let load = AdmittedImageLoad(authority: admission, completion: completion)
         let task = Task {
             var usedRunner: (any PluginImageRunner)?
             var targetPluginId: String?
@@ -70,28 +87,28 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                 let pluginId = locator.pluginID
                 targetPluginId = pluginId
 
+                // Refused before the runner starts; the resolution and wire transfer keep the original scope.
+                try admission.checkImageAdmission()
+
                 let runner = try await runnerProvider(pluginId)
                 usedRunner = runner
                 try Task.checkCancellation()
 
-                // One `ito://` load is one operation: every export of its resolution shares the ID and scope.
-                // The reader marks its page requests; an unmarked request is a cover image.
-                let purpose = ImageRequestPurpose.marked(on: request)?.networkPurpose ?? .coverImage
-                let operation = PluginNetworkOperation(purpose: purpose, operationID: UUID())
-                let contexts = networkContexts
                 switch try await PluginImageResolution.resolve(locator, runner: runner, context: {
-                    contexts.context(pluginID: pluginId, operation)
+                    admission.context
                 }) {
                 case .fetch(let target, let headers, let allowedOrigins):
+                    // Resolution and native transfer retain the same frozen authority.
                     let (data, response) = try await imageTransport.fetch(
                         url: target,
                         headers: headers,
                         allowedOrigins: allowedOrigins,
-                        pluginID: pluginId
+                        pluginID: pluginId,
+                        authority: admission
                     )
                     try Task.checkCancellation()
-                    didReceiveData(data, response)
-                    completion(nil)
+                    load.deliver(data, response, to: didReceiveData)
+                    load.complete(nil)
                 case .bytes(let data):
                     let response = URLResponse(
                         url: url,
@@ -99,17 +116,24 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                         expectedContentLength: data.count,
                         textEncodingName: nil
                     )
-                    didReceiveData(data, response)
-                    completion(nil)
+                    load.deliver(data, response, to: didReceiveData)
+                    load.complete(nil)
                 case .direct(let realUrl):
                     var realRequest = ImageRequestPurpose.unmarked(request)
                     realRequest.url = realUrl
-                    guard !cancellationLatch.isCancelled && !Task.isCancelled else { throw CancellationError() }
-                    let sub = defaultLoader.loadData(with: realRequest, didReceiveData: didReceiveData, completion: completion)
-                    cancellationLatch.setUnderlying(sub)
+                    guard !Task.isCancelled else { throw CancellationError() }
+                    guard Self.isRemote(realUrl) else { throw URLError(.unsupportedURL) }
+                    // The direct transfer is its own admitted load; the outer load cancels it.
+                    let sub = admittedTransfer(
+                        realRequest,
+                        authority: admission,
+                        didReceiveData: { load.deliver($0, $1, to: didReceiveData) },
+                        completion: { load.complete($0) }
+                    )
+                    load.attach(sub)
                 }
             } catch is CancellationError {
-                completion(URLError(.cancelled))
+                load.complete(URLError(.cancelled))
             } catch {
                 if let runner = usedRunner,
                    let pluginId = targetPluginId,
@@ -117,69 +141,48 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                    callError.kind == .crashed {
                     await runnerEvictor?(pluginId, runner)
                 }
-                completion(error)
+                load.complete(error)
             }
         }
+        load.attach(task: task)
 
-        return AnyCancellable {
-            task.cancel()
-            cancellationLatch.cancel()
+        return load
+    }
+
+    /// The authority a `ito://` load is first admitted under: its source, scope and purpose, under the live policy.
+    private func startAuthority(for url: URL, mark: ImageRequestPurpose?) -> NetworkRequestAuthority {
+        let pluginID = (try? PluginImageLocator.parse(url).pluginID) ?? NetworkRequestAuthority.appSourceID
+        let operation = PluginNetworkOperation(purpose: mark?.networkPurpose ?? .coverImage, operationID: UUID())
+        return NetworkRequestAuthority(contexts: networkContexts, context: networkContexts.context(pluginID: pluginID, operation))
+    }
+
+    /// One remote transfer through the default loader, owned by its own authority. A live policy change that
+    /// stops admitting it cancels this transfer only; a redirect is re-checked when the loader supports it.
+    private func admittedTransfer(
+        _ request: URLRequest,
+        authority: NetworkRequestAuthority,
+        didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void,
+        completion: @escaping @Sendable (Error?) -> Void
+    ) -> Cancellable {
+        let load = AdmittedImageLoad(authority: authority, completion: completion)
+        let refreshed = authority
+        do {
+            try refreshed.checkImageAdmission()
+        } catch {
+            Task { load.complete(error) }
+            return load
         }
-    }
-}
-nonisolated
-final class CancellationLatch: @unchecked Sendable {
-    private enum State {
-        case idle
-        case active(Cancellable)
-        case cancelled
-    }
-
-    private let lock = NSLock()
-    private var state: State = .idle
-
-    var isCancelled: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        if case .cancelled = state { return true }
-        return false
-    }
-
-    func setUnderlying(_ cancellable: Cancellable) {
-        lock.lock()
-        defer { lock.unlock() }
-        switch state {
-        case .idle:
-            state = .active(cancellable)
-        case .active(let existing):
-            existing.cancel()
-            state = .active(cancellable)
-        case .cancelled:
-            cancellable.cancel()
+        let received: @Sendable (Data, URLResponse) -> Void = { data, response in
+            load.deliver(data, response, to: didReceiveData)
         }
-    }
-
-    func cancel() {
-        lock.lock()
-        defer { lock.unlock() }
-        switch state {
-        case .idle:
-            state = .cancelled
-        case .active(let cancellable):
-            cancellable.cancel()
-            state = .cancelled
-        case .cancelled:
-            break
+        let finished: @Sendable (Error?) -> Void = { load.complete($0) }
+        let transfer: any Cancellable
+        if let loader = defaultLoader as? any AuthorizedDataLoading {
+            transfer = loader.loadData(with: request, authority: refreshed, didReceiveData: received, completion: finished)
+        } else {
+            transfer = defaultLoader.loadData(with: request, didReceiveData: received, completion: finished)
         }
-    }
-}
-
-private final class AnyCancellable: Cancellable, @unchecked Sendable {
-    let closure: () -> Void
-    init(_ closure: @escaping () -> Void) {
-        self.closure = closure
-    }
-    func cancel() {
-        closure()
+        load.attach(transfer)
+        return load
     }
 }

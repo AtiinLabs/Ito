@@ -382,13 +382,15 @@ public final class DurableStateBootstrap: ObservableObject {
             mangaBakaCredentialStore: trackerCredentialStore,
             legacyTokenStore: legacyTokenStore,
             usernameDefaults: usernameDefaults,
-            backgroundExecution: .application
+            backgroundExecution: .application,
+            networkContexts: pluginSettings.networkContexts
         )
         let repositories = RepoManager(
             dbPool: dbPool,
             pluginManager: plugins,
             pluginsDirectory: installedPluginsDirectory
         )
+        repositories.configure(networkContexts: pluginSettings.networkContexts)
         let resolver = PluginResolver(
             dbPool: dbPool,
             repoManager: repositories,

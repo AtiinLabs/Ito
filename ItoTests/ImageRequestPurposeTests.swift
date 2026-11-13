@@ -226,7 +226,7 @@ final class ImageRequestPurposeTests: XCTestCase {
     ) -> PluginDataLoader {
         PluginDataLoader(
             configuration: .ephemeral,
-            contexts: PluginNetworkContexts(),
+            contexts: PluginNetworkContexts(policy: NetworkPolicyCenter(path: ManualNetworkPathObserver(initial: .init(status: .satisfied)))),
             defaultLoader: defaultLoader,
             runnerProvider: { _ in runner }
         )

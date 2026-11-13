@@ -81,8 +81,6 @@ final class PluginDataLoaderNativeTests: XCTestCase {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [PluginImageTransportTestURLProtocol.self]
         let loader = PluginDataLoader(configuration: config, contexts: PluginNetworkContexts(), runnerProvider: { _ in runner })
-        let completed = expectation(description: "Both loaders finish cancellation")
-        completed.expectedFulfillmentCount = 2
         let capture = NativeImageCapture()
         let subscriptions = ["first", "second"].map { path in
             loader.loadData(
@@ -90,24 +88,24 @@ final class PluginDataLoaderNativeTests: XCTestCase {
                 didReceiveData: { data, _ in capture.append(data) },
                 completion: { error in
                     capture.complete(error)
-                    completed.fulfill()
                 }
             )
         }
         await fulfillment(of: [started], timeout: 5)
         subscriptions.forEach { $0.cancel() }
-        await fulfillment(of: [stopped, completed], timeout: 5)
+        await fulfillment(of: [stopped], timeout: 5)
+        for subscription in subscriptions {
+            await (subscription as? AdmittedImageLoad)?.waitForTaskForTesting()
+        }
         XCTAssertTrue(capture.data.isEmpty)
-        XCTAssertEqual(capture.completions, 2)
-        XCTAssertEqual((capture.error as? URLError)?.code, .cancelled)
+        XCTAssertEqual(capture.completions, 0, "Nuke receives no callbacks after detachment.")
         let legacyCalls = await runner.legacyCalls
         XCTAssertEqual(legacyCalls, 0)
     }
 
-    func testCancellationAfterANoncooperativeLegacyCallAlwaysCompletesWithoutData() async {
+    func testCancellationAfterANoncooperativeLegacyCallCannotPublish() async {
         for handledData in [Data([9, 8]), nil] {
             let started = expectation(description: "Legacy handler entered")
-            let done = expectation(description: "Cancelled image completed")
             let runner = DelayedLegacyImageRunner(didStart: { started.fulfill() })
             let loader = PluginDataLoader(configuration: .ephemeral, contexts: PluginNetworkContexts(), runnerProvider: { _ in runner })
             let capture = NativeImageCapture()
@@ -116,16 +114,13 @@ final class PluginDataLoaderNativeTests: XCTestCase {
                 capture.append(data)
             }, completion: { error in
                 capture.complete(error)
-                done.fulfill()
             })
             await fulfillment(of: [started], timeout: 5)
             subscription.cancel()
             await runner.resume(returning: handledData)
-            await fulfillment(of: [done], timeout: 5)
-
+            await (subscription as? AdmittedImageLoad)?.waitForTaskForTesting()
             XCTAssertTrue(capture.data.isEmpty)
-            XCTAssertEqual(capture.completions, 1)
-            XCTAssertEqual((capture.error as? URLError)?.code, .cancelled)
+            XCTAssertEqual(capture.completions, 0)
         }
     }
 

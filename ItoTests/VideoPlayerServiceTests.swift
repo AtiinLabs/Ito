@@ -24,10 +24,10 @@ final class VideoPlayerServiceTests: XCTestCase {
         )
     }
 
-    func testPlaybackCoordinatorContractPrepareReplaceObservePauseAndShutdown() async {
+    func testPlaybackCoordinatorContractPrepareReplaceObservePauseAndShutdown() async throws {
         let coordinator = VideoPlaybackCoordinatorFake()
         var updates: [(Double, Double)] = []
-        let first = await coordinator.prepare(video: video("first"))
+        let first = try await coordinator.prepare(video: video("first"))
         XCTAssertNotNil(first)
         XCTAssertTrue(
             coordinator.activate(try XCTUnwrap(first), startTime: nil) { time, duration in
@@ -36,7 +36,7 @@ final class VideoPlayerServiceTests: XCTestCase {
         )
         coordinator.emit(currentTime: 4, duration: 10)
 
-        let second = await coordinator.prepare(video: video("second"))
+        let second = try await coordinator.prepare(video: video("second"))
         XCTAssertTrue(
             coordinator.activate(try XCTUnwrap(second), startTime: nil) { time, duration in
                 updates.append((time, duration))

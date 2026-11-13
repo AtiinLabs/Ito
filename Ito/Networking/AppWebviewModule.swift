@@ -1,25 +1,73 @@
-import OSLog
+import Combine
 import Foundation
 import UIKit
 import WebKit
 import ito_runner
 
+/// The web view a plugin drives. With a live network policy every runner operation owns its own page, so
+/// cancelling or replacing one operation's load never settles another's. Each page is bound to its source's
+/// website data for the current authorization scope, never to a host shared across sources. Without a policy
+/// (tests, previews) one unbound page serves every call.
 actor AppWebviewModule: WebviewModule {
-    // The host context is accepted for the runner's contract and is not read yet.
+    /// Live pages. More than this many retire the one used least recently: a page is a full web view.
+    private static let maximumPages = 3
+
+    private let contexts: PluginNetworkContexts?
+    private var pages: [(operationID: UUID, page: WebviewManager)] = []
+    private var unboundPage: WebviewManager?
+
+    init(contexts: PluginNetworkContexts? = nil) {
+        self.contexts = contexts
+    }
+
+    private func page(for context: NetworkOperationContext) async throws -> WebviewManager {
+        guard let contexts else {
+            if let unboundPage { return unboundPage }
+            let created = await WebviewManager()
+            unboundPage = created
+            return created
+        }
+        let authority = NetworkRequestAuthority(contexts: contexts, context: context)
+        try Task.checkCancellation()
+        // A background or bulk operation never gets a page: it is told it needs the user, and no view is built.
+        try authority.checkInteractive()
+        var live: [(operationID: UUID, page: WebviewManager)] = []
+        for entry in pages {
+            if await !entry.page.isRetired { live.append(entry) }
+        }
+        pages = live
+        if let index = pages.firstIndex(where: { $0.operationID == context.operationID }) {
+            let entry = pages.remove(at: index)
+            pages.append(entry)
+            try await entry.page.validate(authority)
+            return entry.page
+        }
+        let created = await WebviewManager(authority: authority)
+        pages.append((context.operationID, created))
+        // Capacity never retires another operation that still has a native waiter.
+        while pages.count > Self.maximumPages {
+            var idleIndex: Int?
+            for index in pages.indices where pages[index].operationID != context.operationID {
+                if await pages[index].page.isIdle { idleIndex = index; break }
+            }
+            guard let idleIndex else { break }
+            let oldest = pages.remove(at: idleIndex)
+            await oldest.page.retire(with: CancellationError())
+        }
+        return created
+    }
+
     func loadUrl(request: WebviewRequest, context: NetworkOperationContext) async throws -> WebviewResponse {
-        AppLogger.network.debug("AppWebviewModule: loadUrl called for \(request.url)")
-        return try await WebviewManager.shared.loadUrl(request: request)
+        try await page(for: context).loadUrl(request: request)
     }
 
     func executeJs(script: String, context: NetworkOperationContext) async throws -> String {
-        AppLogger.network.debug("AppWebviewModule: executeJs called")
-        return try await WebviewManager.shared.executeJs(script: script)
+        try await page(for: context).executeJs(script: script)
     }
 }
 
 @MainActor
 class WebviewManager: NSObject, WKNavigationDelegate {
-    static let shared = WebviewManager()
     /// The error a script ends with when the user closes the page (see `closeByUser`).
     static let closedByUser: Error = ItoError.hostModuleError(domain: "webview", message: "Verification was closed.")
 
@@ -27,6 +75,52 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     private let pageLoadDeadline: TimeInterval
     /// Whether the user can see the app, so a page may be shown to them. Injected so tests can refuse.
     private let isInteractive: @MainActor () -> Bool
+    /// The authority of the operation that owns this page; nil for the unbound page.
+    private let authority: NetworkRequestAuthority?
+    private var policyObservation: AnyCancellable?
+    var isIdle: Bool { pendingLoad == nil && pendingScripts.isEmpty }
+    private var retirement: UUID?
+    private(set) var isRetired = false
+
+    /// Whether `incoming` is the operation that owns this page, and is still admitted.
+    func validate(_ incoming: NetworkRequestAuthority) throws {
+        guard !isRetired, let authority,
+              authority.context.authorizationScope == incoming.context.authorizationScope,
+              authority.context.sourceID == incoming.context.sourceID,
+              authority.context.operationID == incoming.context.operationID else {
+            throw HostNetworkPolicyOutcome.sourceAuthorizationFailure
+        }
+        try checkAdmission()
+    }
+
+    private func checkAdmission() throws {
+        guard !isRetired else { throw HostNetworkPolicyOutcome.sourceAuthorizationFailure }
+        try authority?.checkInteractive()
+    }
+
+    private var isAdmitted: Bool {
+        do { try checkAdmission(); return true } catch { return false }
+    }
+
+    /// Ends this page: its pending load and scripts settle with `error` once, and the web view goes away. Only
+    /// this page's waiters are affected.
+    func retire(with error: Error) {
+        guard !isRetired else { return }
+        isRetired = true
+        policyObservation?.cancel()
+        policyObservation = nil
+        if let retirement { SourceWebsiteContexts.shared.removeObserver(retirement) }
+        retirement = nil
+        finishLoad(with: .failure(error))
+        invalidatePendingScripts(with: error)
+        presentation?.end()
+        presentation = nil
+        webView?.stopLoading()
+        webView?.navigationDelegate = nil
+        webView?.removeFromSuperview()
+        webView = nil
+    }
+
     /// The origins the user closed a page for. A closed origin isn't shown again until the app becomes active.
     private var declinedOrigins: Set<String> = []
     private(set) var webView: WKWebView?
@@ -53,19 +147,49 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     var onShowPageDecision: ((Bool) -> Void)?
 #endif
 
-    init(pageLoadDeadline: TimeInterval = 45, isInteractive: @escaping @MainActor () -> Bool = { PagePresentation.foregroundScene != nil }) {
+    init(
+        pageLoadDeadline: TimeInterval = 45,
+        isInteractive: @escaping @MainActor () -> Bool = { PagePresentation.foregroundScene != nil },
+        authority: NetworkRequestAuthority? = nil
+    ) {
+        self.authority = authority
         self.pageLoadDeadline = pageLoadDeadline
         self.isInteractive = isInteractive
         super.init()
+        if let authority {
+            retirement = SourceWebsiteContexts.shared.observeRetirement { [weak self] in
+                self?.retire(with: CancellationError())
+            }
+            // A live change that no longer admits this operation ends only this page.
+            policyObservation = authority.changes.sink { [weak self] _ in
+                do {
+                    try authority.checkInteractive()
+                } catch {
+                    Task { @MainActor [weak self] in self?.retire(with: error) }
+                }
+            }
+        }
         NotificationCenter.default.addObserver(
             self, selector: #selector(applicationDidBecomeActive),
             name: UIApplication.didBecomeActiveNotification, object: nil)
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        MainActor.assumeIsolated {
+            presentation?.end()
+            webView?.stopLoading()
+            webView?.removeFromSuperview()
+            if let retirement { SourceWebsiteContexts.shared.removeObserver(retirement) }
+        }
+    }
+
     private func setupWebView() {
         if webView == nil {
             let config = WKWebViewConfiguration()
-            config.websiteDataStore = WKWebsiteDataStore.default()
+            // A page owned by an operation uses its source's website data for the current scope; the unbound page
+            // keeps the app's default store.
+            config.websiteDataStore = authority.map { SourceWebsiteContexts.shared.store(for: $0.context) } ?? .default()
             let prefs = WKWebpagePreferences()
             prefs.allowsContentJavaScript = true
             config.defaultWebpagePreferences = prefs
@@ -92,8 +216,8 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     /// A newer load replaces this one (it fails with `URLError(.cancelled)`); cancelling the
     /// caller or passing the deadline stops the page and fails the load.
     func loadUrl(request: WebviewRequest) async throws -> WebviewResponse {
-        AppLogger.network.debug("WebviewManager: loadUrl requested")
         try Task.checkCancellation()
+        try checkAdmission()
         finishLoad(with: .failure(URLError(.cancelled)))
         invalidatePendingScripts(with: URLError(.cancelled))
         guard let url = URL(string: request.url) else {
@@ -107,7 +231,7 @@ class WebviewManager: NSObject, WKNavigationDelegate {
             try await withCheckedThrowingContinuation { continuation in
                 let deadline = Task { [weak self] in
                     guard (try? await Task.sleep(nanoseconds: deadlineNanoseconds)) != nil else { return }
-                    self?.finishLoad(id, with: .failure(URLError(.timedOut)))
+                    self?.finishLoad(id, with: .failure(ItoError.hostCallTimedOut(.webview)))
                 }
                 pendingLoad = PendingLoad(id: id, continuation: continuation, deadline: deadline)
                 pendingLoad?.navigation = webView?.load(URLRequest(url: url))
@@ -135,27 +259,23 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     /// function body: it must `return` a value, and a Promise it returns is awaited. Any other
     /// script is evaluated with `evaluateJavaScript`. Either way the result is a string.
     func executeJs(script: String) async throws -> String {
-        AppLogger.network.debug("WebviewManager: executing js script of length \(script.count)")
+        try Task.checkCancellation()
+        try checkAdmission()
         if script.hasPrefix(WebviewManager.asyncScriptMarker) {
             return try await executeAsyncJs(script: script)
         }
-        return try await withCheckedThrowingContinuation { continuation in
-            guard let wv = webView else {
-                AppLogger.network.debug("WebviewManager: webView is nil")
-                continuation.resume(throwing: URLError(.badURL))
-                return
-            }
-            wv.evaluateJavaScript(script) { result, error in
-                if let error = error {
-                    AppLogger.network.error("WebviewManager: evaluateJavaScript error: \(error)")
-                    continuation.resume(throwing: error)
-                } else {
-                    // `undefined` arrives as nil and `null` as NSNull: both are an empty result.
-                    let resultStr = result.flatMap { $0 is NSNull ? nil : String(describing: $0) } ?? ""
-                    AppLogger.network.debug("WebviewManager: evaluateJavaScript success, result length: \(resultStr.count)")
-                    continuation.resume(returning: resultStr)
+        guard let wv = webView else { throw URLError(.badURL) }
+        let id = UUID()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+                guard !Task.isCancelled else { continuation.resume(throwing: CancellationError()); return }
+                pendingScripts[id] = continuation
+                wv.evaluateJavaScript(script) { [weak self] value, error in
+                    self?.finishScript(id, with: error.map { .failure($0) } ?? .success(WebviewManager.scriptResult(value)))
                 }
             }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.finishScript(id, with: .failure(CancellationError())) }
         }
     }
 
@@ -163,13 +283,13 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     /// completion or the cancellation that ends it always finds it; whichever arrives first removes it.
     private func executeAsyncJs(script: String) async throws -> String {
         guard let wv = webView else {
-            AppLogger.network.debug("WebviewManager: webView is nil")
             throw URLError(.badURL)
         }
         try Task.checkCancellation()
         let id = UUID()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+                guard !Task.isCancelled else { continuation.resume(throwing: CancellationError()); return }
                 pendingScripts[id] = continuation
                 // WebKit's Objective-C entry point, not the Swift overlay: it needs no
                 // libswiftWebKit symbol on older systems, reports `undefined` as nil rather than
@@ -188,8 +308,14 @@ class WebviewManager: NSObject, WKNavigationDelegate {
 
     /// Ends the async script `id` with `result`, if it is still waiting. A late completion for a
     /// script that was cancelled or invalidated finds no entry and is ignored.
-    private func finishScript(_ id: UUID, with result: Result<String, Error>) {
+    private func finishScript(_ id: UUID, with resultFromCallback: Result<String, Error>) {
         guard let continuation = pendingScripts.removeValue(forKey: id) else { return }
+        let result: Result<String, Error>
+        if case .success = resultFromCallback {
+            do { try checkAdmission(); result = resultFromCallback } catch { result = .failure(error) }
+        } else {
+            result = resultFromCallback
+        }
         endPresentationIfIdle()
         continuation.resume(with: result)
     }
@@ -220,6 +346,7 @@ class WebviewManager: NSObject, WKNavigationDelegate {
             && message.frameInfo.isMainFrame
             && !pendingScripts.isEmpty
             && isInteractive()
+            && isAdmitted
             && !declinedOrigins.contains(origin)
         if accepted, presentation == nil, let webView {
             presentation = PagePresentation(
@@ -265,6 +392,27 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     }
 
     // MARK: - WKNavigationDelegate
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        // A navigation of an operation's page is a network request: it is decided against the live policy, and
+        // one that is no longer admitted ends this page. Local schemes (data, about) are not network.
+        guard authority != nil, let target = navigationAction.request.url,
+              target.scheme == "https" || target.scheme == "http" else {
+            decisionHandler(.allow)
+            return
+        }
+        do {
+            try checkAdmission()
+            decisionHandler(.allow)
+        } catch {
+            decisionHandler(.cancel)
+            retire(with: error)
+        }
+    }
+
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         // A committed navigation replaces the document, so scripts still awaiting the old one can't
         // finish. Same-document changes (pushState, fragment) don't commit and keep their scripts.
@@ -282,7 +430,6 @@ class WebviewManager: NSObject, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         guard let id = loadID(for: navigation) else { return }
-        AppLogger.network.error("WebviewManager: navigation failed: \(error.localizedDescription)")
         finishLoad(id, with: .failure(error))
     }
 

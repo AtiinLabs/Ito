@@ -8,9 +8,8 @@ import ito_runner
 /// message, and `unmarked(_:)` removes it from every request handed to a network loader, so the
 /// transport never receives it.
 ///
-/// Nuke coalesces requests for one URL into one data task, and that task keeps the purpose of the first
-/// request that started it. A later request for the same URL shares that purpose. No behaviour depends on the
-/// purpose yet, so this is accepted rather than worked around.
+/// Network task coalescing is disabled in the shared pipeline: equal URLs are not equal authority.
+/// Cache hits remain shared and require no remote admission.
 nonisolated enum ImageRequestPurpose: String, Sendable {
     case foregroundReading
     case prefetch

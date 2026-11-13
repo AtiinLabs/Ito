@@ -355,8 +355,8 @@ public class PluginManager: ObservableObject {
             frozenScope: nil
         ) {
             PluginRunnerHostModules(
-                net: AppNetModule(pluginID: pluginID, cookieJar: settingsStore.cookies, trust: settingsStore.trust),
-                webview: AppWebviewModule()
+                net: AppNetModule(pluginID: pluginID, cookieJar: settingsStore.cookies, trust: settingsStore.trust, contexts: settingsStore.networkContexts),
+                webview: AppWebviewModule(contexts: settingsStore.networkContexts)
             )
         }
     }

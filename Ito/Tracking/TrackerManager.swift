@@ -23,6 +23,9 @@ public final class TrackerManager: ObservableObject {
     @Published private(set) var credentialBootstrapState: CredentialBootstrapState = .notStarted
     @Published private(set) var malCredentialBootstrapState: CredentialBootstrapState = .notStarted
     @Published private(set) var mangaBakaCredentialBootstrapState: CredentialBootstrapState = .notStarted
+    /// Last acknowledged/deferred/unknown result of automatic sync. This is presentation state, not a retry outbox;
+    /// callers may report a pending update without claiming a write succeeded or rolled back.
+    @Published private(set) var progressUpdateReports: [MediaIdentity: ProgressUpdateReport] = [:]
 
     public let providers: [any TrackerProvider]
 
@@ -42,28 +45,44 @@ public final class TrackerManager: ObservableObject {
         legacyTokenStore: any LegacyTokenStoring,
         usernameDefaults: UserDefaults,
         backgroundExecution: BackgroundExecution = .none,
-        malSession: URLSession = .shared,
-        mangaBakaSession: URLSession = .shared
+        malSession: URLSession? = nil,
+        mangaBakaSession: URLSession? = nil,
+        networkContexts: PluginNetworkContexts? = nil
     ) {
         self.dbPool = dbPool
+        // One authority provider for the three trackers. Without a live policy (tests, previews) they keep the
+        // plain shared session and are not gated.
+        let authorities = AppNetworkAuthorityProvider()
+        let gatedSession: URLSession
+        if let networkContexts {
+            authorities.set(networkContexts)
+            gatedSession = PolicyRedirectDelegate.session(authorities: authorities, purpose: .trackerWrite)
+        } else {
+            gatedSession = .shared
+        }
+        let malSession = malSession ?? gatedSession
+        let mangaBakaSession = mangaBakaSession ?? gatedSession
         let credentialRepository = AniListCredentialRepository(
             secureStore: credentialStore,
             legacyStore: legacyTokenStore
         )
         let tracker = AnilistTracker(
             credentialRepository: credentialRepository,
-            usernameDefaults: usernameDefaults
+            usernameDefaults: usernameDefaults,
+            session: gatedSession,
+            authorities: authorities
         )
         let malOAuth = MALOAuth(clientID: MALTracker.clientID, session: malSession)
         let malTracker = MALTracker(
             credentialRepository: MALCredentialRepository(
                 store: malCredentialStore,
-                refresher: malOAuth,
+                refresher: PolicyMALTokenRefresher(inner: malOAuth, authorities: authorities),
                 backgroundExecution: backgroundExecution
             ),
             oauth: malOAuth,
             usernameDefaults: usernameDefaults,
-            session: malSession
+            session: malSession,
+            authorities: authorities
         )
         anilistTracker = tracker
         self.malTracker = malTracker
@@ -75,12 +94,13 @@ public final class TrackerManager: ObservableObject {
         mangaBakaTracker = MangaBakaTracker(
             credentialRepository: MangaBakaCredentialRepository(
                 store: mangaBakaCredentialStore,
-                refresher: mangaBakaOAuth,
+                refresher: PolicyMangaBakaTokenRefresher(inner: mangaBakaOAuth, authorities: authorities),
                 backgroundExecution: backgroundExecution
             ),
             oauth: mangaBakaOAuth,
             usernameDefaults: usernameDefaults,
-            session: mangaBakaSession
+            session: mangaBakaSession,
+            authorities: authorities
         )
         providers = [tracker, malTracker, mangaBakaTracker]
     }
@@ -262,18 +282,50 @@ public final class TrackerManager: ObservableObject {
         providers.filter(\.isAuthenticated)
     }
 
+    /// What an automatic progress update did, per tracker. Automatic writes have no durable retry queue, so a
+    /// tracker the policy deferred is reported as deferred, and the next progress update sends the absolute value
+    /// again; it is neither sent, failed, nor lost silently.
+    struct ProgressUpdateReport: Equatable {
+        /// Trackers whose write was acknowledged.
+        var sent: [String] = []
+        /// Trackers the network policy refused before any request: nothing was sent, and sending again is safe.
+        var deferred: [String] = []
+        /// Trackers whose write failed. A failure after the request started may have reached the remote.
+        var failed: [String] = []
+
+        mutating func recordFailure(providerID: String, error: any Error) {
+            if error is HostNetworkPolicyOutcome {
+                deferred.append(providerID)
+            } else {
+                // A transport failure is not proof the remote rejected or rolled back the request.
+                failed.append(providerID)
+            }
+        }
+    }
+
     public func updateProgress(media: MediaIdentity, progress: Int) async {
+        _ = await updateProgressReport(media: media, progress: progress)
+    }
+
+    func updateProgressReport(media: MediaIdentity, progress: Int) async -> ProgressUpdateReport {
         let mappings = trackerMappings[media] ?? [:]
+        var report = ProgressUpdateReport()
         for provider in authenticatedProviders {
             guard let remoteMediaId = mappings[provider.identifier] else { continue }
             do {
                 try await provider.updateProgress(mediaId: remoteMediaId, progress: progress, status: nil)
+                report.sent.append(provider.identifier)
             } catch {
-                AppLogger.auth.error(
-                    "Failed to update progress on \(provider.name): \(error.localizedDescription)"
-                )
+                report.recordFailure(providerID: provider.identifier, error: error)
+                if error is HostNetworkPolicyOutcome {
+                    AppLogger.auth.info("Tracker progress update deferred by network policy.")
+                } else {
+                    AppLogger.auth.error("Tracker progress update was not acknowledged.")
+                }
             }
         }
+        progressUpdateReports[media] = report
+        return report
     }
 }
 

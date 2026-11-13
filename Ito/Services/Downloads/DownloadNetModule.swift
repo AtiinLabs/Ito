@@ -196,7 +196,12 @@ extension PluginRunnerHostModules {
             retryLogger: OSLogAppNetRetryLogger(),
             pluginID: pluginID,
             cookieJar: cookieJar,
-            trust: trust
+            trust: trust,
+            admitContext: { context in
+                if let denial = recorder.firstDenial { throw denial }
+                guard gate.isCurrent(context) else { try recorder.deny(.deferred(.policyChanged)) }
+                if case .wait(let reason) = gate.admission() { try recorder.deny(reason.policyOutcome) }
+            }
         )
         return PluginRunnerHostModules(
             net: DownloadNetModule(inner: transport, gate: gate, recorder: recorder),

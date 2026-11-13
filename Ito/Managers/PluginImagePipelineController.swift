@@ -88,6 +88,9 @@ nonisolated final class PluginImagePipelineController: @unchecked Sendable {
             let pipeline = ImagePipeline(delegate: delegate) {
                 $0.dataCache = dataCache
                 $0.dataLoader = dataLoader
+                // URL-only coalescing can promote a speculative subscriber to a foreground transfer.
+                // Keep cache sharing, but let each loader invocation retain its own immutable authority.
+                $0.isTaskCoalescingEnabled = false
                 $0.makeImageDecoder = ItoImageDecoders.make(for:)
             }
             currentDelegate?.pluginMemory?.removeAll()

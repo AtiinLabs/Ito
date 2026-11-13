@@ -151,6 +151,17 @@ final class ReaderPageImageSession {
             prefetchOrder.removeAll { $0 == key }
         }
         entries[key] = entry
+        if consumer == .visible, entry.taskIsPrefetch, let cancelTask = entry.cancelTask {
+            // A foreground read never rides on speculative work: that transfer was admitted, and may be refused,
+            // as a prefetch. Replace it with a task started under foreground authority.
+            entry.generation &+= 1
+            runningPrefetches = max(0, runningPrefetches - 1)
+            cancelTask()
+            entry.cancelTask = nil
+            entry.taskIsPrefetch = false
+            entry.phase = .idle
+            entries[key] = entry
+        }
         if case .idle = entry.phase {
             switch consumer {
             case .visible: start(key)
@@ -328,7 +339,9 @@ final class ReaderPageImageSession {
         if entry.taskIsPrefetch { runningPrefetches = max(0, runningPrefetches - 1) }
         entry.cancelTask = nil
         entry.taskIsPrefetch = false
-        if !entry.leases.isEmpty { entry.phase = .failed } else { entry.phase = .idle }
+        // A refused or failed prefetch is silent: only a page someone is looking at shows a failure, and the
+        // entry stays startable so a later foreground read is admitted on its own authority.
+        if entry.leases.values.contains(.visible) { entry.phase = .failed } else { entry.phase = .idle }
         entries[key] = entry
         publish(key)
         startQueuedPrefetches()

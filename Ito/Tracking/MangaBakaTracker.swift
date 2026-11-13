@@ -189,6 +189,7 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
     private let oauth: MangaBakaOAuth
     private let usernameDefaults: UserDefaults
     private let session: URLSession
+    private let authorities: AppNetworkAuthorityProvider?
     private let catalog: MangaBakaClient
     private var writeChains: [Int: Task<Void, any Error>] = [:]
     var scoreIdentity: TrackerScoreIdentity { credentialRepository.scoreIdentity }
@@ -198,12 +199,14 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
         credentialRepository: MangaBakaCredentialRepository,
         oauth: MangaBakaOAuth,
         usernameDefaults: UserDefaults,
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        authorities: AppNetworkAuthorityProvider? = nil
     ) {
         self.credentialRepository = credentialRepository
         self.oauth = oauth
         self.usernameDefaults = usernameDefaults
         self.session = session
+        self.authorities = authorities
         catalog = Self.client(credential: nil, session: session)
         username = usernameDefaults.string(forKey: usernameKey)
     }
@@ -220,16 +223,23 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
     /// Signs in through MangaBaka's OAuth page with PKCE. The token is kept only once the API
     /// accepts it, so a sign-in that cannot sync fails here instead of later.
     public func authenticate(using oauthManager: OAuthManager) async throws {
+        // Before the sign-in starts, so a refused sign-in never leaves an exchanged token to revoke.
+        try authorities?.admit(.trackerWrite)
         let request = oauth.authorizationRequest()
         let callbackURL = try await oauthManager.authenticate(url: request.url, callbackScheme: "ito")
         let code = try oauth.authorizationCode(from: callbackURL, matching: request)
+        try authorities?.admit(.trackerWrite)
         let token = try await oauth.exchangeCode(code, for: request)
         let profile: MangaBakaProfile
         do {
+            try authorities?.admit(.trackerWrite)
             profile = try await Self.client(credential: .oauthAccessToken(token.accessToken), session: session).profile()
         } catch {
             AppLogger.auth.error("MangaBaka sign-in validation failed.")
-            try? await oauth.revoke(token)
+            do {
+                try authorities?.admit(.trackerWrite)
+                try await oauth.revoke(token)
+            } catch {}
             throw error
         }
         scoreIdentity.rotate()
@@ -244,6 +254,7 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
         guard !token.isEmpty else { throw TrackerTokenError.rejected }
         let profile: MangaBakaProfile
         do {
+            try authorities?.admit(.trackerWrite)
             profile = try await Self.client(credential: .personalAccessToken(token), session: session).profile()
         } catch MangaBakaError.unauthorized, MangaBakaError.forbidden {
             throw TrackerTokenError.rejected
@@ -261,7 +272,10 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
         clearUsername()
         if let token {
             // Ending the session on MangaBaka is best effort; the local session is already gone.
-            try? await oauth.revoke(token)
+            do {
+                try authorities?.admit(.trackerWrite)
+                try await oauth.revoke(token)
+            } catch {}
         }
     }
 
@@ -269,6 +283,7 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
         let query = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !isAnime, !query.isEmpty else { return [] }
         // Every content rating: the user is looking for a series they are already reading.
+        try authorities?.admit(.trackerWrite)
         let page = try await catalog.searchSeries(SeriesSearchQuery(
             text: query,
             contentRatings: [.safe, .suggestive, .erotica, .pornographic],
@@ -430,6 +445,7 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
 
     private func read(_ id: Int, scoreSession: TrackerScoreSession? = nil) async throws -> RemoteEntry {
         try await validate(scoreSession)
+        try authorities?.admit(.trackerWrite)
         async let seriesRead = catalog.series(id: id)
         let library = try await perform(scoreSession: scoreSession) { try await $0.libraryEntry(seriesID: id) }
         try await validate(scoreSession)
@@ -481,6 +497,8 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
             let credential = try await credentialRepository.validCredential()
             try await validate(scoreSession)
             do {
+                // Checked before every request, so a refusal always means nothing was sent.
+                try authorities?.admit(.trackerWrite)
                 let result = try await operation(Self.client(credential: credential, session: session))
                 try await validate(scoreSession)
                 return result
@@ -489,6 +507,7 @@ public final class MangaBakaTracker: TrackerProvider, TrackerTokenAuthenticating
                 let replacement = try await credentialRepository.credential(replacing: credential)
                 try await validate(scoreSession)
                 do {
+                    try authorities?.admit(.trackerWrite)
                     let result = try await operation(Self.client(credential: replacement, session: session))
                     try await validate(scoreSession)
                     return result

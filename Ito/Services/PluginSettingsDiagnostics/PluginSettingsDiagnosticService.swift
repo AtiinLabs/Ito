@@ -88,7 +88,8 @@ final class PluginSettingsDiagnosticService: PluginSettingsDiagnosing {
         let cookies = settingsStore.cookies
         let netModule = PluginCompletionNetModule(
             cookies: { url in cookies.cookies(pluginID: pluginID, for: url) },
-            trust: (pluginID, settingsStore.trust)
+            trust: (pluginID, settingsStore.trust),
+            contexts: settingsStore.networkContexts
         )
         defer { netModule.invalidate() }
 

@@ -130,7 +130,7 @@ final class VideoSubtitleLoaderFake: VideoSubtitleTextLoading {
         responses[url, default: []].append(response)
     }
 
-    func text(from urlString: String) async throws -> String {
+    func text(from urlString: String, authority: NetworkRequestAuthority?) async throws -> String {
         requestedURLs.append(urlString)
         let response = responses[urlString]?.isEmpty == false
             ? responses[urlString]?.removeFirst()
@@ -197,10 +197,12 @@ final class VideoPlaybackCoordinatorFake: VideoPlaybackCoordinating {
         case preparation(String)
         case invalid
         case suspended
+        case refused(HostNetworkPolicyOutcome)
     }
 
     struct Request {
         let video: Anime.Video
+        let authority: NetworkRequestAuthority?
     }
 
     private struct Pending {
@@ -214,6 +216,7 @@ final class VideoPlaybackCoordinatorFake: VideoPlaybackCoordinating {
     }
 
     private(set) var surface: (any VideoPlaybackSurface)?
+    var networkRefusalHandler: (@MainActor (HostNetworkPolicyOutcome) -> Void)?
     var responses: [String: [Response]] = [:]
     private(set) var requests: [Request] = []
     private(set) var activatedPreparationIDs: [String] = []
@@ -234,8 +237,8 @@ final class VideoPlaybackCoordinatorFake: VideoPlaybackCoordinating {
         responses[videoURL, default: []].append(response)
     }
 
-    func prepare(video: Anime.Video) async -> (any VideoPlaybackPreparation)? {
-        requests.append(Request(video: video))
+    func prepare(video: Anime.Video, authority: NetworkRequestAuthority?) async throws -> (any VideoPlaybackPreparation)? {
+        requests.append(Request(video: video, authority: authority))
         let response = responses[video.url]?.isEmpty == false
             ? responses[video.url]?.removeFirst()
             : .preparation(video.url)
@@ -244,6 +247,8 @@ final class VideoPlaybackCoordinatorFake: VideoPlaybackCoordinating {
             return VideoPlaybackPreparationFake(id: id)
         case .invalid:
             return nil
+        case .refused(let outcome):
+            throw outcome
         case .suspended:
             return await withCheckedContinuation { continuation in
                 pending.append(Pending(videoURL: video.url, continuation: continuation))
@@ -297,6 +302,11 @@ final class VideoPlaybackCoordinatorFake: VideoPlaybackCoordinating {
 
     func emit(currentTime: Double, duration: Double) {
         timeUpdate?(currentTime, duration)
+    }
+
+    /// Stops the stream the way the production coordinator does when a policy change refuses it.
+    func emitNetworkRefusal(_ outcome: HostNetworkPolicyOutcome) {
+        networkRefusalHandler?(outcome)
     }
 
     func waitForPendingCount(_ count: Int) async {

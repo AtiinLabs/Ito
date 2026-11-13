@@ -139,7 +139,7 @@ struct WebviewManagerTests {
         let manager = WebviewManager(pageLoadDeadline: 0.3)
         defer { dispose(manager) }
 
-        await #expect(throws: URLError(.timedOut)) {
+        await #expect(throws: ItoError.hostCallTimedOut(.webview)) {
             try await manager.loadUrl(request: WebviewRequest(url: await server.url(), script: nil))
         }
     }
