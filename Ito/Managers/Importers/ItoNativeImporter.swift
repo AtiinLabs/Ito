@@ -558,12 +558,13 @@ public struct ItoNativeImporter: BackupImporter {
     }
 
     /// The backup's thumbnails, once their total size is known to fit the budget: a backup can't make the
-    /// importer load more than a backup may carry.
+    /// importer load more than a backup may carry. The size is counted in bytes whatever type a crafted file
+    /// stores, since `length` of TEXT counts characters.
     nonisolated private func fetchBoundedThumbnails(in db: Database) throws -> [LibraryCoverThumbnailRecord] {
         guard try db.tableExists(LibraryCoverThumbnailRecord.databaseTableName) else { return [] }
         let bytes = try Int.fetchOne(
             db,
-            sql: "SELECT COALESCE(SUM(length(imageData)), 0) FROM libraryCoverThumbnail"
+            sql: "SELECT COALESCE(SUM(length(CAST(imageData AS BLOB))), 0) FROM libraryCoverThumbnail"
         ) ?? 0
         guard bytes <= LibraryCoverThumbnailRecord.maximumPortableAggregateByteCount else {
             throw invalidCapability(component: .savedLibraryThumbnails, code: "thumbnailBudgetExceeded")
@@ -579,7 +580,7 @@ public struct ItoNativeImporter: BackupImporter {
         var seen = Set<String>()
         for thumbnail in thumbnails {
             guard seen.insert(thumbnail.libraryItemId).inserted,
-                  thumbnail.isPortable(for: itemsById[thumbnail.libraryItemId])
+                  thumbnail.isPortable(coverUrl: itemsById[thumbnail.libraryItemId]?.coverUrl)
             else {
                 throw invalidCapability(component: .savedLibraryThumbnails, code: "invalidThumbnail")
             }

@@ -456,7 +456,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         for thumbnail in backup.savedLibraryThumbnails {
             guard thumbnail.imageData.count <= thumbnailBudget,
                   thumbnailItems.insert(thumbnail.libraryItemId).inserted,
-                  thumbnail.isPortable(for: itemsById[thumbnail.libraryItemId])
+                  thumbnail.isPortable(coverUrl: itemsById[thumbnail.libraryItemId]?.coverUrl)
             else {
                 throw rejection(.invalidComponentData(component: .savedLibraryThumbnails, code: "invalidThumbnail"))
             }
@@ -1378,7 +1378,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             switch existing {
             case .some(let existing) where existing == restored:
                 outcomes[.savedLibraryThumbnails]?.skipped += 1
-            case .some(let existing) where keepsLocal && existing.isPortable(for: item):
+            case .some(let existing) where keepsLocal && existing.isPortable(coverUrl: item.coverUrl):
                 outcomes[.savedLibraryThumbnails]?.preservedLocal += 1
             case .some:
                 try restored.update(db)

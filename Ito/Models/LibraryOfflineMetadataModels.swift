@@ -156,12 +156,10 @@ public nonisolated struct LibraryCoverThumbnailRecord: Codable, Equatable, Senda
     public var pixelHeight: Int
     public var storedAt: Date
 
-    /// Whether this is a well-formed JPEG within the table's limits, made for `item`'s current cover. Only such
-    /// thumbnails leave an installation in a backup or enter one from it.
-    func isPortable(for item: LibraryItem?) -> Bool {
-        guard let item,
-              item.id == libraryItemId,
-              let coverUrl = item.coverUrl,
+    /// Whether this is a well-formed JPEG within the table's limits, made for the cover address `coverUrl` of
+    /// the item it belongs to. Only such thumbnails leave an installation in a backup or enter one from it.
+    func isPortable(coverUrl: String?) -> Bool {
+        guard let coverUrl,
               coverURLSHA256 == LibraryCoverThumbnailStore.coverHash(coverUrl),
               (1...Self.maximumByteCount).contains(imageData.count),
               (1...Self.maximumPixelWidth).contains(pixelWidth),

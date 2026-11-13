@@ -376,10 +376,7 @@ nonisolated public struct BackupExportOperation: Sendable {
     /// is left out rather than failing the backup; this runs before the expected counts are taken.
     private static func selectPortableThumbnails(in database: DatabaseQueue) throws {
         try database.write { db in
-            let items = Dictionary(
-                try LibraryItem.fetchAll(db).map { ($0.id, $0) },
-                uniquingKeysWith: { first, _ in first }
-            )
+            let coverURLs = try coverURLsByItemID(in: db)
             var keptBytes = 0
             var dropped: [String] = []
             let thumbnails = try LibraryCoverThumbnailRecord.fetchCursor(
@@ -389,7 +386,7 @@ nonisolated public struct BackupExportOperation: Sendable {
             while let thumbnail = try thumbnails.next() {
                 let fits = keptBytes + thumbnail.imageData.count
                     <= LibraryCoverThumbnailRecord.maximumPortableAggregateByteCount
-                if fits, thumbnail.isPortable(for: items[thumbnail.libraryItemId]) {
+                if fits, thumbnail.isPortable(coverUrl: coverURLs[thumbnail.libraryItemId]) {
                     keptBytes += thumbnail.imageData.count
                 } else {
                     dropped.append(thumbnail.libraryItemId)
@@ -400,20 +397,30 @@ nonisolated public struct BackupExportOperation: Sendable {
     }
 
     private static func validateThumbnails(in db: Database) throws {
-        let items = Dictionary(
-            try LibraryItem.fetchAll(db).map { ($0.id, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
+        let coverURLs = try coverURLsByItemID(in: db)
         var bytes = 0
         let thumbnails = try LibraryCoverThumbnailRecord.fetchCursor(db)
         while let thumbnail = try thumbnails.next() {
             bytes += thumbnail.imageData.count
             guard bytes <= LibraryCoverThumbnailRecord.maximumPortableAggregateByteCount,
-                  thumbnail.isPortable(for: items[thumbnail.libraryItemId])
+                  thumbnail.isPortable(coverUrl: coverURLs[thumbnail.libraryItemId])
             else {
                 throw ValidationError.invalidThumbnail
             }
         }
+    }
+
+    /// Only the cover address of each Library item: a thumbnail is checked against it, so the items' saved
+    /// payloads are never loaded for this.
+    private static func coverURLsByItemID(in db: Database) throws -> [String: String] {
+        var coverURLs: [String: String] = [:]
+        let rows = try Row.fetchCursor(db, sql: "SELECT id, coverUrl FROM libraryItem WHERE coverUrl IS NOT NULL")
+        while let row = try rows.next() {
+            let id: String = row["id"]
+            let coverUrl: String = row["coverUrl"]
+            coverURLs[id] = coverUrl
+        }
+        return coverURLs
     }
 
     private static func validateScalarPreferences(in db: Database) throws {

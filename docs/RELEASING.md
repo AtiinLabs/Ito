@@ -11,6 +11,11 @@ Restore validates JPEG dimensions, encoded size, cover digest and Library identi
 each thumbnail. A merge that keeps local details keeps its existing thumbnail, filling only missing
 ones. Older backups without this capability remain supported.
 
+The compatibility is one-directional. Every backup this version exports lists the
+`savedLibraryThumbnails` capability, and earlier app versions reject an unknown capability component
+(`unknownComponent`), so they cannot read these backups at all. Say so in the release notes of the
+version that ships it.
+
 Snapshot freshness remains installation-local. Restored details do not prove current catalog
 completeness. Backups still exclude downloaded chapter media, inventory pointers, queues, source
 epochs and runtime permissions.

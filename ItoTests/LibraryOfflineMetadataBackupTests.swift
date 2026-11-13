@@ -23,19 +23,46 @@ struct LibraryOfflineMetadataBackupTests {
         let thumbnails: LibraryCoverThumbnailStore
     }
 
-    @Test func capabilityMigrationPreservesOlderRepresentationsAndAdmitsThumbnails() throws {
+    @Test func capabilityMigrationKeepsEveryOlderRowAndStillRejectsUnrepresentedComponents() throws {
         let database = try DatabaseQueue()
         let migrator = AppDatabase.makeMigrator()
         try migrator.migrate(database, upTo: "v21")
+        let olderComponents = BackupComponent.allCases.filter { $0 != .savedLibraryThumbnails }
+        #expect(olderComponents.count == 13)
+        var before: [String: String] = [:]
         try database.write { db in
-            try BackupCapabilityRecord(component: .libraryCore, representation: .representedNonempty).insert(db)
+            for (index, component) in olderComponents.enumerated() {
+                let representation: BackupRepresentation = index.isMultiple(of: 2)
+                    ? .representedNonempty
+                    : .representedEmpty
+                try BackupCapabilityRecord(component: component, representation: representation).insert(db)
+                before[component.rawValue] = representation.rawValue
+            }
         }
 
         try migrator.migrate(database)
+
         try database.write { db in
-            #expect(try BackupCapabilityRecord.fetchOne(db, key: "libraryCore")?.representation == .representedNonempty)
+            let rows = try Row.fetchAll(db, sql: "SELECT component, representation FROM backupCapability")
+            let after = Dictionary(uniqueKeysWithValues: rows.map { ($0["component"] as String, $0["representation"] as String) })
+            #expect(after == before)
+
             try BackupCapabilityRecord(component: .savedLibraryThumbnails, representation: .representedEmpty).insert(db)
             #expect(try BackupCapabilityRecord.fetchOne(db, key: "savedLibraryThumbnails")?.representation == .representedEmpty)
+
+            for (component, representation) in [
+                (nil, "representedEmpty"),
+                ("futureComponent", "representedEmpty"),
+                ("pluginSettings", "unrepresented")
+            ] as [(String?, String)] {
+                #expect(throws: DatabaseError.self) {
+                    try db.execute(
+                        sql: "INSERT INTO backupCapability (component, representation) VALUES (?, ?)",
+                        arguments: [component, representation]
+                    )
+                }
+            }
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM backupCapability") == 14)
         }
     }
 
@@ -209,16 +236,22 @@ struct LibraryOfflineMetadataBackupTests {
         #expect(try await manager.snapshotRefreshDate(for: Self.media) == nil)
     }
 
-    @Test func aLargeLibraryExportsWithinTheThumbnailBudgetWithoutChangingLocalCopies() async throws {
+    @Test func aLargeLibraryExportsTheNewestThumbnailsWithinTheBudgetWithoutChangingLocalCopies() async throws {
         let fixture = try await makeFixture()
         defer { fixture.database.cleanup() }
         try await refresh(fixture)
         var jpeg = try Self.jpeg(.white)
         jpeg.append(Data(count: LibraryCoverThumbnailRecord.maximumByteCount - jpeg.count))
         let paddedJPEG = jpeg
+        let oldest = Date(timeIntervalSince1970: 1_600_000_000)
         try await fixture.database.dbPool.write { db in
             let original = try #require(try LibraryItem.fetchOne(db, key: "series-1"))
             let originalThumbnail = try #require(try LibraryCoverThumbnailRecord.fetchOne(db, key: "series-1"))
+            // The original series' thumbnail is the oldest of all 66, budget-0 the next oldest.
+            try db.execute(
+                sql: "UPDATE libraryCoverThumbnail SET storedAt = ? WHERE libraryItemId = 'series-1'",
+                arguments: [oldest]
+            )
             for index in 0..<65 {
                 let item = LibraryItem(
                     id: "budget-\(index)",
@@ -234,6 +267,7 @@ struct LibraryOfflineMetadataBackupTests {
                 var thumbnail = originalThumbnail
                 thumbnail.libraryItemId = item.id
                 thumbnail.imageData = paddedJPEG
+                thumbnail.storedAt = oldest.addingTimeInterval(Double(index + 1) * 60)
                 try thumbnail.insert(db)
             }
         }
@@ -242,6 +276,10 @@ struct LibraryOfflineMetadataBackupTests {
         let backup = try await ItoNativeImporter().parse(url: url)
         #expect(backup.items.count == 66)
         #expect(backup.savedLibraryThumbnails.count == 64)
+        #expect(
+            Set(backup.savedLibraryThumbnails.map(\.libraryItemId))
+                == Set((1..<65).map { "budget-\($0)" })
+        )
         let bytes = backup.savedLibraryThumbnails.reduce(0) { $0 + $1.imageData.count }
         #expect(bytes <= LibraryCoverThumbnailRecord.maximumPortableAggregateByteCount)
         let localCount = try await fixture.database.dbPool.read { db in
@@ -250,37 +288,209 @@ struct LibraryOfflineMetadataBackupTests {
         #expect(localCount == 66)
     }
 
-    @Test(arguments: ["corrupt", "truncated", "wrong-cover-digest"])
+    @Test func anExportPrunesThumbnailsThatAreNotWellFormedInsteadOfFailing() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.database.cleanup() }
+        try await refresh(fixture)
+        let valid = try Self.jpeg(.white)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let pngData = try #require(
+            UIGraphicsImageRenderer(size: CGSize(width: 20, height: 30), format: format)
+                .image { _ in }
+                .pngData()
+        )
+        try await fixture.database.dbPool.write { db in
+            let original = try #require(try LibraryItem.fetchOne(db, key: "series-1"))
+            let originalThumbnail = try #require(try LibraryCoverThumbnailRecord.fetchOne(db, key: "series-1"))
+            let defects: [(String, Data, Int)] = [
+                ("png", pngData, 20),
+                ("misdescribed", valid, 21),
+                ("truncated", Data(valid.prefix(valid.count / 2)), 20)
+            ]
+            for (id, data, width) in defects {
+                try LibraryItem(
+                    id: id,
+                    title: original.title,
+                    coverUrl: original.coverUrl,
+                    pluginId: original.pluginId,
+                    isAnime: false,
+                    pluginType: .manga,
+                    rawPayload: original.rawPayload,
+                    anilistId: nil
+                ).insert(db)
+                var thumbnail = originalThumbnail
+                thumbnail.libraryItemId = id
+                thumbnail.imageData = data
+                thumbnail.pixelWidth = width
+                try thumbnail.insert(db)
+            }
+        }
+
+        let url = try await export(fixture, to: "pruned-thumbnails.itobackup")
+
+        let backup = try await ItoNativeImporter().parse(url: url)
+        #expect(backup.items.count == 4)
+        #expect(backup.savedLibraryThumbnails.map(\.libraryItemId) == ["series-1"])
+        #expect(backup.representation(of: .savedLibraryThumbnails) == .representedNonempty)
+        let localCount = try await fixture.database.dbPool.read { db in
+            try LibraryCoverThumbnailRecord.fetchCount(db)
+        }
+        #expect(localCount == 4)
+    }
+
+    @Test(arguments: ["corrupt", "truncated", "wrong-cover-digest", "wrong-dimensions", "png", "orphan"])
     func invalidThumbnailPayloadsAreRejectedBeforeRestore(_ mutation: String) async throws {
         let fixture = try await makeFixture()
         defer { fixture.database.cleanup() }
         try await refresh(fixture)
         let url = try await export(fixture, to: "\(mutation).itobackup")
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let pngData = try #require(
+            UIGraphicsImageRenderer(size: CGSize(width: 20, height: 30), format: format)
+                .image { _ in }
+                .pngData()
+        )
         let backupDB = try DatabaseQueue(path: url.path)
-        try await backupDB.write { db in
-            if mutation == "corrupt" {
+        try await backupDB.writeWithoutTransaction { db in
+            try db.execute(sql: "PRAGMA foreign_keys = OFF")
+            switch mutation {
+            case "corrupt":
                 try db.execute(
                     sql: "UPDATE libraryCoverThumbnail SET imageData = ?",
                     arguments: [Data([0, 1, 2])]
                 )
-            } else if mutation == "truncated" {
+            case "truncated":
                 let data = try #require(try Data.fetchOne(db, sql: "SELECT imageData FROM libraryCoverThumbnail"))
                 try db.execute(
                     sql: "UPDATE libraryCoverThumbnail SET imageData = ?",
                     arguments: [Data(data.prefix(data.count / 2))]
                 )
-            } else {
+            case "wrong-cover-digest":
                 try db.execute(
                     sql: "UPDATE libraryCoverThumbnail SET coverURLSHA256 = ?",
                     arguments: [String(repeating: "0", count: 64)]
+                )
+            case "wrong-dimensions":
+                try db.execute(sql: "UPDATE libraryCoverThumbnail SET pixelWidth = 21")
+            case "png":
+                try db.execute(sql: "UPDATE libraryCoverThumbnail SET imageData = ?", arguments: [pngData])
+            default:
+                try db.execute(sql: "UPDATE libraryCoverThumbnail SET libraryItemId = 'not-an-item'")
+            }
+        }
+        try backupDB.close()
+
+        await #expect(
+            throws: BackupPreflightError.rejected(
+                .invalidCapabilityMetadata(component: .savedLibraryThumbnails, code: "invalidThumbnail")
+            )
+        ) {
+            _ = try await ItoNativeImporter().parse(url: url)
+        }
+    }
+
+    /// More than 16 MiB of thumbnail bytes is refused from a size query, before any thumbnail is loaded or
+    /// decoded: the rows here are not images, so loading them would fail differently. Text values count their
+    /// bytes, not their characters.
+    @Test(arguments: ["blob", "text"])
+    func aBackupCarryingMoreThanTheBudgetOfThumbnailBytesIsRefusedBeforeTheyAreLoaded(_ storage: String) async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.database.cleanup() }
+        try await refresh(fixture)
+        let url = try await export(fixture, to: "\(storage)-budget.itobackup")
+        let rowCount = storage == "blob" ? 65 : 17
+        let coverHash = LibraryCoverThumbnailStore.coverHash(Self.refreshedCover)
+        let fourByteCharacters = String(repeating: "\u{1D11E}", count: LibraryCoverThumbnailRecord.maximumByteCount)
+        let backupDB = try DatabaseQueue(path: url.path)
+        try await backupDB.write { db in
+            for index in 0..<rowCount {
+                let id = "oversized-\(index)"
+                try LibraryItem(
+                    id: id,
+                    title: "Oversized \(index)",
+                    coverUrl: Self.refreshedCover,
+                    pluginId: Self.pluginId,
+                    isAnime: false,
+                    pluginType: .manga,
+                    rawPayload: Data(),
+                    anilistId: nil
+                ).insert(db)
+                let image = storage == "blob" ? "zeroblob(\(LibraryCoverThumbnailRecord.maximumByteCount))" : "?"
+                var values: [(any DatabaseValueConvertible)?] = [id, coverHash]
+                if storage == "text" { values.append(fourByteCharacters) }
+                values.append(Self.refreshedAt)
+                try db.execute(
+                    sql: """
+                        INSERT INTO libraryCoverThumbnail
+                          (libraryItemId, coverURLSHA256, imageData, pixelWidth, pixelHeight, storedAt)
+                        VALUES (?, ?, \(image), 20, 30, ?)
+                        """,
+                    arguments: StatementArguments(values)
                 )
             }
         }
         try backupDB.close()
 
-        await #expect(throws: BackupPreflightError.self) {
+        await #expect(
+            throws: BackupPreflightError.rejected(
+                .invalidCapabilityMetadata(component: .savedLibraryThumbnails, code: "thumbnailBudgetExceeded")
+            )
+        ) {
             _ = try await ItoNativeImporter().parse(url: url)
         }
+    }
+
+    @Test func anOlderBackupWithoutTheThumbnailComponentIgnoresStrayRowsAndLeavesLocalThumbnailsAlone() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.database.cleanup() }
+        try await refresh(fixture)
+        let url = try await export(fixture, to: "thirteen-components.itobackup")
+        let backupDB = try DatabaseQueue(path: url.path)
+        try await backupDB.write { db in
+            try db.execute(
+                sql: "DELETE FROM backupCapability WHERE component = ?",
+                arguments: [BackupComponent.savedLibraryThumbnails.rawValue]
+            )
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM libraryCoverThumbnail") == 1)
+        }
+        try backupDB.close()
+
+        let backup = try await ItoNativeImporter().parse(url: url)
+
+        #expect(backup.capabilities.count == 13)
+        #expect(backup.representation(of: .savedLibraryThumbnails) == .unrepresented)
+        #expect(backup.savedLibraryThumbnails.isEmpty)
+        #expect(!backup.representedComponents.contains(.savedLibraryThumbnails))
+
+        try await fixture.database.dbPool.write { db in
+            _ = try LibraryCoverThumbnailRecord.deleteAll(db)
+        }
+        let stored = try await fixture.thumbnails.store(
+            EncodedCoverThumbnail(data: try Self.jpeg(.black), pixelWidth: 20, pixelHeight: 30),
+            itemID: "series-1",
+            coverUrl: Self.refreshedCover
+        )
+        #expect(stored == .stored)
+        let local = try await fixture.thumbnails.storedThumbnail(for: "series-1")
+
+        let merged = try await ComponentAwareBackupRestoreOperation(dbPool: fixture.database.dbPool)
+            .restore(backup, mode: .merge, operationId: "older-merge", resolvedConflicts: ["series-1": .keepBackup])
+
+        #expect(try await fixture.thumbnails.storedThumbnail(for: "series-1") == local)
+        #expect(!merged.representedComponents.contains(.savedLibraryThumbnails))
+        #expect(!merged.outcomes.contains { $0.component == .savedLibraryThumbnails })
+
+        let destination = try TestDatabase()
+        defer { destination.cleanup() }
+        let wiped = try await ComponentAwareBackupRestoreOperation(dbPool: destination.dbPool)
+            .restore(backup, mode: .wipe, operationId: "older-wipe")
+        #expect(!wiped.outcomes.contains { $0.component == .savedLibraryThumbnails })
+        let restoredCount = try await destination.dbPool.read { db in
+            try LibraryCoverThumbnailRecord.fetchCount(db)
+        }
+        #expect(restoredCount == 0)
     }
 
     @Test func restoringOlderDetailsLeavesTheLocalStateAloneAndHidesTheAgeOfThePayload() async throws {
