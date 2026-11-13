@@ -5,6 +5,24 @@ import Testing
 
 @MainActor
 struct NetworkPreferenceMigrationTests {
+    @Test func representedEmptyScalarWipeAndRefreshDoNotMaterializeNetworkDefaults() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let settings = AppSettingsStore(dbPool: database.dbPool)
+        try await settings.reload()
+        let backup = ImportedBackup(
+            metadata: BackupMetadataRecord(formatVersion: 1, createdAt: Date(timeIntervalSince1970: 1)),
+            capabilities: [BackupCapabilityRecord(component: .scalarAppPreferences, representation: .representedEmpty)]
+        )
+        let operation = ComponentAwareBackupRestoreOperation(dbPool: database.dbPool, standardApplicationDomain: "test.app")
+        _ = try await operation.restore(backup, mode: .wipe, operationId: UUID().uuidString)
+        try await settings.reloadAfterRestore()
+        let rows = try await database.dbPool.read { db in try AppPreference.fetchAll(db) }
+        #expect(rows.isEmpty)
+        #expect(settings.adjacentChapterPrefetchCount == .two)
+        #expect(settings.networkDownloadMode == .unmeteredOnly)
+    }
+
     @Test(arguments: [BackupRestoreMode.merge, .wipe])
     func olderCompleteScalarCatalogRestoresThroughComponentOperation(mode: BackupRestoreMode) async throws {
         let database = try TestDatabase()

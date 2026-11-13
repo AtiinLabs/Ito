@@ -351,7 +351,9 @@ nonisolated struct BackupMergeOperation: Sendable {
             }
             // A backup made before the network preferences existed carries none; derive them from the
             // restored image preload rather than leaving a gap for a default to fill.
-            try NetworkPreferenceMigration.insertMissing(in: db)
+            if try AppPreference.fetchCount(db) > 0 {
+                try NetworkPreferenceMigration.insertMissing(in: db)
+            }
 
             let result = BackupMergeResult(
                 insertedItemCount: insertedItemCount,
