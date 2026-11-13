@@ -11,6 +11,7 @@ struct DownloadPreviewSheet: View {
     /// Called with the keys of the other uploads the user ticked.
     let onConfirm: (Set<String>) -> Void
     let onCancel: () -> Void
+    let onEditFallback: () -> Void
 
     @State private var ticked = Set<String>()
 
@@ -26,6 +27,24 @@ struct DownloadPreviewSheet: View {
                             comment: "Download preview: the series' chapter list changed while the preview was open, so it was made again."
                         )
                         .foregroundStyle(.orange)
+                    }
+                }
+                if preview.missingPositionCount > 0 {
+                    Section {
+                        Text("Preferred edition unavailable", comment: "Some positions are not currently offered by the preferred group.")
+                        Text(
+                            "\(preview.missingPositionCount) selected positions need another edition or will be skipped.",
+                            comment: "Aggregate unresolved download positions; count needs plural forms. Does not claim source deletion."
+                        )
+                        Button(action: onEditFallback) {
+                            Text("Edit fallback order", comment: "Open the explicit ordered fallback policy editor, with optional Remember.")
+                        }
+                        Button {
+                            onConfirm([])
+                        } label: {
+                            Text("Keep selection", comment: "Confirm only the permitted available chapters and leave missing positions unresolved.")
+                        }
+                        .disabled(preview.toQueue.isEmpty || isEnqueuing)
                     }
                 }
                 toDownloadSection
@@ -47,10 +66,14 @@ struct DownloadPreviewSheet: View {
                     Button {
                         onConfirm(ticked)
                     } label: {
-                        Text(
-                            "Download \(queueCount) Chapters",
-                            comment: "Button on the download preview: queue the listed chapters. The placeholder is the number of chapters, which needs plural forms."
-                        )
+                        if preview.selection.asksBeforeSwitching, preview.missingPositionCount > 0, !ticked.isEmpty {
+                            Text("Use \(ticked.count) selected alternatives this time", comment: "Confirm exact alternatives ticked in the preview for this batch only; does not remember fallback permission. The placeholder is the number ticked and needs plural forms.")
+                        } else {
+                            Text(
+                                "Download \(queueCount) Chapters",
+                                comment: "Button on the download preview: queue the listed chapters. The placeholder is the number of chapters, which needs plural forms."
+                            )
+                        }
                     }
                     .disabled(queueCount == 0 || isEnqueuing)
                 }
@@ -159,7 +182,7 @@ struct DownloadPreviewSheet: View {
                     comment: "Download preview: how many chapters in range are marked read and so are not downloaded. The placeholder is a number, which needs plural forms."
                 )
             } footer: {
-                Text("Chapters marked read are skipped.", comment: "Download preview footer: read chapters are not downloaded by this preset.")
+                Text("Chapters marked read are skipped, including other editions with the same chapter number.", comment: "Compatibility key-or-number read markers, not offline coverage.")
             }
         }
     }

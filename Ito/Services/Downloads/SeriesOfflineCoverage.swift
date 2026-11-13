@@ -61,16 +61,9 @@ nonisolated enum SeriesOfflineCoverage {
             return .saved(savedCount)
         }
 
-        let resolvedSelection: ResolvedEditionSelection?
-        if case .scanlators = selection {
-            resolvedSelection = ScanlatorCatalogIndex(
-                catalog,
-                id: \.scanlatorID,
-                name: \.scanlator
-            ).resolve(selection)
-        } else {
-            resolvedSelection = selection.resolve(in: [])
-        }
+        let resolvedSelection = ScanlatorCatalogIndex(
+            catalog, id: \.scanlatorID, name: \.scanlator
+        ).resolve(selection)
         guard let resolvedSelection else { return .saved(savedCount) }
         // The same positions the download presets plan over: one per source logical unit, one per row
         // without one. Only a verified copy of a permitted row saves a position: a copy outside the

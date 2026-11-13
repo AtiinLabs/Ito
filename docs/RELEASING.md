@@ -166,3 +166,21 @@ Do not add unavailable signing credentials to the unsigned workflows.
 For a stable release, mark the release unavailable or publish a newer patch version; do not move or reuse a `v*` tag. Remove an unsafe version from the matching source JSON on `gh-pages` if necessary.
 
 Dev releases are temporary and automatically pruned.
+
+## Edition-policy checks
+
+Before releasing changes to download selection, verify legacy v1/v2 preferences retain their
+meaning. Preferred-group fallback policies use v3; unknown versions and missing group identities
+must require review rather than silently broadening selection. Approved fallback groups may
+substitute only for a source-proven logical position, and existing permitted saved copies must not
+be upgraded merely because the primary group returns.
+
+Confirm that Ask presents one aggregate batch decision, Cancel queues nothing, and a changed
+catalog or source session invalidates the old confirmation. Remember must wait for persistence;
+an admitted save that outlives its sheet must refresh authoritative preferences without restoring
+removed Library scope or reporting stale success.
+
+Another open screen for the same series may hold an older copy of the policy. A reviewed batch
+carries the policy it was planned under, and the store refuses it in the write transaction when the
+stored policy differs, so verify the second screen cannot queue another group after the first
+narrows to Strict.
