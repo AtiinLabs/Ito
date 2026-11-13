@@ -1961,9 +1961,15 @@ Reading font: the system font */
 
 "The source stopped unexpectedly. Try again." = "The source stopped unexpectedly. Try again.";
 
+/* Error: a network request the source made did not finish in time */
+"The source took too long to respond. Try again." = "The source took too long to respond. Try again.";
+
 "The source was saved, but could not be opened. Try Open again." = "The source was saved, but could not be opened. Try Open again.";
 
 "The source's web page failed: %@" = "The source's web page failed: %@";
+
+/* Error: a web page the source loaded did not respond in time */
+"The source's web page took too long to respond. Try again." = "The source's web page took too long to respond. Try again.";
 
 "The specified HTTP header is prohibited." = "The specified HTTP header is prohibited.";
 
