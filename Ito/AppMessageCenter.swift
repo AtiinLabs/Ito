@@ -45,6 +45,8 @@ enum AppMessageKind: Equatable {
     case mediaDetailEditionChoiceNotSaved
     case mediaDetailEditionChoiceUnreadable
     case mediaDetailEditionChoiceReadFailed(reviewing: Bool)
+    case mediaDetailEditionChoiceChanged
+    case mediaDetailPreferredGroupNotListed
     case libraryLayoutPersistenceFailed
     case libraryItemRemovalFailed
     /// The series left the Library, but its downloads are still stored.
@@ -363,8 +365,8 @@ extension AppMessageKind {
                     comment: "Series details: the chosen scanlators could not be remembered for this series."
                 ),
                 detail: String(
-                    localized: "It applies to this download only.",
-                    comment: "Series details: detail when the chosen scanlators could not be remembered for the series, so the choice applies to the current download only."
+                    localized: "Nothing was queued. Try again, or turn off Remember to use this choice for this batch only.",
+                    comment: "Edition policy save failed. Batch-only authorization requires a separate explicit confirmation."
                 )
             )
         case .mediaDetailEditionChoiceNotSaved:
@@ -407,6 +409,30 @@ extension AppMessageKind {
                         localized: "Please try again.",
                         comment: "Series details: detail when the remembered scanlators could not be read and nothing was changed."
                     )
+            )
+        case .mediaDetailEditionChoiceChanged:
+            return .init(
+                style: .info,
+                title: String(
+                    localized: "Edition choice changed",
+                    comment: "Series details: a download choice or preview was made under a source, chapter list or edition policy that has since changed, so nothing was saved or queued."
+                ),
+                detail: String(
+                    localized: "The source, chapter list or edition choice changed. Review again.",
+                    comment: "Series details: detail when a draft was invalidated before confirmation because the source, chapter list or edition policy changed; no changed plan was submitted automatically."
+                )
+            )
+        case .mediaDetailPreferredGroupNotListed:
+            return .init(
+                style: .info,
+                title: String(
+                    localized: "Preferred group not listed",
+                    comment: "Series details: the group chosen for this series has no chapters in the source's current list, so nothing was queued. Does not claim the group stopped publishing."
+                ),
+                detail: String(
+                    localized: "The source's current list has no chapters from it. Choose another group to continue.",
+                    comment: "Series details: detail when the preferred group is absent from the current chapter list; the user may change the group in the scanlator choice."
+                )
             )
         case .libraryLayoutPersistenceFailed:
             return .init(
