@@ -2,6 +2,20 @@
 
 Ito currently distributes unsigned device IPAs. AltStore and SideStore can re-sign them with the user's Apple account; TrollStore and jailbreak installation depend on the target device and environment. App Store/TestFlight signing remains a separate future workflow.
 
+## Backup compatibility
+
+Manual backups carry saved Library details and valid saved cover thumbnails through a separate
+`savedLibraryThumbnails` capability. Export retains up to 16 MiB of thumbnails, newest first;
+invalid, stale or over-budget cached thumbnails are omitted without changing the local Library.
+Restore validates JPEG dimensions, encoded size, cover digest and Library identity before remapping
+each thumbnail. A merge that keeps local details keeps its existing thumbnail, filling only missing
+ones. Older backups without this capability remain supported.
+
+Snapshot freshness remains installation-local. Restored details do not prove current catalog
+completeness. Backups still exclude downloaded chapter media, inventory pointers, queues, source
+epochs and runtime permissions.
+
+
 ## One-time repository setup
 
 1. Copy this starter kit into the Ito repository.
