@@ -346,18 +346,117 @@ final class MediaDetailDownloadActionTests: XCTestCase {
         XCTAssertEqual(downloads.confirmedMeteredUses, [false])
     }
 
-    func testDismissingThePromptQueuesNothing() async throws {
+    func testADialogThatHidesItselfBeforeItsButtonRunsStillQueuesTheBatch() async throws {
         let downloads = MediaDetailDownloadsFake()
         downloads.meteredConfirmationNeeded = true
         let viewModel = makeViewModel(media: Self.series, saved: true, downloads: downloads)
         await viewModel.performDownloadAction(.download, for: chapter("chapter-1")).value
         let prompt = try XCTUnwrap(viewModel.downloadBatch.meteredPrompt)
 
-        viewModel.downloadBatch.dismissMeteredPrompt()
+        viewModel.downloadBatch.hideMeteredPrompt()
+        XCTAssertNil(viewModel.downloadBatch.meteredPrompt)
+        await viewModel.downloadBatch.resolveMeteredPrompt(prompt.id, useMeteredData: true).value
+
+        XCTAssertEqual(downloads.batchRequests.map { $0.chapters.map(\.key) }, [["chapter-1"]])
+        XCTAssertEqual(downloads.confirmedMeteredUses, [true])
+    }
+
+    func testQueueAndWaitStillQueuesAfterTheDialogHidItself() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.meteredConfirmationNeeded = true
+        let viewModel = makeViewModel(media: Self.series, saved: true, downloads: downloads)
+        await viewModel.performDownloadAction(.download, for: chapter("chapter-1")).value
+        let prompt = try XCTUnwrap(viewModel.downloadBatch.meteredPrompt)
+
+        viewModel.downloadBatch.hideMeteredPrompt()
+        await viewModel.downloadBatch.resolveMeteredPrompt(prompt.id, useMeteredData: false).value
+
+        XCTAssertEqual(downloads.confirmedMeteredUses, [false])
+        XCTAssertEqual(downloads.batchRequests.count, 1)
+    }
+
+    func testCancelDropsTheBatchSoAnAnswerForItQueuesNothing() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.meteredConfirmationNeeded = true
+        let viewModel = makeViewModel(media: Self.series, saved: true, downloads: downloads)
+        await viewModel.performDownloadAction(.download, for: chapter("chapter-1")).value
+        let prompt = try XCTUnwrap(viewModel.downloadBatch.meteredPrompt)
+
+        viewModel.downloadBatch.cancelMeteredPrompt()
         await viewModel.downloadBatch.resolveMeteredPrompt(prompt.id, useMeteredData: true).value
 
         XCTAssertNil(viewModel.downloadBatch.meteredPrompt)
         XCTAssertTrue(downloads.batchRequests.isEmpty)
+    }
+
+    func testAHiddenPromptIsNotShownAgainWhenASheetLaterDismisses() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.meteredConfirmationNeeded = true
+        let viewModel = makeViewModel(media: Self.series, saved: true, downloads: downloads)
+        await viewModel.performDownloadAction(.download, for: chapter("chapter-1")).value
+        XCTAssertNotNil(viewModel.downloadBatch.meteredPrompt)
+
+        viewModel.downloadBatch.hideMeteredPrompt()
+        viewModel.downloadBatch.downloadSheetDidDismiss()
+
+        XCTAssertNil(viewModel.downloadBatch.meteredPrompt)
+    }
+
+    func testAnAnswerWhileAnotherBatchIsBeingQueuedIsReportedNotDropped() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        let messages = MediaDetailMessageSpy()
+        let series = Manga(
+            key: "series-1",
+            title: "Series One",
+            chapters: [Chapter(key: "chapter-1", chapter: 1), Chapter(key: "chapter-3", chapter: 3)]
+        )
+        let viewModel = makeViewModel(media: series, saved: true, downloads: downloads, messages: messages)
+        downloads.meteredConfirmationNeeded = true
+        await viewModel.performDownloadAction(.download, for: Chapter(key: "chapter-3", chapter: 3)).value
+        let prompt = try XCTUnwrap(viewModel.downloadBatch.meteredPrompt)
+        downloads.meteredConfirmationNeeded = false
+        downloads.holdsBatches = true
+        defer {
+            downloads.holdsBatches = false
+            downloads.releaseBatches()
+        }
+        let queueing = viewModel.downloadBatch.startDownload(.next)
+        try await downloads.waitForPendingBatch()
+
+        await viewModel.downloadBatch.resolveMeteredPrompt(prompt.id, useMeteredData: true).value
+
+        XCTAssertEqual(messages.messages, [.downloadBatchBusy])
+        XCTAssertEqual(downloads.batchRequests.count, 1, "Only the batch already being queued reached the store")
+        downloads.holdsBatches = false
+        downloads.releaseBatches()
+        await queueing.value
+    }
+
+    func testATappedChapterWhileABatchIsBeingQueuedSaysSoInsteadOfRefusing() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        let messages = MediaDetailMessageSpy()
+        let series = Manga(
+            key: "series-1",
+            title: "Series One",
+            chapters: [Chapter(key: "chapter-1", chapter: 1), Chapter(key: "chapter-3", chapter: 3)]
+        )
+        let viewModel = makeViewModel(media: series, saved: true, downloads: downloads, messages: messages)
+        downloads.holdsBatches = true
+        defer {
+            downloads.holdsBatches = false
+            downloads.releaseBatches()
+        }
+        let queueing = viewModel.downloadBatch.startDownload(.next)
+        try await downloads.waitForPendingBatch()
+        downloads.meteredConfirmationNeeded = true
+
+        await viewModel.performDownloadAction(.download, for: Chapter(key: "chapter-3", chapter: 3)).value
+
+        XCTAssertEqual(messages.messages, [.downloadBatchBusy])
+        XCTAssertNil(viewModel.downloadBatch.meteredPrompt)
+        downloads.holdsBatches = false
+        downloads.releaseBatches()
+        await queueing.value
     }
 
     func testAStalePromptAnswerAfterResetQueuesNothing() async throws {
@@ -385,6 +484,7 @@ final class MediaDetailDownloadActionTests: XCTestCase {
         guard case .preview(let preview)? = viewModel.downloadBatch.sheet else {
             return XCTFail("All of twelve chapters is previewed before it is queued")
         }
+        viewModel.downloadBatch.downloadSheetDidAppear()
         await viewModel.downloadBatch.confirmDownloadPreview(previewID: preview.id).value
 
         // The sheet is still dismissing: a dialog presented now would not be shown.
@@ -395,6 +495,23 @@ final class MediaDetailDownloadActionTests: XCTestCase {
 
         XCTAssertEqual(downloads.confirmedMeteredUses, [false])
         XCTAssertEqual(downloads.batchRequests.first?.chapters.count, 12)
+    }
+
+    func testAPreviewClearedWithoutEverBeingShownDoesNotHoldThePromptBack() async throws {
+        let chapters = (1...12).map { Chapter(key: "c\($0)", chapter: Double($0)) }
+        let series = Manga(key: "series-1", title: "Series One", chapters: chapters)
+        let downloads = MediaDetailDownloadsFake()
+        downloads.meteredConfirmationNeeded = true
+        let viewModel = makeViewModel(media: series, saved: true, downloads: downloads)
+
+        await viewModel.downloadBatch.startDownload(.all).value
+        guard case .preview(let preview)? = viewModel.downloadBatch.sheet else {
+            return XCTFail("All of twelve chapters is previewed before it is queued")
+        }
+        // The screen never reported the sheet on screen, so no dismissal is coming.
+        await viewModel.downloadBatch.confirmDownloadPreview(previewID: preview.id).value
+
+        XCTAssertNotNil(viewModel.downloadBatch.meteredPrompt)
     }
 
     // MARK: - Subjects

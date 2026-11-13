@@ -2467,7 +2467,10 @@
       "comment" : "Download menu item: download the next five unread chapters."
     },
     "Next Chapter" : {
-      "comment" : "Adjacent chapter prefetch: only the following chapter is prefetched"
+
+    },
+    "Next Chapter Only" : {
+      "comment" : "Adjacent chapter prefetch picker value: only the following chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch."
     },
     "Next Page" : {
 
@@ -2489,6 +2492,9 @@
     },
     "Next chapter opens in the text reader" : {
       "comment" : "Reader: the next chapter is text; go back to the series to open it"
+    },
+    "No Adjacent Chapters" : {
+      "comment" : "Adjacent chapter prefetch picker value: no neighbouring chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch."
     },
     "No History" : {
 
@@ -2661,7 +2667,7 @@
       "comment" : "Anime format: original video animation"
     },
     "Off" : {
-      "comment" : "Adjacent chapter prefetch: no neighbouring chapter is prefetched"
+
     },
     "Official" : {
       "comment" : "Discord status: chapter from the official release"
@@ -3626,6 +3632,9 @@
     "Still in library" : {
 
     },
+    "Still queuing downloads" : {
+      "comment" : "Series details: a download was tapped while an earlier download request was still being queued, so nothing was queued for the new one."
+    },
     "Stop Tracking" : {
 
     },
@@ -4393,6 +4402,9 @@
           }
         }
       }
+    },
+    "Wait a moment, then download this again." : {
+      "comment" : "Series details: detail asking the user to repeat a download that was not queued because an earlier request was still being queued."
     },
     "Waiting for Wi-Fi" : {
       "comment" : "Chapter download status: downloads do not use cellular or other metered networks"

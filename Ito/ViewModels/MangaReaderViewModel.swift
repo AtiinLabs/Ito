@@ -62,12 +62,14 @@ final class MangaReaderViewModel: ObservableObject {
     private var mainLoadTask: Task<Void, Never>?
     private var mainLoadOperationID: UUID?
     private var adjacentPrefetchTask: Task<Void, Never>?
-    private var adjacentPrefetchOperationID: UUID?
-    private var adjacentPrefetchEpoch: NetworkPrefetchEpoch?
+    private(set) var adjacentPrefetchOperationID: UUID?
+    private(set) var adjacentPrefetchEpoch: NetworkPrefetchEpoch?
     /// The neighbors the last prefetch was started for.
     private var adjacentPrefetchKeys: Set<String> = []
     /// A boundary changed while the reader was inactive; `appear()` applies it.
     private var offlineChangeWaiting = false
+    /// Operations whose end was logged, so an operation ends in the log once however many paths finish it.
+    var finalizedLogOperations: Set<UUID> = []
     private(set) var appendTask: Task<Void, Never>?
     private(set) var appendOperationID: UUID?
     private(set) var appendPrefetchEpoch: NetworkPrefetchEpoch?
@@ -120,16 +122,15 @@ final class MangaReaderViewModel: ObservableObject {
         publishContinuousSnapshot()
         observeOfflineChanges()
         networkSubscription = dependencies.settings.mangaReaderNetworkChanges.sink { @Sendable [weak self] in
-            Task { @MainActor in
-                guard let self, self.isActive else { return }
-                if self.dependencies.settings.mangaReaderEffectivePreloadImageCount == 0 {
-                    self.imagePrefetcher.stopPrefetching()
-                }
-                self.adjacentPrefetchOperationID = nil
-                self.adjacentPrefetchTask?.cancel()
-                self.cancelSpeculativeAppendIfNeeded()
-            }
+            Task { @MainActor in self?.networkPolicyDidChange() }
         }
+    }
+
+    /// Stops the running adjacent prefetch; its task ends as stale at its next check.
+    func cancelAdjacentChapterPrefetch() {
+        adjacentPrefetchOperationID = nil
+        adjacentPrefetchTask?.cancel()
+        adjacentPrefetchTask = nil
     }
 
     private func rebuildFlatPages() {
@@ -251,7 +252,7 @@ final class MangaReaderViewModel: ObservableObject {
 
     /// Applies a boundary change to a paged reader. One that arrives while the reader is inactive waits
     /// for `appear()`. A prefetch in flight is left alone unless the neighbors to fetch changed.
-    private func applyOfflineChange() {
+    func applyOfflineChange() {
         guard isActive else { return offlineChangeWaiting = true }
         offlineChangeWaiting = false
         guard isPaged, loadPhase == .content, !pagedPages.isEmpty else { return }

@@ -23,8 +23,9 @@ protocol MediaDetailDownloadBatchHost: AnyObject {
 final class MediaDetailDownloadBatchModel: ObservableObject {
     @Published private(set) var sheet: DownloadSheet? {
         didSet {
-            // A sheet that was on screen is still dismissing when it is cleared; a metered prompt waits for that.
-            if sheet == nil, oldValue != nil { sheetDismissalPending = true }
+            // A sheet the screen reported on screen is still dismissing when it is cleared; a metered prompt waits
+            // for that. One cleared before it was ever shown never reports a dismissal, so nothing waits for it.
+            if sheet == nil, oldValue != nil, sheetIsOnScreen { sheetDismissalPending = true }
         }
     }
     /// SHA-256 hex digest of the chapter list as the source returned it. Empty where nothing is downloadable.
@@ -85,8 +86,10 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     private var enqueueOperationID: UUID?
     /// The batch held until the user decides whether it may use an expensive path.
     private var pendingMeteredBatch: PendingMeteredBatch?
-    /// Set from the moment a sheet is cleared until SwiftUI reports it dismissed. A metered prompt waits for that,
-    /// because a dialog presented over a sheet that is still going away is not shown.
+    /// Whether the screen reported the current download sheet on screen, and so will report its dismissal.
+    private var sheetIsOnScreen = false
+    /// Set from the moment a shown sheet is cleared until SwiftUI reports it dismissed. A metered prompt waits for
+    /// that, because a dialog presented over a sheet that is still going away is not shown.
     private var sheetDismissalPending = false
 
     /// The saved editions asked of the inventory, for one series and one set of unlisted keys.
@@ -101,6 +104,8 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         let request: DownloadBatchRequest
         let alreadyStored: Int
         let scope: BatchScope
+        /// The dialog has been shown for this batch; hiding it does not show it again.
+        var wasPresented = false
     }
 
     private struct BatchScope {
@@ -182,7 +187,8 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         savedScopeGeneration &+= 1
         sheet = nil
         sheetDismissalPending = false
-        dismissMeteredPrompt()
+        sheetIsOnScreen = false
+        cancelMeteredPrompt()
         choiceOperationID = nil
         isApplyingChoice = false
         releaseEnqueueOwnership()
@@ -235,7 +241,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
 
     /// A new series identity starts over. A batch already submitted is not cancelled; it no longer reports here.
     func reset() {
-        dismissMeteredPrompt()
+        cancelMeteredPrompt()
         scopeGeneration &+= 1
         savedScopeGeneration &+= 1
         releaseEnqueueOwnership()
@@ -254,6 +260,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         isApplyingChoice = false
         sheet = nil
         sheetDismissalPending = false
+        sheetIsOnScreen = false
         remembered = .unknown
         preferenceIdentity = nil
         coverageBasis = nil
@@ -940,61 +947,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         )
     }
 
-    /// The catalog's source-provided scanlator identities, with exact-row counts.
-    private func scanlatorOptions() -> [ScanlatorOption] {
-        var counts: [ScanlatorRef: Int] = [:]
-        for chapter in host?.batchChapters ?? [] {
-            let reference = ScanlatorRef(
-                id: chapter.scanlatorID,
-                name: chapter.scanlator,
-                binding: chapter.scanlatorID == nil ? .exactIDless : nil
-            )
-            counts[reference, default: 0] += 1
-        }
-        return counts
-            .map { ScanlatorOption(ref: $0.key, chapterCount: $0.value) }
-            .sorted {
-                if $0.chapterCount != $1.chapterCount { return $0.chapterCount > $1.chapterCount }
-                switch ($0.ref.name, $1.ref.name) {
-                case (nil, nil): break
-                case (nil, _): return true
-                case (_, nil): return false
-                case (let left?, let right?):
-                    if !left.utf8.elementsEqual(right.utf8) {
-                        return left.utf8.lexicographicallyPrecedes(right.utf8)
-                    }
-                }
-                switch ($0.ref.id, $1.ref.id) {
-                case (nil, nil): return $0.ref.binding == .exactIDless && $1.ref.binding != .exactIDless
-                case (nil, _): return true
-                case (_, nil): return false
-                case (let left?, let right?): return left.utf8.lexicographicallyPrecedes(right.utf8)
-                }
-            }
-    }
-
     // MARK: - Queueing
-
-    /// The exact source chapters for `keys`, in reading order. The list is the one a plan was just made from.
-    private func frozenChapters(keys: Set<String>) -> [Chapter] {
-        var seen = Set<String>()
-        let chosen = (host?.batchChapters ?? []).filter {
-            keys.contains($0.key) && !$0.isPaywalled && seen.insert($0.key).inserted
-        }
-        let order = ChapterReadingOrder.order(chosen.map { ChapterFacts($0) }).order
-        return order.map { chosen[$0] }
-    }
-
-    /// What a batch is checked against in the store: the remembered policy this screen planned under.
-    /// An unknown policy (a read that failed) is not claimed.
-    private func reviewedPolicy(of choice: RememberedEditionChoice) -> ReviewedEditionPolicy? {
-        switch choice {
-        case .none: return ReviewedEditionPolicy.none
-        case .unreadable: return ReviewedEditionPolicy.unreadable
-        case .chosen(let selection): return ReviewedEditionPolicy.selection(selection)
-        case .unknown: return nil
-        }
-    }
 
     private func enqueueBatch(
         preset: DownloadPreset,
@@ -1029,7 +982,11 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     /// Queues one chapter the user tapped, as the one-chapter `single` batch the store makes for it. Under
     /// "Ask on Metered Networks" on an expensive path it waits for the same foreground confirmation a batch gets.
     func queueSingleChapter(_ chapter: Chapter) -> Task<Void, Never> {
-        guard !isEnqueuing, let scope = currentBatchScope(), let host, let entry = host.batchEntry else {
+        if isEnqueuing, isCurrentSeriesSaved {
+            host?.presentBatchMessage(.downloadBatchBusy)
+            return Task {}
+        }
+        guard let scope = currentBatchScope(), let host, let entry = host.batchEntry else {
             host?.presentBatchMessage(.downloadRefused)
             return Task {}
         }
@@ -1058,17 +1015,31 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         return nil
     }
 
-    /// Shows the held batch's prompt unless a sheet is still dismissing. `downloadSheetDidDismiss()` shows it then.
+    /// Shows the held batch's prompt unless a sheet is still dismissing or the dialog was already shown for it.
+    /// `downloadSheetDidDismiss()` shows it then.
     private func presentHeldMeteredPrompt() {
-        guard let pending = pendingMeteredBatch, !sheetDismissalPending else { return }
+        guard var pending = pendingMeteredBatch, !pending.wasPresented, !sheetDismissalPending else { return }
+        pending.wasPresented = true
+        pendingMeteredBatch = pending
         meteredPrompt = MeteredDownloadPrompt(id: pending.id, chapterCount: pending.request.chapters.count)
     }
 
-    /// Called when a download sheet has finished dismissing. A prompt held behind that sheet is shown now.
+    /// Called when the screen shows a download sheet. Only a sheet that was shown reports its dismissal.
+    func downloadSheetDidAppear() {
+        guard sheet != nil else { return }
+        sheetIsOnScreen = true
+    }
+
+    /// Called when a download sheet has finished dismissing. A prompt held behind that sheet is shown now. A sheet
+    /// that was replaced rather than cleared is still on screen.
     func downloadSheetDidDismiss() {
+        if sheet == nil { sheetIsOnScreen = false }
         sheetDismissalPending = false
         presentHeldMeteredPrompt()
     }
+
+    /// Whether the screen shows this series as a saved one, so a message about its downloads is about it.
+    private var isCurrentSeriesSaved: Bool { host?.batchIsSaved == true }
 
     private func submitBatch(
         _ request: DownloadBatchRequest,
@@ -1099,22 +1070,36 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
 
     /// Applies the user's decision to the batch held for it. `useMeteredData` queues it with consent to use an
     /// expensive path for this batch alone; otherwise it is queued without one and waits for an unmetered path.
-    /// A decision for a batch no longer held, or for a series no longer shown, does nothing.
+    /// The batch is found by the prompt the dialog presented, so a dialog that already hid itself while dismissing
+    /// still resolves it. A decision for a batch no longer held does nothing: its series is no longer shown. A
+    /// batch that cannot be submitted now is reported, not dropped silently.
     @discardableResult
     func resolveMeteredPrompt(_ promptID: UUID, useMeteredData: Bool) -> Task<Void, Never> {
         guard let pending = pendingMeteredBatch, pending.id == promptID else { return Task {} }
         pendingMeteredBatch = nil
         meteredPrompt = nil
-        return submitBatch(
+        if let task = submitBatch(
             pending.request,
             confirmedMeteredUse: useMeteredData,
             alreadyStored: pending.alreadyStored,
             scope: pending.scope
-        ) ?? Task {}
+        ) {
+            return task
+        }
+        if host?.batchIdentity == pending.scope.identity, isCurrentSeriesSaved {
+            host?.presentBatchMessage(isEnqueuing ? .downloadBatchBusy : .editionChoiceChanged)
+        }
+        return Task {}
     }
 
-    /// Drops the batch held for the user's decision without queueing anything.
-    func dismissMeteredPrompt() {
+    /// Hides the dialog without deciding. The held batch stays, because the dialog hides itself while a button's
+    /// action is still to run; only `cancelMeteredPrompt()` drops it.
+    func hideMeteredPrompt() {
+        meteredPrompt = nil
+    }
+
+    /// The user's Cancel, or the series going away: drops the held batch without queueing anything.
+    func cancelMeteredPrompt() {
         pendingMeteredBatch = nil
         meteredPrompt = nil
     }

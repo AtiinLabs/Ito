@@ -157,6 +157,30 @@ struct ReaderNetworkPolicyTests {
         #expect(!subject.viewModel.loadingNextChapter)
     }
 
+    @Test func aRetiredLookAheadAppendIsLoggedFinishedExactlyOnce() async {
+        let first = Chapter(key: "a", chapter: 1)
+        let next = Chapter(key: "b", chapter: 2)
+        let entry = Manga(key: "series", title: "Fixture", viewer: .Vertical, chapters: [first, next])
+        let subject = makeMangaReaderSubject(manga: entry, initialChapter: first, preloadImageCount: 5)
+        let twoPages = [Page(index: 0, content: .text("fixture")), Page(index: 1, content: .text("fixture"))]
+        subject.loader.enqueue(.pages(twoPages), for: "a")
+        subject.viewModel.start()
+        await subject.viewModel.waitForTestingOperations()
+        subject.viewModel.continuousViewportChanged([FlatPage.id(chapterKey: "a", position: 0)])
+        subject.loader.enqueue(.suspended, for: "b")
+        subject.viewModel.appendNextChapter(trigger: .speculative)
+        await subject.loader.waitForPendingCount(1, for: "b")
+
+        subject.settings.policyPath = .init(status: .satisfied, isExpensive: true)
+        subject.loader.resolveFirst(for: "b", with: .success(pages))
+        await subject.viewModel.waitForTestingOperations()
+
+        let finished = subject.logger.events.filter { $0.kind == .chapterAppend && $0.phase == .finished }
+        let started = subject.logger.events.filter { $0.kind == .chapterAppend && $0.phase == .started }
+        #expect(finished.count == 1)
+        #expect(started.map(\.operationID) == finished.map(\.operationID))
+    }
+
     @Test func queuedSpeculativeAppendAtTheVisibleEndRetiresIntoReaderIntent() async {
         let subject = await manga()
         subject.viewModel.continuousViewportChanged([FlatPage.id(chapterKey: "a", position: 0)])

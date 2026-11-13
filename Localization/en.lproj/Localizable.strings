@@ -1037,8 +1037,10 @@ Manga format */
 /* Download menu item: download the next five unread chapters. */
 "Next 5 Chapters" = "Next 5 Chapters";
 
-/* Adjacent chapter prefetch: only the following chapter is prefetched */
 "Next Chapter" = "Next Chapter";
+
+/* Adjacent chapter prefetch picker value: only the following chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch. */
+"Next Chapter Only" = "Next Chapter Only";
 
 "Next Page" = "Next Page";
 
@@ -1059,6 +1061,9 @@ Manga format */
 
 /* Reader: the next chapter is text; go back to the series to open it */
 "Next chapter opens in the text reader" = "Next chapter opens in the text reader";
+
+/* Adjacent chapter prefetch picker value: no neighbouring chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch. */
+"No Adjacent Chapters" = "No Adjacent Chapters";
 
 "No History" = "No History";
 
@@ -1185,7 +1190,6 @@ Manga format: light novel */
 /* Anime format: original video animation */
 "OVA" = "OVA";
 
-/* Adjacent chapter prefetch: no neighbouring chapter is prefetched */
 "Off" = "Off";
 
 /* Discord status: chapter from the official release */
@@ -1829,6 +1833,9 @@ Downloads queue: retry a failed or paused job */
 
 "Still in library" = "Still in library";
 
+/* Series details: a download was tapped while an earlier download request was still being queued, so nothing was queued for the new one. */
+"Still queuing downloads" = "Still queuing downloads";
+
 "Stop Tracking" = "Stop Tracking";
 
 "Stop Tracking removes the link in Ito. Your %@ list entry is kept." = "Stop Tracking removes the link in Ito. Your %@ list entry is kept.";
@@ -2333,6 +2340,9 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 
 /* History: volume and chapter title */
 "Vol. %@ · %@" = "Vol. %1$@ · %2$@";
+
+/* Series details: detail asking the user to repeat a download that was not queued because an earlier request was still being queued. */
+"Wait a moment, then download this again." = "Wait a moment, then download this again.";
 
 /* Chapter download status: downloads do not use cellular or other metered networks */
 "Waiting for Wi-Fi" = "Waiting for Wi-Fi";

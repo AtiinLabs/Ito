@@ -77,12 +77,16 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 viewModel.downloadBatch.downloadSheetDidDismiss()
             }) { sheet in
                 downloadSheetContent(sheet)
+                    // Only a sheet that was shown reports its dismissal; the model waits for that and no other.
+                    .onAppear { viewModel.downloadBatch.downloadSheetDidAppear() }
             }
             .confirmationDialog(
                 String(localized: "Use Metered Data?", comment: "Confirmation for one download batch on cellular or a hotspot"),
                 isPresented: Binding(
                     get: { viewModel.downloadBatch.meteredPrompt != nil },
-                    set: { if !$0 { viewModel.downloadBatch.dismissMeteredPrompt() } }
+                    // The dialog hides itself while a button's action is still to run: that action resolves the
+                    // batch it presented, so only Cancel drops it.
+                    set: { if !$0 { viewModel.downloadBatch.hideMeteredPrompt() } }
                 ),
                 titleVisibility: .visible,
                 presenting: viewModel.downloadBatch.meteredPrompt
@@ -93,7 +97,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 Button(String(localized: "Queue and Wait for Wi-Fi", comment: "Queues downloads without cellular permission")) {
                     viewModel.downloadBatch.resolveMeteredPrompt(prompt.id, useMeteredData: false)
                 }
-                Button("Cancel", role: .cancel) { viewModel.downloadBatch.dismissMeteredPrompt() }
+                Button("Cancel", role: .cancel) { viewModel.downloadBatch.cancelMeteredPrompt() }
             } message: { _ in
                 Text("This batch may use cellular data or a personal hotspot while the app stays in the foreground. Other downloads and prefetching are not approved.", comment: "Scope of temporary metered download permission")
             }

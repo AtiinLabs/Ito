@@ -68,6 +68,27 @@ extension MangaReaderViewModel {
             operationID: operationID, boundary: boundary, session: session, generation: generation
         )
     }
+
+    /// A network policy or setting change. A running adjacent prefetch is cancelled only when it is no longer
+    /// allowed, or was admitted under an epoch that has moved; a change that leaves it allowed, such as a batch's
+    /// consent expiring, does not touch it. When prefetching is allowed and none is running, it starts again for
+    /// the neighbours still missing.
+    func networkPolicyDidChange() {
+        guard isActive else { return }
+        let settings = dependencies.settings
+        if settings.mangaReaderEffectivePreloadImageCount == 0 {
+            imagePrefetcher.stopPrefetching()
+        }
+        let admitted = settings.mangaReaderAdjacentPrefetchCount > 0
+        if adjacentPrefetchOperationID != nil, !admitted || adjacentPrefetchEpoch != settings.mangaReaderPrefetchEpoch {
+            cancelAdjacentChapterPrefetch()
+        }
+        if admitted, adjacentPrefetchOperationID == nil {
+            applyOfflineChange()
+        }
+        cancelSpeculativeAppendIfNeeded()
+    }
+
     /// The neighbouring chapters to prefetch. One means the following chapter only; two adds the preceding one. A
     /// missing following chapter never lets the preceding one stand in for it.
     func adjacentPrefetchCandidates(for reference: Manga.Chapter) -> [Manga.Chapter] {
@@ -164,11 +185,13 @@ extension MangaReaderViewModel {
         )
     }
 
+    /// Logs the end of an operation once; a later finish of the same operation is not logged again.
     func logFinished(
         kind: PresentationEventKind,
         operationID: UUID,
         outcome: PresentationEventOutcome
     ) {
+        guard finalizedLogOperations.insert(operationID).inserted else { return }
         dependencies.presentationLogger.log(
             .finished(
                 feature: .mangaReader,

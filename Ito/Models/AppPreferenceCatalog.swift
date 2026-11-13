@@ -94,8 +94,8 @@ nonisolated public enum AdjacentChapterPrefetchPreference: Int, Codable, CaseIte
     /// `one` is the following chapter only; `two` adds the preceding one.
     public var localizedTitle: String {
         switch self {
-        case .none: String(localized: "Off", comment: "Adjacent chapter prefetch: no neighbouring chapter is prefetched")
-        case .one: String(localized: "Next Chapter", comment: "Adjacent chapter prefetch: only the following chapter is prefetched")
+        case .none: String(localized: "No Adjacent Chapters", comment: "Adjacent chapter prefetch picker value: no neighbouring chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch.")
+        case .one: String(localized: "Next Chapter Only", comment: "Adjacent chapter prefetch picker value: only the following chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch.")
         case .two: String(localized: "Next and Previous", comment: "Adjacent chapter prefetch: the following and the preceding chapter are prefetched")
         }
     }
