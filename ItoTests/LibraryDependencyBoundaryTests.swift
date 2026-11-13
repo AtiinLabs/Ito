@@ -68,7 +68,7 @@ final class LibraryDependencyBoundaryTests: XCTestCase {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent()
         )
         let pluginURL = URL(fileURLWithPath: "/test/plugin.exact.ito")
@@ -110,7 +110,7 @@ final class LibraryDependencyBoundaryTests: XCTestCase {
             responses: [.suspended, .immediate(replacementRunner)]
         )
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
             runnerLoader: loader.load
         )

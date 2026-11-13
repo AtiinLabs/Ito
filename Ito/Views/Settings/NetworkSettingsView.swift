@@ -28,7 +28,7 @@ struct NetworkSettingsView: View {
                 Picker(String(localized: "Adjacent Chapters", comment: "Number of neighbor manga chapter manifests to prefetch"), selection: Binding(
                     get: { viewModel.adjacentPrefetch }, set: { value in Task { await viewModel.setAdjacent(value) } }
                 )) {
-                    ForEach(AdjacentChapterPrefetchPreference.allCases, id: \.self) { count in Text("\(count.rawValue)").tag(count) }
+                    ForEach(AdjacentChapterPrefetchPreference.allCases, id: \.self) { count in Text(count.localizedTitle).tag(count) }
                 }
                 Toggle(String(localized: "Prefetch Novel Chapters", comment: "Configured speculative novel chapter loading"), isOn: Binding(
                     get: { viewModel.novelPrefetch }, set: { value in Task { await viewModel.setNovelPrefetch(value) } }

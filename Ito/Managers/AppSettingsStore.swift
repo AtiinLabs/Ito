@@ -14,6 +14,7 @@ public struct AppSettingsLoadIssue: Equatable, Sendable {
 public protocol AppSettingsPersistence: Sendable {
     func readPreferences() async throws -> [AppPreference]
     func writePreferences(_ preferences: [AppPreference]) async throws -> [AppPreference]
+    func insertAbsentNetworkPreferences() async throws -> [AppPreference]
 }
 
 public struct GRDBAppSettingsPersistence: AppSettingsPersistence {
@@ -34,6 +35,13 @@ public struct GRDBAppSettingsPersistence: AppSettingsPersistence {
             for preference in preferences {
                 try preference.save(db)
             }
+            return try AppPreference.fetchAll(db)
+        }
+    }
+
+    public func insertAbsentNetworkPreferences() async throws -> [AppPreference] {
+        try await dbPool.write { db in
+            try NetworkPreferenceMigration.insertMissing(in: db)
             return try AppPreference.fetchAll(db)
         }
     }
@@ -70,14 +78,6 @@ public final class AppSettingsStore: ObservableObject {
     let networkPolicy: NetworkPolicyCenter
     private var operationTail = Task<Void, Never> {}
 
-    public convenience init(dbPool: DatabasePool) {
-        self.init(persistence: GRDBAppSettingsPersistence(dbPool: dbPool))
-    }
-
-    public convenience init(persistence: any AppSettingsPersistence) {
-        self.init(persistence: persistence, networkPolicy: NetworkPolicyCenter())
-    }
-
     /// - Parameter networkPolicy: the process's live network policy, which this store feeds with every
     ///   acknowledged change of the configured values.
     convenience init(dbPool: DatabasePool, networkPolicy: NetworkPolicyCenter) {
@@ -103,10 +103,10 @@ public final class AppSettingsStore: ObservableObject {
             // Derive absent network values when a restored preload supplies legacy configuration to preserve.
             // An explicitly empty/partial represented component with no preload has no dependent value to
             // migrate: refresh must remain read-only rather than materializing unrelated defaults.
-            let derived = rows.contains { $0.key == AppPreferenceKeys.preloadImageCount }
-                ? NetworkPreferenceMigration.missingRows(in: rows) : []
-            if !derived.isEmpty {
-                rows = try await persistence.writePreferences(derived)
+            let hasPreload = rows.contains { $0.key == AppPreferenceKeys.preloadImageCount }
+            // Decided inside the write, from the rows it reads, so only keys that are absent are inserted.
+            if hasPreload, !NetworkPreferenceMigration.missingRows(in: rows).isEmpty {
+                rows = try await persistence.insertAbsentNetworkPreferences()
             }
             let resolved = AppSettingsSnapshot.resolve(rows)
             publish(resolved.snapshot, issues: resolved.issues)
@@ -182,9 +182,8 @@ public final class AppSettingsStore: ObservableObject {
         // Absent network preferences are derived from the stored ones before any generic default is
         // materialized, so a stored image preload of zero is never overtaken by a default adjacent amount.
         var rows = rows
-        let derived = NetworkPreferenceMigration.missingRows(in: rows)
-        if !derived.isEmpty {
-            rows = try await persistence.writePreferences(derived)
+        if !NetworkPreferenceMigration.missingRows(in: rows).isEmpty {
+            rows = try await persistence.insertAbsentNetworkPreferences()
         }
         let first = AppSettingsSnapshot.resolve(rows)
         guard !first.repairs.isEmpty else {

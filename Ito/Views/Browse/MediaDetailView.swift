@@ -72,7 +72,10 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             .sheet(item: relinkPresentationBinding) { _ in
                 relinkSearchSheet
             }
-            .sheet(item: downloadSheetBinding) { sheet in
+            .sheet(item: downloadSheetBinding, onDismiss: {
+                // Reports the end of the dismissal, so a metered prompt held behind this sheet can be shown.
+                viewModel.downloadBatch.downloadSheetDidDismiss()
+            }) { sheet in
                 downloadSheetContent(sheet)
             }
             .confirmationDialog(

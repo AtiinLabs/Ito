@@ -324,12 +324,18 @@ public class UpdateManager: ObservableObject {
         }
     }
 
-    /// Re-evaluated before every series, not just once at the beginning of a scheduled run.
+    /// Re-evaluated before every series, not just once at the beginning of a scheduled run. A path that has not been
+    /// reported yet is awaited rather than read as offline, so a cold background launch is not skipped by timing. The
+    /// wait ends with the run's task, which the background task's expiration cancels.
     private func automaticChecksAdmitted() async -> Bool {
         guard let settingsStore else { return false }
         let policy = settingsStore.networkPolicy
         let path: NetworkPathSnapshot
         if let observed = policy.observedPath {
+            guard observed.status != .unknown else {
+                guard let reported = await policy.firstKnownPath() else { return false }
+                return policy.decide(.automaticMetadata, path: reported) == .allow
+            }
             path = observed
         } else {
             path = NetworkPathSnapshot(status: .satisfied, isExpensive: await !networkConditions.isOnUnmeteredNetwork())

@@ -2310,13 +2310,16 @@
       "comment" : "Download menu item: download the next five unread chapters."
     },
     "Next Chapter" : {
-
+      "comment" : "Adjacent chapter prefetch: only the following chapter is prefetched"
     },
     "Next Page" : {
 
     },
     "Next Unread Chapter" : {
       "comment" : "Download menu item: download the next unread chapter."
+    },
+    "Next and Previous" : {
+      "comment" : "Adjacent chapter prefetch: the following and the preceding chapter are prefetched"
     },
     "Next chapter is locked" : {
       "comment" : "Reader: shown after the last page when the next chapter needs an unlock"
@@ -2490,7 +2493,7 @@
       "comment" : "Anime format: original video animation"
     },
     "Off" : {
-
+      "comment" : "Adjacent chapter prefetch: no neighbouring chapter is prefetched"
     },
     "Official" : {
       "comment" : "Discord status: chapter from the official release"

@@ -180,7 +180,7 @@ final class DownloadCenter: ObservableObject {
     func cancel(_ edition: OfflineChapterEdition) async throws {
         guard let job = try await queuedJob(for: edition) else { return }
         try await store.cancel(jobID: job.id)
-        if let batchID = UUID(uuidString: job.batchId) { contexts.policy.revokeConsent(forBatch: batchID) }
+        await revokeConsentOfFinishedBatches([job.batchId])
         coordinator.cancelAttempt(jobID: job.id)
     }
 
@@ -199,11 +199,21 @@ final class DownloadCenter: ObservableObject {
     func cancel(jobIDs: [String]) async throws {
         let jobs = try await store.jobs(ids: jobIDs)
         let removed = try await store.cancel(jobIDs: jobIDs)
-        for job in jobs where removed.contains(job.id) {
-            if let batchID = UUID(uuidString: job.batchId) { contexts.policy.revokeConsent(forBatch: batchID) }
-        }
+        await revokeConsentOfFinishedBatches(jobs.filter { removed.contains($0.id) }.map(\.batchId))
         for jobID in removed {
             coordinator.cancelAttempt(jobID: jobID)
+        }
+    }
+
+    /// A batch's metered consent ends only when the batch has no job left. Cancelling one chapter leaves the
+    /// approved siblings queued under the same consent. An unreadable count keeps the consent: the observed
+    /// snapshot ends it once the batch really disappears.
+    private func revokeConsentOfFinishedBatches(_ batchIDs: [String]) async {
+        for batchID in Set(batchIDs) {
+            guard let id = UUID(uuidString: batchID) else { continue }
+            if (try? await store.batchHasJobs(batchID)) == false {
+                contexts.policy.revokeConsent(forBatch: id)
+            }
         }
     }
 

@@ -731,7 +731,7 @@ private struct ExecutorHarness {
         }
         executor = PluginCompletionExecutor(
             store: store,
-            contexts: PluginNetworkContexts(),
+            contexts: PluginNetworkContexts(policy: NetworkPolicyCenter()),
             locatePlugin: locator,
             makeNetModule: { pluginID in
                 onNetworkCreated?()

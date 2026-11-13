@@ -1022,12 +1022,16 @@ Manga format */
 /* Download menu item: download the next five unread chapters. */
 "Next 5 Chapters" = "Next 5 Chapters";
 
+/* Adjacent chapter prefetch: only the following chapter is prefetched */
 "Next Chapter" = "Next Chapter";
 
 "Next Page" = "Next Page";
 
 /* Download menu item: download the next unread chapter. */
 "Next Unread Chapter" = "Next Unread Chapter";
+
+/* Adjacent chapter prefetch: the following and the preceding chapter are prefetched */
+"Next and Previous" = "Next and Previous";
 
 /* Reader: shown after the last page when the next chapter needs an unlock */
 "Next chapter is locked" = "Next chapter is locked";
@@ -1163,6 +1167,7 @@ Manga format: light novel */
 /* Anime format: original video animation */
 "OVA" = "OVA";
 
+/* Adjacent chapter prefetch: no neighbouring chapter is prefetched */
 "Off" = "Off";
 
 /* Discord status: chapter from the official release */

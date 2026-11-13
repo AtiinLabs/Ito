@@ -113,4 +113,100 @@ struct ReaderNetworkPolicyTests {
         #expect(!subject.viewModel.appendFailed)
         #expect(subject.history.requests.map(\.chapterKey) == ["a"])
     }
+
+    @Test func aLookAheadCancelledWithTheReaderAtTheChapterEndResumesAsTheReadersContinuation() async {
+        let subject = await manga()
+        subject.viewModel.continuousViewportChanged([FlatPage.id(chapterKey: "a", position: 0)])
+        subject.loader.enqueue(.suspended, for: "b")
+        subject.loader.enqueue(.pages(pages), for: "b")
+        subject.viewModel.appendNextChapter(trigger: .speculative)
+        await subject.loader.waitForPendingCount(1, for: "b")
+
+        subject.settings.policyPath = .init(status: .satisfied, isExpensive: true)
+        subject.loader.resolveFirst(for: "b", with: .success(pages))
+        await subject.viewModel.waitForTestingOperations()
+
+        #expect(subject.loader.requestedChapterKeys == ["a", "b", "b"])
+        #expect(subject.loader.operations.last?.purpose == .foregroundReading)
+        #expect(subject.viewModel.segments.map { $0.chapter.key } == ["a", "b"])
+        #expect(!subject.viewModel.loadingNextChapter)
+    }
+
+    @Test func aLookAheadCancelledAwayFromTheChapterEndDoesNotStartAnotherAppend() async {
+        let first = Chapter(key: "a", chapter: 1)
+        let next = Chapter(key: "b", chapter: 2)
+        let entry = Manga(key: "series", title: "Fixture", viewer: .Vertical, chapters: [first, next])
+        let subject = makeMangaReaderSubject(manga: entry, initialChapter: first, preloadImageCount: 5)
+        let twoPages = [Page(index: 0, content: .text("fixture")), Page(index: 1, content: .text("fixture"))]
+        subject.loader.enqueue(.pages(twoPages), for: "a")
+        subject.viewModel.start()
+        await subject.viewModel.waitForTestingOperations()
+        // Only the first page is on screen, so the reader is not at the chapter's end.
+        subject.viewModel.continuousViewportChanged([FlatPage.id(chapterKey: "a", position: 0)])
+        subject.loader.enqueue(.suspended, for: "b")
+        subject.loader.enqueue(.pages(pages), for: "b")
+        subject.viewModel.appendNextChapter(trigger: .speculative)
+        await subject.loader.waitForPendingCount(1, for: "b")
+
+        subject.settings.policyPath = .init(status: .satisfied, isExpensive: true)
+        subject.loader.resolveFirst(for: "b", with: .success(pages))
+        await subject.viewModel.waitForTestingOperations()
+
+        #expect(subject.loader.requestedChapterKeys == ["a", "b"])
+        #expect(subject.viewModel.segments.map { $0.chapter.key } == ["a"])
+        #expect(!subject.viewModel.loadingNextChapter)
+    }
+
+    @Test func queuedSpeculativeAppendAtTheVisibleEndRetiresIntoReaderIntent() async {
+        let subject = await manga()
+        subject.viewModel.continuousViewportChanged([FlatPage.id(chapterKey: "a", position: 0)])
+        subject.loader.enqueue(.suspended, for: "b")
+        subject.viewModel.appendNextChapter(trigger: .speculative)
+        subject.settings.policyPath = .init(status: .satisfied, isExpensive: true)
+
+        await subject.loader.waitForPendingCount(1, for: "b")
+        #expect(subject.loader.requestedChapterKeys == ["a", "b"])
+        #expect(subject.loader.operations.last?.purpose == .foregroundReading)
+        subject.loader.resolveFirst(for: "b", with: .success(pages))
+        await subject.viewModel.waitForTestingOperations()
+
+        #expect(subject.viewModel.segments.map { $0.chapter.key } == ["a", "b"])
+        #expect(!subject.viewModel.loadingNextChapter)
+    }
+
+    @Test func thrownSpeculativeAppendAtTheVisibleEndTransfersToReaderIntent() async {
+        let subject = await manga()
+        subject.viewModel.continuousViewportChanged([FlatPage.id(chapterKey: "a", position: 0)])
+        subject.loader.enqueue(.suspended, for: "b")
+        subject.loader.enqueue(.suspended, for: "b")
+        subject.viewModel.appendNextChapter(trigger: .speculative)
+        await subject.loader.waitForPendingCount(1, for: "b")
+
+        subject.settings.policyPath = .init(status: .satisfied, isExpensive: true)
+        subject.loader.resolveFirst(for: "b", with: .failure(URLError(.timedOut)))
+        await subject.loader.waitForPendingCount(1, for: "b")
+        #expect(subject.loader.requestedChapterKeys == ["a", "b", "b"])
+        #expect(subject.loader.operations.last?.purpose == .foregroundReading)
+
+        subject.loader.resolveFirst(for: "b", with: .success(pages))
+        await subject.viewModel.waitForTestingOperations()
+        #expect(subject.viewModel.segments.map { $0.chapter.key } == ["a", "b"])
+    }
+
+    @Test func staleReaderSessionCannotTransferASpeculativeAppend() async {
+        let subject = await manga()
+        subject.viewModel.continuousViewportChanged([FlatPage.id(chapterKey: "a", position: 0)])
+        subject.loader.enqueue(.suspended, for: "b")
+        subject.viewModel.appendNextChapter(trigger: .speculative)
+        await subject.loader.waitForPendingCount(1, for: "b")
+        let oldSession = subject.viewModel.sessionID
+
+        subject.viewModel.disappear()
+        #expect(subject.viewModel.sessionID != oldSession)
+        subject.loader.resolveFirst(for: "b", with: .success(pages))
+        await subject.loader.waitForCompletedCallCount(2)
+        #expect(subject.loader.requestedChapterKeys == ["a", "b"])
+        #expect(subject.viewModel.segments.map { $0.chapter.key } == ["a"])
+        #expect(!subject.viewModel.loadingNextChapter)
+    }
 }

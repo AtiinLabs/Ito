@@ -21,7 +21,12 @@ protocol MediaDetailDownloadBatchHost: AnyObject {
 /// controls. The screen's model owns it and forwards its changes; it reads the screen only through its host.
 @MainActor
 final class MediaDetailDownloadBatchModel: ObservableObject {
-    @Published private(set) var sheet: DownloadSheet?
+    @Published private(set) var sheet: DownloadSheet? {
+        didSet {
+            // A sheet that was on screen is still dismissing when it is cleared; a metered prompt waits for that.
+            if sheet == nil, oldValue != nil { sheetDismissalPending = true }
+        }
+    }
     /// SHA-256 hex digest of the chapter list as the source returned it. Empty where nothing is downloadable.
     @Published private(set) var catalogDigest = ""
     /// A batch is being queued; a second one waits for it instead of being dropped.
@@ -76,6 +81,9 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     private var enqueueOperationID: UUID?
     /// The batch held until the user decides whether it may use an expensive path.
     private var pendingMeteredBatch: PendingMeteredBatch?
+    /// Set from the moment a sheet is cleared until SwiftUI reports it dismissed. A metered prompt waits for that,
+    /// because a dialog presented over a sheet that is still going away is not shown.
+    private var sheetDismissalPending = false
 
     /// The saved editions asked of the inventory, for one series and one set of unlisted keys.
     private struct SavedOnlyRequest: Equatable {
@@ -168,6 +176,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         scopeGeneration &+= 1
         savedScopeGeneration &+= 1
         sheet = nil
+        sheetDismissalPending = false
         dismissMeteredPrompt()
         choiceOperationID = nil
         isApplyingChoice = false
@@ -239,6 +248,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         lastSavedState = nil
         isApplyingChoice = false
         sheet = nil
+        sheetDismissalPending = false
         remembered = .unknown
         preferenceIdentity = nil
         coverageBasis = nil
@@ -832,17 +842,51 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             catalogDigest: scope.catalogDigest.isEmpty ? nil : scope.catalogDigest,
             chapters: chapters
         )
-        // A batch that would use an expensive path waits for the user's direct decision, which is the only way a
-        // consent for it is ever requested. The decision is applied to this exact request.
-        if downloads.meteredUseNeedsConfirmation() {
-            let id = UUID()
-            pendingMeteredBatch = PendingMeteredBatch(
-                id: id, request: request, alreadyStored: alreadyStored, scope: scope
-            )
-            meteredPrompt = MeteredDownloadPrompt(id: id, chapterCount: chapters.count)
-            return nil
+        return queueOrHold(request, alreadyStored: alreadyStored, scope: scope)
+    }
+
+    /// Queues one chapter the user tapped, as the one-chapter `single` batch the store makes for it. Under
+    /// "Ask on Metered Networks" on an expensive path it waits for the same foreground confirmation a batch gets.
+    func queueSingleChapter(_ chapter: Chapter) -> Task<Void, Never> {
+        guard !isEnqueuing, let scope = currentBatchScope(), let host, let entry = host.batchEntry else {
+            host?.presentBatchMessage(.downloadRefused)
+            return Task {}
         }
-        return submitBatch(request, confirmedMeteredUse: false, alreadyStored: alreadyStored, scope: scope)
+        let request = DownloadBatchRequest(
+            pluginId: scope.identity.pluginId,
+            mediaKind: scope.identity.mediaKind,
+            canonicalMediaId: scope.identity.canonicalMediaId,
+            entry: entry,
+            seriesTitle: host.batchSeriesTitle,
+            preset: .single,
+            selection: DownloadBatchRecord.sourceListSelection,
+            catalogDigest: nil,
+            chapters: [chapter]
+        )
+        return queueOrHold(request, alreadyStored: 0, scope: scope) ?? Task {}
+    }
+
+    /// Queues the request, or holds it for the user's decision when it would use an expensive path under a mode
+    /// that asks. The decision is applied to this exact request.
+    private func queueOrHold(_ request: DownloadBatchRequest, alreadyStored: Int, scope: BatchScope) -> Task<Void, Never>? {
+        guard downloads.meteredUseNeedsConfirmation() else {
+            return submitBatch(request, confirmedMeteredUse: false, alreadyStored: alreadyStored, scope: scope)
+        }
+        pendingMeteredBatch = PendingMeteredBatch(id: UUID(), request: request, alreadyStored: alreadyStored, scope: scope)
+        presentHeldMeteredPrompt()
+        return nil
+    }
+
+    /// Shows the held batch's prompt unless a sheet is still dismissing. `downloadSheetDidDismiss()` shows it then.
+    private func presentHeldMeteredPrompt() {
+        guard let pending = pendingMeteredBatch, !sheetDismissalPending else { return }
+        meteredPrompt = MeteredDownloadPrompt(id: pending.id, chapterCount: pending.request.chapters.count)
+    }
+
+    /// Called when a download sheet has finished dismissing. A prompt held behind that sheet is shown now.
+    func downloadSheetDidDismiss() {
+        sheetDismissalPending = false
+        presentHeldMeteredPrompt()
     }
 
     private func submitBatch(

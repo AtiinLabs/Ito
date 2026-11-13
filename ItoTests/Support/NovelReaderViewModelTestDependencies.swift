@@ -356,7 +356,7 @@ final class NovelReaderSettingsFake: NovelReaderSettingsAccessing {
     }
     private var pathGeneration: UInt64 = 0
     var novelReaderPrefetchEpoch: NetworkPrefetchEpoch {
-        .init(policyRevision: 0, pathGeneration: pathGeneration)
+        .init(speculativeRevision: 0, pathGeneration: pathGeneration)
     }
     var novelReaderAllowsSpeculativePrefetch: Bool {
         var configuration = NetworkPolicyConfiguration.defaults

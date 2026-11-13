@@ -304,6 +304,99 @@ final class MediaDetailDownloadActionTests: XCTestCase {
         XCTAssertEqual(downloads.downloadRequests.map(\.chapterKey), ["a16"])
     }
 
+    // MARK: - Metered prompt
+
+    func testASingleChapterInAskModeWaitsForTheForegroundPrompt() async {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.meteredConfirmationNeeded = true
+        let viewModel = makeViewModel(media: Self.series, saved: true, downloads: downloads)
+
+        await viewModel.performDownloadAction(.download, for: chapter("chapter-1")).value
+
+        XCTAssertNotNil(viewModel.downloadBatch.meteredPrompt)
+        XCTAssertTrue(downloads.downloadRequests.isEmpty)
+        XCTAssertTrue(downloads.batchRequests.isEmpty)
+    }
+
+    func testUseMeteredDataQueuesTheSingleChapterWithConsent() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.meteredConfirmationNeeded = true
+        let viewModel = makeViewModel(media: Self.series, saved: true, downloads: downloads)
+        await viewModel.performDownloadAction(.download, for: chapter("chapter-1")).value
+        let prompt = try XCTUnwrap(viewModel.downloadBatch.meteredPrompt)
+
+        await viewModel.downloadBatch.resolveMeteredPrompt(prompt.id, useMeteredData: true).value
+
+        XCTAssertNil(viewModel.downloadBatch.meteredPrompt)
+        XCTAssertEqual(downloads.batchRequests.map { $0.chapters.map(\.key) }, [["chapter-1"]])
+        XCTAssertEqual(downloads.batchRequests.first?.preset, .single)
+        XCTAssertEqual(downloads.confirmedMeteredUses, [true])
+    }
+
+    func testQueueAndWaitQueuesTheSingleChapterWithoutConsent() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.meteredConfirmationNeeded = true
+        let viewModel = makeViewModel(media: Self.series, saved: true, downloads: downloads)
+        await viewModel.performDownloadAction(.download, for: chapter("chapter-1")).value
+        let prompt = try XCTUnwrap(viewModel.downloadBatch.meteredPrompt)
+
+        await viewModel.downloadBatch.resolveMeteredPrompt(prompt.id, useMeteredData: false).value
+
+        XCTAssertEqual(downloads.batchRequests.count, 1)
+        XCTAssertEqual(downloads.confirmedMeteredUses, [false])
+    }
+
+    func testDismissingThePromptQueuesNothing() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.meteredConfirmationNeeded = true
+        let viewModel = makeViewModel(media: Self.series, saved: true, downloads: downloads)
+        await viewModel.performDownloadAction(.download, for: chapter("chapter-1")).value
+        let prompt = try XCTUnwrap(viewModel.downloadBatch.meteredPrompt)
+
+        viewModel.downloadBatch.dismissMeteredPrompt()
+        await viewModel.downloadBatch.resolveMeteredPrompt(prompt.id, useMeteredData: true).value
+
+        XCTAssertNil(viewModel.downloadBatch.meteredPrompt)
+        XCTAssertTrue(downloads.batchRequests.isEmpty)
+    }
+
+    func testAStalePromptAnswerAfterResetQueuesNothing() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.meteredConfirmationNeeded = true
+        let viewModel = makeViewModel(media: Self.series, saved: true, downloads: downloads)
+        await viewModel.performDownloadAction(.download, for: chapter("chapter-1")).value
+        let prompt = try XCTUnwrap(viewModel.downloadBatch.meteredPrompt)
+
+        viewModel.downloadBatch.reset()
+        XCTAssertNil(viewModel.downloadBatch.meteredPrompt)
+        await viewModel.downloadBatch.resolveMeteredPrompt(prompt.id, useMeteredData: true).value
+
+        XCTAssertTrue(downloads.batchRequests.isEmpty)
+    }
+
+    func testAPreviewConfirmedInAskModeShowsThePromptOnlyAfterItsSheetDismisses() async throws {
+        let chapters = (1...12).map { Chapter(key: "c\($0)", chapter: Double($0)) }
+        let series = Manga(key: "series-1", title: "Series One", chapters: chapters)
+        let downloads = MediaDetailDownloadsFake()
+        downloads.meteredConfirmationNeeded = true
+        let viewModel = makeViewModel(media: series, saved: true, downloads: downloads)
+
+        await viewModel.downloadBatch.startDownload(.all).value
+        guard case .preview(let preview)? = viewModel.downloadBatch.sheet else {
+            return XCTFail("All of twelve chapters is previewed before it is queued")
+        }
+        await viewModel.downloadBatch.confirmDownloadPreview(previewID: preview.id).value
+
+        // The sheet is still dismissing: a dialog presented now would not be shown.
+        XCTAssertNil(viewModel.downloadBatch.meteredPrompt)
+        viewModel.downloadBatch.downloadSheetDidDismiss()
+        let prompt = try XCTUnwrap(viewModel.downloadBatch.meteredPrompt)
+        await viewModel.downloadBatch.resolveMeteredPrompt(prompt.id, useMeteredData: false).value
+
+        XCTAssertEqual(downloads.confirmedMeteredUses, [false])
+        XCTAssertEqual(downloads.batchRequests.first?.chapters.count, 12)
+    }
+
     // MARK: - Subjects
 
     private func chapter(_ key: String) -> Chapter {
@@ -395,6 +488,9 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
     var holdsPreferenceWrites = false
     var holdsBatches = false
     private(set) var batchRequests: [DownloadBatchRequest] = []
+    /// Whether queueing would use an expensive path the user must confirm first.
+    var meteredConfirmationNeeded = false
+    private(set) var confirmedMeteredUses: [Bool] = []
     private(set) var storedPreferences: [MediaIdentity: EditionSelection] = [:]
     private(set) var preferenceReadCount = 0
     private(set) var preferenceWriteCount = 0
@@ -466,10 +562,11 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
         if let failure { throw failure }
     }
 
-    func meteredUseNeedsConfirmation() -> Bool { false }
+    func meteredUseNeedsConfirmation() -> Bool { meteredConfirmationNeeded }
 
     func enqueueBatch(_ request: DownloadBatchRequest, confirmedMeteredUse: Bool = false) async -> DownloadBatchOutcome {
         batchRequests.append(request)
+        confirmedMeteredUses.append(confirmedMeteredUse)
         if holdsBatches {
             await withCheckedContinuation { continuation in
                 pendingBatches.append(continuation)

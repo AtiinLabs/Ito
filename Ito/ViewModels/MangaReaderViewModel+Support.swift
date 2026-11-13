@@ -30,11 +30,74 @@ extension MangaReaderViewModel {
             && appendPrefetchEpoch == dependencies.settings.mangaReaderPrefetchEpoch
     }
 
-    func cancelSpeculativeAppendIfNeeded() {
-        guard !speculativeAppendAdmitted, let operationID = appendOperationID else { return }
+    /// Retires an invalid speculative append exactly once. If its session, content boundary and visible loaded end
+    /// still match, transfer continuation to a fresh reader-intent operation before cancelling the old task.
+    func retireStaleSpeculativeAppend(
+        operationID: UUID,
+        boundary: ChapterToken,
+        session: UUID,
+        generation: UInt64
+    ) -> Bool {
+        guard appendOperationID == operationID,
+              appendPrefetchEpoch != nil,
+              !speculativeAppendAdmitted else { return false }
+        let mayContinue = isActive
+            && !isPaged
+            && sessionID == session
+            && contentGeneration == generation
+            && segments.last.map(ChapterToken.init) == boundary
+            && readerIsAtLoadedEnd
         let task = appendTask
         finishAppend(operationID: operationID, outcome: .ignoredStale)
         task?.cancel()
+        if mayContinue {
+            appendNextChapter(trigger: .reader)
+        }
+        return true
+    }
+
+    /// A settings/path notification retires using the append's captured scope. The old task's cancellation state
+    /// never decides whether an interactive continuation may start.
+    func cancelSpeculativeAppendIfNeeded() {
+        guard !speculativeAppendAdmitted,
+              let operationID = appendOperationID,
+              let boundary = appendBoundary,
+              let session = appendSession,
+              let generation = appendGeneration else { return }
+        _ = retireStaleSpeculativeAppend(
+            operationID: operationID, boundary: boundary, session: session, generation: generation
+        )
+    }
+    /// The neighbouring chapters to prefetch. One means the following chapter only; two adds the preceding one. A
+    /// missing following chapter never lets the preceding one stand in for it.
+    func adjacentPrefetchCandidates(for reference: Manga.Chapter) -> [Manga.Chapter] {
+        let count = dependencies.settings.mangaReaderAdjacentPrefetchCount
+        return [
+            count >= 1 ? boundaryAfter(reference).chapter : nil,
+            count >= 2 ? boundaryBefore(reference).chapter : nil
+        ].compactMap { $0 }
+    }
+
+    func finishAppendFailure(
+        operationID: UUID,
+        boundary: ChapterToken,
+        session: UUID,
+        generation: UInt64
+    ) {
+        guard isActive,
+              speculativeAppendAdmitted,
+              sessionID == session,
+              contentGeneration == generation,
+              appendOperationID == operationID else {
+            logFinished(kind: .chapterAppend, operationID: operationID, outcome: .ignoredStale)
+            if !retireStaleSpeculativeAppend(
+                operationID: operationID, boundary: boundary, session: session, generation: generation
+            ) {
+                finishAppend(operationID: operationID, outcome: .ignoredStale)
+            }
+            return
+        }
+        finishAppend(operationID: operationID, outcome: .failed(.pluginExecution))
     }
     /// The page to open `chapter` at: where the reader stopped last time, unless that was the
     /// last page, which means the chapter was finished and starts over.

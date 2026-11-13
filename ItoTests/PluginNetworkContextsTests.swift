@@ -20,7 +20,7 @@ struct PluginNetworkContextsTests {
     }
 
     @Test func theMirrorFollowsTheCommittedEpochsAndAFrozenEpochWins() {
-        let contexts = PluginNetworkContexts(epochs: ["plugin.a": Self.epochA])
+        let contexts = PluginNetworkContexts(epochs: ["plugin.a": Self.epochA], policy: NetworkPolicyCenter())
 
         #expect(contexts.context(pluginID: "plugin.a", Self.operation()).authorizationScope == Self.scopeA)
         #expect(contexts.context(
@@ -35,7 +35,7 @@ struct PluginNetworkContextsTests {
     }
 
     @Test func twoPluginsNeverShareAScope() {
-        let contexts = PluginNetworkContexts(epochs: ["plugin.a": Self.epochA, "plugin.b": Self.epochB])
+        let contexts = PluginNetworkContexts(epochs: ["plugin.a": Self.epochA, "plugin.b": Self.epochB], policy: NetworkPolicyCenter())
 
         let first = contexts.context(pluginID: "plugin.a", Self.operation())
         let second = contexts.context(pluginID: "plugin.b", Self.operation())
@@ -47,7 +47,7 @@ struct PluginNetworkContextsTests {
     }
 
     @Test func aMissingRowGivesAStableScopeUntilTheScopeTableCommits() {
-        let contexts = PluginNetworkContexts(epochs: ["plugin.a": Self.epochA])
+        let contexts = PluginNetworkContexts(epochs: ["plugin.a": Self.epochA], policy: NetworkPolicyCenter())
 
         let first = contexts.context(pluginID: "plugin.new", Self.operation()).authorizationScope
         let second = contexts.context(pluginID: "plugin.new", Self.operation()).authorizationScope
@@ -59,7 +59,7 @@ struct PluginNetworkContextsTests {
     }
 
     @Test func everyCallGetsItsOwnGenerationAndPassesTheOperationThrough() {
-        let contexts = PluginNetworkContexts(epochs: ["plugin.a": Self.epochA])
+        let contexts = PluginNetworkContexts(epochs: ["plugin.a": Self.epochA], policy: NetworkPolicyCenter())
         let operationID = UUID()
         let batchID = UUID()
         let operation = PluginNetworkOperation(purpose: .manualBulkDownload, operationID: operationID, batchID: batchID)
@@ -79,10 +79,8 @@ struct PluginNetworkContextsTests {
     @Test func rotatingASettingOrASecretChangesTheScopeBeforeTheWriteReturns() throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let settings = PluginSettingsStore(
-            dbPool: database.dbPool,
-            secrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain())
-        )
+        let settings = PluginSettingsStore(dbPool: database.dbPool,
+        secrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain()), networkPolicy: NetworkPolicyCenter())
         let contexts = settings.networkContexts
         func scope(_ pluginID: String) -> UUID? {
             contexts.context(pluginID: pluginID, Self.operation()).authorizationScope
@@ -110,10 +108,8 @@ struct PluginNetworkContextsTests {
     @Test func aSettingChangeForOnePluginLeavesAnotherPluginsScopeAlone() throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let settings = PluginSettingsStore(
-            dbPool: database.dbPool,
-            secrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain())
-        )
+        let settings = PluginSettingsStore(dbPool: database.dbPool,
+        secrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain()), networkPolicy: NetworkPolicyCenter())
         #expect(settings.set(pluginId: "plugin.other", key: "server", value: "https://b.example"))
         let otherBefore = settings.networkContexts
             .context(pluginID: "plugin.other", Self.operation()).authorizationScope

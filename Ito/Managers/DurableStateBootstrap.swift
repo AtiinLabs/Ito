@@ -830,7 +830,8 @@ struct InstalledPluginSuiteBootstrapExtension: DurableStateBootstrapExtension {
                 }
             }
         }
-        try PluginSettingsStore(dbPool: dbPool).prepareForDurableSnapshot(discoveries)
+        // Discovery metadata only: this store makes no network request, so it takes no live path policy.
+        try PluginSettingsStore(dbPool: dbPool, networkPolicy: NetworkPolicyCenter()).prepareForDurableSnapshot(discoveries)
     }
 
     private static func defaultPluginsDirectory(_ fileManager: FileManager) throws -> URL {

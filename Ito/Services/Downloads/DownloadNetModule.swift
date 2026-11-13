@@ -40,7 +40,7 @@ nonisolated protocol DownloadAdmissionGate: Sendable {
 /// its scoped consent.
 nonisolated struct NetworkPathAdmissionGate: DownloadAdmissionGate {
     let observer: any NetworkPathObserving
-    var policy: NetworkPolicyCenter = NetworkPolicyCenter()
+    let policy: NetworkPolicyCenter
     var intent: NetworkIntent = .manualBulkDownload
     var consent: NetworkConsentBinding?
     var operation: PluginNetworkOperation?

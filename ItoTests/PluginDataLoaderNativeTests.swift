@@ -80,7 +80,7 @@ final class PluginDataLoaderNativeTests: XCTestCase {
         )
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [PluginImageTransportTestURLProtocol.self]
-        let loader = PluginDataLoader(configuration: config, contexts: PluginNetworkContexts(), runnerProvider: { _ in runner })
+        let loader = PluginDataLoader(configuration: config, contexts: PluginNetworkContexts(policy: NetworkPolicyCenter()), runnerProvider: { _ in runner })
         let completed = expectation(description: "Both loaders finish cancellation")
         completed.expectedFulfillmentCount = 2
         let capture = NativeImageCapture()
@@ -109,7 +109,7 @@ final class PluginDataLoaderNativeTests: XCTestCase {
             let started = expectation(description: "Legacy handler entered")
             let done = expectation(description: "Cancelled image completed")
             let runner = DelayedLegacyImageRunner(didStart: { started.fulfill() })
-            let loader = PluginDataLoader(configuration: .ephemeral, contexts: PluginNetworkContexts(), runnerProvider: { _ in runner })
+            let loader = PluginDataLoader(configuration: .ephemeral, contexts: PluginNetworkContexts(policy: NetworkPolicyCenter()), runnerProvider: { _ in runner })
             let capture = NativeImageCapture()
             let request = URLRequest(url: URL(string: "ito://fixture.plugin/https://images.example/cover")!)
             let subscription = loader.loadData(with: request, didReceiveData: { data, _ in
@@ -144,7 +144,7 @@ final class PluginDataLoaderNativeTests: XCTestCase {
         let cache = TestImageRunnerCache(initialRunner: crashedRunner)
         let loader = PluginDataLoader(
             configuration: .ephemeral,
-            contexts: PluginNetworkContexts(),
+            contexts: PluginNetworkContexts(policy: NetworkPolicyCenter()),
             runnerProvider: { pluginId in
                 await cache.runner(for: pluginId)
             },
@@ -207,7 +207,7 @@ final class PluginDataLoaderNativeTests: XCTestCase {
         let cache = TestImageRunnerCache(initialRunner: runner)
         let loader = PluginDataLoader(
             configuration: .ephemeral,
-            contexts: PluginNetworkContexts(),
+            contexts: PluginNetworkContexts(policy: NetworkPolicyCenter()),
             runnerProvider: { pluginId in
                 await cache.runner(for: pluginId)
             },
@@ -245,7 +245,7 @@ final class PluginDataLoaderNativeTests: XCTestCase {
         let cache = TestImageRunnerCache(initialRunner: runner)
         let loader = PluginDataLoader(
             configuration: .ephemeral,
-            contexts: PluginNetworkContexts(),
+            contexts: PluginNetworkContexts(policy: NetworkPolicyCenter()),
             runnerProvider: { pluginId in
                 await cache.runner(for: pluginId)
             },
@@ -282,7 +282,7 @@ final class PluginDataLoaderNativeTests: XCTestCase {
     private func load(_ runner: NativeImageRunner) async -> NativeImageCapture {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [PluginImageTransportTestURLProtocol.self]
-        let loader = PluginDataLoader(configuration: config, contexts: PluginNetworkContexts(), runnerProvider: { _ in runner })
+        let loader = PluginDataLoader(configuration: config, contexts: PluginNetworkContexts(policy: NetworkPolicyCenter()), runnerProvider: { _ in runner })
         let capture = NativeImageCapture()
         let done = expectation(description: "Image load completed")
         let request = URLRequest(url: URL(string: "ito://fixture.plugin/api/v1/cover")!)
