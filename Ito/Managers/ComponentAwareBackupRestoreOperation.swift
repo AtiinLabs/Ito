@@ -2026,7 +2026,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             status: item.status,
             lastCheckedAt: item.lastCheckedAt,
             lastUpdatedAt: item.lastUpdatedAt,
-            knownChapterCount: item.knownChapterCount
+            knownChapterCount: item.knownChapterCount,
+            knownChapterCountBasis: item.knownChapterCountBasis
         )
     }
 
@@ -2228,6 +2229,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             && lhs.lastCheckedAt == rhs.lastCheckedAt
             && lhs.lastUpdatedAt == rhs.lastUpdatedAt
             && lhs.knownChapterCount == rhs.knownChapterCount
+            && lhs.knownChapterCountBasis == rhs.knownChapterCountBasis
     }
 
     private func linkSort(_ lhs: ItemCategoryLink, _ rhs: ItemCategoryLink) -> Bool {

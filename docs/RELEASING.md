@@ -67,6 +67,21 @@ Release tags must match the file: `v1.3.0` requires `MARKETING_VERSION = 1.3.0` 
 
 `main` declares the version its contents would be released as. After tagging `v1.3.0`, bump `main` to the patch version `1.3.1` so dev builds stop claiming the released version. The first pull request after that which adds a feature also bumps the minor version (`1.4.0`); breaking changes bump the major version. The version on `main` only moves forward.
 
+## Exact-edition update counts
+
+Library schema v23 adds nullable `knownChapterCountBasis` (v22 is reserved for History).
+Manga and novels count distinct byte-exact chapter keys, including alternate groups and
+same-number splits; anime keeps its existing episode count. New nonempty saves establish
+the exact-key basis. Older or unknown baselines silently adopt the first successful
+nonempty current catalog without changing an existing badge or update timestamp.
+Only later same-basis positive count growth adds to the badge. Failed/empty catalogs do
+not establish a basis. This is an update-count heuristic, not a new-release detector.
+
+Library backups preserve this metadata; missing/unknown values safely rebaseline.
+Detail acknowledgment still requires the existing current-operation/visibility guards.
+Read-number persistence and offline inventory counts are unchanged. Notifications and
+Library accessibility describe manga/novel count growth as editions, not logical chapters.
+
 ## Publish a stable version
 
 1. Confirm the latest `main` commit has a passing CI run.
