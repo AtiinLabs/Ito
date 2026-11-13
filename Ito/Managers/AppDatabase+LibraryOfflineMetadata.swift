@@ -10,9 +10,9 @@ extension AppDatabase {
     /// them, so a catalog that is complete but filtered is never mistaken for the whole series. Both are
     /// `unknown` until a source says otherwise. An empty catalog is never recorded.
     ///
-    /// `libraryCoverThumbnail` follows its Library item and is removed with it. Like the offline chapter
-    /// tables, neither table is a backup component: a restored payload has an unknown age, and a thumbnail
-    /// is captured again from the next successful cover load.
+    /// `libraryCoverThumbnail` follows its Library item and is removed with it. It travels in manual backups
+    /// as the bounded `savedLibraryThumbnails` component (see v25); `librarySnapshotState`, like the offline
+    /// chapter tables, does not, because a restored payload has an unknown age.
     nonisolated static func registerLibraryOfflineMetadataMigration(_ migrator: inout DatabaseMigrator) {
         migrator.registerMigration("v20") { db in
             try db.execute(sql: """

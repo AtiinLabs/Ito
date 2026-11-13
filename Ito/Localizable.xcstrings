@@ -3178,6 +3178,9 @@
         }
       }
     },
+    "Saved cover thumbnails" : {
+      "comment" : "Backup restore report: the component containing bounded cover images saved with library items."
+    },
     "Saved credentials are currently unavailable." : {
 
     },

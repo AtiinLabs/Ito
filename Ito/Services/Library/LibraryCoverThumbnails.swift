@@ -193,6 +193,9 @@ final class LibraryCoverThumbnails: LibraryCoverThumbnailServing {
     /// before that is older than the store and must not repopulate the cache.
     private var epochs: [String: UInt64] = [:]
     private var epochClock: UInt64 = 0
+    /// Bumped when every stored thumbnail may have changed at once, so no read that began before it can
+    /// repopulate the cache either.
+    private var storeGeneration: UInt64 = 0
     private let changes = PassthroughSubject<String, Never>()
     var thumbnailChanges: AnyPublisher<String, Never> { changes.eraseToAnyPublisher() }
 
@@ -216,6 +219,7 @@ final class LibraryCoverThumbnails: LibraryCoverThumbnailServing {
         let key = itemID as NSString
         if let cached = cache.object(forKey: key) { return cached.cover }
         let epoch = epochs[itemID]
+        let generation = storeGeneration
         guard let stored = try? await store.storedThumbnail(for: itemID) else { return nil }
         // Decoding is explicitly off the main actor, whatever the module's isolation defaults are.
         let decode = decode
@@ -223,7 +227,9 @@ final class LibraryCoverThumbnails: LibraryCoverThumbnailServing {
         guard let decoded else { return nil }
         // A capture or forget that finished while this read was suspended makes it stale: the caller still
         // checks the cover address, but the cache must not take it back after the eviction.
-        if epochs[itemID] == epoch { cache.setObject(CachedCover(decoded), forKey: key, cost: decoded.cost) }
+        if epochs[itemID] == epoch, storeGeneration == generation {
+            cache.setObject(CachedCover(decoded), forKey: key, cost: decoded.cost)
+        }
         return decoded
     }
 
@@ -237,6 +243,15 @@ final class LibraryCoverThumbnails: LibraryCoverThumbnailServing {
             recordedHashes[itemID] = nil
             capturesInFlight[itemID] = nil
         }
+    }
+
+    /// Drops everything held in memory, so the next read comes from the store. A restore replaces stored
+    /// thumbnails behind this service's back; whatever it held, or was still reading, may be older than that.
+    func invalidateAll() {
+        cache.removeAllObjects()
+        recordedHashes.removeAll()
+        capturesInFlight.removeAll()
+        storeGeneration &+= 1
     }
 
     private func evict(_ itemID: String) {
