@@ -663,11 +663,8 @@ extension TrackerDetailsViewModelTests {
         XCTAssertNil(model.scoreFormat)
         XCTAssertTrue(service.updateInvocations.isEmpty)
         service.scoreFormatError = nil
-        let loaded = expectation(description: "Score format recovered")
-        let token = model.$remoteEntryState.filter { $0 == .existing }.sink { _ in loaded.fulfill() }
         model.retryRemoteEntryLoad()
-        await fulfillment(of: [loaded], timeout: 2)
-        token.cancel()
+        await awaitValue(of: model.$remoteEntryState) { $0 == .existing }
         XCTAssertEqual(model.scoreFormat, .point10Decimal)
         XCTAssertEqual(model.score, 7)
     }
@@ -739,19 +736,16 @@ extension TrackerDetailsViewModelTests {
     func testAccountSwitchDuringEntryLoadShowsRecoverableFailure() async {
         let service = scoringService()
         service.suspendsLoads = true
-        let started = expectation(description: "Entry request suspended")
-        service.onLoadStarted = { started.fulfill() }
+        let started = TestGate()
+        service.onLoadStarted = { started.open() }
         let model = makeViewModel(service: service)
-        let failed = expectation(description: "Stale account response rejected")
-        let token = model.$remoteEntryState.filter { $0 == .failure }.sink { _ in failed.fulfill() }
         model.start()
-        await fulfillment(of: [started], timeout: 2)
+        await started.wait()
         service.scoreIdentity = UUID()
         service.completeLoad(with: .success(TrackerMediaEntry(
             status: "CURRENT", progress: 99, score: 9, startDate: nil, finishDate: nil
         )))
-        await fulfillment(of: [failed], timeout: 2)
-        token.cancel()
+        await awaitValue(of: model.$remoteEntryState) { $0 == .failure }
         XCTAssertNil(model.scoreFormat)
         XCTAssertNil(model.score)
         XCTAssertEqual(model.remoteLoadErrorMessage, TrackerScoreEditingError.accountChanged.userMessage)
@@ -764,16 +758,14 @@ extension TrackerDetailsViewModelTests {
         let model = makeViewModel(service: service, links: links)
         await loadScoring(model)
         model.setScore(8)
-        let started = expectation(description: "Score request suspended")
-        service.onUpdateStarted = { started.fulfill() }
-        let settled = expectation(description: "Save rejects stale account acknowledgment")
-        let token = model.$isSaving.dropFirst().filter { !$0 }.sink { _ in settled.fulfill() }
+        let started = TestGate()
+        service.onUpdateStarted = { started.open() }
         model.save()
-        await fulfillment(of: [started], timeout: 2)
+        XCTAssertTrue(model.isSaving)
+        await started.wait()
         service.scoreIdentity = UUID()
         service.completeUpdate(with: .success(()))
-        await fulfillment(of: [settled], timeout: 2)
-        token.cancel()
+        await awaitValue(of: model.$isSaving) { !$0 }
         XCTAssertTrue(links.linkInvocations.isEmpty)
         XCTAssertNil(model.output)
         XCTAssertEqual(model.failure, .remoteUpdateExplanation(TrackerScoreEditingError.accountChanged.userMessage))
@@ -783,18 +775,16 @@ extension TrackerDetailsViewModelTests {
         let service = scoringService()
         let links = TrackerLinkStoreFake()
         links.suspendsLinks = true
-        let started = expectation(description: "Local link awaits commit")
-        links.onLinkStarted = { started.fulfill() }
+        let started = TestGate()
+        links.onLinkStarted = { started.open() }
         let model = makeViewModel(service: service, links: links)
         await loadScoring(model)
-        let settled = expectation(description: "Stale link rejected")
-        let token = model.$isSaving.dropFirst().filter { !$0 }.sink { _ in settled.fulfill() }
         model.save()
-        await fulfillment(of: [started], timeout: 2)
+        XCTAssertTrue(model.isSaving)
+        await started.wait()
         service.scoreIdentity = UUID()
         links.completeLink(with: .success(()))
-        await fulfillment(of: [settled], timeout: 2)
-        token.cancel()
+        await awaitValue(of: model.$isSaving) { !$0 }
         XCTAssertNil(links.remoteMediaID(for: trackerTestDestination().mediaIdentity, providerID: "anilist"))
         XCTAssertFalse(model.isLocallyLinked)
         XCTAssertNil(model.output)
@@ -836,18 +826,13 @@ extension TrackerDetailsViewModelTests {
         _ model: TrackerDetailsViewModel,
         state: TrackerRemoteEntryPresentationState = .existing
     ) async {
-        let loaded = expectation(description: "Remote score and entry loaded")
-        let token = model.$remoteEntryState.filter { $0 == state }.sink { _ in loaded.fulfill() }
         model.start()
-        await fulfillment(of: [loaded], timeout: 2)
-        token.cancel()
+        await awaitValue(of: model.$remoteEntryState) { $0 == state }
     }
 
     private func saveScoring(_ model: TrackerDetailsViewModel) async {
-        let saved = expectation(description: "Manual save settled")
-        let token = model.$isSaving.dropFirst().filter { !$0 }.sink { _ in saved.fulfill() }
         model.save()
-        await fulfillment(of: [saved], timeout: 2)
-        token.cancel()
+        XCTAssertTrue(model.isSaving)
+        await awaitValue(of: model.$isSaving) { !$0 }
     }
 }
