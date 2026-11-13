@@ -36,7 +36,8 @@
     "%@ available" : {
       "comment" : "Download preview: free space on this device. The placeholder is a size such as 4.2 GB."
     },
-    "%@ has %lld new chapters." : {
+    "%@ has %lld new editions." : {
+      "comment" : "Manga/novel update-count heuristic: exact uploads, possibly alternate translations, not unique logical chapters.",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -44,13 +45,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%@ has %lld new chapter."
+                  "value" : "%@ has %lld new edition."
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%@ has %lld new chapters."
+                  "value" : "%@ has %lld new editions."
                 }
               }
             }
@@ -396,6 +397,52 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld damaged"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld edition updates" : {
+      "comment" : "Library manga/novel badge counts exact uploads, including alternate translations, not logical chapters.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld edition update"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld edition updates"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld episode updates" : {
+      "comment" : "Library update badge for anime; preserves numbered episode counting.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld episode update"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld episode updates"
                 }
               }
             }

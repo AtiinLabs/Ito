@@ -86,4 +86,63 @@ extension MediaDetailViewModelTests {
         XCTAssertEqual(current?.media, relinked)
         XCTAssertEqual(current?.knownChapterCount, 2)
     }
+
+    func testDetailAcknowledgesEveryExactEditionWithEqualNumbers() async {
+        let subject = makeMangaSubject(media: manga(chapters: [
+            Chapter(key: "a", chapter: 1, scanlator: "A"),
+            Chapter(key: "b", chapter: 1, scanlator: "B"),
+            Chapter(key: "split", chapter: 1, scanlator: "B"),
+            Chapter(key: "split", chapter: 1, scanlator: "B")
+        ]), saved: true)
+        let acknowledged = expectation(description: "Exact catalog acknowledged")
+        subject.baseline.onAdvance = { acknowledged.fulfill() }
+        subject.viewModel.start()
+        await fulfillment(of: [acknowledged])
+        XCTAssertEqual(subject.baseline.requests.map(\.knownChapterCount), [3])
+    }
+
+    func testStaleCatalogCannotAcknowledgeEditionsOrClearCurrentLoading() async {
+        let subject = makeMangaSubject(saved: true)
+        subject.route.loadResponses = [.suspended, .suspended]
+        let oldPending = expectation(description: "Old load suspended")
+        subject.route.onLoadSuspended = { oldPending.fulfill() }
+        let old = Task { await subject.viewModel.refresh() }
+        await fulfillment(of: [oldPending])
+        let currentPending = expectation(description: "Current load suspended")
+        subject.route.onLoadSuspended = { currentPending.fulfill() }
+        let current = Task { await subject.viewModel.refresh() }
+        await fulfillment(of: [currentPending])
+
+        subject.route.resolveLoad(at: 0, with: .success(manga(chapters: [chapter("old", 1)])))
+        await old.value
+        XCTAssertTrue(subject.baseline.requests.isEmpty)
+        XCTAssertEqual(subject.viewModel.detailLoadState, .loading)
+        let acknowledged = expectation(description: "Current load acknowledged")
+        subject.baseline.onAdvance = { acknowledged.fulfill() }
+        subject.route.resolveLoad(at: 0, with: .success(manga(chapters: [
+            chapter("a", 1), chapter("b", 1)
+        ])))
+        await current.value
+        // Manual refresh deliberately does not acknowledge update badges. A current detail
+        // retry does; keep that distinction while proving stale loads never acknowledge anything.
+        XCTAssertTrue(subject.baseline.requests.isEmpty)
+        subject.viewModel.retryDetailLoad()
+        await fulfillment(of: [acknowledged])
+        XCTAssertEqual(subject.baseline.requests.map(\.knownChapterCount), [2])
+    }
+
+    func testDismissedCatalogCannotAcknowledgeEditions() async {
+        let subject = makeMangaSubject(saved: true)
+        subject.viewModel.appear()
+        subject.route.loadResponses = [.suspended]
+        let pending = expectation(description: "Load suspended")
+        subject.route.onLoadSuspended = { pending.fulfill() }
+        let load = Task { await subject.viewModel.refresh() }
+        await fulfillment(of: [pending])
+        subject.viewModel.disappear()
+        subject.route.resolveLoad(at: 0, with: .success(manga(chapters: [chapter("a", 1)])))
+        await load.value
+        XCTAssertTrue(subject.baseline.requests.isEmpty)
+        XCTAssertEqual(subject.viewModel.detailLoadState, .idle)
+    }
 }

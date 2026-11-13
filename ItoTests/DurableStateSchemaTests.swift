@@ -308,7 +308,13 @@ struct DurableStateSchemaTests {
 
         try dbQueue.write { db in
             try category.insert(db)
-            try item.insert(db)
+            try db.execute(
+                sql: """
+                    INSERT INTO libraryItem (id, title, coverUrl, pluginId, isAnime, pluginType, rawPayload, anilistId)
+                    VALUES (?, ?, NULL, ?, 0, NULL, ?, ?)
+                    """,
+                arguments: [item.id, item.title, item.pluginId, item.rawPayload, item.anilistId]
+            )
             try categoryLink.insert(db)
             try db.execute(
                 sql: """
