@@ -280,7 +280,7 @@ public struct ItoNativeImporter: BackupImporter {
         }
 
         let availableColumns = Set(try db.columns(in: "libraryItem").map(\.name))
-        let optionalColumns = ["status", "lastCheckedAt", "lastUpdatedAt", "knownChapterCount"]
+        let optionalColumns = ["status", "lastCheckedAt", "lastUpdatedAt", "knownChapterCount", "knownChapterCountBasis"]
         let projections = requiredColumns + optionalColumns.map { column in
             availableColumns.contains(column) ? column : "NULL AS \(column)"
         }

@@ -154,11 +154,12 @@ struct DownloadPresetResolverTests {
 
     @Test func nameMatchingIsExactSoARenamedGroupSelectsNothing() {
         let catalog = listed(rows("Alpha", 1...3))
-        let result = plan(.all, catalog, selection: .scanlators([ScanlatorRef(name: "alpha")]))
-
-        #expect(result.toQueue.isEmpty)
-        #expect(keys(result.alternatives).isEmpty)
-        #expect(result.issues == [.nothingToDo])
+        for preset in [DownloadPreset.all, .unread] {
+            let result = plan(preset, catalog, selection: .scanlators([ScanlatorRef(name: "alpha")]))
+            #expect(result.toQueue.isEmpty)
+            #expect(keys(result.alternatives).isEmpty)
+            #expect(result.issues == [.nothingToDo])
+        }
     }
 
     @Test func alternativesInsideTheWindowAreShownButNeverQueued() {
@@ -558,7 +559,7 @@ struct EditionSelectionTests {
     }
 
     @Test func anUnknownVersionOrKindDoesNotDecode() {
-        #expect(throws: DecodingError.self) { try decode(#"{"formatVersion":3,"kind":"sourceList"}"#) }
+        #expect(throws: DecodingError.self) { try decode(#"{"formatVersion":4,"kind":"sourceList"}"#) }
         #expect(throws: DecodingError.self) { try decode(#"{"formatVersion":1,"kind":"newest"}"#) }
         #expect(throws: DecodingError.self) { try decode(#"{"kind":"sourceList"}"#) }
         #expect(throws: DecodingError.self) { try decode(#"{"formatVersion":1,"kind":"scanlators"}"#) }

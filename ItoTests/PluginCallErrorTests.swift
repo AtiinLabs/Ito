@@ -92,6 +92,16 @@ struct PluginCallErrorTests {
         ))
     }
 
+    @Test func aChapterEditionsViolationIsAnIncompatibilityThatNeverShowsTheRule() {
+        let error = PluginCallError(.chapterEditionsViolation(
+            function: "get_chapter_editions", violation: .init(.requestEntryKind)
+        ))
+
+        #expect(error == PluginCallError(
+            kind: .incompatible, message: "The source sent something this version of Ito can't read. Update the source or Ito."
+        ))
+    }
+
     @Test func aPluginReportedContractViolationIsAnIncompatibilityWhateverItsReason() {
         let error = PluginCallError(.pluginFailed(
             function: "get_manga_list", reason: "duplicate.key", category: .contractViolation
@@ -138,6 +148,18 @@ struct PluginCallErrorTests {
                 kind: .host, message: "The source couldn't complete this request."
             ))
         }
+    }
+
+    @Test func aHostCallTimeoutIsATypedHostErrorNotACrashOrServerError() {
+        let net = PluginCallError(.hostCallTimedOut(.net))
+        let webview = PluginCallError(.hostCallTimedOut(.webview))
+
+        #expect(net == PluginCallError(kind: .host, message: "The source took too long to respond. Try again."))
+        #expect(webview == PluginCallError(
+            kind: .host, message: "The source's web page took too long to respond. Try again."
+        ))
+        // Not `.crashed`: a timed-out call must never make screens retire the runner.
+        #expect(net.kind != .crashed && webview.kind != .crashed)
     }
 
     @Test func errorsThatDidNotComeFromTheRunnerPassThrough() {

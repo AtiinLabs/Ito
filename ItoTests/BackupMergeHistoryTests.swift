@@ -414,7 +414,8 @@ struct BackupMergeHistoryTests {
             status: "reading",
             lastCheckedAt: checkedAt,
             lastUpdatedAt: updatedAt,
-            knownChapterCount: 9
+            knownChapterCount: 9,
+            knownChapterCountBasis: .exactChapterKeys
         )
         let untouched = makeItem(id: "test.plugin_untouched", title: "Untouched")
         let imported = makeItem(id: importedId, title: "Imported")
@@ -468,6 +469,7 @@ struct BackupMergeHistoryTests {
             #expect(destination.lastCheckedAt == checkedAt)
             #expect(destination.lastUpdatedAt == updatedAt)
             #expect(destination.knownChapterCount == local.knownChapterCount)
+            #expect(destination.knownChapterCountBasis == local.knownChapterCountBasis)
             #expect(try LibraryItem.fetchOne(db, key: untouched.id) == untouched)
             #expect(try ItemCategoryLink.fetchOne(
                 db,

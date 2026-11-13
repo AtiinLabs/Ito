@@ -25,8 +25,11 @@ protocol MediaDetailDownloadServing: AnyObject {
     /// The scanlators the user asked to remember for a series; nil when none were. Throws when a stored choice
     /// could not be read, which is not the same as having none.
     func editionPreference(for media: MediaIdentity) async throws -> EditionSelection?
-    /// Remembers the scanlators chosen for a series. Throws when the choice could not be written.
-    func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity) async throws
+    /// Opaque source configuration epoch. It is never an account identifier.
+    func editionPreferenceEpoch(for pluginID: String) throws -> String
+    /// Remembers the scanlators chosen for a series. Throws when the choice could not be written, including
+    /// when `sourceEpoch` is no longer the source's current epoch.
+    func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity, sourceEpoch: String) async throws
     /// The free space where downloads are stored; nil when it cannot be read.
     func availableCapacity() async -> Int64?
     /// The bytes this series' stored copies occupy; nil when they cannot be read.
@@ -106,7 +109,11 @@ final class UnavailableMediaDetailDownloads: MediaDetailDownloadServing {
         nil
     }
 
-    func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity) async throws {
+    func editionPreferenceEpoch(for pluginID: String) throws -> String {
+        throw Unavailable.noOfflineStore
+    }
+
+    func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity, sourceEpoch: String) async throws {
         throw Unavailable.noOfflineStore
     }
 

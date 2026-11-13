@@ -460,11 +460,13 @@ final class MediaDetailBaselineFake: MediaDetailBaselineAdvancing {
     }
 
     var error: (any Error)?
+    var onAdvance: (() -> Void)?
     private(set) var requests: [Request] = []
     private(set) var refreshCount = 0
 
     func advanceBaseline(media: MediaIdentity, knownChapterCount: Int) async throws {
         requests.append(Request(media: media, knownChapterCount: knownChapterCount))
+        onAdvance?()
         if let error { throw error }
     }
 

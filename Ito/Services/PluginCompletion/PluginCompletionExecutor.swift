@@ -248,7 +248,7 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
             case .contractViolation: return .paused(.incompatible, .incompatible)
             }
         case .requiresNewerHost, .unsupportedABI, .postcardDecodingError, .postcardEncodingError,
-             .controlContractViolation, .catalogContractViolation:
+             .controlContractViolation, .catalogContractViolation, .chapterEditionsViolation:
             return .paused(.incompatible, .incompatible)
         case .hostModuleError(let domain, _):
             // The plugin needs a capability a headless completion deliberately lacks.
@@ -266,6 +266,12 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
                 // Headless delivery cannot get foreground permission; pausing never drops data.
                 return .paused(.sourceError, .sourceError)
             }
+        case .hostCallTimedOut(.net):
+            // The remote write may have completed before the watchdog fired. Do not replay it automatically.
+            return .paused(.sourceError, .sourceError)
+        case .hostCallTimedOut(.webview):
+            // Headless delivery has no web view; a web view outcome is never retried on its own.
+            return .paused(.incompatible, .incompatible)
         case .reloadDuringActiveExport, .pluginReloaded:
             // Unreachable while every attempt loads fresh runners. Fail closed rather than retry.
             return .paused(.sourceError, .sourceError)

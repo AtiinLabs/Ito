@@ -546,6 +546,7 @@ public final class AppDatabase: Sendable {
         registerLibraryOfflineMetadataMigration(&migrator)
         registerEditionPreferencesMigration(&migrator)
         registerHistoryScanlatorIdentityMigration(&migrator)
+        registerLibraryCountBasisMigration(&migrator)
         return migrator
     }
 
