@@ -38,6 +38,7 @@ enum AppMessageKind: Equatable {
     case mediaDetailChapterNotDownloaded
     case mediaDetailDownloadRefused
     case mediaDetailDownloadActionFailed
+    case mediaDetailReplacementUnavailable
     /// A download preset queued chapters; `alreadyStored` of its range were saved or queued before.
     case mediaDetailDownloadsQueued(queued: Int, alreadyStored: Int)
     case mediaDetailNothingToDownload
@@ -319,6 +320,18 @@ extension AppMessageKind {
                     comment: "Series details: the chapter is locked, or its source can't be saved for offline reading."
                 ),
                 detail: nil
+            )
+        case .mediaDetailReplacementUnavailable:
+            return .init(
+                style: .info,
+                title: String(
+                    localized: "This copy can't be replaced.",
+                    comment: "Series details: a saved chapter cannot be replaced, because its source settings changed after it was saved or it was saved under another series."
+                ),
+                detail: String(
+                    localized: "Delete the saved copy and download the chapter again.",
+                    comment: "Series details: what to do when a saved chapter cannot be replaced."
+                )
             )
         case .mediaDetailDownloadActionFailed:
             return .init(

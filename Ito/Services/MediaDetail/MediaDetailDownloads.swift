@@ -11,12 +11,19 @@ protocol MediaDetailDownloadServing: AnyObject {
     /// The download state of each of this series' chapters, keyed by chapter key, now and after every
     /// change. A chapter that was never downloaded or queued has no entry.
     func chapterStates(for media: MediaIdentity) -> AnyPublisher<[String: ChapterDownloadState], Never>
+    /// Replacement activity for chapters whose verified copy stays readable: a replacement queued, running, waiting or
+    /// ended. A chapter with no activity has no entry.
+    func replacementStates(for media: MediaIdentity) -> AnyPublisher<[String: ChapterDownloadState], Never>
     func download(
         media: MediaIdentity,
         entry: MediaEntry,
         chapter: Chapter,
         seriesTitle: String
     ) async -> DownloadEnqueueOutcome
+    func replacementPreview(
+        media: MediaIdentity, entry: MediaEntry, chapter: Chapter, seriesTitle: String
+    ) async throws -> DownloadReplacementAccess
+    func replace(_ preview: DownloadReplacementPreview) async -> DownloadEnqueueOutcome
     func cancel(_ edition: OfflineChapterEdition) async throws
     func retry(_ edition: OfflineChapterEdition) async throws
     func delete(_ edition: OfflineChapterEdition) async throws
@@ -41,6 +48,13 @@ extension DownloadCenter: MediaDetailDownloadServing {
     /// read from the emitted map, not from `states`.
     func chapterStates(for media: MediaIdentity) -> AnyPublisher<[String: ChapterDownloadState], Never> {
         $states
+            .map { $0[media] ?? [:] }
+            .removeDuplicates()
+            .eraseToAnyPublisher()
+    }
+
+    func replacementStates(for media: MediaIdentity) -> AnyPublisher<[String: ChapterDownloadState], Never> {
+        $chapterReplacementStates
             .map { $0[media] ?? [:] }
             .removeDuplicates()
             .eraseToAnyPublisher()
@@ -77,12 +91,24 @@ final class UnavailableMediaDetailDownloads: MediaDetailDownloadServing {
         Just([:]).eraseToAnyPublisher()
     }
 
+    func replacementStates(for media: MediaIdentity) -> AnyPublisher<[String: ChapterDownloadState], Never> {
+        Just([:]).eraseToAnyPublisher()
+    }
+
     func download(
         media: MediaIdentity,
         entry: MediaEntry,
         chapter: Chapter,
         seriesTitle: String
     ) async -> DownloadEnqueueOutcome {
+        .refused(.unavailable)
+    }
+
+    func replacementPreview(
+        media: MediaIdentity, entry: MediaEntry, chapter: Chapter, seriesTitle: String
+    ) async throws -> DownloadReplacementAccess { .refused(.unavailable) }
+
+    func replace(_ preview: DownloadReplacementPreview) async -> DownloadEnqueueOutcome {
         .refused(.unavailable)
     }
 
@@ -122,11 +148,14 @@ final class UnavailableMediaDetailDownloads: MediaDetailDownloadServing {
 /// What the detail screen offers for one chapter's download.
 enum ChapterDownloadAction: Hashable, Identifiable {
     case download
+    case replace
     case cancel
     case retry
     /// Opens a downloaded chapter from its source for this reading only.
     case readOnlineThisTime
     case delete
+    /// Cancels a replacement's activity over a saved copy. The saved copy stays.
+    case cancelReplacement
 
     var id: Self { self }
 }

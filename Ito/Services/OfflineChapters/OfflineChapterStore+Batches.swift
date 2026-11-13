@@ -160,11 +160,20 @@ extension OfflineChapterStore {
                 case .failed, .waiting:
                     break
                 }
+                // A terminal replacement is never revived, and a replacement keeps the epoch it was confirmed under.
+                if job.failureReason?.endsReplacement == true { continue }
                 guard let epoch = epochs[job.pluginId] else { throw OfflineStoreError.jobUnavailable }
+                if let intent = try DownloadReplacementIntent.fetchOne(db, key: id) {
+                    if let reason = try Self.staleReplacementReason(job: job, intent: intent, currentEpoch: epoch, in: db) {
+                        try Self.endReplacement(&job, reason: reason, now: now, in: db)
+                        continue
+                    }
+                } else {
+                    job.sourceEpoch = epoch
+                }
                 job.state = .queued
                 job.waitingReason = nil
                 job.failureReason = nil
-                job.sourceEpoch = epoch
                 job.updatedAt = now
                 try job.update(db)
                 requeued += 1
@@ -262,6 +271,13 @@ extension OfflineChapterStore {
             }
         }
         for job in jobs {
+            if suppress {
+                try DownloadSuppressionRecord(
+                    pluginId: job.pluginId, mediaKind: job.mediaKind,
+                    canonicalMediaId: job.canonicalMediaId, chapterKey: job.chapterKey,
+                    authorityScope: job.authorityScope, suppressedAt: now
+                ).insert(db, onConflict: .replace)
+            }
             _ = try DownloadJobRecord.deleteOne(db, key: job.id)
         }
         for batchId in Set(jobs.map(\.batchId)) {

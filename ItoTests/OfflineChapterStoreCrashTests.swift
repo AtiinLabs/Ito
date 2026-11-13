@@ -258,11 +258,11 @@ struct OfflineChapterStoreCrashTests {
         #expect(try await fixture.rowCount("downloadedChapter") == 0)
         #expect(try await restarted.jobs().isEmpty)
         #expect(try await fixture.rowCount("downloadBatch") == 0)
-        // The suppression was committed with the rows, so it survives the crash: copies only, never jobs.
+        // Exact deletion tombstones survive the crash, including editions that were only queued.
         let suppressed = try await fixture.database.dbPool.read { db in
             try DownloadSuppressionRecord.fetchAll(db).map(\.chapterKey).sorted()
         }
-        #expect(suppressed == ["a", "b"])
+        #expect(suppressed == ["a", "b", "q1", "q2"])
         #expect(fixture.fileSystem.childNames(of: fixture.versionsURL).isEmpty)
         #expect(fixture.fileSystem.childNames(of: fixture.stagingURL).isEmpty)
         #expect(fixture.fileSystem.childNames(of: fixture.trashURL).isEmpty)

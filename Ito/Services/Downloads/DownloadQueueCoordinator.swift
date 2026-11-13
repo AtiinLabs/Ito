@@ -346,6 +346,10 @@ final class DownloadQueueCoordinator {
         let currentEpoch = try? await store.currentSourceEpoch(pluginId: job.pluginId)
         if let step = await stopBeforeAttempt(current, job: job, generation: generation) { return step }
         guard let frozenEpoch = job.sourceEpoch, let currentEpoch, currentEpoch == frozenEpoch else {
+            // A replacement cannot follow the source to a new epoch. It ends here, and the saved copy stays.
+            if (try? await store.settleStaleReplacement(jobID: job.id, currentEpoch: currentEpoch)) == true {
+                return .proceeded
+            }
             return await setWaiting(job.id, .sourceConfigurationChanged) ? .proceeded : .blocked
         }
 
@@ -386,6 +390,13 @@ final class DownloadQueueCoordinator {
             staging = try await store.beginAttempt(jobID: job.id)
         } catch OfflineStoreError.jobUnavailable {
             return .proceeded
+        } catch OfflineStoreError.replacementSettled(_) {
+            // The confirmation no longer applies and the job has ended, so the pass goes on to the next job.
+            return .proceeded
+        } catch OfflineStoreError.blocked(let reason) {
+            // A replacement that also needs room for its old copy waits without holding back the jobs behind it.
+            let isReplacement = (try? await store.replacementIntent(jobID: job.id)) != nil
+            return reason == .insufficientStorage && isReplacement ? .proceeded : .blocked
         } catch {
             return .blocked
         }

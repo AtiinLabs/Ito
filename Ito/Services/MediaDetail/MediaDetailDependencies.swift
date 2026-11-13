@@ -319,6 +319,8 @@ enum MediaDetailMessage: Equatable {
     case downloadRefused
     /// A Download, Cancel, Retry or Delete did not reach the store.
     case downloadActionFailed
+    /// The saved copy cannot be replaced: its source settings changed after it was saved, or it was saved under another series.
+    case replacementUnavailable
     /// A preset queued chapters. `alreadyStored` counts the chapters of its range that were saved or queued.
     case downloadsQueued(queued: Int, alreadyStored: Int)
     /// A preset found nothing new to queue.
@@ -367,6 +369,8 @@ final class AppMessageMediaDetailPresenter: MediaDetailMessagePresenting {
             messageCenter.publish(.mediaDetailDownloadRefused)
         case .downloadActionFailed:
             messageCenter.publish(.mediaDetailDownloadActionFailed)
+        case .replacementUnavailable:
+            messageCenter.publish(.mediaDetailReplacementUnavailable)
         case .downloadsQueued(let queued, let alreadyStored):
             messageCenter.publish(.mediaDetailDownloadsQueued(queued: queued, alreadyStored: alreadyStored))
         case .nothingToDownload:

@@ -88,8 +88,26 @@ extension ChapterDownloadState {
             return Text("Queued", comment: "Chapter download status: waiting for its turn")
         case .waiting(let reason):
             return reason.label
-        case .failed:
-            return Text("Download failed", comment: "Chapter download status")
+        case .failed(let reason):
+            switch reason {
+            case .replacementStale:
+                return Text(
+                    "Replacement no longer applies",
+                    comment: "Chapter download status: the saved copy or its source changed after a replacement was confirmed. The saved copy is kept; replace it again to review the chapter."
+                )
+            case .replacementContentChanged:
+                return Text(
+                    "Source chapter changed",
+                    comment: "Chapter download status: the source's chapter changed after a replacement was confirmed. The saved copy is kept; replace it again to review the chapter."
+                )
+            case .replacementInterrupted:
+                return Text(
+                    "Replacement interrupted",
+                    comment: "Chapter download status: the app restarted before a replacement was verified. The saved copy is kept; replace it again to fetch the chapter."
+                )
+            default:
+                return Text("Download failed", comment: "Chapter download status")
+            }
         case .damaged:
             return Text(
                 "Download damaged",
@@ -105,6 +123,32 @@ extension ChapterDownloadState {
             return true
         case .downloaded, .downloading, .queued:
             return false
+        }
+    }
+}
+
+extension ChapterDownloadState {
+    /// The menu header while a replacement has activity over a saved copy. The saved copy stays available beside it,
+    /// through the menu's own actions.
+    var replacementLabel: Text {
+        switch self {
+        case .queued, .downloading:
+            return Text(
+                "Replacing download",
+                comment: "Chapter download status: a replacement of a saved chapter is queued or running. The saved copy stays available."
+            )
+        case .waiting(let reason):
+            return reason.label
+        case .failed(let reason):
+            guard reason.endsReplacement else {
+                return Text(
+                    "Replacement failed",
+                    comment: "Chapter download status: a replacement of a saved chapter failed. The saved copy stays available."
+                )
+            }
+            return label
+        case .downloaded, .damaged:
+            return label
         }
     }
 }
@@ -154,8 +198,15 @@ extension ChapterDownloadAction {
         switch self {
         case .download:
             return Text("Download", comment: "Chapter menu: save this chapter for offline reading")
+        case .replace:
+            return Text("Replace download", comment: "Chapter menu: manually replace the exact saved copy after confirmation")
         case .cancel:
             return Text("Cancel Download", comment: "Chapter menu: remove this chapter from the download queue")
+        case .cancelReplacement:
+            return Text(
+                "Cancel Replacement",
+                comment: "Chapter menu: stop a replacement of this saved chapter, or dismiss its ended record. The saved copy stays."
+            )
         case .retry:
             return Text("Retry Download", comment: "Chapter menu")
         case .readOnlineThisTime:
@@ -168,7 +219,9 @@ extension ChapterDownloadAction {
     var systemImage: String {
         switch self {
         case .download: return "arrow.down.circle"
+        case .replace: return "arrow.triangle.2.circlepath"
         case .cancel: return "xmark.circle"
+        case .cancelReplacement: return "xmark.circle"
         case .retry: return "arrow.clockwise"
         case .readOnlineThisTime: return "globe"
         case .delete: return "trash"

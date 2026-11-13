@@ -17,6 +17,20 @@ final class MediaDetailDownloadActionTests: XCTestCase {
         ]
     )
 
+    func testReplacementRequiresConfirmationAndFreezesTheExactTarget() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.set(.downloaded, chapterKey: "chapter-1")
+        let viewModel = makeViewModel(media: Self.series, saved: true, downloads: downloads)
+        let prepared = await viewModel.replacementPreview(for: chapter("chapter-1"))
+        let preview = try XCTUnwrap(prepared)
+        XCTAssertEqual(preview.download.chapter.key, "chapter-1")
+        XCTAssertEqual(preview.expectedVersionId, "installed")
+        XCTAssertFalse(preview.hasChangedRevision)
+        await viewModel.performDownloadAction(.replace, for: chapter("chapter-1")).value
+        XCTAssertTrue(downloads.downloadRequests.isEmpty)
+        XCTAssertTrue(downloads.editionCalls.isEmpty)
+    }
+
     func testUnavailableDownloadsShowNoStateAndNoActions() {
         let downloads = MediaDetailDownloadsFake(isAvailable: false)
         downloads.set(.downloaded, chapterKey: "chapter-1")
@@ -57,7 +71,7 @@ final class MediaDetailDownloadActionTests: XCTestCase {
             (.waiting(.sourceUnavailable), [.retry, .cancel]),
             (.waiting(.restoredPendingReview), [.retry, .cancel]),
             (.failed(.network), [.retry, .cancel]),
-            (.downloaded, [.readOnlineThisTime, .delete]),
+            (.downloaded, [.readOnlineThisTime, .replace, .delete]),
             (.damaged, [.delete])
         ]
         for (state, expected) in cases {
@@ -68,6 +82,71 @@ final class MediaDetailDownloadActionTests: XCTestCase {
             XCTAssertEqual(viewModel.downloadState(for: chapter("chapter-1")), state)
             XCTAssertEqual(viewModel.downloadActions(for: chapter("chapter-1")), expected, "\(state)")
         }
+    }
+
+    func testALockedOrUnlistedChapterIsRefusedWithoutDeleteAdvice() async {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.set(.downloaded, chapterKey: "locked")
+        let messages = MediaDetailMessageSpy()
+        let viewModel = makeViewModel(media: Self.series, saved: true, downloads: downloads, messages: messages)
+
+        let locked = await viewModel.replacementPreview(for: chapter("locked"))
+        XCTAssertNil(locked)
+        XCTAssertEqual(messages.messages, [.downloadRefused])
+        messages.clear()
+
+        let unlisted = await viewModel.replacementPreview(for: Chapter(key: "unlisted", chapter: 9))
+        XCTAssertNil(unlisted)
+        XCTAssertEqual(messages.messages, [.downloadRefused])
+        XCTAssertTrue(downloads.editionCalls.isEmpty)
+    }
+
+    func testACopyFromAnOlderSourceEpochExplainsItsRefusal() async {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.set(.downloaded, chapterKey: "chapter-1")
+        downloads.replacementRefusal = .copyCannotBeReplaced
+        let messages = MediaDetailMessageSpy()
+        let viewModel = makeViewModel(media: Self.series, saved: true, downloads: downloads, messages: messages)
+
+        let preview = await viewModel.replacementPreview(for: chapter("chapter-1"))
+        XCTAssertNil(preview)
+        XCTAssertEqual(messages.messages, [.replacementUnavailable])
+    }
+
+    func testAnEndedReplacementOffersReplaceDirectlyWhileAnActiveOneDoesNot() {
+        let ended = MediaDetailDownloadsFake()
+        ended.set(.downloaded, chapterKey: "chapter-1")
+        ended.setReplacement(.failed(.replacementStale), chapterKey: "chapter-1")
+        let endedModel = makeViewModel(media: Self.series, saved: true, downloads: ended)
+        XCTAssertEqual(
+            endedModel.downloadActions(for: chapter("chapter-1")),
+            [.replace, .cancelReplacement, .readOnlineThisTime, .delete]
+        )
+
+        let active = MediaDetailDownloadsFake()
+        active.set(.downloaded, chapterKey: "chapter-1")
+        active.setReplacement(.downloading(completed: 1, total: 3), chapterKey: "chapter-1")
+        let activeModel = makeViewModel(media: Self.series, saved: true, downloads: active)
+        XCTAssertEqual(activeModel.replacementState(for: chapter("chapter-1")), .downloading(completed: 1, total: 3))
+        XCTAssertEqual(
+            activeModel.downloadActions(for: chapter("chapter-1")),
+            [.cancelReplacement, .readOnlineThisTime, .delete]
+        )
+        XCTAssertEqual(activeModel.downloadState(for: chapter("chapter-1")), .downloaded)
+    }
+
+    func testCancellingAReplacementLeavesTheSavedCopyToTheCancelCall() async {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.set(.downloaded, chapterKey: "chapter-1")
+        downloads.setReplacement(.queued, chapterKey: "chapter-1")
+        let viewModel = makeViewModel(media: Self.series, saved: true, downloads: downloads)
+
+        await viewModel.performDownloadAction(.cancelReplacement, for: chapter("chapter-1")).value
+
+        XCTAssertEqual(
+            downloads.editionCalls,
+            [.cancel(OfflineChapterEdition(media: MediaDetailDownloadsFake.series, chapterKey: "chapter-1"))]
+        )
     }
 
     func testAnAnimeSeriesNeverShowsDownloadControls() {
@@ -184,7 +263,7 @@ final class MediaDetailDownloadActionTests: XCTestCase {
         XCTAssertEqual(viewModel.downloadState(for: chapter("chapter-1")), .downloading(completed: 1, total: 3))
 
         downloads.set(.downloaded, chapterKey: "chapter-1")
-        XCTAssertEqual(viewModel.downloadActions(for: chapter("chapter-1")), [.readOnlineThisTime, .delete])
+        XCTAssertEqual(viewModel.downloadActions(for: chapter("chapter-1")), [.readOnlineThisTime, .replace, .delete])
     }
 
     func testDownloadDecidesOnTheCurrentChapterAndRefusesOneNoLongerListedOrNowLocked() async {
@@ -231,7 +310,7 @@ final class MediaDetailDownloadActionTests: XCTestCase {
         let savedOnly = makeViewModel(media: Self.series, saved: true, downloads: downloads, savedOnly: true)
         savedOnly.start()
 
-        XCTAssertEqual(withSource.downloadActions(for: chapter("chapter-1")), [.readOnlineThisTime, .delete])
+        XCTAssertEqual(withSource.downloadActions(for: chapter("chapter-1")), [.readOnlineThisTime, .replace, .delete])
         XCTAssertEqual(withSource.downloadActions(for: chapter("locked")), [.delete])
         XCTAssertEqual(withSource.downloadActions(for: chapter("damaged")), [.delete])
         XCTAssertEqual(savedOnly.detailLoadState, .savedOnly)
@@ -381,6 +460,8 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
 
     let isAvailable: Bool
     var downloadOutcome: DownloadEnqueueOutcome = .queued
+    /// What `replacementPreview` answers instead of a preview: the copy's refusal, when the test sets one.
+    var replacementRefusal: DownloadReplacementRefusal?
     var failure: Error?
     private(set) var downloadRequests: [DownloadRequest] = []
     private(set) var editionCalls: [EditionCall] = []
@@ -407,6 +488,7 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
     var pendingPreferenceWriteCount: Int { pendingPreferenceWrites.count }
     var pendingBatchCount: Int { pendingBatches.count }
     private let states = CurrentValueSubject<[MediaIdentity: [String: ChapterDownloadState]], Never>([:])
+    private let replacementActivity = CurrentValueSubject<[MediaIdentity: [String: ChapterDownloadState]], Never>([:])
 
     init(isAvailable: Bool = true) {
         self.isAvailable = isAvailable
@@ -418,6 +500,13 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
         all[media, default: [:]][chapterKey] = state
         states.send(all)
     }
+
+    /// Records a chapter's replacement activity over its saved copy, as the store would publish it. Nil removes it.
+    func setReplacement(_ state: ChapterDownloadState?, chapterKey: String, media: MediaIdentity = MediaDetailDownloadsFake.series) {
+        var all = replacementActivity.value
+        all[media, default: [:]][chapterKey] = state
+        replacementActivity.send(all)
+    }
     func seedPreference(_ selection: EditionSelection, for media: MediaIdentity) {
         storedPreferences[media] = selection
     }
@@ -428,6 +517,10 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
 
     func chapterStates(for media: MediaIdentity) -> AnyPublisher<[String: ChapterDownloadState], Never> {
         states.map { $0[media] ?? [:] }.removeDuplicates().eraseToAnyPublisher()
+    }
+
+    func replacementStates(for media: MediaIdentity) -> AnyPublisher<[String: ChapterDownloadState], Never> {
+        replacementActivity.map { $0[media] ?? [:] }.removeDuplicates().eraseToAnyPublisher()
     }
 
     func download(
@@ -450,6 +543,22 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
         ))
         return downloadOutcome
     }
+
+    func replacementPreview(
+        media: MediaIdentity, entry: MediaEntry, chapter: Chapter, seriesTitle: String
+    ) async throws -> DownloadReplacementAccess {
+        if let failure { throw failure }
+        if let replacementRefusal { return .refused(replacementRefusal) }
+        return .preview(DownloadReplacementPreview(
+            download: DownloadEnqueueRequest(
+                pluginId: media.pluginId, mediaKind: media.mediaKind, canonicalMediaId: media.canonicalMediaId,
+                entry: entry, chapter: chapter, seriesTitle: seriesTitle, sourceEpoch: "test"
+            ),
+            installed: chapter, expectedVersionId: "installed"
+        ))
+    }
+
+    func replace(_ preview: DownloadReplacementPreview) async -> DownloadEnqueueOutcome { downloadOutcome }
 
     func cancel(_ edition: OfflineChapterEdition) async throws {
         editionCalls.append(.cancel(edition))

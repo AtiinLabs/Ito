@@ -636,7 +636,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         XCTAssertFalse(subject.viewModel.isSavedOnlyRow(Chapter(key: "c1", chapter: 1)))
         // It can be read from this device and deleted, but there is no online copy to read.
         XCTAssertEqual(subject.viewModel.downloadActions(for: gone), [.delete])
-        XCTAssertEqual(subject.viewModel.downloadActions(for: Chapter(key: "c1", chapter: 1)), [.readOnlineThisTime, .delete])
+        XCTAssertEqual(subject.viewModel.downloadActions(for: Chapter(key: "c1", chapter: 1)), [.readOnlineThisTime, .replace, .delete])
         // The list itself is untouched: absence from it is not deletion.
         XCTAssertEqual(subject.viewModel.media.chapterList?.map(\.key), ["c1", "c2"])
     }

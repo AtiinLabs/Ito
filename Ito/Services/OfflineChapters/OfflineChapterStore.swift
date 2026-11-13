@@ -132,6 +132,8 @@ actor OfflineChapterStore {
     private var reconciliation: Task<OfflineReconcileReport, Never>?
     /// Versions whose attempt this instance is running. Garbage collection and recovery skip them.
     private var liveAttemptVersions: Set<String> = []
+    /// Revision evidence is ephemeral and specific to one staging attempt.
+    private var replacementConfirmations: [String: DownloadReplacementIntent] = [:]
 
     /// - Parameter root: the `OfflineChapters` directory itself.
     init(
@@ -309,6 +311,14 @@ actor OfflineChapterStore {
                 continue
             }
             do {
+                if try await replacementIntent(jobID: job.id) != nil {
+                    // The confirmation was ephemeral and died with the process, so the replacement cannot roll forward.
+                    // Its staging is discarded, it is not requeued, and the saved copy stays.
+                    discardArtifacts(versionId: versionId)
+                    try await setOutcome(jobID: job.id, versionId: versionId, outcome: .failed(.replacementInterrupted))
+                    details.discardedVersions += 1
+                    continue
+                }
                 if try fileSystem.entryExists(at: versionDirectory(versionId)),
                    let staged = try verifiedPublishedVersion(versionId: versionId, edition: job.edition) {
                     let outcome = try await commitPublish(
@@ -482,6 +492,7 @@ actor OfflineChapterStore {
         let removed = try await removeJobs(ids: jobIDs)
         for versionId in removed.compactMap(\.stagingVersionId) {
             liveAttemptVersions.remove(versionId)
+            replacementConfirmations[versionId] = nil
             try? fileSystem.removeItem(at: stagingDirectory(versionId))
         }
         return removed.map(\.id)
@@ -502,10 +513,25 @@ actor OfflineChapterStore {
             case .downloading:
                 throw OfflineStoreError.jobUnavailable
             }
+            // A terminal replacement is never revived: its saved copy is what remains.
+            if job.failureReason?.endsReplacement == true {
+                throw OfflineStoreError.jobUnavailable
+            }
+            if let intent = try DownloadReplacementIntent.fetchOne(db, key: jobID) {
+                // A replacement keeps the epoch it was confirmed under. Retry never re-stamps it: a source that
+                // has moved on ends the replacement instead.
+                if let reason = try Self.staleReplacementReason(
+                    job: job, intent: intent, currentEpoch: currentEpoch, in: db
+                ) {
+                    try Self.endReplacement(&job, reason: reason, now: now, in: db)
+                    return
+                }
+            } else {
+                job.sourceEpoch = currentEpoch
+            }
             job.state = .queued
             job.waitingReason = nil
             job.failureReason = nil
-            job.sourceEpoch = currentEpoch
             job.updatedAt = now
             try job.update(db)
         }
@@ -550,11 +576,18 @@ actor OfflineChapterStore {
         let clearable = reasons.subtracting(DownloadWaitingReason.requiringRetry)
         guard !clearable.isEmpty else { return }
         let now = clock()
+        // Room is read once, outside the transaction. A replacement needs room for its old copy as well.
+        let capacity = try? fileSystem.availableCapacity(at: root)
         try await database.write { db in
             let waiting = try DownloadJobRecord
                 .filter(Column("state") == DownloadJobState.waiting.rawValue)
                 .fetchAll(db)
             for var job in waiting where job.waitingReason.map({ clearable.contains($0) }) == true {
+                if job.waitingReason == .insufficientStorage {
+                    let needed = try Self.replacementBytes(for: job, in: db)
+                    let hasRoom = capacity.map { $0 - Self.reserveBytes >= needed } ?? false
+                    if needed > 0, !hasRoom { continue }
+                }
                 job.state = .queued
                 job.waitingReason = nil
                 job.updatedAt = now
@@ -620,6 +653,7 @@ actor OfflineChapterStore {
 
         for stagingVersionId in removed.stagingVersionIds {
             liveAttemptVersions.remove(stagingVersionId)
+            replacementConfirmations[stagingVersionId] = nil
             try? fileSystem.removeItem(at: stagingDirectory(stagingVersionId))
         }
         let trashed = removed.versionIds.compactMap { detachToTrash($0) }
@@ -657,7 +691,7 @@ actor OfflineChapterStore {
             if limit == .publish(.stream) { return nil }
             return try await runPublish(attempt, commitGuard: commitGuard, through: limit)
         case .delete(let edition):
-            _ = try await runDelete(.editions([edition]), suppress: false, through: limit)
+            _ = try await runDelete(.editions([edition]), suppress: true, through: limit)
             return nil
         case .deleteScope(let scope, let suppress):
             _ = try await runDelete(scope, suppress: suppress, through: limit)
@@ -675,16 +709,30 @@ actor OfflineChapterStore {
         }
         guard let current, current.state == .queued else { throw OfflineStoreError.jobUnavailable }
 
-        if let blocker = await admissionBlocker() {
+        // Admission reads the bytes a replacement needs. The transaction below decides whether the job may start.
+        let replacementBytes = try await database.read { db in
+            try Self.replacementBytes(for: current, in: db)
+        }
+        if let blocker = await admissionBlocker(additionalBytes: replacementBytes) {
             try await setWaiting(jobID: jobID, reason: blocker)
             throw OfflineStoreError.blocked(blocker)
         }
 
         let versionId = UUID().uuidString
         let now = clock()
-        try await database.write { db in
+        let settled = try await database.write { db -> DownloadFailureReason? in
             guard var job = try DownloadJobRecord.fetchOne(db, key: jobID), job.state == .queued else {
                 throw OfflineStoreError.jobUnavailable
+            }
+            // A replacement starts only while its confirmation still applies. That is decided in this same
+            // transaction: one that no longer applies ends here, before any staging exists, so the job is never
+            // left queued for the worker to pick again.
+            if let intent = try DownloadReplacementIntent.fetchOne(db, key: jobID) {
+                let epoch = try PluginCompletionScope.current(pluginID: job.pluginId, in: db)
+                if let reason = try Self.staleReplacementReason(job: job, intent: intent, currentEpoch: epoch, in: db) {
+                    try Self.endReplacement(&job, reason: reason, now: now, in: db)
+                    return reason
+                }
             }
             job.state = .downloading
             job.waitingReason = nil
@@ -692,6 +740,10 @@ actor OfflineChapterStore {
             job.attemptCount += 1
             job.updatedAt = now
             try job.update(db)
+            return nil
+        }
+        if let settled {
+            throw OfflineStoreError.replacementSettled(settled)
         }
         liveAttemptVersions.insert(versionId)
 
@@ -710,12 +762,20 @@ actor OfflineChapterStore {
         )
     }
 
+    func confirmReplacement(_ intent: DownloadReplacementIntent, staging: OfflineStagingAttempt) throws {
+        guard liveAttemptVersions.contains(staging.versionId), staging.jobID == intent.jobId else {
+            throw OfflineStoreError.jobUnavailable
+        }
+        replacementConfirmations[staging.versionId] = intent
+    }
+
     /// Ends an attempt that will not publish. Ownership is checked before any file is touched: the
     /// attempt must be live here. If the job still references its version, the version is discarded
     /// and the job moves to `outcome`. If the job was cancelled or deleted meanwhile, an unreferenced
     /// version is discarded; a published one is never touched.
     func abandonAttempt(jobID: String, versionId: String, outcome: DownloadAttemptOutcome) async throws {
         guard liveAttemptVersions.contains(versionId) else { return }
+        replacementConfirmations[versionId] = nil
         let job = try await database.read { db in
             try DownloadJobRecord.fetchOne(db, key: jobID)
         }
@@ -736,11 +796,12 @@ actor OfflineChapterStore {
         try await setOutcome(jobID: jobID, versionId: versionId, outcome: outcome)
     }
 
-    private func admissionBlocker() async -> DownloadWaitingReason? {
+    private func admissionBlocker(additionalBytes: Int64 = 0) async -> DownloadWaitingReason? {
         guard await protectedData.isProtectedDataAvailable() else { return .protectedDataUnavailable }
         do {
             let capacity = try fileSystem.availableCapacity(at: root)
-            return capacity >= Self.reserveBytes ? nil : .insufficientStorage
+            return capacity >= Self.reserveBytes && capacity - Self.reserveBytes >= additionalBytes
+                ? nil : .insufficientStorage
         } catch OfflineFileSystemError.permissionDenied {
             return .protectedDataUnavailable
         } catch {
@@ -754,7 +815,10 @@ actor OfflineChapterStore {
         through limit: OfflineStepLimit
     ) async throws -> OfflinePublishOutcome? {
         let versionId = attempt.versionId
-        defer { liveAttemptVersions.remove(versionId) }
+        defer {
+            liveAttemptVersions.remove(versionId)
+            replacementConfirmations[versionId] = nil
+        }
         guard let job = try await database.read({ db in
             try DownloadJobRecord.filter(Column("stagingVersionId") == versionId).fetchOne(db)
         }) else {
@@ -815,6 +879,8 @@ actor OfflineChapterStore {
         let manifest = staged.manifest
         let manifestSHA256 = OfflineDigest.sha256Hex(staged.manifestData)
         let jobID = job.id
+        let oldVersion = try await replacementIntent(jobID: jobID)?.expectedVersionId
+        let confirmation = replacementConfirmations[versionId]
         let decision = try await database.write { db in
             try Self.commitVerifiedEdition(
                 db,
@@ -823,7 +889,8 @@ actor OfflineChapterStore {
                 manifest: manifest,
                 manifestSHA256: manifestSHA256,
                 commitGuard: commitGuard,
-                now: now
+                now: now,
+                replacementConfirmation: confirmation
             )
         }
         // Decided inside the transaction: a version that a row references is never trashed.
@@ -831,90 +898,10 @@ actor OfflineChapterStore {
            let trashed = detachToTrash(versionId) {
             try? fileSystem.removeItem(at: trashed)
         }
+        if case .published = decision.outcome, let oldVersion {
+            await reclaimIfUnreferenced(versionId: oldVersion)
+        }
         return decision.outcome
-    }
-
-    /// P5: inserts the inventory row and deletes the job in one transaction. The source epoch is
-    /// read from `pluginCompletionScope` here, and must equal the epoch frozen on the job.
-    nonisolated private static func commitVerifiedEdition(
-        _ db: Database,
-        jobID: String,
-        versionId: String,
-        manifest: OfflineChapterManifest,
-        manifestSHA256: String,
-        commitGuard: OfflineCommitGuard,
-        now: Date
-    ) throws -> OfflineCommitDecision {
-        guard var job = try DownloadJobRecord.fetchOne(db, key: jobID),
-              job.stagingVersionId == versionId else {
-            return try refusal(.jobGone, versionId: versionId, in: db)
-        }
-        if try DownloadedChapterRecord.filter(job.edition.predicate).fetchCount(db) > 0 {
-            try Self.deleteJob(id: jobID, batchId: job.batchId, in: db)
-            return try refusal(.alreadyVerified, versionId: versionId, in: db)
-        }
-        let currentEpoch = try PluginCompletionScope.current(pluginID: job.pluginId, in: db)
-        guard job.sourceEpoch != nil, currentEpoch == job.sourceEpoch else {
-            // The source's settings or credentials changed: the user decides whether to fetch again.
-            job.state = .waiting
-            job.waitingReason = .sourceConfigurationChanged
-            job.stagingVersionId = nil
-            job.updatedAt = now
-            try job.update(db)
-            return try refusal(.configurationChanged, versionId: versionId, in: db)
-        }
-        guard commitGuard(job) else {
-            // The plugin or its trust changed under the attempt. Nothing the user chose changed, so
-            // the chapter is fetched again by a fresh runtime under the current trust.
-            job.state = .queued
-            job.waitingReason = nil
-            job.stagingVersionId = nil
-            job.updatedAt = now
-            try job.update(db)
-            return try refusal(.staleRuntime, versionId: versionId, in: db)
-        }
-        let snapshot = try inventorySnapshot(of: job.chapterSnapshot)
-        try DownloadedChapterRecord(
-            pluginId: job.pluginId,
-            mediaKind: job.mediaKind,
-            canonicalMediaId: job.canonicalMediaId,
-            chapterKey: job.chapterKey,
-            authorityScope: job.authorityScope,
-            versionId: versionId,
-            state: .verified,
-            damageReason: nil,
-            contentKind: manifest.contentKind,
-            pageCount: manifest.pages.count,
-            byteCount: manifest.totalBytes,
-            manifestFormatVersion: manifest.formatVersion,
-            manifestSHA256: manifestSHA256,
-            chapterSnapshot: snapshot,
-            seriesTitle: job.seriesTitle,
-            sourceEpoch: job.sourceEpoch,
-            verifiedAt: now
-        ).insert(db)
-        try deleteJob(id: jobID, batchId: job.batchId, in: db)
-        return OfflineCommitDecision(outcome: .published(versionId: versionId), versionIsReferenced: true)
-    }
-
-    nonisolated private static func refusal(
-        _ reason: OfflinePublishRefusal,
-        versionId: String,
-        in db: Database
-    ) throws -> OfflineCommitDecision {
-        OfflineCommitDecision(
-            outcome: .refused(reason),
-            versionIsReferenced: try isReferenced(versionId: versionId, in: db)
-        )
-    }
-
-    /// The inventory copy of a chapter: `url` and `paywalled` are dropped, as the queue's copy
-    /// needs them only to fetch pages.
-    nonisolated private static func inventorySnapshot(of chapterSnapshot: Data) throws -> Data {
-        var chapter = try JSONDecoder().decode(Chapter.self, from: chapterSnapshot)
-        chapter.url = nil
-        chapter.paywalled = nil
-        return try JSONEncoder().encode(chapter)
     }
 
     private func discardPublish(
@@ -936,6 +923,10 @@ actor OfflineChapterStore {
                   job.stagingVersionId == versionId else { return }
             Self.apply(outcome, to: &job, now: now)
             try job.update(db)
+            // A terminal replacement ends its confirmation with it. The saved copy is not touched.
+            if case .failed(let reason) = outcome, reason.endsReplacement {
+                _ = try DownloadReplacementIntent.deleteOne(db, key: jobID)
+            }
         }
     }
 
@@ -998,7 +989,7 @@ actor OfflineChapterStore {
         }
     }
 
-    nonisolated private static func isReferenced(versionId: String, in db: Database) throws -> Bool {
+    nonisolated static func isReferenced(versionId: String, in db: Database) throws -> Bool {
         try DownloadedChapterRecord.filter(Column("versionId") == versionId).fetchCount(db) > 0
             || DownloadJobRecord.filter(Column("stagingVersionId") == versionId).fetchCount(db) > 0
     }
@@ -1180,10 +1171,4 @@ actor OfflineChapterStore {
             throw OfflineStoreError.protectedDataUnavailable
         }
     }
-}
-
-/// The result of P5: the outcome, and whether the version is still referenced afterwards.
-nonisolated private struct OfflineCommitDecision: Sendable {
-    let outcome: OfflinePublishOutcome
-    let versionIsReferenced: Bool
 }

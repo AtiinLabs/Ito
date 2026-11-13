@@ -63,6 +63,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     @Published private(set) var relinkPresentation: MediaDetailRelinkPresentation?
     /// This series' chapter download states, keyed by chapter key.
     @Published private(set) var chapterDownloadStates: [String: ChapterDownloadState] = [:]
+    /// This series' replacement activity over saved chapters, keyed by chapter key. Empty when none is in progress.
+    @Published private(set) var chapterReplacementStates: [String: ChapterDownloadState] = [:]
     /// Whether the device reports no network.
     @Published private(set) var isOffline: Bool
     /// When the saved details of this series were last refreshed from their source; nil when unknown. Read
@@ -183,6 +185,17 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             .sink { [weak self] identity, states in
                 self?.chapterDownloadStates = states
                 self?.downloadBatch.statesDidChange(states, for: identity)
+            }
+            .store(in: &cancellables)
+        // A replacement's activity over a saved copy. It is separate from the copy's own state, so the copy keeps
+        // its reading and deletion while the replacement shows its progress, cancellation and retry.
+        $media
+            .map { [pluginID] in MediaIdentity(pluginId: pluginID, canonicalMediaId: $0.key, mediaKind: $0.mediaKind) }
+            .removeDuplicates()
+            .map { identity in downloads.replacementStates(for: identity).map { (identity, $0) } }
+            .switchToLatest()
+            .sink { [weak self] _, states in
+                self?.chapterReplacementStates = states
             }
             .store(in: &cancellables)
         dependencies.connectivity.isOfflinePublisher

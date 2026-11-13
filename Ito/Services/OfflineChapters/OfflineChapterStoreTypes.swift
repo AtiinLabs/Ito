@@ -19,6 +19,8 @@ nonisolated enum OfflineStoreError: Error, Equatable, Sendable {
     /// The verified row points at a version directory that is not on disk.
     case versionUnavailable
     case protectedDataUnavailable
+    /// A confirmed replacement no longer applies, so its job ended as a failure. The job is no longer queued.
+    case replacementSettled(DownloadFailureReason)
 }
 
 nonisolated enum OfflineStagingError: Error, Equatable, Sendable {
@@ -66,6 +68,9 @@ nonisolated enum OfflinePublishRefusal: Equatable, Sendable {
     case staleRuntime
     /// The edition already has a verified copy. M0 never replaces one.
     case alreadyVerified
+    /// A confirmed replacement no longer applies, or its target was not confirmed. The job ended as a failure
+    /// and the saved copy is kept.
+    case replacementSettled
 }
 
 nonisolated enum OfflinePublishOutcome: Equatable, Sendable {

@@ -46,6 +46,9 @@ final class DownloadCenter: ObservableObject {
     @Published private(set) var jobProgress: [String: DownloadProgress] = [:]
     /// What the Library shows about downloads. It changes only when the tables do.
     @Published private(set) var librarySummary = LibraryDownloadSummary.empty
+    /// Replacement activity over a chapter whose verified copy stays readable: queued, running, waiting or ended.
+    /// A chapter absent here has no replacement activity.
+    @Published private(set) var chapterReplacementStates: [MediaIdentity: [String: ChapterDownloadState]] = [:]
 
     private let dbPool: DatabasePool
     private let store: OfflineChapterStore
@@ -121,6 +124,48 @@ final class DownloadCenter: ObservableObject {
             if outcome == .queued {
                 coordinator.wake()
             }
+            return outcome
+        } catch {
+            return .refused(.unavailable)
+        }
+    }
+
+    /// What a replacement confirmation may start from. A copy that is not verified, or a locked chapter, is
+    /// `.unavailable`. A copy saved under another series or from an older source epoch is `.copyCannotBeReplaced`:
+    /// its saved bytes are kept, but the source no longer vouches for them under the current settings.
+    func replacementPreview(
+        media: MediaIdentity, entry: MediaEntry, chapter: Chapter, seriesTitle: String
+    ) async throws -> DownloadReplacementAccess {
+        let edition = OfflineChapterEdition(media: media, chapterKey: chapter.key)
+        let installed = try await dbPool.read { db in
+            try DownloadedChapterRecord.filter(edition.predicate).fetchOne(db)
+        }
+        guard let installed, installed.state == .verified, chapter.paywalled != true else {
+            return .refused(.unavailable)
+        }
+        guard installed.manifestIdentity == edition else { return .refused(.copyCannotBeReplaced) }
+        let epoch = try captureEpoch(media.pluginId)
+        guard installed.sourceEpoch == epoch else { return .refused(.copyCannotBeReplaced) }
+        return try .preview(DownloadReplacementPreview(
+            download: DownloadEnqueueRequest(
+                pluginId: media.pluginId, mediaKind: media.mediaKind,
+                canonicalMediaId: media.canonicalMediaId, entry: entry, chapter: chapter,
+                seriesTitle: seriesTitle, sourceEpoch: epoch
+            ),
+            installed: JSONDecoder().decode(Chapter.self, from: installed.chapterSnapshot),
+            expectedVersionId: installed.versionId
+        ))
+    }
+
+    /// Minted only on confirmation. This UUID identifies the manual decision; it is not a network grant.
+    func replace(_ preview: DownloadReplacementPreview) async -> DownloadEnqueueOutcome {
+        do {
+            let outcome = try await store.enqueueReplacement(DownloadReplacementRequest(
+                download: preview.download, expectedVersionId: preview.expectedVersionId,
+                expectedRevision: DownloadReplacementIntent.revision(preview.installed),
+                authorizationId: UUID().uuidString
+            ))
+            if outcome == .queued { coordinator.wake() }
             return outcome
         } catch {
             return .refused(.unavailable)
@@ -279,6 +324,8 @@ final class DownloadCenter: ObservableObject {
         // A database change republishes the same progress; observers hear only real changes.
         if jobProgress != current { jobProgress = current }
         states = Self.states(copies: snapshot.copies, jobs: snapshot.jobs, progress: current)
+        let activity = Self.replacementStates(copies: snapshot.copies, jobs: snapshot.jobs, progress: current)
+        if chapterReplacementStates != activity { chapterReplacementStates = activity }
     }
 
     /// The per-media state map. A verified copy wins over a queued job for the same chapter.
@@ -305,6 +352,27 @@ final class DownloadCenter: ObservableObject {
             if result[identity]?[job.chapterKey] != nil {
                 continue
             }
+            result[identity, default: [:]][job.chapterKey] = state(of: job, progress: progress[job.id])
+        }
+        return result
+    }
+
+    /// The replacement activity over each chapter whose verified copy stays readable. A job for an edition that has
+    /// a verified copy can only be a replacement, because an ordinary enqueue refuses a saved chapter. Keyed like
+    /// `states`.
+    nonisolated static func replacementStates(
+        copies: [DownloadedChapterRecord],
+        jobs: [DownloadJobRecord],
+        progress: [String: DownloadProgress]
+    ) -> [MediaIdentity: [String: ChapterDownloadState]] {
+        let verified = Set(copies.filter { $0.state == .verified }.map(\.edition))
+        var result: [MediaIdentity: [String: ChapterDownloadState]] = [:]
+        for job in jobs where verified.contains(job.edition) {
+            let identity = MediaIdentity(
+                pluginId: job.pluginId,
+                canonicalMediaId: job.canonicalMediaId,
+                mediaKind: job.mediaKind
+            )
             result[identity, default: [:]][job.chapterKey] = state(of: job, progress: progress[job.id])
         }
         return result

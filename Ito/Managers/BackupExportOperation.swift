@@ -34,7 +34,7 @@ nonisolated public struct BackupExportOperation: Sendable {
 
     private static let databaseArtifactSuffixes = ["", "-wal", "-shm", "-journal"]
     private static let destinationSidecarSuffixes = ["-wal", "-shm", "-journal"]
-    private static let sanitizedTables = [
+    private static let sanitizedTables: [String] = [
         LegacyDefaultsOutcomeRecord.databaseTableName,
         LegacyDefaultsInboxRecord.databaseTableName,
         LegacyStateMigrationRecord.databaseTableName,
@@ -47,6 +47,7 @@ nonisolated public struct BackupExportOperation: Sendable {
         PluginCompletionScope.tableName,
         DownloadedChapterRecord.databaseTableName,
         // Jobs reference their batch, so they are cleared first.
+        DownloadReplacementIntent.databaseTableName,
         DownloadJobRecord.databaseTableName,
         DownloadBatchRecord.databaseTableName,
         DownloadSuppressionRecord.databaseTableName,
@@ -85,6 +86,8 @@ nonisolated public struct BackupExportOperation: Sendable {
             "Installation-local pointers to offline media files that backups never contain.",
         DownloadJobRecord.databaseTableName:
             "Installation-local download queue; restored rules start paused and never replay from a backup.",
+        DownloadReplacementIntent.databaseTableName:
+            "Installation-local replacement approval bound to one downloaded version; never replayed from a backup.",
         DownloadBatchRecord.databaseTableName:
             "Installation-local download batches; frozen selections never replay from a backup.",
         DownloadSuppressionRecord.databaseTableName:
