@@ -576,6 +576,27 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
                 ready.values.forEach { $0.continuation.resume() }
             }
         }
+        if let reviewed = request.reviewedSourceEpoch, reviewed != policyEpoch {
+            refusedForSourceChange += 1
+            return .refused(.sourceChanged)
+        }
+        if let reviewed = request.reviewedPolicy {
+            let media = MediaIdentity(
+                pluginId: request.pluginId, canonicalMediaId: request.canonicalMediaId, mediaKind: request.mediaKind
+            )
+            let stored: ReviewedEditionPolicy
+            if let selection = storedPreferences[media] {
+                stored = .selection(selection)
+            } else if let failure = preferenceReadFailure as? SeriesEditionPreferenceError, failure == .unreadable {
+                stored = .unreadable
+            } else {
+                stored = ReviewedEditionPolicy.none
+            }
+            if stored != reviewed {
+                refusedForPolicyChange += 1
+                return .refused(.policyChanged)
+            }
+        }
         return batchOutcome ?? DownloadBatchOutcome(queued: request.chapters.count)
     }
 
@@ -586,7 +607,18 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
         return storedPreferences[media]
     }
 
-    func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity) async throws {
+    var policyEpoch = "test-policy-epoch"
+    /// Batches refused because the source epoch rotated after review; they queued nothing.
+    var refusedForSourceChange = 0
+    /// Batches refused because the remembered policy differed from the reviewed one; they queued nothing.
+    var refusedForPolicyChange = 0
+    var epochFailure: (any Error)?
+    func editionPreferenceEpoch(for pluginID: String) throws -> String {
+        if let epochFailure { throw epochFailure }
+        return policyEpoch
+    }
+
+    func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity, sourceEpoch: String) async throws {
         preferenceWriteCount += 1
         if holdsPreferenceWrites {
             await withCheckedContinuation { continuation in
@@ -597,6 +629,7 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
             }
         }
         if let preferenceWriteFailure { throw preferenceWriteFailure }
+        guard sourceEpoch == policyEpoch else { throw SeriesEditionPreferenceError.sourceChanged }
         storedPreferences[media] = selection
     }
 

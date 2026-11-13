@@ -97,9 +97,6 @@ History filter: every kind of media */
 
 "All sources resolved" = "All sources resolved";
 
-/* Scanlator choice: download every upload of every chapter. An advanced choice. */
-"All uploads" = "All uploads";
-
 "All-Time Popular" = "All-Time Popular";
 
 /* Download mode permitting cellular and hotspots */
@@ -124,6 +121,9 @@ History filter: every kind of media */
 History: kind of media */
 "Anime" = "Anime";
 
+/* Advanced explicit permission to use any eligible visible group. */
+"Any available group" = "Any available group";
+
 "App preferences" = "App preferences";
 
 /* Reader settings tab: colors and brightness */
@@ -138,6 +138,9 @@ History: kind of media */
 "Archived plugins cannot be installed or updated." = "Archived plugins cannot be installed or updated.";
 
 "Are you sure you want to reject this match?" = "Are you sure you want to reject this match?";
+
+/* Require batch consent before using another group. */
+"Ask before switching" = "Ask before switching";
 
 "Ask on Discord" = "Ask on Discord";
 
@@ -246,8 +249,8 @@ Downloads queue: cancel one job */
 
 "Chapters" = "Chapters";
 
-/* Download preview footer: read chapters are not downloaded by this preset. */
-"Chapters marked read are skipped." = "Chapters marked read are skipped.";
+/* Compatibility key-or-number read markers, not offline coverage. */
+"Chapters marked read are skipped, including other editions with the same chapter number." = "Chapters marked read are skipped, including other editions with the same chapter number.";
 
 "Check AniList Discord Status" = "Check AniList Discord Status";
 
@@ -276,10 +279,10 @@ Downloads queue: cancel one job */
 
 "Choose a list status before adding this entry to MyAnimeList." = "Choose a list status before adding this entry to MyAnimeList.";
 
-"Choose a valid score for your scoring format." = "Choose a valid score for your scoring format.";
+/* Choose the translation group normally used for this series. */
+"Choose a preferred group" = "Choose a preferred group";
 
-/* Scanlator choice: download only chapters from the scanlators the user ticks. */
-"Choose scanlators" = "Choose scanlators";
+"Choose a valid score for your scoring format." = "Choose a valid score for your scoring format.";
 
 "Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports." = "Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports.";
 
@@ -492,6 +495,9 @@ Confirm permanent deletion of selected downloads */
 /* Configured bulk download network mode */
 "Download Network" = "Download Network";
 
+/* Advanced action: download every exact upload, including multiple translations of one chapter. */
+"Download all editions" = "Download all editions";
+
 /* Accessibility label of the menu that queues several chapters for offline reading. */
 "Download chapters" = "Download chapters";
 
@@ -533,7 +539,7 @@ Storage settings offline downloads section */
 /* Downloads manager bulk Retry failure */
 "Downloads couldn't be retried. Check the list before trying again." = "Downloads couldn't be retried. Check the list before trying again.";
 
-/* Footer under the All uploads scanlator choice. */
+/* Footer under the Download all editions choice. */
 "Downloads every upload, including several translations of the same chapter." = "Downloads every upload, including several translations of the same chapter.";
 
 /* Library: a series was removed from the Library, but its saved chapters could not be deleted. */
@@ -552,6 +558,12 @@ Storage settings offline downloads section */
 "Edit" = "Edit";
 
 "Edit List" = "Edit List";
+
+/* Open the explicit ordered fallback policy editor, with optional Remember. */
+"Edit fallback order" = "Edit fallback order";
+
+/* Series details: a download choice or preview was made under a source, chapter list or edition policy that has since changed, so nothing was saved or queued. */
+"Edition choice changed" = "Edition choice changed";
 
 /* Distinguishes an explicitly empty source-provided group name from no group name. */
 "Empty source label" = "Empty source label";
@@ -672,8 +684,8 @@ History: an episode without a title */
 /* Series status: complete */
 "Finished" = "Finished";
 
-/* Scanlator choice: download whatever the source lists, from every scanlator it shows. */
-"Follow the source's list" = "Follow the source's list";
+/* Let the source choose which visible upload to download. Uploads form one reading position only when the source supplies a shared logical-unit ID; otherwise each listed upload is separate. */
+"Follow the source's preferred edition" = "Follow the source's preferred edition";
 
 "Format" = "Format";
 
@@ -774,9 +786,6 @@ History: an episode without a title */
 
 "Invalid URL" = "Invalid URL";
 
-/* Series details: detail when the chosen scanlators could not be remembered for the series, so the choice applies to the current download only. */
-"It applies to this download only." = "It applies to this download only.";
-
 "Items only in this list move to %@. Nothing is removed from your library." = "Items only in this list move to %@. Nothing is removed from your library.";
 
 "Items you read or watch\nwill appear here." = "Items you read or watch\nwill appear here.";
@@ -803,6 +812,9 @@ History: an episode without a title */
 "Keep All Backup" = "Keep All Backup";
 
 "Keep All Local" = "Keep All Local";
+
+/* Confirm only the permitted available chapters and leave missing positions unresolved. */
+"Keep selection" = "Keep selection";
 
 "Key: %@" = "Key: %@";
 
@@ -992,6 +1004,9 @@ Manga format */
 
 "Move" = "Move";
 
+/* Move an approved fallback group earlier in priority order. */
+"Move earlier" = "Move earlier";
+
 /* Anime format: movie */
 "Movie" = "Movie";
 
@@ -1143,6 +1158,9 @@ Downloads manager empty inventory */
 /* Download preview: no chapter would be queued. */
 "Nothing to download." = "Nothing to download.";
 
+/* Edition policy save failed. Batch-only authorization requires a separate explicit confirmation. */
+"Nothing was queued. Try again, or turn off Remember to use this choice for this batch only." = "Nothing was queued. Try again, or turn off Remember to use this choice for this batch only.";
+
 "Notification permission was denied, but the preference could not be disabled. Please try again." = "Notification permission was denied, but the preference could not be disabled. Please try again.";
 
 "Notifications Disabled" = "Notifications Disabled";
@@ -1186,6 +1204,9 @@ Manga format: light novel */
 
 "Ongoing" = "Ongoing";
 
+/* Approved fallback has no unlisted final fallback, and a fallback is always shown in a preview before it is queued. */
+"Only these groups are offered as fallbacks, in the order shown. You review them before anything is queued." = "Only these groups are offered as fallbacks, in the order shown. You review them before anything is queued.";
+
 "Open" = "Open";
 
 /* Button on a library series whose source is unavailable: shows the details saved in the library. */
@@ -1216,8 +1237,8 @@ Manga format: light novel */
 /* Discord status: video in its original language */
 "Original" = "Original";
 
-/* Download preview section: uploads from scanlators outside the selection that sit inside the range. */
-"Other scanlators' uploads in this range" = "Other scanlators' uploads in this range";
+/* Download preview section: uploads of chapters in the range that were not chosen for download, such as another group's upload of the same chapter or an extra upload from a selected group. */
+"Other uploads in this range" = "Other uploads in this range";
 
 "Packages" = "Packages";
 
@@ -1280,6 +1301,15 @@ History: the page a chapter was left on */
 "Preference not saved" = "Preference not saved";
 
 "Preferences" = "Preferences";
+
+/* Some positions are not currently offered by the preferred group. */
+"Preferred edition unavailable" = "Preferred edition unavailable";
+
+/* The first selected group is the primary edition choice. */
+"Preferred group" = "Preferred group";
+
+/* Series details: the group chosen for this series has no chapters in the source's current list, so nothing was queued. Does not claim the group stopped publishing. */
+"Preferred group not listed" = "Preferred group not listed";
 
 /* Configured speculative novel chapter loading */
 "Prefetch Novel Chapters" = "Prefetch Novel Chapters";
@@ -1647,6 +1677,9 @@ Downloads queue: retry a failed or paused job */
 
 "Selected" = "Selected";
 
+/* Strict allowed set: only the ticked groups are used. Their order is not a fallback order and never authorizes another group. */
+"Selected groups only" = "Selected groups only";
+
 "Selection limit reached." = "Selection limit reached.";
 
 "Send paused progress to the current account?" = "Send paused progress to the current account?";
@@ -1803,6 +1836,9 @@ Downloads queue: retry a failed or paused job */
 "Stopping tracking" = "Stopping tracking";
 
 "Storage" = "Storage";
+
+/* Leave positions unavailable when the preferred group is missing. */
+"Strict selection" = "Strict selection";
 
 /* Subtitle button when no subtitle is selected */
 "Subtitles" = "Subtitles";
@@ -2011,9 +2047,21 @@ Reading font: the system font */
 
 "The source stopped unexpectedly. Try again." = "The source stopped unexpectedly. Try again.";
 
+/* Error: a network request the source made did not finish in time */
+"The source took too long to respond. Try again." = "The source took too long to respond. Try again.";
+
 "The source was saved, but could not be opened. Try Open again." = "The source was saved, but could not be opened. Try Open again.";
 
+/* Series details: detail when the preferred group is absent from the current chapter list; the user may change the group in the scanlator choice. */
+"The source's current list has no chapters from it. Choose another group to continue." = "The source's current list has no chapters from it. Choose another group to continue.";
+
 "The source's web page failed: %@" = "The source's web page failed: %@";
+
+/* Error: a web page the source loaded did not respond in time */
+"The source's web page took too long to respond. Try again." = "The source's web page took too long to respond. Try again.";
+
+/* Series details: detail when a draft was invalidated before confirmation because the source, chapter list or edition policy changed; no changed plan was submitted automatically. */
+"The source, chapter list or edition choice changed. Review again." = "The source, chapter list or edition choice changed. Review again.";
 
 "The specified HTTP header is prohibited." = "The specified HTTP header is prohibited.";
 
@@ -2029,7 +2077,7 @@ Reading font: the system font */
 
 "Theme" = "Theme";
 
-/* Download preview footer: other scanlators' uploads are only downloaded when ticked. */
+/* Download preview footer: the uploads listed above are only downloaded when ticked. */
 "These aren't downloaded unless you tick them." = "These aren't downloaded unless you tick them.";
 
 "These settings can't be shown." = "These settings can't be shown.";
@@ -2255,6 +2303,9 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 
 "Use a Personal Access Token" = "Use a Personal Access Token";
 
+/* Use only the explicitly ordered fallback groups. */
+"Use approved groups in order" = "Use approved groups in order";
+
 "Use this when a source stays blocked by Cloudflare or a website login stops working." = "Use this when a source stays blocked by Cloudflare or a website login stops working.";
 
 "Validating plugin settings…" = "Validating plugin settings…";
@@ -2329,6 +2380,9 @@ Effective network policy refusal */
 "When on, Ito checks your library for new chapters while the app is closed. iOS decides the exact timing." = "When on, Ito checks your library for new chapters while the app is closed. iOS decides the exact timing.";
 
 "When on, saving a new series opens the list picker instead of saving to Uncategorized. Only applies when you have at least one list of your own." = "When on, saving a new series opens the list picker instead of saving to Uncategorized. Only applies when you have at least one list of your own.";
+
+/* Fallback policy for a missing preferred edition. */
+"When unavailable" = "When unavailable";
 
 "When updating or tracking a series, automatically mark all previous chapters or episodes as read/watched in your local library." = "When updating or tracking a series, automatically mark all previous chapters or episodes as read/watched in your local library.";
 

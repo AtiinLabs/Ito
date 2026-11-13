@@ -224,7 +224,8 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 availableBytes: viewModel.downloadBatch.availableBytes,
                 isEnqueuing: viewModel.downloadBatch.isEnqueuing,
                 onConfirm: { viewModel.downloadBatch.confirmDownloadPreview(including: $0, previewID: preview.id) },
-                onCancel: viewModel.downloadBatch.dismissDownloadSheet
+                onCancel: viewModel.downloadBatch.dismissDownloadSheet,
+                onEditFallback: { viewModel.downloadBatch.editFallbackOrder(previewID: preview.id) }
             )
         }
     }

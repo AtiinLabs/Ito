@@ -2,6 +2,16 @@
 
 Ito currently distributes unsigned device IPAs. AltStore and SideStore can re-sign them with the user's Apple account; TrollStore and jailbreak installation depend on the target device and environment. App Store/TestFlight signing remains a separate future workflow.
 
+## Runner compatibility
+
+The runner pin includes bounded, explicit chapter-edition enumeration and typed native host-call
+timeouts. Network and web-page watchdog timeouts remain host failures, not plugin crashes, HTTP
+server errors or network-policy waits. They do not evict the runner. A timed-out completion write
+pauses instead of replaying automatically because its remote outcome may be unknown.
+Edition-contract violations use the existing incompatible-source presentation. The optional
+enumeration API alone does not start background or automatic traversals.
+
+
 ## One-time repository setup
 
 1. Copy this starter kit into the Ito repository.
@@ -38,6 +48,21 @@ For example `Ito-1.3.0-dev.124-unsigned.ipa`. It creates a GitHub prerelease tag
 Release tags must match the file: `v1.3.0` requires `MARKETING_VERSION = 1.3.0` at the tagged commit, or the release workflow stops. Tags with a suffix after the version are rejected.
 
 `main` declares the version its contents would be released as. After tagging `v1.3.0`, bump `main` to the patch version `1.3.1` so dev builds stop claiming the released version. The first pull request after that which adds a feature also bumps the minor version (`1.4.0`); breaking changes bump the major version. The version on `main` only moves forward.
+
+## Exact-edition update counts
+
+Library schema v23 adds nullable `knownChapterCountBasis` (v22 is reserved for History).
+Manga and novels count distinct byte-exact chapter keys, including alternate groups and
+same-number splits; anime keeps its existing episode count. New nonempty saves establish
+the exact-key basis. Older or unknown baselines silently adopt the first successful
+nonempty current catalog without changing an existing badge or update timestamp.
+Only later same-basis positive count growth adds to the badge. Failed/empty catalogs do
+not establish a basis. This is an update-count heuristic, not a new-release detector.
+
+Library backups preserve this metadata; missing/unknown values safely rebaseline.
+Detail acknowledgment still requires the existing current-operation/visibility guards.
+Read-number persistence and offline inventory counts are unchanged. Notifications and
+Library accessibility describe manga/novel count growth as editions, not logical chapters.
 
 ## Publish a stable version
 
@@ -123,6 +148,24 @@ Do not add unavailable signing credentials to the unsigned workflows.
 For a stable release, mark the release unavailable or publish a newer patch version; do not move or reuse a `v*` tag. Remove an unsafe version from the matching source JSON on `gh-pages` if necessary.
 
 Dev releases are temporary and automatically pruned.
+
+## Edition-policy checks
+
+Before releasing changes to download selection, verify legacy v1/v2 preferences retain their
+meaning. Preferred-group fallback policies use v3; unknown versions and missing group identities
+must require review rather than silently broadening selection. Approved fallback groups may
+substitute only for a source-proven logical position, and existing permitted saved copies must not
+be upgraded merely because the primary group returns.
+
+Confirm that Ask presents one aggregate batch decision, Cancel queues nothing, and a changed
+catalog or source session invalidates the old confirmation. Remember must wait for persistence;
+an admitted save that outlives its sheet must refresh authoritative preferences without restoring
+removed Library scope or reporting stale success.
+
+Another open screen for the same series may hold an older copy of the policy. A reviewed batch
+carries the policy it was planned under, and the store refuses it in the write transaction when the
+stored policy differs, so verify the second screen cannot queue another group after the first
+narrows to Strict.
 
 ## Network preference upgrade checks
 

@@ -136,16 +136,21 @@ final class DownloadCenter: ObservableObject {
         }
     }
 
-    /// Queues many chapters of one series as one frozen batch. The source's epoch is read once, here, and
-    /// frozen on every job of the batch. The outcome counts how each chapter was settled; a refusal means
-    /// the request as a whole was not queued.
+    /// Queues many chapters of one series as one frozen batch. A reviewed batch freezes the epoch it was
+    /// reviewed under, which the store verifies in its write transaction; any other reads the epoch once, here.
+    /// The outcome counts how each chapter was settled; a refusal means the request as a whole was not queued.
     ///
     /// `confirmedMeteredUse` says the user directly confirmed, just now and in the foreground, that this exact
     /// batch may use an expensive path. The consent is minted for the batch's stored ID only after the batch is
     /// queued, so it can never name a different batch, and before the worker is woken for it. The policy mints
     /// nothing unless the mode asks, the app is in the foreground and the path is expensive and unconstrained.
     func enqueueBatch(_ request: DownloadBatchRequest, confirmedMeteredUse: Bool = false) async -> DownloadBatchOutcome {
-        guard let epoch = try? captureEpoch(request.pluginId) else {
+        let epoch: String
+        if let reviewed = request.reviewedSourceEpoch {
+            epoch = reviewed
+        } else if let captured = try? captureEpoch(request.pluginId) {
+            epoch = captured
+        } else {
             return .refused(.unavailable)
         }
         let confirmation = confirmedMeteredUse ? contexts.policy.captureConfirmation() : nil
@@ -263,11 +268,28 @@ final class DownloadCenter: ObservableObject {
         try await dbPool.read { db in try SeriesEditionPreferenceRecord.selection(for: media, in: db) }
     }
 
+    /// The source's current epoch: a settings or credential change rotates it. A reviewed policy choice or
+    /// batch is stored only while the epoch it was reviewed under is still current, which the stores verify
+    /// inside their write transactions. This is a plain read; only a source with no epoch yet captures one.
+    func editionPreferenceEpoch(for pluginID: String) throws -> String {
+        if let epoch = try dbPool.read({ db in try PluginCompletionScope.current(pluginID: pluginID, in: db) }) {
+            return epoch
+        }
+        return try captureEpoch(pluginID)
+    }
+
     /// Remembers the scanlators chosen for a series, replacing an earlier choice. Throws when it could not
-    /// be written.
-    func setEditionPreference(_ selection: EditionSelection, for media: MediaIdentity) async throws {
+    /// be written, when the series is no longer saved, or when `sourceEpoch` is no longer the source's.
+    func setEditionPreference(
+        _ selection: EditionSelection,
+        for media: MediaIdentity,
+        sourceEpoch: String
+    ) async throws {
         let now = Date()
         try await dbPool.write { db in
+            guard try PluginCompletionScope.current(pluginID: media.pluginId, in: db) == sourceEpoch else {
+                throw SeriesEditionPreferenceError.sourceChanged
+            }
             let candidates = ImportedMediaIdentity.localItemIDs(
                 pluginId: media.pluginId,
                 canonicalMediaId: media.canonicalMediaId,

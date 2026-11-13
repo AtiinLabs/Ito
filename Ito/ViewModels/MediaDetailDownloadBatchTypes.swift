@@ -21,6 +21,8 @@ struct EditionChooserPresentation: Equatable {
     let identity: MediaIdentity
     let scopeGeneration: Int
     let catalogDigest: String
+    var sourceEpoch = ""
+    var policy: RememberedEditionChoice = .unknown
     let options: [ScanlatorOption]
     let initialSelection: EditionSelection
     /// Whether "Remember for this series" starts on. Only a choice made for a download can be left unremembered.
@@ -65,14 +67,18 @@ struct DownloadPreview: Identifiable, Equatable {
     let scopeGeneration: Int
     /// The digest of the chapter list this was made from.
     let catalogDigest: String
+    var sourceEpoch = ""
+    var policy: RememberedEditionChoice = .unknown
     let toQueue: [DownloadPreviewRow]
     /// Positions already saved or queued; they count toward the preset's N.
     let satisfied: [DownloadPreviewRow]
     let damaged: [DownloadPreviewRow]
     let locked: [DownloadPreviewRow]
-    /// Rows outside the selection that sit inside the preset's range. Never queued unless the user ticks them.
+    /// Other uploads inside the preset's range, from any group: extra uploads of chosen positions and rows the
+    /// selection does not supply. Never queued unless the user ticks them.
     let alternatives: [DownloadPreviewRow]
     let skippedReadCount: Int
+    var missingPositionCount = 0
     let issues: Set<DownloadPlanIssue>
     /// The chapter list changed while the preview was open, so this replaced the one the user was reading.
     let listChanged: Bool

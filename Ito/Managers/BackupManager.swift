@@ -429,7 +429,8 @@ nonisolated struct BackupMergeOperation: Sendable {
             status: item.status,
             lastCheckedAt: item.lastCheckedAt,
             lastUpdatedAt: item.lastUpdatedAt,
-            knownChapterCount: item.knownChapterCount
+            knownChapterCount: item.knownChapterCount,
+            knownChapterCountBasis: item.knownChapterCountBasis
         )
     }
 

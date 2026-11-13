@@ -476,7 +476,8 @@ struct UpdateRunTests {
             status: status,
             lastCheckedAt: nil,
             lastUpdatedAt: nil,
-            knownChapterCount: 5
+            knownChapterCount: 5,
+            knownChapterCountBasis: .exactChapterKeys
         )
     }
 }

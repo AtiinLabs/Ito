@@ -24,23 +24,37 @@ nonisolated enum StoredEditionState: Equatable, Sendable {
     case damaged
     /// A job is already queued, running or waiting for this exact edition.
     case queued
+
+    /// What the store knows of one exact key. A failed job still occupies its key, so it holds its position
+    /// and is not queued again: Retry is the way back.
+    init(_ state: ChapterDownloadState?) {
+        switch state {
+        case nil: self = .none
+        case .downloaded?: self = .verified
+        case .damaged?: self = .damaged
+        case .queued?, .downloading?, .waiting?, .failed?: self = .queued
+        }
+    }
 }
 
 nonisolated enum DownloadPlanIssue: Hashable, Sendable {
     /// Reading order cannot be derived confidently.
     case orderingAmbiguous
-    /// The recorded anchor key is absent from the selected rows.
+    /// The recorded anchor key is not in a position the selection can supply.
     case anchorNotInSelection
-    /// Two selected rows share a (volume, number) hint and have distinct source group identities.
+    /// Two chosen rows from different source groups share a (volume, number) hint, so they may be
+    /// uploads of one chapter. A warning only: nothing treats them as one position.
     case alternativeUploads
     /// Unread or All over the source list spans multiple source group identities.
     case multipleScanlators
     /// A locked row was skipped inside the window.
     case lockedGap
     case damagedCopies
-    /// Fewer positions than requested because the selection filtered rows out; they may fill the gap.
+    /// Fewer positions than requested because the selection cannot supply some positions; other rows
+    /// may fill the gap.
     case selectionExhausted
     case nothingToDo
+    case preferredUnavailable
 }
 
 /// The outcome of one preset over one catalog. `Element` is an exact catalog row.
@@ -53,10 +67,13 @@ nonisolated struct DownloadPlan<Element: Sendable>: Sendable {
     var damaged: [Element] = []
     /// Locked rows, skipped. A gap is noted rather than closed.
     var locked: [Element] = []
-    /// Rows outside the selection inside the window, shown and never queued.
+    /// Other uploads inside the window, from any group: the extra uploads of positions the plan took and the
+    /// rows of positions the selection cannot supply. Shown, never queued unless the user ticks them.
     var alternatives: [Element] = []
     /// Rows the read markers skipped inside the window (Next presets and Unread).
     var skippedReadCount = 0
+    /// Unresolved positions in this action's window, aggregated into one decision.
+    var missingPositionCount = 0
     var issues: Set<DownloadPlanIssue> = []
     /// Whether the action must show a preview and wait for the user instead of queueing at once.
     var requiresPreview = false
@@ -69,6 +86,7 @@ nonisolated struct DownloadPlan<Element: Sendable>: Sendable {
             locked: locked.map(transform),
             alternatives: alternatives.map(transform),
             skippedReadCount: skippedReadCount,
+            missingPositionCount: missingPositionCount,
             issues: issues,
             requiresPreview: requiresPreview
         )
@@ -90,79 +108,19 @@ nonisolated struct DownloadPlanRow: Sendable, Equatable {
     }
 }
 
-struct DownloadPresetInput<C: ChapterDisplayable> {
-    let preset: DownloadPreset
-    /// The chapter list as the source returned it.
-    let catalog: [C]
-    let selection: EditionSelection
-    /// The exact key of the last-read chapter, if one was recorded.
-    let anchorKey: String?
-    /// The read markers the list shows: exact key or chapter number.
-    let isRead: (C) -> Bool
-    /// The stored state of one exact key.
-    let stored: (String) -> StoredEditionState
-    /// Manga and novel chapters; never anime.
-    let isStorable: (C) -> Bool
-    /// Concrete extraction seam for a source-provided group ID; absent IDs remain nil.
-    let scanlatorID: (C) -> String?
-    let largeBatchThreshold: Int
-
-    init(
-        preset: DownloadPreset,
-        catalog: [C],
-        selection: EditionSelection,
-        anchorKey: String?,
-        isRead: @escaping (C) -> Bool,
-        stored: @escaping (String) -> StoredEditionState,
-        isStorable: @escaping (C) -> Bool,
-        scanlatorID: @escaping (C) -> String? = { _ in nil },
-        largeBatchThreshold: Int = DownloadPresetResolver.largeBatchThreshold
-    ) {
-        self.preset = preset
-        self.catalog = catalog
-        self.selection = selection
-        self.anchorKey = anchorKey
-        self.isRead = isRead
-        self.stored = stored
-        self.isStorable = isStorable
-        self.scanlatorID = scanlatorID
-        self.largeBatchThreshold = largeBatchThreshold
-    }
-}
-
 /// Resolves a preset over a catalog into exact rows to queue.
 ///
-/// A preset selects reading positions, not transfers: a row already saved or queued satisfies its
-/// position and counts toward N. Each exact catalog row is its own position. Number, title and scanlator
-/// name are never used to merge rows, to identify a stored edition or to decide that a position is
+/// A preset selects reading positions, not transfers. Positions come from `EditionPositionResolver`, built
+/// over the whole eligible catalog before any group selection is applied: only rows the source gave one
+/// logical unit ID share a position, and every other row is its own. Each position takes one permitted
+/// exact row (every permitted row for All Editions); a row already saved or queued satisfies its position
+/// and counts toward N. Number, title, volume and group name never merge rows or decide that a position is
 /// satisfied; (volume, number) only orders rows and flags possible alternative uploads.
 nonisolated enum DownloadPresetResolver {
     /// Unread and All preview above this many rows to queue.
     static let largeBatchThreshold = 10
     /// Any preset previews above this many rows to queue.
     static let previewCeiling = 50
-
-    /// Reads each row once, then resolves purely.
-    @MainActor
-    static func plan<C: ChapterDisplayable & Sendable>(_ input: DownloadPresetInput<C>) -> DownloadPlan<C> {
-        let rows = input.catalog.map { chapter -> DownloadPlanRow in
-            let storable = input.isStorable(chapter)
-            let facts = ChapterFacts(chapter, scanlatorID: input.scanlatorID(chapter), isStorable: storable)
-            return DownloadPlanRow(
-                facts: facts,
-                isRead: storable && input.isRead(chapter),
-                stored: storable ? input.stored(facts.key) : .none
-            )
-        }
-        let indexPlan = plan(
-            rows: rows,
-            preset: input.preset,
-            selection: input.selection,
-            anchorKey: input.anchorKey,
-            largeBatchThreshold: input.largeBatchThreshold
-        )
-        return indexPlan.map { input.catalog[$0] }
-    }
 
     /// The pure resolver. The plan holds indices into `rows`.
     static func plan(
@@ -179,126 +137,170 @@ nonisolated enum DownloadPresetResolver {
         for index in rows.indices where rows[index].facts.isStorable {
             if seenKeys.insert(rows[index].facts.key).inserted { catalog.append(index) }
         }
+        let catalogRows = catalog.map { rows[$0] }
 
-        let selectionResolution: ResolvedEditionSelection?
-        if let resolvedSelection {
-            selectionResolution = resolvedSelection
-        } else if case .scanlators = selection {
-            selectionResolution = ScanlatorCatalogIndex(
-                rows,
-                id: { $0.facts.scanlatorID },
-                name: { $0.facts.scanlator }
-            ).resolve(selection)
-        } else {
-            selectionResolution = selection.resolve(in: [])
+        let selectionResolution = resolvedSelection ?? ScanlatorCatalogIndex(
+            catalogRows,
+            id: { $0.facts.scanlatorID },
+            name: { $0.facts.scanlator }
+        ).resolve(selection)
+
+        // 1. Positions over the whole catalog, then the permitted rows of each. From here on, indices are
+        //    offsets into `catalogRows`.
+        let positions = EditionPositionResolver.resolve(
+            facts: catalogRows.map(\.facts),
+            stored: catalogRows.map(\.stored),
+            selection: selectionResolution
+        )
+        var positionOfRow = [Int](repeating: 0, count: catalogRows.count)
+        for (position, resolved) in positions.enumerated() {
+            for row in resolved.members { positionOfRow[row] = position }
         }
-        let selectedCatalog = catalog.filter {
-            selectionResolution?.admits(
-                scanlator: rows[$0].facts.scanlator,
-                groupID: rows[$0].facts.scanlatorID
-            ) ?? false
+        // A position is read when any of its rows carries the read marker the list shows.
+        let isRead = positions.map { position in position.members.contains { catalogRows[$0].isRead } }
+
+        // 2. The positions this selection can supply, in reading order.
+        // Only a position the source declared (a logical unit ID) is a proven gap when no permitted group has
+        // it. An exact-key row of another group is just an alternative: nothing says what it replaces.
+        let isPreferred: Bool
+        if case .preferred = selection { isPreferred = true } else { isPreferred = false }
+        let permittedPositions = positions.indices.filter {
+            positions[$0].hasPermitted || (isPreferred && positions[$0].key.isLogical)
         }
-        let ordering = ChapterReadingOrder.order(selectedCatalog.map { rows[$0].facts })
-        let selectedOrder = ordering.order.map { selectedCatalog[$0] }
+        let ordering = ChapterReadingOrder.order(
+            positions: permittedPositions.map { position in
+                positions[position].rankedMembers.map { catalogRows[$0].facts }
+            }
+        )
+        let selectedOrder = ordering.order.map { permittedPositions[$0] }
 
         var plan = DownloadPlan<Int>()
         var taken = 0
         var lastTaken: Int?
         var firstUnreadExamined: Int?
+        var placed: [Int] = []
 
-        /// 3. Eligibility, in precedence: locked, satisfied, damaged, candidate.
-        func place(_ index: Int) {
-            let row = rows[index]
-            if row.facts.isLocked {
-                plan.locked.append(index)
+        /// 3. Eligibility: a locked position is skipped; any other takes its chosen rows. All Editions can
+        ///    leave out the uploads that are read, locked ones included.
+        func place(_ position: Int, skippingReadRows: Bool = false) {
+            let resolved = positions[position]
+            func unread(_ rows: [Int]) -> [Int] {
+                skippingReadRows ? rows.filter { !catalogRows[$0].isRead } : rows
+            }
+            plan.locked += unread(resolved.locked)
+            if !resolved.hasPermitted {
+                plan.missingPositionCount += 1
+                placed.append(position)
+                taken += 1
+                lastTaken = position
                 return
             }
-            switch row.stored {
-            case .verified, .queued: plan.satisfied.append(index)
-            case .damaged: plan.damaged.append(index)
-            case .none: plan.toQueue.append(index)
-            }
+            guard resolved.isOccupied else { return }
+            plan.toQueue += unread(resolved.toQueue)
+            plan.satisfied += unread(resolved.satisfied)
+            plan.damaged += unread(resolved.damaged)
+            placed.append(position)
             taken += 1
-            lastTaken = index
+            lastTaken = position
         }
 
-        var anchorIndex: Int?
+        var anchorPosition: Int?
         if let limit = preset.positionLimit {
-            // 4. The anchor decides where the window starts.
+            // 4. The anchor decides where the window starts. Its exact key finds its position; no number or
+            //    group name maps an anchor into another group's rows.
             var start = 0
             if let anchorKey {
-                if let position = selectedOrder.firstIndex(where: { rows[$0].facts.key == anchorKey }) {
-                    anchorIndex = selectedOrder[position]
-                    start = rows[selectedOrder[position]].isRead ? position + 1 : position
+                if let anchorRow = catalogRows.firstIndex(where: { $0.facts.key == anchorKey }),
+                   let offset = selectedOrder.firstIndex(of: positionOfRow[anchorRow]) {
+                    anchorPosition = selectedOrder[offset]
+                    start = isRead[selectedOrder[offset]] ? offset + 1 : offset
                 } else {
                     plan.issues.insert(.anchorNotInSelection)
                 }
             }
-            // 5. Walk forward, skipping read rows, until N positions are taken.
-            for position in start..<selectedOrder.count {
+            // 5. Walk forward, skipping read positions, until N positions are taken.
+            for offset in start..<selectedOrder.count {
                 if taken >= limit { break }
-                let index = selectedOrder[position]
-                if rows[index].isRead {
+                let position = selectedOrder[offset]
+                if isRead[position] {
                     plan.skippedReadCount += 1
                     continue
                 }
-                if firstUnreadExamined == nil { firstUnreadExamined = index }
-                place(index)
+                if firstUnreadExamined == nil { firstUnreadExamined = position }
+                place(position)
             }
             // Running out at the natural end of the series is not an issue; running out because the
-            // selection filtered rows away is, since those rows may fill the gap.
-            if taken < limit, selectedCatalog.count < catalog.count { plan.issues.insert(.selectionExhausted) }
+            // selection cannot supply some positions is, since other groups' rows may fill the gap.
+            if taken < limit, positions.contains(where: { !$0.hasPermitted }) { plan.issues.insert(.selectionExhausted) }
         } else {
-            for index in selectedOrder {
-                // 6. Unread skips read rows; 7. All keeps them.
-                if preset == .unread, rows[index].isRead {
-                    plan.skippedReadCount += 1
-                    continue
+            // 6. Unread skips read positions, or under All Editions the uploads that are read themselves;
+            //    7. All keeps everything.
+            let readsPerUpload = preset == .unread && selectionResolution?.selection == .allUploads
+            for position in selectedOrder {
+                if preset == .unread {
+                    let resolved = positions[position]
+                    // Under All Editions every upload, locked ones too, is judged by its own marker.
+                    let uploads = resolved.chosen + resolved.locked
+                    let skipped = readsPerUpload
+                        ? !uploads.isEmpty && uploads.allSatisfy { catalogRows[$0].isRead }
+                        : isRead[position]
+                    if skipped {
+                        plan.skippedReadCount += 1
+                        continue
+                    }
                 }
-                place(index)
+                place(position, skippingReadRows: readsPerUpload)
             }
-            let selectedGroupCount = Set(selectedCatalog.map {
-                ScanlatorGroupKey(id: rows[$0].facts.scanlatorID, name: rows[$0].facts.scanlator)
-            }).count
-            if selectedGroupCount >= 2, selection == .sourceList {
+            // The groups the source list spans: the representative upload of every position the selection
+            // can supply, read or locked or not.
+            let representedGroups = Set(selectedOrder.compactMap { positions[$0].rankedMembers.first }.map {
+                ScanlatorGroupKey(id: catalogRows[$0].facts.scanlatorID, name: catalogRows[$0].facts.scanlator)
+            })
+            if representedGroups.count >= 2, selection == .sourceList {
                 plan.issues.insert(.multipleScanlators)
             }
         }
 
-        if selectedCatalog.count < catalog.count {
-            plan.alternatives = alternatives(
-                rows: rows,
-                catalog: catalog,
-                selectedCatalog: selectedCatalog,
-                preset: preset,
-                placed: plan.toQueue + plan.satisfied + plan.damaged,
-                taken: taken,
-                lastTaken: lastTaken,
-                anchorIndex: anchorIndex,
-                firstUnreadExamined: firstUnreadExamined
-            )
-        }
+        plan.alternatives = alternatives(
+            rows: catalogRows,
+            positions: positions,
+            isRead: isRead,
+            preset: preset,
+            placed: placed,
+            taken: taken,
+            lastTaken: lastTaken,
+            anchorPosition: anchorPosition,
+            firstUnreadExamined: firstUnreadExamined
+        )
 
         if ordering.confidence == .ambiguous { plan.issues.insert(.orderingAmbiguous) }
         if !plan.locked.isEmpty { plan.issues.insert(.lockedGap) }
+        if plan.missingPositionCount > 0 { plan.issues.insert(.preferredUnavailable) }
         if !plan.damaged.isEmpty { plan.issues.insert(.damagedCopies) }
         if plan.toQueue.isEmpty { plan.issues.insert(.nothingToDo) }
-        if hasAlternativeUploads(rows: rows, positions: plan.toQueue + plan.satisfied + plan.damaged) {
+        if hasAlternativeUploads(rows: catalogRows, positions: plan.toQueue + plan.satisfied + plan.damaged) {
             plan.issues.insert(.alternativeUploads)
         }
 
+        let usesFallback = plan.toQueue.contains { index in
+            guard case .preferred = selection else { return false }
+            return (selectionResolution?.rank(
+                scanlator: catalogRows[index].facts.scanlator, groupID: catalogRows[index].facts.scanlatorID
+            ) ?? 0) > 0
+        }
         // The preview rules: any issue but nothingToDo, a large Unread or All, or a very large batch.
         let isBulk = preset == .unread || preset == .all
-        plan.requiresPreview = !plan.issues.subtracting([.nothingToDo]).isEmpty
+        plan.requiresPreview = usesFallback || !plan.issues.subtracting([.nothingToDo]).isEmpty
             || (isBulk && plan.toQueue.count > largeBatchThreshold)
             || plan.toQueue.count > previewCeiling
-        return plan
+        return plan.map { catalog[$0] }
     }
 
     // MARK: - Internals
 
-    /// Two selected rows with one exact (volume, number) hint and distinct source group identities are
-    /// possible alternative uploads. Cached labels never establish or erase group identity.
+    /// Two chosen rows with one exact (volume, number) hint and distinct source group identities may be
+    /// alternative uploads of one chapter. Only a warning: the source gave them no shared logical unit ID, so
+    /// nothing treats them as one position. Cached labels never establish or erase group identity.
     private static func hasAlternativeUploads(rows: [DownloadPlanRow], positions: [Int]) -> Bool {
         struct Hint: Hashable {
             let volume: Float?
@@ -315,59 +317,77 @@ nonisolated enum DownloadPresetResolver {
         return groupKeys.values.contains { $0.count >= 2 }
     }
 
-    /// Rows outside the selection that the user may tick in the preview. A candidate is unlocked, has
-    /// no stored copy or job, and (except for All) is unread.
+    /// Rows the user may tick in the preview: other rows of the positions the plan took, and the rows of
+    /// positions the selection cannot supply that sit inside the preset's range. A candidate is unlocked, has
+    /// no stored copy or job, and (except for All) is unread. Never queued unless ticked.
     private static func alternatives(
         rows: [DownloadPlanRow],
-        catalog: [Int],
-        selectedCatalog: [Int],
+        positions: [ResolvedEditionPosition],
+        isRead: [Bool],
         preset: DownloadPreset,
         placed: [Int],
         taken: Int,
         lastTaken: Int?,
-        anchorIndex: Int?,
+        anchorPosition: Int?,
         firstUnreadExamined: Int?
     ) -> [Int] {
-        let fullOrder = ChapterReadingOrder.order(catalog.map { rows[$0].facts }).order.map { catalog[$0] }
-        var position: [Int: Int] = [:]
-        for (offset, index) in fullOrder.enumerated() { position[index] = offset }
-        let selected = Set(selectedCatalog)
+        // Order over every position, permitted or not: a range needs both kinds.
+        let fullOrder = ChapterReadingOrder.order(
+            positions: positions.map { position in position.rankedMembers.map { rows[$0].facts } }
+        ).order
+        var offsets = [Int](repeating: 0, count: positions.count)
+        for (offset, position) in fullOrder.enumerated() { offsets[position] = offset }
+        let placedSet = Set(placed)
 
-        let candidates = fullOrder.filter { index in
-            let row = rows[index]
-            return !selected.contains(index) && !row.facts.isLocked && row.stored == .none
-                && (preset == .all || !row.isRead)
+        func candidates(_ position: Int) -> [Int] {
+            guard preset == .all || !isRead[position] else { return [] }
+            let chosen = Set(positions[position].chosen)
+            return positions[position].members.filter { index in
+                !chosen.contains(index) && !rows[index].facts.isLocked && rows[index].stored == .none
+                    && (preset == .all || !rows[index].isRead)
+            }
         }
 
+        var result: [Int] = []
         if let limit = preset.positionLimit {
-            // From the anchor (or the first unread row examined) to the last position taken. When the
-            // selection ran out, the rows after it fill the remaining positions.
+            // From the anchor (or the first unread position examined) to the last position taken. When the
+            // selection ran out, the positions after it fill the remaining ones.
             var lower = 0
-            if let anchorIndex {
-                lower = (position[anchorIndex] ?? 0) + (rows[anchorIndex].isRead ? 1 : 0)
+            if let anchorPosition {
+                lower = offsets[anchorPosition] + (isRead[anchorPosition] ? 1 : 0)
             } else if let firstUnreadExamined {
-                lower = position[firstUnreadExamined] ?? 0
+                lower = offsets[firstUnreadExamined]
             }
-            let upper = lastTaken.flatMap { position[$0] }
-            var inside: [Int] = []
-            var tail: [Int] = []
-            for index in candidates {
-                guard let offset = position[index], offset >= lower else { continue }
-                if let upper, offset < upper {
-                    inside.append(index)
-                } else {
-                    tail.append(index)
+            let upper = lastTaken.map { offsets[$0] }
+            var tailBudget = taken < limit ? limit - taken : 0
+            for position in fullOrder {
+                let candidateRows = candidates(position)
+                guard !candidateRows.isEmpty else { continue }
+                if placedSet.contains(position) {
+                    result += candidateRows
+                } else if offsets[position] >= lower {
+                    if let upper, offsets[position] < upper {
+                        result += candidateRows
+                    } else if tailBudget > 0 {
+                        tailBudget -= 1
+                        result += candidateRows
+                    }
                 }
             }
-            return inside + (taken < limit ? Array(tail.prefix(limit - taken)) : [])
+            return result
         }
 
-        // Unread and All: rows between the first and last selected position.
-        let offsets = placed.compactMap { position[$0] }
-        guard let lower = offsets.min(), let upper = offsets.max() else { return [] }
-        return candidates.filter { index in
-            guard let offset = position[index] else { return false }
-            return offset > lower && offset < upper
+        // Unread and All: positions between the first and last one taken. An unresolved declared position
+        // is taken (it is a proven gap); other groups' rows outside that window stay unlisted.
+        let placedOffsets = placed.map { offsets[$0] }
+        guard let lower = placedOffsets.min(), let upper = placedOffsets.max() else { return [] }
+        for position in fullOrder {
+            let candidateRows = candidates(position)
+            guard !candidateRows.isEmpty else { continue }
+            if placedSet.contains(position) || (offsets[position] > lower && offsets[position] < upper) {
+                result += candidateRows
+            }
         }
+        return result
     }
 }

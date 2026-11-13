@@ -182,7 +182,8 @@ public class LibraryManager: ObservableObject {
                 pluginType: .manga,
                 rawPayload: payload,
                 anilistId: nil,
-                knownChapterCount: manga.chapters?.distinctChapterCount ?? 0
+                knownChapterCount: manga.chapters?.distinctChapterCount ?? 0,
+                knownChapterCountBasis: manga.chapters?.isEmpty == false ? .exactChapterKeys : nil
             )
         )
     }
@@ -218,7 +219,8 @@ public class LibraryManager: ObservableObject {
                 pluginType: .novel,
                 rawPayload: payload,
                 anilistId: nil,
-                knownChapterCount: novel.chapters?.distinctChapterCount ?? 0
+                knownChapterCount: novel.chapters?.distinctChapterCount ?? 0,
+                knownChapterCountBasis: novel.chapters?.isEmpty == false ? .exactChapterKeys : nil
             )
         )
     }
@@ -428,16 +430,7 @@ public class LibraryManager: ObservableObject {
         case .novel: chapters = (try? decoder.decode(Novel.self, from: item.rawPayload))?.chapters
         case .anime: chapters = nil
         }
-        return (chapters ?? []).map {
-            ChapterFacts(
-                key: $0.key,
-                number: $0.chapterNumber,
-                volume: $0.volumeNumber,
-                scanlator: $0.scanlator,
-                scanlatorID: $0.scanlatorID,
-                isLocked: $0.paywalled ?? false
-            )
-        }
+        return (chapters ?? []).map { ChapterFacts($0) }
     }
 
     private func saveItemDurably(
@@ -511,7 +504,8 @@ public class LibraryManager: ObservableObject {
             status: item.status,
             lastCheckedAt: item.lastCheckedAt,
             lastUpdatedAt: item.lastUpdatedAt,
-            knownChapterCount: item.knownChapterCount
+            knownChapterCount: item.knownChapterCount,
+            knownChapterCountBasis: item.knownChapterCountBasis
         )
     }
 

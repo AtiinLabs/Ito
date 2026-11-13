@@ -65,14 +65,12 @@ final class PluginDataLoaderNativeTests: XCTestCase {
 
     func testTwoNativeLoadsEnterTransportBeforeEitherCompletes() async throws {
         let target = try XCTUnwrap(URL(string: "https://images.example/pending"))
-        let started = expectation(description: "Both native requests started")
-        started.expectedFulfillmentCount = 2
-        let stopped = expectation(description: "Both requests cancelled")
-        stopped.expectedFulfillmentCount = 2
+        let started = TestGate()
+        let stopped = TestGate()
         PluginImageTransportTestURLProtocol.registerPendingRoute(
             for: target,
-            onStart: { started.fulfill() },
-            onStop: { stopped.fulfill() }
+            onStart: { Task { @MainActor in started.open() } },
+            onStop: { Task { @MainActor in stopped.open() } }
         )
         let runner = NativeImageRunner(
             request: PluginImageRequest(url: target.absoluteString),
@@ -81,8 +79,7 @@ final class PluginDataLoaderNativeTests: XCTestCase {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [PluginImageTransportTestURLProtocol.self]
         let loader = PluginDataLoader(configuration: config, contexts: PluginNetworkContexts(policy: NetworkPolicyCenter()), runnerProvider: { _ in runner })
-        let completed = expectation(description: "Both loaders finish cancellation")
-        completed.expectedFulfillmentCount = 2
+        let completed = TestGate()
         let capture = NativeImageCapture()
         let subscriptions = ["first", "second"].map { path in
             loader.loadData(
@@ -90,13 +87,14 @@ final class PluginDataLoaderNativeTests: XCTestCase {
                 didReceiveData: { data, _ in capture.append(data) },
                 completion: { error in
                     capture.complete(error)
-                    completed.fulfill()
+                    Task { @MainActor in completed.open() }
                 }
             )
         }
-        await fulfillment(of: [started], timeout: 5)
+        await started.wait(for: 2)
         subscriptions.forEach { $0.cancel() }
-        await fulfillment(of: [stopped, completed], timeout: 5)
+        await stopped.wait(for: 2)
+        await completed.wait(for: 2)
         XCTAssertTrue(capture.data.isEmpty)
         XCTAssertEqual(capture.completions, 2)
         XCTAssertEqual((capture.error as? URLError)?.code, .cancelled)

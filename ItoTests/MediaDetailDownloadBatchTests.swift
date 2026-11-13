@@ -239,7 +239,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         XCTAssertTrue(Self.isChooser(second.viewModel.downloadSheet))
     }
 
-    func testAChoiceThatCannotBeRememberedStillAppliesToThatBatchAndSaysSo() async throws {
+    func testAChoiceThatCannotBeRememberedWaitsForExplicitBatchOnlyConsent() async throws {
         let downloads = MediaDetailDownloadsFake()
         downloads.preferenceWriteFailure = MediaDetailTestFailure.expected
         let subject = await makeSubject(chapters: Self.numbered(1...3), downloads: downloads)
@@ -247,8 +247,11 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         await subject.viewModel.downloadBatch.applyEditionChoice(.sourceList, remember: true, then: .next).value
 
         XCTAssertEqual(subject.messages.messages.first, .editionChoiceNotRemembered)
-        XCTAssertEqual(downloads.batchRequests.count, 1, "The download goes ahead under the choice")
+        XCTAssertTrue(downloads.batchRequests.isEmpty, "A failed durable approval never becomes batch-only consent")
         XCTAssertEqual(subject.viewModel.downloadBatch.remembered, .none, "A choice that was not stored is not remembered")
+        XCTAssertTrue(Self.isChooser(subject.viewModel.downloadSheet))
+        await subject.viewModel.downloadBatch.applyEditionChoice(.sourceList, remember: false, then: .next).value
+        XCTAssertEqual(downloads.batchRequests.count, 1)
     }
 
     func testAChoiceFromTheScanlatorsEntryIsAlwaysRememberedAndFailureIsReportedAsNotSaved() async throws {
@@ -266,7 +269,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         await subject.viewModel.downloadBatch.applyEditionChoice(.sourceList, remember: true, then: nil).value
 
         XCTAssertEqual(subject.messages.messages, [.editionChoiceNotSaved])
-        XCTAssertNil(subject.viewModel.downloadSheet)
+        XCTAssertTrue(Self.isChooser(subject.viewModel.downloadSheet))
         XCTAssertEqual(subject.viewModel.downloadBatch.rememberedSelection, .allUploads, "The stored choice stands")
     }
 
@@ -418,7 +421,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         await Task.yield()
 
         XCTAssertNil(subject.viewModel.downloadSheet, "The chooser does not open on the default while the choice is read")
-        downloads.releasePreferenceReads()
+        downloads.holdsPreferenceReads = false; downloads.releasePreferenceReads()
         await opening.value
         guard case .chooser(let presentation)? = subject.viewModel.downloadSheet else { return XCTFail("The chooser opens") }
         XCTAssertEqual(presentation.initialSelection, stored)
@@ -1003,7 +1006,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         let capacity = await downloads.availableCapacity()
         let bytes = await downloads.storedByteCount(for: Self.identity)
         var wrote = true
-        do { try await downloads.setEditionPreference(.sourceList, for: Self.identity) } catch { wrote = false }
+        do { try await downloads.setEditionPreference(.sourceList, for: Self.identity, sourceEpoch: "epoch") } catch { wrote = false }
 
         XCTAssertEqual(outcome, .refused(.unavailable))
         XCTAssertNil(preference)
@@ -1210,7 +1213,8 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         inventory: InventoryBox? = nil,
         basis: LibrarySnapshotBasis? = nil,
         relinkTargets: [Manga] = [],
-        awaitsLoads: Bool = true
+        awaitsLoads: Bool = true,
+        downloadService: (any MediaDetailDownloadServing)? = nil
     ) async -> Subject {
         let catalog = Catalog(chapters)
         let library = MediaDetailLibraryFake(state: MediaDetailLibraryState(
@@ -1246,7 +1250,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         )
         let relink = MediaDetailRelinkFake()
         var dependencies = Self.dependencies(library: library, progress: progress, relink: relink)
-        dependencies.downloads = downloads
+        dependencies.downloads = downloadService ?? downloads
         dependencies.connectivity = connectivity
         let viewModel = MediaDetailViewModel(
             media: Manga(key: "series-1", title: "Series", chapters: chapters),
