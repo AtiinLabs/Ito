@@ -715,7 +715,7 @@ struct BackupRestoreOperationPhaseTests {
         #expect(preferences.1 == unknown)
     }
 
-    @Test func earlierTwentyKeyCatalogKeepsLocalNewKeyOnMergeAndDefaultsItOnWipe() async throws {
+    @Test func earlierTwentyKeyCatalogKeepsLocalNewKeyOnMergeAndMaterializesItsDefaultOnWipeSoExportStillWorks() async throws {
         for mode in [BackupRestoreMode.merge, .wipe] {
             let database = try TestDatabase()
             defer { database.cleanup() }
@@ -737,10 +737,27 @@ struct BackupRestoreOperationPhaseTests {
             _ = try await operation(database).restore(backup, mode: mode, operationId: "legacy-\(mode)")
 
             let rows = try await database.dbPool.read { db in try AppPreference.fetchAll(db) }
-            #expect(Set(rows.map(\.key)) == Set(legacy.map(\.key)).union(mode == .merge ? [local.key] : []))
+            #expect(Set(rows.map(\.key)) == Set(AppPreferenceCatalogEntry.allCases.map(\.rawValue)))
+            let askRow = try #require(rows.first { $0.key == local.key })
             if mode == .merge {
-                #expect(rows.first { $0.key == local.key } == local)
+                #expect(askRow == local)
+            } else {
+                #expect(askRow.value == AppPreferenceCatalogEntry.askBeforeSwitchingGroups.canonicalDefaultJSON)
             }
+
+            // The very next export needs the complete catalog, without a relaunch or a settings write.
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("legacy-catalog-export-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let output = directory.appendingPathComponent("backup.itobackup")
+            try await BackupExportOperation(
+                dbPool: database.dbPool,
+                sourceDatabaseURL: database.databaseURL,
+                standardApplicationDomain: "test.app",
+                readinessGate: {}
+            ).export(to: output)
+            #expect(FileManager.default.fileExists(atPath: output.path))
         }
     }
 

@@ -1225,9 +1225,6 @@
     "Continue from %@" : {
 
     },
-    "Continue in Another Group" : {
-      "comment" : "Novel reader button after the last loaded chapter: asks whether to open the next chapter, which belongs to another translation group"
-    },
     "Continue to %@ from %@ for this reading only?" : {
       "comment" : "Reader consent alert message. %1$@ is the chapter title and %2$@ the translation group name, both untranslated source content ('Unnamed group' stands in when the source names none). Opening is for this reading only: no saved preference or history link changes.",
       "localizations" : {

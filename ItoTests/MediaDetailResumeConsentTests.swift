@@ -132,18 +132,17 @@ extension MediaDetailViewModelTests {
             subject.route.loadResponses = [.value(media)]
             await subject.viewModel.refresh()
             await subject.viewModel.waitForContinuationForTesting()
+            var approvedKey: String?
             if expectsPrompt {
                 XCTAssertNil(subject.viewModel.readerDestination, "Another group waits for consent")
-                subject.viewModel.confirmGroupSwitch(try XCTUnwrap(subject.viewModel.groupSwitchConsent).id)
+                let pending = try XCTUnwrap(subject.viewModel.groupSwitchConsent)
+                approvedKey = pending.chapter.key
+                subject.viewModel.confirmGroupSwitch(pending.id)
             } else {
                 XCTAssertNil(subject.viewModel.groupSwitchConsent)
             }
             guard case .pages(_, _, _, _, let chapter) = subject.viewModel.readerDestination else { return XCTFail("Expected reader") }
-            if expectsPrompt {
-                XCTAssertTrue(["a2", "b2"].contains(chapter.key), "Only the exact approved candidate opens")
-            } else {
-                XCTAssertEqual(chapter.key, "a2")
-            }
+            XCTAssertEqual(chapter.key, approvedKey ?? "a2", "Only the exact approved candidate opens")
         }
     }
 

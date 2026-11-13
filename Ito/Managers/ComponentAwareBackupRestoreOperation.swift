@@ -1466,6 +1466,15 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                 outcomes[.scalarAppPreferences]?.inserted += 1
             }
         }
+        // A wipe leaves no local value to keep, and the catalog must stay complete for the next export:
+        // an entry an older backup never carried gets its canonical default, as launch would write it.
+        if plan.mode == .wipe, plan.backup.metadata != nil, !plan.backup.preferences.isEmpty {
+            let carried = Set(plan.backup.preferences.map(\.key))
+            for entry in AppPreferenceCatalogEntry.allCases
+            where !entry.isRequiredInBackups && !carried.contains(entry.rawValue) {
+                try AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON).insert(db)
+            }
+        }
     }
 
     /// `sourceMapping` uses its declared five-column primary key as merge identity.

@@ -251,15 +251,16 @@ struct NovelReaderView: View {
                             .font(.footnote)
                             .opacity(0.7)
                     }
-                    if boundary.needsGroupConsent {
-                        Button(String(localized: "Continue in Another Group", comment: "Novel reader button after the last loaded chapter: asks whether to open the next chapter, which belongs to another translation group")) {
-                            viewModel.requestGroupSwitch(.next, atLoadedEdge: true)
-                        }
-                    }
                 }
                 .multilineTextAlignment(.center)
                 .foregroundColor(viewModel.theme.textColor)
                 .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if notice.requestsGroupConsent { viewModel.requestGroupSwitch(.next, atLoadedEdge: true) }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(notice.requestsGroupConsent ? .isButton : [])
                 .padding()
             } else if let next = boundary.chapter {
                 if viewModel.appendFailed {
