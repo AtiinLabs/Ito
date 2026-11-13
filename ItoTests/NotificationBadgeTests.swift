@@ -43,7 +43,8 @@ struct NotificationBadgeTests {
             status: nil,
             lastCheckedAt: nil,
             lastUpdatedAt: nil,
-            knownChapterCount: 10
+            knownChapterCount: 10,
+            knownChapterCountBasis: .exactChapterKeys
         )
         try await database.dbPool.write { db in try item.insert(db) }
         let updates = UpdateManager(dbPool: database.dbPool)

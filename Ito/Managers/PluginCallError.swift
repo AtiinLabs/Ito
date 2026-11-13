@@ -45,7 +45,8 @@ struct PluginCallError: LocalizedError, Equatable {
             self.init(kind: kind, message: Self.pluginMessage(reason))
         case .wasmTrap, .memoryOutOfBounds:
             self.init(kind: .crashed, message: String(localized: "The source stopped unexpectedly. Try again."))
-        case .postcardDecodingError, .postcardEncodingError, .controlContractViolation, .catalogContractViolation:
+        case .postcardDecodingError, .postcardEncodingError, .controlContractViolation, .catalogContractViolation,
+             .chapterEditionsViolation:
             self.init(kind: .incompatible, message: Self.incompatibleMessage)
         case .requiresNewerHost, .unsupportedABI:
             // Only raised while loading, where PluginManager turns them into a PluginIncompatibility; mapped here
@@ -59,6 +60,18 @@ struct PluginCallError: LocalizedError, Equatable {
                 kind: .needsSettings,
                 message: String(localized: "The server or account settings changed, or are incomplete.")
             )
+        case .hostCallTimedOut(.net):
+            // A watchdog timeout, not a server error the source reported and not a crash: the runner
+            // stays usable, so this never asks for a reload.
+            self.init(kind: .host, message: String(
+                localized: "The source took too long to respond. Try again.",
+                comment: "Error: a network request the source made did not finish in time"
+            ))
+        case .hostCallTimedOut(.webview):
+            self.init(kind: .host, message: String(
+                localized: "The source's web page took too long to respond. Try again.",
+                comment: "Error: a web page the source loaded did not respond in time"
+            ))
         case .networkPolicy, .reloadDuringActiveExport, .pluginReloaded:
             self.init(kind: .host, message: String(localized: "The source couldn't complete this request."))
         case .hostModuleError(let domain, let message):

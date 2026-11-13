@@ -241,8 +241,8 @@ struct UpdateBaselineTests {
         let updates = UpdateManager(dbPool: database.dbPool)
         library.configure(updateManager: updates)
 
-        let mangaID = try await library.saveMangaDurably(manga: Manga(key: "series", title: "Manga Title"), pluginId: "source.multi")
-        let novelID = try await library.saveNovelDurably(novel: Novel(key: "series", title: "Novel Title"), pluginId: "source.multi")
+        let mangaID = try await library.saveMangaDurably(manga: Manga(key: "series", title: "Manga Title", chapters: [Chapter(key: "one")]), pluginId: "source.multi")
+        let novelID = try await library.saveNovelDurably(novel: Novel(key: "series", title: "Novel Title", chapters: [Chapter(key: "one")]), pluginId: "source.multi")
 
         let mangaItem = try await database.dbPool.read { db in try #require(try LibraryItem.fetchOne(db, key: mangaID)) }
         let novelItem = try await database.dbPool.read { db in try #require(try LibraryItem.fetchOne(db, key: novelID)) }
@@ -250,21 +250,21 @@ struct UpdateBaselineTests {
         let mangaDelta = await successfulUpdate(updates, item: mangaItem, freshCount: 5)
         let novelDelta = await successfulUpdate(updates, item: novelItem, freshCount: 2)
 
-        #expect(mangaDelta == 5)
-        #expect(novelDelta == 2)
-        #expect(updates.badgeCount(for: mangaItem.mediaIdentity) == 5)
-        #expect(updates.badgeCount(for: novelItem.mediaIdentity) == 2)
-        #expect(updates.totalBadgeCount == 7)
+        #expect(mangaDelta == 4)
+        #expect(novelDelta == 1)
+        #expect(updates.badgeCount(for: mangaItem.mediaIdentity) == 4)
+        #expect(updates.badgeCount(for: novelItem.mediaIdentity) == 1)
+        #expect(updates.totalBadgeCount == 5)
 
         try await updates.clearBadge(for: mangaItem.mediaIdentity)
         #expect(updates.badgeCount(for: mangaItem.mediaIdentity) == 0)
-        #expect(updates.badgeCount(for: novelItem.mediaIdentity) == 2)
-        #expect(updates.totalBadgeCount == 2)
+        #expect(updates.badgeCount(for: novelItem.mediaIdentity) == 1)
+        #expect(updates.totalBadgeCount == 1)
 
         let reloaded = UpdateManager(dbPool: database.dbPool)
         try await reloaded.reload()
         #expect(reloaded.badgeCount(for: mangaItem.mediaIdentity) == 0)
-        #expect(reloaded.badgeCount(for: novelItem.mediaIdentity) == 2)
+        #expect(reloaded.badgeCount(for: novelItem.mediaIdentity) == 1)
     }
 
     @Test func repeatedBadgeUpdatesKeepOneLogicalRow() async throws {
@@ -306,7 +306,7 @@ struct UpdateBaselineTests {
         }
     }
 
-    @Test func scanlationsOfOneChapterCountOnceAndUnnumberedChaptersCountByKey() {
+    @Test func distinctExactUploadsCountEvenWhenNumberAndGroupMatch() {
         let chapters = [
             Manga.Chapter(key: "a", chapter: 1, scanlator: "Team A"),
             Manga.Chapter(key: "b", chapter: 1, scanlator: "Team B"),
@@ -316,14 +316,167 @@ struct UpdateBaselineTests {
             Manga.Chapter(key: "extra-2")
         ]
 
-        #expect(chapters.distinctChapterCount == 4)
+        #expect(chapters.distinctChapterCount == 5)
+    }
+
+    @Test func rawDoubleCollisionsAndLogicalMetadataNeverMergeExactKeys() {
+        let raw = [1.1, Double(Float(1.1))]
+        #expect(raw[0] != raw[1])
+        let before = [
+            Chapter(key: "part-a", chapter: raw[0], scanlator: "Same group"),
+            Chapter(key: "part-b", chapter: raw[1], scanlator: "Same group")
+        ]
+        #expect(before[0].chapterNumber == before[1].chapterNumber)
+        #expect(before.distinctChapterCount == 2)
+        let after = [
+            Chapter(key: "part-a", chapter: raw[0], scanlator: "Renamed", scanlatorID: "group", logicalUnitID: "unit"),
+            Chapter(key: "part-b", chapter: raw[1], scanlator: "Renamed", scanlatorID: "group", logicalUnitID: "unit")
+        ]
+        #expect(after.distinctChapterCount == before.distinctChapterCount)
+        #expect((after + [after[0]]).distinctChapterCount == 2)
+    }
+
+    @Test func byteDistinctKeysDoNotMergeThroughUnicodeNormalization() {
+        #expect([Chapter(key: "\u{e9}"), Chapter(key: "e\u{301}")].distinctChapterCount == 2)
+    }
+
+    @Test(arguments: [ChapterCountBasis?.none, .some(.unknown)])
+    func legacyBasisSeedsWithoutBadgeOrTimestampChanges(basis: ChapterCountBasis?) async throws {
+        let timestamp = Date(timeIntervalSince1970: 100)
+        let (database, manager, item) = try await makeSubject(
+            knownCount: 10, lastUpdatedAt: timestamp, basis: basis
+        )
+        defer { database.cleanup() }
+        try await database.dbPool.write { db in
+            try UpdateBadgeRecord(
+                pluginId: item.pluginId, canonicalMediaId: item.mediaIdentity.canonicalMediaId,
+                mediaKind: .manga, count: 3, updatedAt: timestamp, provenance: .runtime
+            ).save(db)
+        }
+        #expect(await successfulUpdate(manager, item: item, freshCount: 20) == 0)
+        let seeded = try await persistedItem(database, id: item.id)
+        #expect(seeded.knownChapterCount == 20)
+        #expect(seeded.knownChapterCountBasis == .exactChapterKeys)
+        #expect(seeded.lastUpdatedAt == timestamp)
+        #expect(manager.badgeCount(for: item.mediaIdentity) == 3)
+        let badge = try await database.dbPool.read { db in try UpdateBadgeRecord.fetchAll(db).first }
+        #expect(badge?.updatedAt == timestamp)
+        #expect(await successfulUpdate(manager, item: item, freshCount: 21) == 1)
+        #expect(manager.badgeCount(for: item.mediaIdentity) == 4)
+    }
+
+    @Test func failedRefreshAndEmptyAnswerNeverSeedTheBasis() async throws {
+        let (database, manager, item) = try await makeSubject(knownCount: nil, basis: nil)
+        defer { database.cleanup() }
+        #expect(await manager.processUpdate(for: item) { throw StubError.fetchFailed } == nil)
+        let failed = try await persistedItem(database, id: item.id)
+        #expect(failed.knownChapterCount == nil)
+        #expect(failed.knownChapterCountBasis == nil)
+
+        // With no known nonempty baseline an empty answer is recorded as it always was
+        // (count 0, status), but it does not establish the exact-key basis.
+        #expect(await successfulUpdate(manager, item: item, freshCount: 0, status: "completed") == 0)
+        let empty = try await persistedItem(database, id: item.id)
+        #expect(empty.knownChapterCount == 0)
+        #expect(empty.status == "completed")
+        #expect(empty.knownChapterCountBasis == nil)
+
+        #expect(await successfulUpdate(manager, item: item, freshCount: 8) == 0)
+        let seeded = try await persistedItem(database, id: item.id)
+        #expect(seeded.knownChapterCount == 8)
+        #expect(seeded.knownChapterCountBasis == .exactChapterKeys)
+    }
+
+    @Test(arguments: [ChapterCountBasis?.none, .some(.unknown), .some(.exactChapterKeys)])
+    func emptyAnswerNeverReplacesAKnownNonemptyBaselineOrItsStatus(basis: ChapterCountBasis?) async throws {
+        let (database, manager, item) = try await makeSubject(knownCount: 12, status: "ongoing", basis: basis)
+        defer { database.cleanup() }
+        #expect(await successfulUpdate(manager, item: item, freshCount: 0, status: "completed") == 0)
+        let kept = try await persistedItem(database, id: item.id)
+        #expect(kept.knownChapterCount == 12)
+        #expect(kept.status == "ongoing")
+        #expect(kept.knownChapterCountBasis == basis)
+    }
+
+    @Test func detailAcknowledgmentSetsBasisAndClearsBadge() async throws {
+        let (database, manager, item) = try await makeSubject(knownCount: 3, basis: nil)
+        defer { database.cleanup() }
+        try await manager.advanceBaseline(media: item.mediaIdentity, knownChapterCount: 6)
+        let acknowledged = try await persistedItem(database, id: item.id)
+        #expect(acknowledged.knownChapterCount == 6)
+        #expect(acknowledged.knownChapterCountBasis == .exactChapterKeys)
+        #expect(await successfulUpdate(manager, item: item, freshCount: 7) == 1)
+    }
+
+    @Test func animeStillCombinesNumberedLanguagesAndCountsUnnumberedKeys() {
+        let episodes = [
+            Anime.Episode(key: "sub", episode: 1),
+            Anime.Episode(key: "dub", episode: 1),
+            Anime.Episode(key: "extra"),
+            Anime.Episode(key: "extra")
+        ]
+        #expect(episodes.distinctChapterCount == 2)
+    }
+
+    @Test func additiveMigrationLeavesOldCountsUntypedAndUntouched() throws {
+        let database = try DatabaseQueue()
+        let migrator = AppDatabase.makeMigrator()
+        try migrator.migrate(database, upTo: "v21")
+        try database.write { db in
+            try db.execute(sql: """
+                INSERT INTO libraryItem
+                    (id, title, pluginId, isAnime, pluginType, rawPayload, knownChapterCount, lastUpdatedAt)
+                VALUES ('old', 'Old', 'source', 0, 'manga', X'', 10, 100)
+                """)
+        }
+        try migrator.migrate(database)
+        try database.read { db in
+            let row = try #require(try Row.fetchOne(db, sql: "SELECT * FROM libraryItem WHERE id = 'old'"))
+            #expect((row["knownChapterCount"] as Int?) == 10)
+            #expect((row["lastUpdatedAt"] as Int?) == 100)
+            #expect((row["knownChapterCountBasis"] as String?) == nil)
+        }
+    }
+
+    @Test func explicitSavesOnlyEstablishExactBasisWithANonemptyCatalog() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let library = LibraryManager(dbPool: database.dbPool)
+        let emptyID = try await library.saveNovelDurably(
+            novel: Novel(key: "empty", title: "Empty", chapters: []), pluginId: "source"
+        )
+        let fullID = try await library.saveNovelDurably(
+            novel: Novel(key: "full", title: "Full", chapters: [
+                Chapter(key: "a", chapter: 1), Chapter(key: "b", chapter: 1)
+            ]), pluginId: "source"
+        )
+        let empty = try await persistedItem(database, id: emptyID)
+        let full = try await persistedItem(database, id: fullID)
+        #expect(empty.knownChapterCountBasis == nil)
+        #expect(full.knownChapterCount == 2)
+        #expect(full.knownChapterCountBasis == .exactChapterKeys)
+    }
+
+    @Test func animeNilBasisRetainsItsExistingGrowthHeuristic() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        let library = LibraryManager(dbPool: database.dbPool)
+        let itemID = try await library.saveAnimeDurably(
+            anime: Anime(key: "anime", title: "Anime"), pluginId: "source"
+        )
+        let item = try await persistedItem(database, id: itemID)
+        let manager = UpdateManager(dbPool: database.dbPool)
+        #expect(item.knownChapterCountBasis == nil)
+        #expect(await successfulUpdate(manager, item: item, freshCount: 3) == 3)
+        #expect(try await persistedItem(database, id: itemID).knownChapterCountBasis == nil)
     }
 
     private func makeSubject(
         knownCount: Int?,
         status: String? = nil,
         lastCheckedAt: Date? = nil,
-        lastUpdatedAt: Date? = nil
+        lastUpdatedAt: Date? = nil,
+        basis: ChapterCountBasis? = .exactChapterKeys
     ) async throws -> (TestDatabase, UpdateManager, LibraryItem) {
         let database = try TestDatabase()
         let item = LibraryItem(
@@ -338,7 +491,8 @@ struct UpdateBaselineTests {
             status: status,
             lastCheckedAt: lastCheckedAt,
             lastUpdatedAt: lastUpdatedAt,
-            knownChapterCount: knownCount
+            knownChapterCount: knownCount,
+            knownChapterCountBasis: basis
         )
         try await database.dbPool.write { db in
             try item.insert(db)

@@ -36,7 +36,8 @@
     "%@ available" : {
       "comment" : "Download preview: free space on this device. The placeholder is a size such as 4.2 GB."
     },
-    "%@ has %lld new chapters." : {
+    "%@ has %lld new editions." : {
+      "comment" : "Manga/novel update-count heuristic: exact uploads, possibly alternate translations, not unique logical chapters.",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -44,13 +45,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%@ has %lld new chapter."
+                  "value" : "%@ has %lld new edition."
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%@ has %lld new chapters."
+                  "value" : "%@ has %lld new editions."
                 }
               }
             }
@@ -396,6 +397,52 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld damaged"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld edition updates" : {
+      "comment" : "Library manga/novel badge counts exact uploads, including alternate translations, not logical chapters.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld edition update"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld edition updates"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld episode updates" : {
+      "comment" : "Library update badge for anime; preserves numbered episode counting.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld episode update"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld episode updates"
                 }
               }
             }
@@ -3839,6 +3886,9 @@
     "The source stopped unexpectedly. Try again." : {
 
     },
+    "The source took too long to respond. Try again." : {
+      "comment" : "Error: a network request the source made did not finish in time"
+    },
     "The source was saved, but could not be opened. Try Open again." : {
 
     },
@@ -3850,6 +3900,9 @@
     },
     "The source, chapter list or edition choice changed. Review again." : {
       "comment" : "Series details: detail when a draft was invalidated before confirmation because the source, chapter list or edition policy changed; no changed plan was submitted automatically."
+    },
+    "The source's web page took too long to respond. Try again." : {
+      "comment" : "Error: a web page the source loaded did not respond in time"
     },
     "The specified HTTP header is prohibited." : {
 
