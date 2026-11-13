@@ -312,6 +312,57 @@ struct LibraryCoverThumbnailTests {
         #expect(try await rowCount(database) == 1)
     }
 
+    @Test func invalidatingEverythingServesWhatARestoreStoredBehindTheCache() async throws {
+        let database = try await makeDatabase()
+        defer { database.cleanup() }
+        let store = LibraryCoverThumbnailStore(database: database.dbPool)
+        let service = LibraryCoverThumbnails(store: store)
+        await service.record(itemID: "series-1", coverUrl: Self.coverA, image: image(width: 300, height: 450))
+        #expect(await service.thumbnail(for: "series-1")?.image.size.width == 300)
+        // A restore replaces the item's cover and its thumbnail without going through the service.
+        try await database.dbPool.write { db in
+            try db.execute(sql: "UPDATE libraryItem SET coverUrl = ? WHERE id = 'series-1'", arguments: [Self.coverB])
+            _ = try LibraryCoverThumbnailRecord.deleteAll(db)
+        }
+        let restored = try #require(LibraryCoverThumbnailEncoder.encode(image(width: 150, height: 225)))
+        #expect(try await store.store(restored, itemID: "series-1", coverUrl: Self.coverB) == .stored)
+        #expect(await service.thumbnail(for: "series-1")?.image.size.width == 300)
+
+        service.invalidateAll()
+
+        let current = await service.thumbnail(for: "series-1")
+        #expect(current?.coverURLSHA256 == LibraryCoverThumbnailStore.coverHash(Self.coverB))
+        #expect(current?.image.size.width == 150)
+    }
+
+    @available(iOS 16, *)
+    @Test(.timeLimit(.minutes(1)))
+    func aReadThatBeganBeforeAnInvalidationNeverRepopulatesTheCache() async throws {
+        let database = try await makeDatabase()
+        defer { database.cleanup() }
+        let store = LibraryCoverThumbnailStore(database: database.dbPool)
+        let first = try #require(LibraryCoverThumbnailEncoder.encode(image(width: 300, height: 450)))
+        #expect(try await store.store(first, itemID: "series-1", coverUrl: Self.coverA) == .stored)
+        let gate = FirstDecodeGate()
+        let service = LibraryCoverThumbnails(store: store, decode: { await gate.decode($0) })
+
+        let staleRead = Task { await service.thumbnail(for: "series-1") }
+        for await _ in gate.arrivals { break }
+        try await database.dbPool.write { db in
+            try db.execute(sql: "UPDATE libraryItem SET coverUrl = ? WHERE id = 'series-1'", arguments: [Self.coverB])
+            _ = try LibraryCoverThumbnailRecord.deleteAll(db)
+        }
+        let restored = try #require(LibraryCoverThumbnailEncoder.encode(image(width: 150, height: 225)))
+        #expect(try await store.store(restored, itemID: "series-1", coverUrl: Self.coverB) == .stored)
+        service.invalidateAll()
+        gate.open()
+
+        #expect(await staleRead.value?.coverURLSHA256 == LibraryCoverThumbnailStore.coverHash(Self.coverA))
+        let current = await service.thumbnail(for: "series-1")
+        #expect(current?.coverURLSHA256 == LibraryCoverThumbnailStore.coverHash(Self.coverB))
+        #expect(current?.image.size.width == 150)
+    }
+
     @Test func aNewCoverReplacesTheThumbnailAndTheCachedImage() async throws {
         let database = try await makeDatabase()
         defer { database.cleanup() }
