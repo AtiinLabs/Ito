@@ -134,6 +134,11 @@
     "one": "%lld saved",
     "other": "%lld saved"
   },
+  "%lld selected positions need another edition or will be skipped.": {
+    "description": "Aggregate unresolved download positions; count needs plural forms. Does not claim source deletion.",
+    "one": "%lld selected position needs another edition or will be skipped.",
+    "other": "%lld selected positions need another edition or will be skipped."
+  },
   "%lld sources need attention": {
     "one": "%lld source needs attention",
     "other": "%lld sources need attention"
@@ -188,5 +193,10 @@
     "description": "Download preview section: the chapters that will be queued. The placeholder is their number.",
     "one": "To download · %lld",
     "other": "To download · %lld"
+  },
+  "Use %lld selected alternatives this time": {
+    "description": "Confirm exact alternatives ticked in the preview for this batch only; does not remember fallback permission. The placeholder is the number ticked and needs plural forms.",
+    "one": "Use %lld selected alternative this time",
+    "other": "Use %lld selected alternatives this time"
   }
 }
