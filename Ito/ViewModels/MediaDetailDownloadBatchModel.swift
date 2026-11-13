@@ -310,6 +310,31 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             loadPreference(force: true)
         }
         await preferenceTask?.value
+        await refreshStoredPreference()
+    }
+
+    /// Reads the stored choice once more before an action plans with it, so a choice another screen of the
+    /// same series saved meanwhile is not planned under its old copy. A read that fails or is overtaken keeps
+    /// what is cached; the store still checks the reviewed policy when the batch is queued.
+    private func refreshStoredPreference() async {
+        let before = remembered
+        guard before != .unknown, before != .unreadable, let identity = host?.batchIdentity else { return }
+        let savedGeneration = savedScopeGeneration
+        let fresh: RememberedEditionChoice
+        do {
+            if let stored = try await downloads.editionPreference(for: identity) {
+                fresh = .chosen(stored)
+            } else {
+                fresh = RememberedEditionChoice.none
+            }
+        } catch SeriesEditionPreferenceError.unreadable {
+            fresh = .unreadable
+        } catch {
+            return
+        }
+        guard !Task.isCancelled, host?.batchIdentity == identity, host?.batchIsSaved == true,
+              savedScopeGeneration == savedGeneration, remembered == before else { return }
+        remembered = fresh
     }
 
     private func loadStoredBytes() {
@@ -383,10 +408,10 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
 
     /// The scope an action starts under. The source epoch is read once here; the stores compare it again
     /// inside their write transactions. A read that fails is reported: an action never silently does nothing.
-    private func currentBatchScope() -> BatchScope? {
+    private func currentBatchScope(reportingFailure: Bool = true) -> BatchScope? {
         guard let host, host.batchIsSaved else { return nil }
         guard let epoch = try? downloads.editionPreferenceEpoch(for: host.batchIdentity.pluginId) else {
-            host.presentBatchMessage(.downloadActionFailed)
+            if reportingFailure { host.presentBatchMessage(.downloadActionFailed) }
             return nil
         }
         return BatchScope(
@@ -653,7 +678,8 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             selection: preview.selection,
             chapters: chapters,
             alreadyStored: preview.storedCount,
-            scope: scope
+            scope: scope,
+            policy: preview.policy
         ) ?? Task {}
     }
 
@@ -758,7 +784,14 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         sheet = nil
         let queueable = planned.plan.toQueue.map { planned.chapters[$0] }
         guard !queueable.isEmpty else {
-            host?.presentBatchMessage(.nothingToDownload)
+            // A policy whose groups have no rows at all says so; a plain "nothing new" would hide the cause.
+            var explainsAbsence = false
+            if case .preferred = selection {
+                explainsAbsence = !planned.chapters.contains {
+                    resolvedSelection.admits(scanlator: $0.scanlator, groupID: $0.scanlatorID)
+                }
+            }
+            host?.presentBatchMessage(explainsAbsence ? .preferredGroupNotListed : .nothingToDownload)
             return nil
         }
         return enqueueBatch(
@@ -766,7 +799,8 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             selection: selection,
             chapters: queueable,
             alreadyStored: planned.plan.satisfied.count,
-            scope: scope
+            scope: scope,
+            policy: remembered
         )
     }
 
@@ -819,7 +853,11 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             return
         }
         guard preview.catalogDigest != catalogDigest else { return }
-        guard let scope = currentBatchScope() else { sheet = nil; return }
+        // A list change is not a user action: a policy changed meanwhile is never stamped onto the old selection.
+        guard preview.policy == remembered, let scope = currentBatchScope(reportingFailure: false) else {
+            closeStaleConsent()
+            return
+        }
         guard let resolution = resolveSelection(preview.selection) else {
             sheet = .chooser(
                 makeChooser(
@@ -923,12 +961,24 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         return order.map { chosen[$0] }
     }
 
+    /// What a batch is checked against in the store: the remembered policy this screen planned under.
+    /// An unknown policy (a read that failed) is not claimed.
+    private func reviewedPolicy(of choice: RememberedEditionChoice) -> ReviewedEditionPolicy? {
+        switch choice {
+        case .none: return ReviewedEditionPolicy.none
+        case .unreadable: return ReviewedEditionPolicy.unreadable
+        case .chosen(let selection): return ReviewedEditionPolicy.selection(selection)
+        case .unknown: return nil
+        }
+    }
+
     private func enqueueBatch(
         preset: DownloadPreset,
         selection: EditionSelection,
         chapters: [Chapter],
         alreadyStored: Int,
-        scope: BatchScope
+        scope: BatchScope,
+        policy: RememberedEditionChoice
     ) -> Task<Void, Never>? {
         guard !isEnqueuing, isCurrent(scope), let host,
               let entry = host.batchEntry,
@@ -946,7 +996,8 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             selection: storedSelection,
             catalogDigest: scope.catalogDigest.isEmpty ? nil : scope.catalogDigest,
             chapters: chapters,
-            reviewedSourceEpoch: scope.sourceEpoch
+            reviewedSourceEpoch: scope.sourceEpoch,
+            reviewedPolicy: reviewedPolicy(of: policy)
         )
         let downloads = downloads
         let operation = UUID()
@@ -985,9 +1036,16 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
               host?.batchIdentity == identity else { return }
         if let refusal = outcome.refusal {
             switch refusal {
-            case .unavailable: host?.presentBatchMessage(.downloadActionFailed)
-            case .sourceChanged: host?.presentBatchMessage(.editionChoiceChanged)
-            default: host?.presentBatchMessage(.downloadRefused)
+            case .unavailable:
+                host?.presentBatchMessage(.downloadActionFailed)
+            case .sourceChanged:
+                host?.presentBatchMessage(.editionChoiceChanged)
+            case .policyChanged:
+                // Another screen changed the series' policy: read it again so the next tap plans with it.
+                loadPreference(force: true)
+                host?.presentBatchMessage(.editionChoiceChanged)
+            default:
+                host?.presentBatchMessage(.downloadRefused)
             }
         } else if outcome.queued > 0 {
             host?.presentBatchMessage(.downloadsQueued(

@@ -67,7 +67,7 @@ struct DownloadPreviewSheet: View {
                         onConfirm(ticked)
                     } label: {
                         if preview.selection.asksBeforeSwitching, preview.missingPositionCount > 0, !ticked.isEmpty {
-                            Text("Use selected alternatives this time", comment: "Tick exact alternatives below for this batch only; does not remember fallback permission.")
+                            Text("Use \(ticked.count) selected alternatives this time", comment: "Confirm exact alternatives ticked in the preview for this batch only; does not remember fallback permission. The placeholder is the number ticked and needs plural forms.")
                         } else {
                             Text(
                                 "Download \(queueCount) Chapters",

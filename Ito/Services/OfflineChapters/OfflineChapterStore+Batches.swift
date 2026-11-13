@@ -46,6 +46,23 @@ extension OfflineChapterStore {
                     return .refused(.sourceChanged)
                 }
             }
+            // A batch planned under one remembered policy never queues under another one.
+            if let reviewedPolicy = request.reviewedPolicy {
+                let media = MediaIdentity(
+                    pluginId: request.pluginId, canonicalMediaId: request.canonicalMediaId, mediaKind: request.mediaKind
+                )
+                let stored: ReviewedEditionPolicy
+                do {
+                    if let selection = try SeriesEditionPreferenceRecord.selection(for: media, in: db) {
+                        stored = .selection(selection)
+                    } else {
+                        stored = ReviewedEditionPolicy.none
+                    }
+                } catch SeriesEditionPreferenceError.unreadable {
+                    stored = .unreadable
+                }
+                guard stored == reviewedPolicy else { return .refused(.policyChanged) }
+            }
             var outcome = DownloadBatchOutcome()
             var pending: [Int] = []
             var requestedKeys = Set<String>()

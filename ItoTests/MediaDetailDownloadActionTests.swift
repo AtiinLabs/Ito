@@ -481,6 +481,23 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
             refusedForSourceChange += 1
             return .refused(.sourceChanged)
         }
+        if let reviewed = request.reviewedPolicy {
+            let media = MediaIdentity(
+                pluginId: request.pluginId, canonicalMediaId: request.canonicalMediaId, mediaKind: request.mediaKind
+            )
+            let stored: ReviewedEditionPolicy
+            if let selection = storedPreferences[media] {
+                stored = .selection(selection)
+            } else if let failure = preferenceReadFailure as? SeriesEditionPreferenceError, failure == .unreadable {
+                stored = .unreadable
+            } else {
+                stored = ReviewedEditionPolicy.none
+            }
+            if stored != reviewed {
+                refusedForPolicyChange += 1
+                return .refused(.policyChanged)
+            }
+        }
         return batchOutcome ?? DownloadBatchOutcome(queued: request.chapters.count)
     }
 
@@ -494,6 +511,8 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
     var policyEpoch = "test-policy-epoch"
     /// Batches refused because the source epoch rotated after review; they queued nothing.
     var refusedForSourceChange = 0
+    /// Batches refused because the remembered policy differed from the reviewed one; they queued nothing.
+    var refusedForPolicyChange = 0
     var epochFailure: (any Error)?
     func editionPreferenceEpoch(for pluginID: String) throws -> String {
         if let epochFailure { throw epochFailure }

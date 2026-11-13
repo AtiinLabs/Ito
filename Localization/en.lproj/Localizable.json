@@ -182,5 +182,10 @@
     "description": "Download preview section: the chapters that will be queued. The placeholder is their number.",
     "one": "To download · %lld",
     "other": "To download · %lld"
+  },
+  "Use %lld selected alternatives this time": {
+    "description": "Confirm exact alternatives ticked in the preview for this batch only; does not remember fallback permission. The placeholder is the number ticked and needs plural forms.",
+    "one": "Use %lld selected alternative this time",
+    "other": "Use %lld selected alternatives this time"
   }
 }

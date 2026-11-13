@@ -80,6 +80,35 @@ struct DownloadCenterBatchTests {
         #expect(epochs.allSatisfy { $0 == OfflineStoreFixture.rotatedEpoch }, "Jobs freeze the reviewed epoch")
     }
 
+    @Test func aBatchReviewedUnderAnOlderPolicyIsRefusedInTheStoreAndQueuesNothing() async throws {
+        let fixture = try DownloadWorkerFixture()
+        await fixture.coordinator.reconcile()
+        let pluginId = Self.series.pluginId
+        try await fixture.offline.database.dbPool.write { db in
+            try LibraryItem(
+                id: "series-1", title: "Series", coverUrl: nil, pluginId: pluginId,
+                isAnime: false, pluginType: .manga, rawPayload: Data("{}".utf8), anilistId: nil
+            ).insert(db)
+        }
+        let epoch = try fixture.center.editionPreferenceEpoch(for: Self.series.pluginId)
+        var request = Self.request(["chapter-1"])
+        request.reviewedPolicy = ReviewedEditionPolicy.none
+        let strict = EditionSelection.preferred(primary: ScanlatorRef(id: "a", name: "A"), fallback: .strict)
+
+        // The first screen narrows the policy after the second one planned under "none".
+        try await fixture.center.setEditionPreference(strict, for: Self.series, sourceEpoch: epoch)
+        let stale = await fixture.center.enqueueBatch(request)
+        #expect(stale.refusal == .policyChanged)
+        #expect(try await fixture.offline.rowCount("downloadJob") == 0)
+        #expect(try await fixture.offline.rowCount("downloadBatch") == 0)
+
+        request.reviewedPolicy = .selection(.scanlators([ScanlatorRef(id: "a", name: "A")]))
+        #expect(await fixture.center.enqueueBatch(request).refusal == .policyChanged, "Another policy is not this one")
+
+        request.reviewedPolicy = .selection(strict)
+        #expect(await fixture.center.enqueueBatch(request).queued == 1)
+    }
+
     @available(iOS 16, *)
     @Test(.timeLimit(.minutes(1)))
     func deletingTheSeriesWhileTheFirstChapterIsInFlightLeavesNothingAndNeverStartsTheRest() async throws {

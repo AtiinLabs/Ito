@@ -2613,18 +2613,6 @@
     "Only these groups are offered as fallbacks, in the order shown. You review them before anything is queued." : {
       "comment" : "Approved fallback has no unlisted final fallback, and a fallback is always shown in a preview before it is queued."
     },
-    "Only these groups can be used automatically, in the order shown." : {
-      "comment" : "Approved fallback has no unlisted final fallback.",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Only these groups can be used automatically, in the order shown."
-          }
-        }
-      }
-    },
     "Open" : {
 
     },
@@ -2773,6 +2761,9 @@
           }
         }
       }
+    },
+    "Preferred group not listed" : {
+      "comment" : "Series details: the group chosen for this series has no chapters in the source's current list, so nothing was queued. Does not claim the group stopped publishing."
     },
     "Preload Images" : {
 
@@ -3653,9 +3644,6 @@
     "The chapter list changed; review again." : {
       "comment" : "Download preview: the series' chapter list changed while the preview was open, so it was made again."
     },
-    "The chapter list or edition choice changed. Review again." : {
-      "comment" : "Series details: detail when a draft was invalidated before confirmation; no changed plan was submitted automatically."
-    },
     "The chapter you last read isn't in the selected scanlators, so this starts from the first unread chapter." : {
       "comment" : "Download preview warning: the last-read chapter belongs to a scanlator that is not selected."
     },
@@ -3854,8 +3842,14 @@
     "The source was saved, but could not be opened. Try Open again." : {
 
     },
+    "The source's current list has no chapters from it. Choose another group to continue." : {
+      "comment" : "Series details: detail when the preferred group is absent from the current chapter list; the user may change the group in the scanlator choice."
+    },
     "The source's web page failed: %@" : {
 
+    },
+    "The source, chapter list or edition choice changed. Review again." : {
+      "comment" : "Series details: detail when a draft was invalidated before confirmation because the source, chapter list or edition policy changed; no changed plan was submitted automatically."
     },
     "The specified HTTP header is prohibited." : {
 
@@ -4198,6 +4192,29 @@
     "Updating queued progress…" : {
 
     },
+    "Use %lld selected alternatives this time" : {
+      "comment" : "Confirm exact alternatives ticked in the preview for this batch only; does not remember fallback permission. The placeholder is the number ticked and needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Use %lld selected alternative this time"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Use %lld selected alternatives this time"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Use Selection" : {
       "comment" : "Button on the scanlator sheet: apply the choice and continue with the download."
     },
@@ -4211,17 +4228,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Use approved groups in order"
-          }
-        }
-      }
-    },
-    "Use selected alternatives this time" : {
-      "comment" : "Tick exact alternatives below for this batch only; does not remember fallback permission.",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Use selected alternatives this time"
           }
         }
       }

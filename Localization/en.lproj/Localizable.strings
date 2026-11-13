@@ -1279,6 +1279,9 @@ History: the page a chapter was left on */
 /* The first selected group is the primary edition choice. */
 "Preferred group" = "Preferred group";
 
+/* Series details: the group chosen for this series has no chapters in the source's current list, so nothing was queued. Does not claim the group stopped publishing. */
+"Preferred group not listed" = "Preferred group not listed";
+
 "Preload Images" = "Preload Images";
 
 "Preloading" = "Preloading";
@@ -1856,9 +1859,6 @@ Reading font: the system font */
 /* Download preview: the series' chapter list changed while the preview was open, so it was made again. */
 "The chapter list changed; review again." = "The chapter list changed; review again.";
 
-/* Series details: detail when a draft was invalidated before confirmation; no changed plan was submitted automatically. */
-"The chapter list or edition choice changed. Review again." = "The chapter list or edition choice changed. Review again.";
-
 /* Download preview warning: the last-read chapter belongs to a scanlator that is not selected. */
 "The chapter you last read isn't in the selected scanlators, so this starts from the first unread chapter." = "The chapter you last read isn't in the selected scanlators, so this starts from the first unread chapter.";
 
@@ -1999,7 +1999,13 @@ Reading font: the system font */
 
 "The source was saved, but could not be opened. Try Open again." = "The source was saved, but could not be opened. Try Open again.";
 
+/* Series details: detail when the preferred group is absent from the current chapter list; the user may change the group in the scanlator choice. */
+"The source's current list has no chapters from it. Choose another group to continue." = "The source's current list has no chapters from it. Choose another group to continue.";
+
 "The source's web page failed: %@" = "The source's web page failed: %@";
+
+/* Series details: detail when a draft was invalidated before confirmation because the source, chapter list or edition policy changed; no changed plan was submitted automatically. */
+"The source, chapter list or edition choice changed. Review again." = "The source, chapter list or edition choice changed. Review again.";
 
 "The specified HTTP header is prohibited." = "The specified HTTP header is prohibited.";
 
@@ -2231,9 +2237,6 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 
 /* Use only the explicitly ordered fallback groups. */
 "Use approved groups in order" = "Use approved groups in order";
-
-/* Tick exact alternatives below for this batch only; does not remember fallback permission. */
-"Use selected alternatives this time" = "Use selected alternatives this time";
 
 "Use this when a source stays blocked by Cloudflare or a website login stops working." = "Use this when a source stays blocked by Cloudflare or a website login stops working.";
 

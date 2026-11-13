@@ -137,7 +137,7 @@ catalog or source session invalidates the old confirmation. Remember must wait f
 an admitted save that outlives its sheet must refresh authoritative preferences without restoring
 removed Library scope or reporting stale success.
 
-Known limitation: that refresh reaches only the screen model that issued the save. Another detail
-screen already open for the same series keeps its cached choice until it reads again, and the
-store checks only the source epoch, not the stored policy, when that screen queues a reviewed
-batch. Verify this when changing preference caching.
+Another open screen for the same series may hold an older copy of the policy. A reviewed batch
+carries the policy it was planned under, and the store refuses it in the write transaction when the
+stored policy differs, so verify the second screen cannot queue another group after the first
+narrows to Strict.

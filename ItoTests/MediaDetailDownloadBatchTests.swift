@@ -421,7 +421,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         await Task.yield()
 
         XCTAssertNil(subject.viewModel.downloadSheet, "The chooser does not open on the default while the choice is read")
-        downloads.releasePreferenceReads()
+        downloads.holdsPreferenceReads = false; downloads.releasePreferenceReads()
         await opening.value
         guard case .chooser(let presentation)? = subject.viewModel.downloadSheet else { return XCTFail("The chooser opens") }
         XCTAssertEqual(presentation.initialSelection, stored)
@@ -1213,7 +1213,8 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         inventory: InventoryBox? = nil,
         basis: LibrarySnapshotBasis? = nil,
         relinkTargets: [Manga] = [],
-        awaitsLoads: Bool = true
+        awaitsLoads: Bool = true,
+        downloadService: (any MediaDetailDownloadServing)? = nil
     ) async -> Subject {
         let catalog = Catalog(chapters)
         let library = MediaDetailLibraryFake(state: MediaDetailLibraryState(
@@ -1249,7 +1250,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         )
         let relink = MediaDetailRelinkFake()
         var dependencies = Self.dependencies(library: library, progress: progress, relink: relink)
-        dependencies.downloads = downloads
+        dependencies.downloads = downloadService ?? downloads
         dependencies.connectivity = connectivity
         let viewModel = MediaDetailViewModel(
             media: Manga(key: "series-1", title: "Series", chapters: chapters),

@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Testing
 import ito_runner
 @testable import Ito
@@ -637,6 +638,90 @@ extension EditionIdentityBatchTests {
         #expect(subject.messages.messages == [.editionChoiceChanged])
     }
 
+    @Test func aPreferredGroupWithNoRowsSaysItIsNotListedInsteadOfNothingNew() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.seedPreference(.preferred(primary: Self.primary, fallback: .strict), for: Self.policySeries)
+        let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
+            Chapter(key: "b1", chapter: 1, scanlator: "B", scanlatorID: "b")
+        ], downloads: downloads)
+        await subject.viewModel.downloadBatch.startDownload(.all).value
+        #expect(downloads.batchRequests.isEmpty)
+        #expect(subject.messages.messages == [.preferredGroupNotListed])
+    }
+
+    @Test func aBackgroundListChangeThatCannotReadItsEpochClosesThePreviewWithoutAnActionError() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        downloads.seedPreference(.preferred(primary: Self.primary, fallback: .ask), for: Self.policySeries)
+        let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
+            Chapter(key: "b1", chapter: 1, scanlator: "B", scanlatorID: "b", logicalUnitID: "u1")
+        ], downloads: downloads)
+        await subject.viewModel.downloadBatch.startDownload(.all).value
+        downloads.epochFailure = MediaDetailTestFailure.expected
+        subject.catalog.chapters.append(Chapter(key: "b2", chapter: 2, scanlator: "B", scanlatorID: "b", logicalUnitID: "u2"))
+        await subject.viewModel.refresh()
+        #expect(subject.viewModel.downloadSheet == nil)
+        #expect(!subject.messages.messages.contains(.downloadActionFailed))
+        #expect(subject.messages.messages.contains(.editionChoiceChanged))
+    }
+
+    @Test func twoOpenModelsUseTheRealStoreToRefuseAnOlderPolicyThenPlanWithTheNewOne() async throws {
+        let fixture = try DownloadWorkerFixture()
+        await fixture.coordinator.reconcile()
+        try await fixture.offline.database.dbPool.write { db in
+            try LibraryItem(
+                id: "series-1", title: "Series", coverUrl: nil, pluginId: "plugin.test",
+                isAnime: false, pluginType: .manga, rawPayload: Data("{}".utf8), anilistId: nil
+            ).insert(db)
+        }
+        let chapters = [
+            Chapter(key: "a1", chapter: 1, scanlator: "A", scanlatorID: "a", logicalUnitID: "u1"),
+            Chapter(key: "b1", chapter: 1, scanlator: "B", scanlatorID: "b", logicalUnitID: "u1"),
+            Chapter(key: "a2", chapter: 2, scanlator: "A", scanlatorID: "a", logicalUnitID: "u2"),
+            Chapter(key: "b2", chapter: 2, scanlator: "B", scanlatorID: "b", logicalUnitID: "u2")
+        ]
+        let first = await MediaDetailDownloadBatchTests().makeSubject(chapters: chapters, downloadService: fixture.center)
+        let second = await MediaDetailDownloadBatchTests().makeSubject(chapters: chapters, downloadService: fixture.center)
+        let strict = EditionSelection.preferred(primary: Self.primary, fallback: .strict)
+        await second.viewModel.downloadBatch.applyEditionChoice(.allUploads, remember: false, then: .all).value
+        guard case .preview(let older)? = second.viewModel.downloadSheet else { Issue.record("Expected preview"); return }
+
+        await first.viewModel.downloadBatch.applyEditionChoice(strict, remember: true, then: nil).value
+        #expect(second.viewModel.downloadBatch.remembered == .none, "The second screen still holds the old copy")
+        await second.viewModel.downloadBatch.confirmDownloadPreview(previewID: older.id).value
+        #expect(try await fixture.store.jobs().isEmpty, "The real store refuses the old-policy batch atomically")
+        #expect(second.messages.messages == [.editionChoiceChanged])
+        await second.viewModel.downloadBatch.settleForTesting()
+        #expect(second.viewModel.downloadBatch.remembered == .chosen(strict))
+
+        await second.viewModel.downloadBatch.startDownload(.all).value
+        let keys = try await fixture.store.jobs().map(\.chapterKey)
+        #expect(Set(keys) == ["a1", "a2"], "Never another group's upload after the first screen narrowed to Strict")
+    }
+
+    @Test func aBatchPlannedUnderAnOlderPolicyIsRefusedInTheStoreAndTheScreenReadsAgain() async throws {
+        let downloads = MediaDetailDownloadsFake()
+        let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
+            Chapter(key: "a1", chapter: 1, scanlator: "A", scanlatorID: "a", logicalUnitID: "u1")
+        ], downloads: downloads)
+        downloads.holdsBatches = true
+        defer { downloads.holdsBatches = false; downloads.releaseBatches() }
+        let queuing = subject.viewModel.downloadBatch.startDownload(.next)
+        try await downloads.waitForPendingBatch()
+        #expect(downloads.batchRequests.first?.reviewedPolicy == ReviewedEditionPolicy.none)
+
+        // Another screen narrows the policy between the plan and the queue.
+        let strict = EditionSelection.preferred(primary: Self.primary, fallback: .strict)
+        downloads.seedPreference(strict, for: Self.policySeries)
+        downloads.holdsBatches = false
+        downloads.releaseBatches()
+        await queuing.value
+        await subject.viewModel.downloadBatch.settleForTesting()
+
+        #expect(downloads.refusedForPolicyChange == 1)
+        #expect(subject.messages.messages == [.editionChoiceChanged])
+        #expect(subject.viewModel.downloadBatch.remembered == .chosen(strict), "The next tap uses the fresh policy")
+    }
+
     @Test func aSavedSeriesThatWasUnsavedWhenItsChoiceWasFirstReadIsReadAgainNotReportedAsFailed() async throws {
         let downloads = MediaDetailDownloadsFake()
         let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
@@ -671,7 +756,8 @@ extension EditionIdentityBatchTests {
         #expect(revised.alternatives.map(\.key) == ["new-b16"])
     }
 
-    @Test func aPreferenceResynchronizationClosesAStalePreviewWithAReviewMessage() async throws {
+    @Test(arguments: [false, true])
+    func aPreferenceResynchronizationClosesAStalePreviewWithAReviewMessage(catalogChanges: Bool) async throws {
         let downloads = MediaDetailDownloadsFake()
         downloads.holdsPreferenceWrites = true
         defer { downloads.holdsPreferenceWrites = false; downloads.releasePreferenceWrites() }
@@ -691,6 +777,10 @@ extension EditionIdentityBatchTests {
         downloads.releasePreferenceWrites()
         await saving.value
         await subject.viewModel.downloadBatch.settleForTesting()
+        if catalogChanges {
+            subject.catalog.chapters.append(Chapter(key: "a2", chapter: 2, scanlator: "A", scanlatorID: "a", logicalUnitID: "u2"))
+            await subject.viewModel.refresh()
+        }
         await subject.viewModel.downloadBatch.confirmDownloadPreview(previewID: preview.id).value
         #expect(downloads.batchRequests.isEmpty)
         #expect(subject.viewModel.downloadSheet == nil)

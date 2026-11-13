@@ -334,6 +334,8 @@ enum MediaDetailMessage: Equatable {
     /// The source, catalog or edition policy changed after a choice or preview was shown, so nothing was
     /// stored or queued and the user reviews again.
     case editionChoiceChanged
+    /// The remembered preferred group has no chapters in the source's current list, so nothing was queued.
+    case preferredGroupNotListed
 }
 
 @MainActor
@@ -384,6 +386,8 @@ final class AppMessageMediaDetailPresenter: MediaDetailMessagePresenting {
             messageCenter.publish(.mediaDetailEditionChoiceReadFailed(reviewing: reviewing))
         case .editionChoiceChanged:
             messageCenter.publish(.mediaDetailEditionChoiceChanged)
+        case .preferredGroupNotListed:
+            messageCenter.publish(.mediaDetailPreferredGroupNotListed)
         }
     }
 
