@@ -139,9 +139,10 @@ actor DownloadAttempt {
         try requirePolicyCurrent()
         let isPluginCurrent = runtime.isPluginCurrent
         let isTrustCurrent = runtime.isTrustCurrent
-        let admission = admission
         return DownloadAttemptCompletion(staging: staging) { _ in
-            isPluginCurrent() && isTrustCurrent() && admission.authorityIsCurrent && admission.admission() == .allow
+            // P5 publishes verified local bytes. Soft network permissions no longer govern this commit;
+            // the store independently rechecks the source epoch and live job in the same transaction.
+            isPluginCurrent() && isTrustCurrent()
         }
     }
 

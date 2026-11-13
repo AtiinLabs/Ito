@@ -1471,7 +1471,10 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         // A backup made before the network preferences existed carries none. Derive them from the restored
         // image preload in this same transaction, so the stored catalog is never left incomplete and a default
         // never takes the place of a derived value.
-        try NetworkPreferenceMigration.insertMissing(in: db)
+        // Represented-empty wipe restores remain empty; there is no legacy configuration to migrate.
+        if try AppPreference.fetchCount(db) > 0 {
+            try NetworkPreferenceMigration.insertMissing(in: db)
+        }
     }
 
     /// `sourceMapping` uses its declared five-column primary key as merge identity.

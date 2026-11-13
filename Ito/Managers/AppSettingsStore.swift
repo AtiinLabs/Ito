@@ -100,10 +100,11 @@ public final class AppSettingsStore: ObservableObject {
     public func reloadAfterRestore() async throws {
         try await enqueue { [self] in
             var rows = try await persistence.readPreferences()
-            // A backup made before the network preferences existed carries none. Their values are derived
-            // from the restored image preload, never resolved as a generic default first. Nothing else is
-            // materialized here.
-            let derived = NetworkPreferenceMigration.missingRows(in: rows)
+            // Derive absent network values when a restored preload supplies legacy configuration to preserve.
+            // An explicitly empty/partial represented component with no preload has no dependent value to
+            // migrate: refresh must remain read-only rather than materializing unrelated defaults.
+            let derived = rows.contains { $0.key == AppPreferenceKeys.preloadImageCount }
+                ? NetworkPreferenceMigration.missingRows(in: rows) : []
             if !derived.isEmpty {
                 rows = try await persistence.writePreferences(derived)
             }
