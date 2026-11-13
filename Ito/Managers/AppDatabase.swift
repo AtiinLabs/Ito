@@ -547,6 +547,7 @@ public final class AppDatabase: Sendable {
         registerEditionPreferencesMigration(&migrator)
         registerLibraryCountBasisMigration(&migrator)
         registerDownloadReplacementMigration(&migrator)
+        registerPortableThumbnailsMigration(&migrator)
         return migrator
     }
 

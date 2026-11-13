@@ -35,7 +35,9 @@ struct BackupImporterCapabilityTests {
             for component in BackupComponent.allCases {
                 try BackupCapabilityRecord(
                     component: component,
-                    representation: .representedNonempty
+                    representation: component == .savedLibraryThumbnails
+                        ? .representedEmpty
+                        : .representedNonempty
                 ).insert(db)
             }
             try category.insert(db)
