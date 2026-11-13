@@ -13,14 +13,6 @@ nonisolated final class AdmittedImageLoad: Nuke.Cancellable, @unchecked Sendable
     private var underlying: (any Nuke.Cancellable)?
     private var task: Task<Void, Never>?
     private var isCancelled = false
-#if DEBUG
-    private var taskForTesting: Task<Void, Never>?
-
-    func waitForTaskForTesting() async {
-        let held = lock.withLock { taskForTesting }
-        await held?.value
-    }
-#endif
 
     init(authority: NetworkRequestAuthority, completion: @escaping @Sendable (Error?) -> Void) {
         self.completion = completion
@@ -58,9 +50,6 @@ nonisolated final class AdmittedImageLoad: Nuke.Cancellable, @unchecked Sendable
 
     func attach(task: Task<Void, Never>) {
         let cancelNow = lock.withLock { () -> Bool in
-#if DEBUG
-            taskForTesting = task
-#endif
             if isCancelled || completion == nil { return true }
             self.task = task
             return false
@@ -91,18 +80,24 @@ nonisolated final class AdmittedImageLoad: Nuke.Cancellable, @unchecked Sendable
         running?.cancel()
     }
 
+    /// Detaches this load: no data is delivered afterwards, its transfer is cancelled, and a pending completion
+    /// runs exactly once with `URLError(.cancelled)`. It runs asynchronously, never inside the caller's cancel.
     func cancel() {
-        let (transfer, running): ((any Nuke.Cancellable)?, Task<Void, Never>?) = lock.withLock {
+        let (transfer, running, pending): ((any Nuke.Cancellable)?, Task<Void, Never>?, (@Sendable (Error?) -> Void)?) = lock.withLock {
             isCancelled = true
+            let finish = completion
             completion = nil
             subscription?.cancel()
             subscription = nil
-            let held = (underlying, task)
+            let held = (underlying, task, finish)
             underlying = nil
             task = nil
             return held
         }
         transfer?.cancel()
         running?.cancel()
+        if let pending {
+            Task { pending(URLError(.cancelled)) }
+        }
     }
 }

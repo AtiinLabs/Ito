@@ -2,6 +2,7 @@ import OSLog
 import Foundation
 import Combine
 import anilist
+import ito_runner
 
 @MainActor
 public class AnilistTracker: TrackerProvider {

@@ -70,16 +70,24 @@ final class TransportEnforcementTests: XCTestCase {
         XCTAssertEqual(delegate.policyError as? HostNetworkPolicyOutcome, .deferred(.constrainedPath))
     }
 
-    func testImageCancellationSettlesOnlyItsOwner() {
+    func testImageCancellationSettlesOnlyItsOwner() async {
         let contexts = makeContexts()
         let received = CompletionCounts()
-        let cancelled = AdmittedImageLoad(authority: authority(contexts, .foregroundReading)) { _ in received.increment(0) }
+        let cancelledCompletion = expectation(description: "The cancelled load completes once with cancelled")
+        let cancelledError = CompletionCounts()
+        let cancelled = AdmittedImageLoad(authority: authority(contexts, .foregroundReading)) { error in
+            received.increment(0)
+            if (error as? URLError)?.code == .cancelled { cancelledError.increment(0) }
+            cancelledCompletion.fulfill()
+        }
         let remaining = AdmittedImageLoad(authority: authority(contexts, .foregroundReading)) { _ in received.increment(1) }
         cancelled.cancel()
         cancelled.complete(nil)
         remaining.complete(nil)
         remaining.complete(nil)
-        XCTAssertEqual(received.values, [0, 1])
+        await fulfillment(of: [cancelledCompletion], timeout: 5)
+        XCTAssertEqual(received.values, [1, 1])
+        XCTAssertEqual(cancelledError.values, [1, 0])
     }
 
     func testImageRevocationSettlesOnceWithoutUpgradingPurpose() {

@@ -264,18 +264,24 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         if script.hasPrefix(WebviewManager.asyncScriptMarker) {
             return try await executeAsyncJs(script: script)
         }
-        guard let wv = webView else { throw URLError(.badURL) }
-        let id = UUID()
-        return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
-                guard !Task.isCancelled else { continuation.resume(throwing: CancellationError()); return }
-                pendingScripts[id] = continuation
-                wv.evaluateJavaScript(script) { [weak self] value, error in
-                    self?.finishScript(id, with: error.map { .failure($0) } ?? .success(WebviewManager.scriptResult(value)))
+        // A plain script is not a waiting script: it ends in its own turn and owns no page presentation, so a
+        // page's `itoShowPage` post during it is refused (see `showPage`).
+        return try await withCheckedThrowingContinuation { continuation in
+            guard let wv = webView else {
+                continuation.resume(throwing: URLError(.badURL))
+                return
+            }
+            wv.evaluateJavaScript(script) { [weak self] result, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let self, !self.isAdmitted {
+                    // The operation lost its authority while the script ran: its result is not published.
+                    continuation.resume(throwing: HostNetworkPolicyOutcome.deferred(.policyChanged))
+                } else {
+                    // `undefined` arrives as nil and `null` as NSNull: both are an empty result.
+                    continuation.resume(returning: WebviewManager.scriptResult(result))
                 }
             }
-        } onCancel: {
-            Task { @MainActor [weak self] in self?.finishScript(id, with: .failure(CancellationError())) }
         }
     }
 
