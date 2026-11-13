@@ -96,8 +96,11 @@ public class LibraryManager: ObservableObject {
     @Published public private(set) var links: [ItemCategoryLink] = []
 
     @Published public var isLoading: Bool = true
+    /// The saved details and edition policies the entire-series filter judges from. A separate observation publishes it.
+    @Published private(set) var offlineProofSnapshot = LibraryOfflineProofSnapshot.loading
 
     private var libraryObserver: DatabaseCancellable?
+    private var offlineProofObserver: DatabaseCancellable?
     private let dbPool: DatabasePool
     private let publicationClock = LibraryPublicationClock()
     private var publicationOrder = LibraryPublicationOrder()
@@ -120,6 +123,7 @@ public class LibraryManager: ObservableObject {
             db.add(transactionObserver: publicationClock, extent: .observerLifetime)
         }
         startObservation(scheduling: observationScheduler)
+        startOfflineProofObservation(scheduling: observationScheduler)
     }
 
     func configure(updateManager: UpdateManager) {
@@ -155,6 +159,37 @@ public class LibraryManager: ObservableObject {
             },
             onChange: { [weak self] publication in
                 self?.apply(publication)
+            }
+        )
+    }
+
+    /// The saved details and edition policies, read in an observation of their own. No payload is read here, so a
+    /// refresh that changes only its time reaches the proofs without refetching any saved item.
+    private func startOfflineProofObservation<Scheduler: ValueObservationMainActorScheduler>(
+        scheduling scheduler: Scheduler
+    ) {
+        let observation = ValueObservation.tracking { db -> LibraryOfflineProofSnapshot in
+            let states = try LibrarySnapshotStateRecord.fetchAll(db)
+            let preferences = try SeriesEditionPreferenceRecord.fetchAll(db)
+            return LibraryOfflineProofSnapshot(
+                availability: .available,
+                states: Dictionary(states.map { ($0.media, $0) }, uniquingKeysWith: { _, last in last }),
+                preferences: Dictionary(
+                    preferences.map { ($0.media, $0.selection) },
+                    uniquingKeysWith: { _, last in last }
+                )
+            )
+        }
+        // Read-only: the proof tables are only read, so the observation needs no write access.
+        offlineProofObserver = observation.start(
+            in: dbPool,
+            scheduling: scheduler,
+            onError: { [weak self] _ in
+                AppLogger.database.error("Library offline proof observation failed")
+                self?.offlineProofSnapshot = .unavailable
+            },
+            onChange: { [weak self] snapshot in
+                self?.offlineProofSnapshot = snapshot
             }
         )
     }
@@ -411,21 +446,21 @@ public class LibraryManager: ObservableObject {
                 return LibrarySnapshotBasis(
                     snapshot: state.offlineSnapshot,
                     currentPayloadSHA256: digest,
-                    catalog: backsClaim ? Self.savedCatalog(of: item) : []
+                    catalog: backsClaim ? Self.savedCatalog(payload: item.rawPayload, kind: item.effectiveType) : []
                 )
             }
             return nil
         }
     }
 
-    /// The chapter rows of the payload saved with an item. A payload that cannot be read has no rows, which
-    /// can never back a claim about the entire series.
-    private nonisolated static func savedCatalog(of item: LibraryItem) -> [ChapterFacts] {
+    /// The one decoder for a saved catalog, shared by the detail basis and the Library's entire-series filter.
+    /// A payload that cannot be read has no rows, which can never back a claim about the entire series.
+    nonisolated static func savedCatalog(payload: Data, kind: MediaKind) -> [ChapterFacts] {
         let decoder = JSONDecoder()
         let chapters: [Chapter]?
-        switch item.effectiveType {
-        case .manga: chapters = (try? decoder.decode(Manga.self, from: item.rawPayload))?.chapters
-        case .novel: chapters = (try? decoder.decode(Novel.self, from: item.rawPayload))?.chapters
+        switch kind {
+        case .manga: chapters = (try? decoder.decode(Manga.self, from: payload))?.chapters
+        case .novel: chapters = (try? decoder.decode(Novel.self, from: payload))?.chapters
         case .anime: chapters = nil
         }
         return (chapters ?? []).map { ChapterFacts($0) }

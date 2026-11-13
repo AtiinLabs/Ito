@@ -890,6 +890,9 @@
     "All Chapters" : {
       "comment" : "Download menu item: download every chapter, including those already read."
     },
+    "All Series" : {
+      "comment" : "Library filter: every series in the Library, whether or not any of its chapters is saved."
+    },
     "All Unread Chapters" : {
       "comment" : "Download menu item: download every unread chapter."
     },
@@ -1713,6 +1716,9 @@
         }
       }
     },
+    "Entire Series Offline" : {
+      "comment" : "Library filter: series whose every chapter is saved on this device, and the source recently confirmed its chapter list is complete."
+    },
     "Entire series offline" : {
       "comment" : "Series details: every chapter of the series is saved on this device, and the source confirmed its chapter list is complete."
     },
@@ -1856,6 +1862,9 @@
     "Filter" : {
       "comment" : "History: filter button"
     },
+    "Filter Library" : {
+      "comment" : "More Options menu: submenu that filters the Library by saved chapters."
+    },
     "Filtered" : {
 
     },
@@ -1917,6 +1926,9 @@
     },
     "HTTPS to HTTP redirect downgrades are prohibited." : {
 
+    },
+    "Has Saved Chapters" : {
+      "comment" : "Library filter: series with at least one chapter saved on this device."
     },
     "Hiatus" : {
       "comment" : "Series status: paused"
@@ -2434,6 +2446,9 @@
     "No Results" : {
 
     },
+    "No Saved Chapters" : {
+      "comment" : "Library filter: series with no chapter saved on this device. Series whose downloads are only queued, damaged or failed count here."
+    },
     "No Trackers Authenticated" : {
 
     },
@@ -2496,6 +2511,12 @@
     },
     "No results found. Try again." : {
 
+    },
+    "No series match this filter." : {
+      "comment" : "Library: shown when the saved-chapter filter matches no series and the search is empty."
+    },
+    "No series match this search and filter." : {
+      "comment" : "Library: shown when the search text and the saved-chapter filter together match no series."
     },
     "No source ID" : {
       "comment" : "Distinguishes an ID-less source group from a same-label group with an ID."
