@@ -1,7 +1,8 @@
 {
-  "%@ has %lld new chapters.": {
-    "one": "%1$@ has %2$lld new chapter.",
-    "other": "%1$@ has %2$lld new chapters."
+  "%@ has %lld new editions.": {
+    "description": "Manga/novel update-count heuristic: exact uploads, possibly alternate translations, not unique logical chapters.",
+    "one": "%1$@ has %2$lld new edition.",
+    "other": "%1$@ has %2$lld new editions."
   },
   "%@ has %lld new episodes.": {
     "one": "%1$@ has %2$lld new episode.",
@@ -60,6 +61,16 @@
     "description": "Downloads manager damaged edition count\nSeries details: how many saved chapters of the series failed verification and need deleting. The placeholder is a number, which needs plural forms.",
     "one": "%lld damaged",
     "other": "%lld damaged"
+  },
+  "%lld edition updates": {
+    "description": "Library manga/novel badge counts exact uploads, including alternate translations, not logical chapters.",
+    "one": "%lld edition update",
+    "other": "%lld edition updates"
+  },
+  "%lld episode updates": {
+    "description": "Library update badge for anime; preserves numbered episode counting.",
+    "one": "%lld episode update",
+    "other": "%lld episode updates"
   },
   "%lld episodes": {
     "one": "%lld episode",
