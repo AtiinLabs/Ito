@@ -428,16 +428,7 @@ public class LibraryManager: ObservableObject {
         case .novel: chapters = (try? decoder.decode(Novel.self, from: item.rawPayload))?.chapters
         case .anime: chapters = nil
         }
-        return (chapters ?? []).map {
-            ChapterFacts(
-                key: $0.key,
-                number: $0.chapterNumber,
-                volume: $0.volumeNumber,
-                scanlator: $0.scanlator,
-                scanlatorID: $0.scanlatorID,
-                isLocked: $0.paywalled ?? false
-            )
-        }
+        return (chapters ?? []).map { ChapterFacts($0) }
     }
 
     private func saveItemDurably(

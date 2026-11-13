@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// What a download would do, before it does it: the chapters it will queue, the ones it leaves out and why,
-/// and other scanlators' uploads in range that the user may add. Nothing is queued until Download is pressed.
+/// and other uploads in range that the user may add. Nothing is queued until Download is pressed.
 struct DownloadPreviewSheet: View {
     let preview: DownloadPreview
     /// Free space where downloads are stored; nil when it is not known.
@@ -219,13 +219,13 @@ struct DownloadPreviewSheet: View {
                 }
             } header: {
                 Text(
-                    "Other scanlators' uploads in this range",
-                    comment: "Download preview section: uploads from scanlators outside the selection that sit inside the range."
+                    "Other uploads in this range",
+                    comment: "Download preview section: uploads of chapters in the range that were not chosen for download, such as another group's upload of the same chapter or an extra upload from a selected group."
                 )
             } footer: {
                 Text(
                     "These aren't downloaded unless you tick them.",
-                    comment: "Download preview footer: other scanlators' uploads are only downloaded when ticked."
+                    comment: "Download preview footer: the uploads listed above are only downloaded when ticked."
                 )
             }
         }

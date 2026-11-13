@@ -2,6 +2,16 @@
 
 Ito currently distributes unsigned device IPAs. AltStore and SideStore can re-sign them with the user's Apple account; TrollStore and jailbreak installation depend on the target device and environment. App Store/TestFlight signing remains a separate future workflow.
 
+## Runner compatibility
+
+The runner pin includes bounded, explicit chapter-edition enumeration and typed native host-call
+timeouts. Network and web-page watchdog timeouts remain host failures, not plugin crashes, HTTP
+server errors or network-policy waits. They do not evict the runner. A timed-out completion write
+pauses instead of replaying automatically because its remote outcome may be unknown.
+Edition-contract violations use the existing incompatible-source presentation. The optional
+enumeration API alone does not start background or automatic traversals.
+
+
 ## One-time repository setup
 
 1. Copy this starter kit into the Ito repository.

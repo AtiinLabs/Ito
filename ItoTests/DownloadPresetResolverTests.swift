@@ -53,18 +53,22 @@ struct DownloadPresetResolverTests {
         storable: Bool = true,
         threshold: Int = DownloadPresetResolver.largeBatchThreshold
     ) -> Plan {
-        DownloadPresetResolver.plan(DownloadPresetInput(
+        let rows = catalog.map { chapter -> DownloadPlanRow in
+            let isRead = read.contains(chapter.key) || (chapter.chapterNumber.map { readNumbers.contains($0) } ?? false)
+            let state = stored[chapter.key] ?? StoredEditionState.none
+            return DownloadPlanRow(
+                facts: ChapterFacts(chapter, isStorable: storable),
+                isRead: storable && isRead,
+                stored: storable ? state : StoredEditionState.none
+            )
+        }
+        return DownloadPresetResolver.plan(
+            rows: rows,
             preset: preset,
-            catalog: catalog,
             selection: selection,
             anchorKey: anchor,
-            isRead: { chapter in
-                read.contains(chapter.key) || (chapter.chapterNumber.map { readNumbers.contains($0) } ?? false)
-            },
-            stored: { stored[$0] ?? .none },
-            isStorable: { _ in storable },
             largeBatchThreshold: threshold
-        ))
+        ).map { catalog[$0] }
     }
 
     private func keys(_ rows: [Chapter]) -> [String] { rows.map(\.key) }

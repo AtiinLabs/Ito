@@ -38,8 +38,9 @@ nonisolated enum SeriesOfflineCoverage {
     ///   - snapshot: The saved freshness, or nil when the series has none.
     ///   - currentPayloadSHA256: The digest of the payload now saved with the Library item. A snapshot
     ///     taken from a different payload (a restore, a relink) proves nothing about this catalog.
-    ///   - selection: The editions the user follows; only rows it admits must be saved.
-    ///   - catalog: The rows of the saved catalog.
+    ///   - selection: The editions the user follows. A position the source declared that it cannot supply
+    ///     blocks the claim; an undeclared row it excludes does not.
+    ///   - catalog: The rows of the saved catalog, with the logical unit IDs the source gave them.
     ///   - states: The download state of each exact key the store knows.
     static func evaluate(
         snapshot: SeriesOfflineSnapshot?,
@@ -71,15 +72,28 @@ nonisolated enum SeriesOfflineCoverage {
             resolvedSelection = selection.resolve(in: [])
         }
         guard let resolvedSelection else { return .saved(savedCount) }
-        let eligible = catalog.filter {
-            $0.isStorable && !$0.isLocked &&
-                resolvedSelection.admits(scanlator: $0.scanlator, groupID: $0.scanlatorID)
+        // The same positions the download presets plan over: one per source logical unit, one per row
+        // without one. Only a verified copy of a permitted row saves a position: a copy outside the
+        // permitted groups, a queued job and a damaged copy do not. A position the source declared that no
+        // permitted row supplies leaves the series incomplete; a row without a logical unit ID that the
+        // selection excludes is simply not followed. Locked rows with no copy hold nothing back.
+        var seenKeys = Set<String>()
+        let eligible = catalog.filter { $0.isStorable && seenKeys.insert($0.key).inserted }
+        let positions = EditionPositionResolver.resolve(
+            facts: eligible,
+            stored: eligible.map { StoredEditionState(states[$0.key]) },
+            selection: resolvedSelection
+        )
+        let hasUnsuppliedUnit = positions.contains { position in
+            guard case .logical = position.key, !position.isOccupied else { return false }
+            return position.members.contains { !eligible[$0].isLocked }
         }
+        let required = positions.filter(\.isOccupied)
         // A series with nothing to download has no "entire series" to speak of.
-        guard !eligible.isEmpty else { return .saved(savedCount) }
-        let allSaved = eligible.allSatisfy { row in
-            if case .downloaded = states[row.key] { return true }
-            return false
+        guard !hasUnsuppliedUnit, !required.isEmpty else { return .saved(savedCount) }
+        let allSaved = required.allSatisfy { position in
+            position.toQueue.isEmpty && position.damaged.isEmpty
+                && position.satisfied.allSatisfy { states[eligible[$0].key] == .downloaded }
         }
         return allSaved ? .entireSeries : .saved(savedCount)
     }

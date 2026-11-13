@@ -3,8 +3,14 @@ import Testing
 @testable import Ito
 
 struct ChapterReadingOrderTests {
-    private func row(_ key: String, _ number: Float?, volume: Float? = nil, order: Int? = nil) -> ChapterFacts {
-        ChapterFacts(key: key, number: number, volume: volume, readingOrder: order)
+    private func row(
+        _ key: String,
+        _ number: Float?,
+        volume: Float? = nil,
+        order: Int64? = nil,
+        unit: String? = nil
+    ) -> ChapterFacts {
+        ChapterFacts(key: key, number: number, volume: volume, logicalUnitID: unit, readingOrder: order)
     }
 
     private func keys(_ rows: [ChapterFacts]) -> (order: [String], confidence: ChapterReadingOrder.Confidence) {
@@ -141,6 +147,69 @@ struct ChapterReadingOrderTests {
     @Test func sourceDeclaredPositionOnlyCountsWhenEveryRowHasOne() {
         let result = keys([row("a", 3, order: 1), row("b", 2), row("c", 1)])
         #expect(result.order == ["c", "b", "a"])
+    }
+
+    @Test func rowsOfOneLogicalUnitMayShareASourceOrder() {
+        let result = keys([row("a", nil, order: 3, unit: "u"), row("b", nil, order: 3, unit: "u"), row("c", nil, order: 4)])
+        #expect(Set(result.order.prefix(2)) == ["a", "b"])
+        #expect(result.order.last == "c")
+        #expect(result.confidence == .confident)
+    }
+
+    @Test func anOrderSharedByRowsOfNoCommonUnitIsAmbiguousAndKeepsTheSourceSequence() {
+        let result = keys([row("a", nil, order: 1), row("b", nil, order: 1)])
+        #expect(result.order == ["b", "a"])
+        #expect(result.confidence == .ambiguous)
+
+        let differentUnits = keys([row("a", nil, order: 1, unit: "u1"), row("b", nil, order: 1, unit: "u2")])
+        #expect(differentUnits.confidence == .ambiguous)
+    }
+
+    @Test func conflictingOrdersInOneUnitIgnoreTheDeclaredOrderInsteadOfFailing() {
+        // Trusting the declared orders would give c, a, b.
+        let result = keys([row("a", nil, order: 3, unit: "u"), row("b", nil, order: 5, unit: "u"), row("c", nil, order: 1)])
+        #expect(result.order == ["c", "b", "a"])
+        #expect(result.confidence == .ambiguous)
+    }
+
+    @Test func anAmbiguousSharedOrderKeepsTheSourceSequenceInsteadOfSorting() {
+        // Sorting by the declared orders would move b first.
+        let result = keys([row("a", nil, order: 3), row("b", nil, order: 1), row("c", nil, order: 3)])
+        #expect(result.order == ["c", "b", "a"])
+        #expect(result.confidence == .ambiguous)
+    }
+
+    @Test func aUnitWithOnlySomeRowsOrderedFollowsItsRepresentativeRow() {
+        let ordered = ChapterReadingOrder.order(positions: [
+            [row("a", 1, order: 2, unit: "u"), row("b", 1, unit: "u")],
+            [row("c", 2, order: 1)]
+        ])
+        #expect(ordered.order == [1, 0])
+        #expect(ordered.confidence == .confident)
+
+        // The representative has no order, so the numbers decide.
+        let numbered = ChapterReadingOrder.order(positions: [
+            [row("b", 1, unit: "u"), row("a", 1, order: 2, unit: "u")],
+            [row("c", 2, order: 1)]
+        ])
+        #expect(numbered.order == [0, 1])
+        #expect(numbered.confidence == .confident)
+    }
+
+    @Test func positionsAreOrderedByTheirRepresentativeRowAndCheckEveryMember() {
+        let shared = ChapterReadingOrder.order(positions: [
+            [row("a", 1, order: 2, unit: "u"), row("b", 1, order: 2, unit: "u")],
+            [row("c", 2, order: 1)]
+        ])
+        #expect(shared.order == [1, 0])
+        #expect(shared.confidence == .confident)
+
+        let conflicting = ChapterReadingOrder.order(positions: [
+            [row("a", 1, order: 2, unit: "u"), row("b", 1, order: 3, unit: "u")],
+            [row("c", 2, order: 1)]
+        ])
+        #expect(conflicting.order == [0, 1])
+        #expect(conflicting.confidence == .ambiguous)
     }
 
     @Test func emptyAndSingleCatalogsAreConfident() {

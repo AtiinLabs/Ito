@@ -1,4 +1,5 @@
 import Foundation
+import ito_runner
 
 /// The facts about one catalog row that ordering, selection and coverage need, copied out of a
 /// `ChapterDisplayable` so the pure code runs off the main actor and holds no references.
@@ -13,8 +14,11 @@ nonisolated struct ChapterFacts: Sendable, Equatable {
     let isLocked: Bool
     /// Manga and novel rows only; anime episodes are never stored.
     let isStorable: Bool
-    /// The source-declared reading position (ABI 3), when it gives one.
-    let readingOrder: Int?
+    /// The source's identifier shared by every upload it declares to be one reading position.
+    let logicalUnitID: String?
+    /// The source-declared reading position (ABI 3), when it gives one. Meaningful only within the
+    /// response it came from.
+    let readingOrder: Int64?
 
     init(
         key: String,
@@ -24,7 +28,8 @@ nonisolated struct ChapterFacts: Sendable, Equatable {
         scanlatorID: String? = nil,
         isLocked: Bool = false,
         isStorable: Bool = true,
-        readingOrder: Int? = nil
+        logicalUnitID: String? = nil,
+        readingOrder: Int64? = nil
     ) {
         self.key = key
         self.number = number
@@ -33,27 +38,44 @@ nonisolated struct ChapterFacts: Sendable, Equatable {
         self.scanlatorID = scanlatorID
         self.isLocked = isLocked
         self.isStorable = isStorable
+        self.logicalUnitID = logicalUnitID
         self.readingOrder = readingOrder
+    }
+
+    /// The source-supplied logical unit ID when it is usable: an absent or empty value identifies nothing.
+    var sourceLogicalUnitID: String? {
+        logicalUnitID.flatMap { $0.isEmpty ? nil : $0 }
     }
 
     /// `ChapterDisplayable` is main-actor isolated by the module's default, so this is the one place a
     /// row is read; everything after it is pure.
     @MainActor
-    init<C: ChapterDisplayable>(
-        _ chapter: C,
-        scanlatorID: String? = nil,
-        isStorable: Bool = true,
-        readingOrder: Int? = nil
-    ) {
+    init<C: ChapterDisplayable>(_ chapter: C, isStorable: Bool = true) {
         self.init(
             key: chapter.key,
             number: chapter.chapterNumber,
             volume: chapter.volumeNumber,
             scanlator: chapter.scanlator,
-            scanlatorID: scanlatorID,
+            scanlatorID: chapter.scanlatorID,
             isLocked: chapter.isPaywalled,
             isStorable: isStorable,
-            readingOrder: readingOrder
+            logicalUnitID: chapter.logicalUnitID,
+            readingOrder: chapter.readingOrder
+        )
+    }
+
+    /// The same projection for a runner chapter, usable off the main actor.
+    init(_ chapter: Chapter, isStorable: Bool = true) {
+        self.init(
+            key: chapter.key,
+            number: chapter.chapterNumber,
+            volume: chapter.volumeNumber,
+            scanlator: chapter.scanlator,
+            scanlatorID: chapter.scanlatorID,
+            isLocked: chapter.paywalled ?? false,
+            isStorable: isStorable,
+            logicalUnitID: chapter.logicalUnitID,
+            readingOrder: chapter.readingOrder
         )
     }
 }
@@ -83,7 +105,46 @@ nonisolated enum ChapterReadingOrder {
         return (result.order.map { rows[$0] }, result.confidence)
     }
 
+    /// Rows in reading order. Rows that share a source logical unit ID declare one position, so they may
+    /// share a source reading order; any other shared order is not evidence of an order.
     static func order(_ facts: [ChapterFacts]) -> Result {
+        var rowsByUnit: [ScanlatorUTF8: [ChapterFacts]] = [:]
+        for fact in facts {
+            if let unit = fact.sourceLogicalUnitID { rowsByUnit[ScanlatorUTF8(value: unit), default: []].append(fact) }
+        }
+        return order(facts, memberOrdersConflict: rowsByUnit.values.contains { hasConflictingOrders($0) })
+    }
+
+    /// Reading positions in reading order, earliest first. Each element holds the rows of one position, the
+    /// first of which stands for it. Rows of one position that declare different source orders make the order
+    /// ambiguous and leave it in source order; an order shared by two positions does the same.
+    static func order(positions: [[ChapterFacts]]) -> Result {
+        order(
+            positions.compactMap(\.first),
+            memberOrdersConflict: positions.contains { hasConflictingOrders($0) }
+        )
+    }
+
+    private static func hasConflictingOrders(_ members: [ChapterFacts]) -> Bool {
+        Set(members.compactMap(\.readingOrder)).count > 1
+    }
+
+    /// Whether two rows that are not declared one position carry the same source order.
+    private static func sharesOrderAcrossPositions(_ facts: [ChapterFacts]) -> Bool {
+        var seen: [Int64: ScanlatorUTF8?] = [:]
+        for fact in facts {
+            guard let order = fact.readingOrder else { continue }
+            let unit = fact.sourceLogicalUnitID.map { ScanlatorUTF8(value: $0) }
+            if let previous = seen[order] {
+                guard let previous, let unit, previous == unit else { return true }
+            } else {
+                seen[order] = .some(unit)
+            }
+        }
+        return false
+    }
+
+    private static func order(_ facts: [ChapterFacts], memberOrdersConflict: Bool) -> Result {
         let count = facts.count
         // Nothing to order: no direction to doubt.
         if count <= 1 { return Result(order: Array(0..<count), confidence: .confident) }
@@ -109,12 +170,13 @@ nonisolated enum ChapterReadingOrder {
         // newest-first convention holds.
         let oldestFirst: [Int] = direction == .oldestFirst ? Array(0..<count) : Array((0..<count).reversed())
 
-        // 1. A source-declared reading position on every row decides.
+        // 1. A source-declared reading position on every row decides, for this response only. Conflicting
+        //    or shared declarations keep the source's own sequence and say so.
         if count > 0, facts.allSatisfy({ $0.readingOrder != nil }) {
-            return Result(
-                order: stableSort(oldestFirst) { facts[$0].readingOrder ?? 0 },
-                confidence: .confident
-            )
+            if memberOrdersConflict || sharesOrderAcrossPositions(facts) {
+                return Result(order: oldestFirst, confidence: .ambiguous)
+            }
+            return Result(order: stableSort(oldestFirst) { facts[$0].readingOrder ?? 0 }, confidence: .confident)
         }
 
         // 2. Every row numbered.

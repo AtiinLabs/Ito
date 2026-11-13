@@ -304,6 +304,11 @@ struct PluginCompletionOutcomeMappingTests {
             error: ItoError.catalogContractViolation(function: "mark_completed", violation: .init(.duplicateKey)),
             expected: "paused(incompatible,incompatible)"
         ),
+        .init(
+            name: "editionsContractViolation",
+            error: ItoError.chapterEditionsViolation(function: "get_chapter_editions", violation: .init(.requestEntryKind)),
+            expected: "paused(incompatible,incompatible)"
+        ),
         .init(name: "pluginReportedContractViolation", error: failure(.contractViolation), expected: "paused(incompatible,incompatible)"),
         .init(
             name: "policyOffline",
@@ -375,6 +380,16 @@ struct PluginCompletionOutcomeMappingTests {
             name: "otherHost",
             error: ItoError.hostModuleError(domain: "html", message: "x"),
             expected: "paused(sourceError,sourceError)"
+        ),
+        .init(
+            name: "netWatchdogTimeout",
+            error: ItoError.hostCallTimedOut(.net),
+            expected: "paused(sourceError,sourceError)"
+        ),
+        .init(
+            name: "webviewWatchdogTimeout",
+            error: ItoError.hostCallTimedOut(.webview),
+            expected: "paused(incompatible,incompatible)"
         ),
         .init(name: "cancelled", error: CancellationError(), expected: "cancelled"),
         .init(

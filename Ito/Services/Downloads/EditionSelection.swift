@@ -138,10 +138,27 @@ nonisolated enum ScanlatorGroupKey: Hashable, Sendable {
 
 nonisolated struct ResolvedEditionSelection: Sendable {
     let selection: EditionSelection
-    fileprivate let groupKeys: Set<ScanlatorGroupKey>?
+    /// Each selected group's place in the user's order; nil when every group is admitted.
+    fileprivate let groupRanks: [ScanlatorGroupKey: Int]?
 
     func admits(scanlator name: String?, groupID: String?) -> Bool {
-        groupKeys?.contains(ScanlatorGroupKey(id: groupID, name: name)) ?? true
+        rank(scanlator: name, groupID: groupID) != nil
+    }
+
+    /// The place of a group in the user's selected order, or nil when the selection does not admit it.
+    /// An unrestricted selection ranks every group equally, so source order decides.
+    func rank(scanlator name: String?, groupID: String?) -> Int? {
+        guard let groupRanks else { return 0 }
+        return groupRanks[ScanlatorGroupKey(id: groupID, name: name)]
+    }
+}
+
+/// The groups a strict selection resolved to, remembering the order each was first selected in.
+nonisolated private struct SelectedGroupRanks {
+    private(set) var ranks: [ScanlatorGroupKey: Int] = [:]
+
+    mutating func insert(_ key: ScanlatorGroupKey) {
+        if ranks[key] == nil { ranks[key] = ranks.count }
     }
 }
 
@@ -196,10 +213,10 @@ nonisolated struct ScanlatorCatalogIndex: Sendable {
     func resolve(_ selection: EditionSelection) -> ResolvedEditionSelection? {
         switch selection {
         case .sourceList, .allUploads:
-            return ResolvedEditionSelection(selection: selection, groupKeys: nil)
+            return ResolvedEditionSelection(selection: selection, groupRanks: nil)
         case .scanlators(let references):
             var resolvedReferences: [ScanlatorRef] = []
-            var selectedGroups = Set<ScanlatorGroupKey>()
+            var selectedGroups = SelectedGroupRanks()
             for reference in references {
                 if let id = reference.id {
                     let exactID = ScanlatorUTF8(value: id)
@@ -241,7 +258,9 @@ nonisolated struct ScanlatorCatalogIndex: Sendable {
                     return nil
                 }
             }
-            return ResolvedEditionSelection(selection: .scanlators(resolvedReferences), groupKeys: selectedGroups)
+            return ResolvedEditionSelection(
+                selection: .scanlators(resolvedReferences), groupRanks: selectedGroups.ranks
+            )
         }
     }
 }
@@ -254,7 +273,7 @@ nonisolated enum EditionSelection: Hashable, Sendable {
     func resolve(in catalog: [ScanlatorRef]) -> ResolvedEditionSelection? {
         switch self {
         case .sourceList, .allUploads:
-            return ResolvedEditionSelection(selection: self, groupKeys: nil)
+            return ResolvedEditionSelection(selection: self, groupRanks: nil)
         case .scanlators:
             return ScanlatorCatalogIndex(catalog).resolve(self)
         }

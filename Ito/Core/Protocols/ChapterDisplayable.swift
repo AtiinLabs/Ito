@@ -10,11 +10,20 @@ public protocol ChapterDisplayable: Identifiable {
     var volumeNumber: Float? { get }
     var dateUpload: String? { get }
     var isPaywalled: Bool { get }
+    /// The source's identifier of the group, when it has one.
+    var scanlatorID: String? { get }
+    /// Shared by every upload the source declares to be one reading position.
+    var logicalUnitID: String? { get }
+    /// The source's reading position, meaningful only within the response it came from.
+    var readingOrder: Int64? { get }
 }
 
 extension ChapterDisplayable {
     public var isPaywalled: Bool { false }
     public var volumeNumber: Float? { nil }
+    public var scanlatorID: String? { nil }
+    public var logicalUnitID: String? { nil }
+    public var readingOrder: Int64? { nil }
 }
 
 extension Sequence where Element: ChapterDisplayable {
