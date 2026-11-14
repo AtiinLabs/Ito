@@ -629,6 +629,29 @@
         }
       }
     },
+    "%lld more uploads found" : {
+      "comment" : "Scanlator sheet: how many uploads the source listed that the chapter list does not show. The placeholder is a number, which needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more upload found"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more uploads found"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld packages" : {
       "localizations" : {
         "en" : {
@@ -964,6 +987,12 @@
     "Already added" : {
 
     },
+    "Already queued" : {
+      "comment" : "Upload row: this upload is already queued for download."
+    },
+    "Already saved" : {
+      "comment" : "Upload row: this upload is already saved on this device."
+    },
     "Also read on %@" : {
       "comment" : "History: other sources the same series was read on"
     },
@@ -1030,6 +1059,9 @@
     },
     "Ask on Discord" : {
 
+    },
+    "Asks the source to list every upload it has for this series. Nothing is downloaded until you choose uploads." : {
+      "comment" : "Footer under Find All Uploads: it only lists uploads; the user picks which to download afterwards."
     },
     "Ask on Metered Networks" : {
       "comment" : "Download mode requiring batch confirmation on cellular"
@@ -1449,6 +1481,9 @@
     "Current Usage" : {
 
     },
+    "Damaged download" : {
+      "comment" : "Upload row: the saved copy of this upload failed verification and must be deleted before downloading again."
+    },
     "Damaged downloads" : {
       "comment" : "Download preview section: chapters whose saved copy failed verification."
     },
@@ -1621,6 +1656,29 @@
         }
       }
     },
+    "Download %lld Uploads" : {
+      "comment" : "Button on the scanlator sheet: queue the ticked uploads exactly as listed. The placeholder is the number ticked, which needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Download %lld Upload"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Download %lld Uploads"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Download Network" : {
       "comment" : "Configured bulk download network mode"
     },
@@ -1643,6 +1701,9 @@
     },
     "Download failed" : {
       "comment" : "Chapter download status"
+    },
+    "Download failed · retry in Downloads" : {
+      "comment" : "Upload row: a download of this upload failed. The Downloads queue, named Downloads, has a Retry for it."
     },
     "Download storage couldn't be measured. Try opening Storage again." : {
       "comment" : "Storage settings failed to read offline inventory totals"
@@ -1942,8 +2003,14 @@
     "Filters, active" : {
       "comment" : "Filter button when filters are applied"
     },
+    "Find All Uploads" : {
+      "comment" : "Button on the scanlator sheet: ask the source to list every upload of this series, including other groups' translations."
+    },
     "Find Manga, Anime, and Novels across all your plugins." : {
 
+    },
+    "Finding uploads…" : {
+      "comment" : "Scanlator sheet: the source is being asked to list every upload of the series."
     },
     "Finished" : {
       "comment" : "Series status: complete"
@@ -2317,8 +2384,14 @@
     "Local progress not updated" : {
 
     },
+    "Locked" : {
+      "comment" : "Upload row: the source marks this upload locked for the account, so it cannot be downloaded."
+    },
     "Locked chapters are skipped. Reading still stops at them." : {
       "comment" : "Download preview footer: locked chapters are not downloaded and the reader stops at them."
+    },
+    "Locked uploads can't be downloaded. Your remembered scanlator choice doesn't change." : {
+      "comment" : "Footer under the Download uploads button: locked uploads stay blocked and downloading chosen uploads does not remember a group choice."
     },
     "Logged in" : {
 
@@ -2424,6 +2497,9 @@
     },
     "More options could not be loaded." : {
 
+    },
+    "More uploads" : {
+      "comment" : "Scanlator sheet section: asks the source to list every upload of the series, including other groups' translations."
     },
     "Move" : {
 
@@ -2571,6 +2647,9 @@
     "No options found." : {
 
     },
+    "No other uploads found." : {
+      "comment" : "Scanlator sheet: the source's full list holds nothing the chapter list does not already show."
+    },
     "No packages match your search." : {
 
     },
@@ -2707,6 +2786,9 @@
     },
     "Ongoing" : {
 
+    },
+    "Only the uploads the source shows by default are listed. Others may exist." : {
+      "comment" : "Scanlator sheet: the source lists only its visible uploads, so other uploads may exist even when this list is complete."
     },
     "Only these groups are offered as fallbacks, in the order shown. You review them before anything is queued." : {
       "comment" : "Approved fallback has no unlisted final fallback, and a fallback is always shown in a preview before it is queued."
@@ -3581,6 +3663,9 @@
     "Some sources couldn't update" : {
 
     },
+    "Some uploads may not be listed." : {
+      "comment" : "Scanlator sheet: the source reports its list of uploads is incomplete."
+    },
     "Some website data could not be removed. Try again." : {
 
     },
@@ -3662,8 +3747,57 @@
     "Stop Tracking removes the link in Ito. Your %@ list entry is kept." : {
 
     },
+    "Stopped after %lld pages, the most listed at once. More may exist." : {
+      "comment" : "Scanlator sheet: listing ended at Ito's cap on pages of results. The placeholder is that cap, a number, which needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Stopped after %lld page, the most listed at once. More may exist."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Stopped after %lld pages, the most listed at once. More may exist."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Stopped at %@" : {
       "comment" : "History: where an episode was left, such as 12:34"
+    },
+    "Stopped at the size limit for one listing. More may exist." : {
+      "comment" : "Scanlator sheet: listing ended because the results reached Ito's size cap."
+    },
+    "Stopped at the upload limit after %lld uploads. More may exist." : {
+      "comment" : "Scanlator sheet: listing ended at Ito's cap on uploads. The placeholder is how many uploads were listed, a number, which needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Stopped at the upload limit after %lld upload. More may exist."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Stopped at the upload limit after %lld uploads. More may exist."
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "Stopping tracking" : {
 
@@ -3940,6 +4074,12 @@
     "The source couldn't complete this request." : {
 
     },
+    "The source didn't say whether this list is complete." : {
+      "comment" : "Scanlator sheet: the source did not say whether its list of uploads holds everything."
+    },
+    "The source didn't say which uploads this covers." : {
+      "comment" : "Scanlator sheet: the source did not say whether this list holds all uploads or only the visible ones."
+    },
     "The source is not installed or is unavailable." : {
 
     },
@@ -3960,6 +4100,9 @@
     },
     "The source reported an error." : {
 
+    },
+    "The source says this covers every upload it offers for your account and settings." : {
+      "comment" : "Scanlator sheet: the list of uploads is complete within what the source offers this account."
     },
     "The source sent something this version of Ito can't read. Update the source or Ito." : {
 
@@ -4086,6 +4229,9 @@
     },
     "This series is no longer available on MangaBaka. Stop tracking it and link it again." : {
 
+    },
+    "This source can't list more uploads. The chapter list is unchanged." : {
+      "comment" : "Scanlator sheet: the source does not offer a list of every upload, so nothing was added to the chapter list."
     },
     "This source can't sync progress with this version of Ito." : {
       "comment" : "Shown in source settings when read progress is paused because the source and this version of Ito don't match. The stored reason has no direction, so the text must not say which side to update."

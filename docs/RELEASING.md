@@ -9,7 +9,9 @@ timeouts. Network and web-page watchdog timeouts remain host failures, not plugi
 server errors or network-policy waits. They do not evict the runner. A timed-out completion write
 pauses instead of replaying automatically because its remote outcome may be unknown.
 Edition-contract violations use the existing incompatible-source presentation. The optional
-enumeration API alone does not start background or automatic traversals.
+enumeration API alone does not start background or automatic traversals. Ito calls it only from the
+explicit **Find All Uploads** action of the scanlator sheet (see Edition-policy checks); a manga or
+novel source without the export gets an explanation there instead of a listing.
 
 ## Backup compatibility
 
@@ -184,6 +186,26 @@ Another open screen for the same series may hold an older copy of the policy. A 
 carries the policy it was planned under, and the store refuses it in the write transaction when the
 stored policy differs, so verify the second screen cannot queue another group after the first
 narrows to Strict.
+
+Find All Uploads is the only caller of the optional edition enumeration. Verify that opening or
+refreshing a series, presets, the scanlator sheet itself, readers, subscriptions and local
+alternatives make no such call. Every manga or novel source that runs through a runner shows the
+button; a source without the export answers with an explanation and an unchanged chapter list. The
+listing is an ephemeral catalog for the open sheet: it is never written to the Library item, saved
+snapshot, chapter counts, History or any baseline, and it is not merged into the chapter list.
+Uploads queued from it do appear in the detail list afterwards as saved-only rows once they are
+downloaded, through the existing inventory; that is expected. Check that the sheet states what the
+listing claims: complete within the source's scope, possibly incomplete, only the uploads the source
+shows by default, or stopped at an Ito cap (the upload cap names the number actually listed), and
+never calls a partial or bounded listing complete. Rows show their saved, queued or failed status
+as it is while the sheet is open; a failed upload points to the Downloads queue, which has Retry.
+Dismissing the sheet, changing the series, and refreshing it to a different chapter list end the
+listing, and a late answer shows nothing. A source settings or account change does not end a
+running listing; it makes the listing stale: its answer is discarded when it finishes and queueing
+from it is refused, and the sheet asks for review. A failure keeps no rows and is not retried.
+Ticked uploads queue through the shared batch as the exact chapters the source listed, under the
+source epoch and remembered policy the sheet was reviewed under; locked uploads stay blocked and no
+group choice is remembered unless the sheet's own Remember flow is used.
 
 ## Network preference upgrade checks
 

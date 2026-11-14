@@ -215,6 +215,14 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             EditionChooserSheet(
                 presentation: presentation,
                 isApplying: viewModel.downloadBatch.isApplyingChoice,
+                uploads: EditionUploadsSection(
+                    state: viewModel.downloadBatch.enumeration,
+                    canFind: viewModel.downloadBatch.canFindAllUploads,
+                    isBusy: viewModel.downloadBatch.isApplyingChoice || viewModel.downloadBatch.isEnqueuing,
+                    onFind: { _ = viewModel.downloadBatch.findAllUploads(chooserID: presentation.id) },
+                    onCancel: viewModel.downloadBatch.cancelEnumeration,
+                    onDownload: { _ = viewModel.downloadBatch.downloadEnumeratedUploads(keys: $0, chooserID: presentation.id) }
+                ),
                 onConfirm: { selection, remember in
                     _ = viewModel.downloadBatch.applyEditionChoice(
                         selection, remember: remember, then: presentation.preset, chooserID: presentation.id

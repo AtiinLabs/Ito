@@ -10,6 +10,8 @@ struct EditionChooserSheet: View {
     let presentation: EditionChooserPresentation
     /// A choice is being applied; the button waits for it.
     let isApplying: Bool
+    /// The explicit "Find All Uploads" part; nil where the source cannot be asked for it.
+    let uploads: EditionUploadsSection?
     let onConfirm: (EditionSelection, Bool) -> Void
     let onCancel: () -> Void
 
@@ -22,11 +24,13 @@ struct EditionChooserSheet: View {
     init(
         presentation: EditionChooserPresentation,
         isApplying: Bool,
+        uploads: EditionUploadsSection? = nil,
         onConfirm: @escaping (EditionSelection, Bool) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.presentation = presentation
         self.isApplying = isApplying
+        self.uploads = uploads
         self.onConfirm = onConfirm
         self.onCancel = onCancel
         switch presentation.initialSelection {
@@ -156,6 +160,10 @@ struct EditionChooserSheet: View {
                             scanlatorRow(option)
                         }
                     }
+                }
+
+                if let uploads {
+                    uploads
                 }
 
                 if let problem = presentation.storedChoiceProblem {

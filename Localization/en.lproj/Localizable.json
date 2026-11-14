@@ -107,6 +107,11 @@
     "one": "%lld marked read, skipped",
     "other": "%lld marked read, skipped"
   },
+  "%lld more uploads found": {
+    "description": "Scanlator sheet: how many uploads the source listed that the chapter list does not show. The placeholder is a number, which needs plural forms.",
+    "one": "%lld more upload found",
+    "other": "%lld more uploads found"
+  },
   "%lld packages": {
     "one": "%lld package",
     "other": "%lld packages"
@@ -166,6 +171,11 @@
     "one": "Download %lld Chapter",
     "other": "Download %lld Chapters"
   },
+  "Download %lld Uploads": {
+    "description": "Button on the scanlator sheet: queue the ticked uploads exactly as listed. The placeholder is the number ticked, which needs plural forms.",
+    "one": "Download %lld Upload",
+    "other": "Download %lld Uploads"
+  },
   "Downloads couldn't be fully deleted for %lld series. Other deletions were kept. Review the remaining downloads in Manage Downloads.": {
     "description": "Storage settings reports partial download deletion, never rollback",
     "one": "Downloads couldn't be fully deleted for %lld series. Other deletions were kept. Review the remaining downloads in Manage Downloads.",
@@ -188,6 +198,16 @@
   "Score: %lld percent": {
     "one": "Score: %lld percent",
     "other": "Score: %lld percent"
+  },
+  "Stopped after %lld pages, the most listed at once. More may exist.": {
+    "description": "Scanlator sheet: listing ended at Ito's cap on pages of results. The placeholder is that cap, a number, which needs plural forms.",
+    "one": "Stopped after %lld page, the most listed at once. More may exist.",
+    "other": "Stopped after %lld pages, the most listed at once. More may exist."
+  },
+  "Stopped at the upload limit after %lld uploads. More may exist.": {
+    "description": "Scanlator sheet: listing ended at Ito's cap on uploads. The placeholder is how many uploads were listed, a number, which needs plural forms.",
+    "one": "Stopped at the upload limit after %lld upload. More may exist.",
+    "other": "Stopped at the upload limit after %lld uploads. More may exist."
   },
   "To download · %lld": {
     "description": "Download preview section: the chapters that will be queued. The placeholder is their number.",
