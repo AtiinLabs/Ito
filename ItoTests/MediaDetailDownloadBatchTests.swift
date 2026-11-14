@@ -1101,6 +1101,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         presenter.present(.editionChoiceNotRemembered)
         presenter.present(.editionChoiceNotSaved)
         presenter.present(.editionChoiceUnreadable)
+        presenter.present(.downloadBatchBusy)
 
         var kinds: [AppMessageKind] = []
         while let message = center.currentMessage {
@@ -1112,7 +1113,8 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
             .mediaDetailNothingToDownload,
             .mediaDetailEditionChoiceNotRemembered,
             .mediaDetailEditionChoiceNotSaved,
-            .mediaDetailEditionChoiceUnreadable
+            .mediaDetailEditionChoiceUnreadable,
+            .mediaDetailDownloadBatchBusy
         ])
     }
 

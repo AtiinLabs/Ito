@@ -179,7 +179,7 @@ final class UnavailableDiscoverDetailDependency: DiscoverDetailServing,
     @unchecked Sendable {
     let installedPlugins: [String: InstalledPlugin] = [:]
     let libraryItems: [LibraryItem] = []
-    let networkContexts = PluginNetworkContexts()
+    let networkContexts = PluginNetworkContexts(policy: NetworkPolicyCenter())
 
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> {
         Just(installedPlugins).eraseToAnyPublisher()
