@@ -1551,6 +1551,9 @@ Downloads queue: retry a failed or paused job */
 
 "Saved Source • %@ • Confirmed" = "Saved Source • %@ • Confirmed";
 
+/* Backup restore report: the component containing bounded cover images saved with library items. */
+"Saved cover thumbnails" = "Saved cover thumbnails";
+
 "Saved credentials are currently unavailable." = "Saved credentials are currently unavailable.";
 
 "Saved credentials will be checked when protected data is available." = "Saved credentials will be checked when protected data is available.";
