@@ -218,10 +218,14 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                 try db.execute(
                     sql: """
                         UPDATE readingHistory
-                        SET libraryItemId = ?, mediaKey = ?, pluginId = ?
+                        SET libraryItemId = ?, mediaKey = ?, pluginId = ?,
+                            scanlatorID = CASE WHEN ? = ? THEN scanlatorID ELSE NULL END
                         WHERE id = ?
                         """,
-                    arguments: [mapping.destinationId, mapping.destinationId, newPluginId, history.id]
+                    arguments: [
+                        mapping.destinationId, mapping.destinationId, newPluginId,
+                        oldPluginId, newPluginId, history.id
+                    ]
                 )
             }
 

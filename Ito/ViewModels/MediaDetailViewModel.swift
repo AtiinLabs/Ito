@@ -40,7 +40,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     @Published private(set) var media: M {
-        didSet { downloadBatch.mediaDidChange() }
+        didSet { cancelGroupSwitch(); downloadBatch.mediaDidChange() }
     }
     @Published private(set) var detailLoadState: DetailLoadState = .idle
     @Published var sortOrder: ChapterSortOrder = .descending
@@ -77,8 +77,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     private let routeContext: MediaDetailRouteContext<M>
-    private let dependencies: PreparedMediaDetailDependencies
-    private let messagePresenter: any MediaDetailMessagePresenting
+    let dependencies: PreparedMediaDetailDependencies
+    let messagePresenter: any MediaDetailMessagePresenting
     /// Downloads for this series' chapters. Unavailable where offline chapters are not composed.
     let downloads: any MediaDetailDownloadServing
     /// The presets, scanlator choice, preview and saved-only rows of the download controls.
@@ -113,7 +113,10 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     private var pendingOpenIntent: MediaDetailOpenIntent?
     /// The group History last saw for this series, used when the series' own record cannot name
     /// one (such as after it moved to another source).
-    private var historyScanlator: String?
+    private(set) var historyScanlator: String?
+    private(set) var historyScanlatorID: String?
+    @Published private(set) var groupSwitchConsent: ReaderGroupSwitchConsent<M.Chapter>?
+    let resume = ResumeContinuation()
     private var isAppeared = false
     private var cancellables = Set<AnyCancellable>()
 
@@ -245,11 +248,13 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         resumeTarget?.isRereading == true
     }
 
-    private var resumeTarget: MediaDetailResumeTarget<M.Chapter>? {
+    var resumeTarget: MediaDetailResumeTarget<M.Chapter>? {
         MediaDetailResumeTarget(
             chapters: media.chapterList ?? [],
             lastReadKey: dependencies.progress.lastReadChapter(for: mediaIdentity),
             fallbackGroup: historyScanlator,
+            fallbackGroupID: historyScanlatorID,
+            useGroupIDs: dependencies.settings.askBeforeSwitchingGroups,
             isCompleted: media.isCompleted,
             isRead: isRead
         )
@@ -420,7 +425,15 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         }
     }
 
+    func setGroupSwitchConsent(_ consent: ReaderGroupSwitchConsent<M.Chapter>?) { groupSwitchConsent = consent }
+
+    func cancelGroupSwitch() {
+        groupSwitchConsent = nil
+        resume.cancel()
+    }
+
     func selectChapter(_ chapter: M.Chapter) {
+        cancelGroupSwitch()
         // A row or Resume action can retain a chapter value from before a metadata refresh.
         let current = media.chapterList?.first { $0.key == chapter.key } ?? chapter
         guard !current.isPaywalled else { return }
@@ -541,6 +554,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             }
 
             invalidateOperationsForIdentityTransition()
+            cancelGroupSwitch()
             media = hydrated
             selectedGroup = Self.preferredAnimeGroup(for: hydrated)
             detailLoadState = .content
@@ -585,6 +599,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     func disappear() {
+        cancelGroupSwitch()
         guard isAppeared else { return }
         isAppeared = false
         dependencies.discord.clear()
@@ -592,6 +607,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     func cancelScreenOperations() {
+        cancelGroupSwitch()
         cancelSupersedableOperations()
         relinkMutationOperationID = nil
         libraryMutationOperationID = nil
@@ -603,6 +619,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         advanceBaselineWhenFinished: Bool,
         purpose: NetworkOperationContext.Purpose
     ) -> Task<Void, Never> {
+        cancelGroupSwitch()
         detailTask?.cancel()
         let operationID = UUID()
         let requestedMedia = media
@@ -894,12 +911,16 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         guard let intent = pendingOpenIntent else { return }
         pendingOpenIntent = nil
         historyScanlator = intent.preferredScanlator
-        let isEpisode = media.mediaKind == .anime
-        switch intent.target(in: media.chapterList ?? [], resume: resumeTarget?.continuationChapter) {
-        case .open(let chapter): selectChapter(chapter)
-        case .locked: messagePresenter.present(.chapterLocked(isEpisode: isEpisode))
-        case .unavailable: messagePresenter.present(.chapterUnavailable(isEpisode: isEpisode))
-        case nil: break
+        historyScanlatorID = intent.preferredScanlatorID
+        switch intent {
+        case .resume:
+            resumeReading(continuation: true)
+        case .chapter(let reference):
+            switch MediaDetailOpenIntent.target(for: reference, in: media.chapterList ?? []) {
+            case .open(let chapter): selectChapter(chapter)
+            case .locked: messagePresenter.present(.chapterLocked(isEpisode: media.mediaKind == .anime))
+            case .unavailable: messagePresenter.present(.chapterUnavailable(isEpisode: media.mediaKind == .anime))
+            }
         }
     }
 

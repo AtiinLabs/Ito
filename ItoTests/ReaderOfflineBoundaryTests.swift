@@ -41,6 +41,7 @@ func boundaryLabel(_ boundary: ReaderChapterBoundary<Chapter>) -> String {
     case .locked(let chapter): "locked:\(chapter.key)"
     case .otherReader(let chapter): "otherReader:\(chapter.key)"
     case .notAvailableOffline(let chapter): "notAvailableOffline:\(chapter.key)"
+    case .groupConsent(let chapter): "groupConsent:\(chapter.key)"
     }
 }
 
@@ -77,7 +78,7 @@ struct ReaderChapterBoundaryTests {
 
     // MARK: - Ordering
 
-    @Test func orderingReportsALockedNeighborBeforeTheLockFilterAndTheWrappersStayUnchanged() {
+    @Test func orderingReportsALockedNeighborBeforeTheLockFilter() {
         let after = ReaderChapterOrdering.boundary(after: Self.t2, in: Self.all, preferredScanlator: nil)
         let before = ReaderChapterOrdering.boundary(before: Self.p4, in: Self.all, preferredScanlator: nil)
         let end = ReaderChapterOrdering.boundary(after: Self.p5, in: Self.all, preferredScanlator: nil)
@@ -85,14 +86,14 @@ struct ReaderChapterBoundaryTests {
         #expect(label(after) == "locked:p3")
         #expect(label(before) == "locked:p3")
         #expect(label(end) == "end")
-        // The wrappers still stop at a lock instead of reaching past it.
-        #expect(ReaderChapterOrdering.mangaChapter(after: Self.t2, in: Self.all, preferredScanlator: nil) == nil)
-        #expect(ReaderChapterOrdering.mangaChapter(after: Self.p4, in: Self.all, preferredScanlator: nil)?.key == "p5")
+        // An openable chapter is only ever exposed when it is not locked: a lock never reaches past itself.
+        #expect(ReaderChapterOrdering.boundary(after: Self.t2, in: Self.all, preferredScanlator: nil).chapter == nil)
+        #expect(ReaderChapterOrdering.boundary(after: Self.p4, in: Self.all, preferredScanlator: nil).chapter?.key == "p5")
 
         #expect(label(ReaderChapterOrdering.boundary(after: Self.i2, in: Self.allText)) == "locked:x3")
         #expect(label(ReaderChapterOrdering.boundary(before: Self.x4, in: Self.allText)) == "locked:x3")
         #expect(label(ReaderChapterOrdering.boundary(after: Self.x5, in: Self.allText)) == "end")
-        #expect(ReaderChapterOrdering.novelChapter(after: Self.i2, in: Self.allText) == nil)
+        #expect(ReaderChapterOrdering.boundary(after: Self.i2, in: Self.allText).chapter == nil)
     }
 
     // MARK: - Page reader
@@ -633,19 +634,20 @@ struct ReaderChapterBoundaryTests {
             // A neighbor that was not downloaded is still opened: the source is asked, as ever.
             #expect(label(viewModel.boundaryAfter(Self.p3)) == "chapter:p4")
             #expect(label(viewModel.boundaryBefore(Self.p5)) == "chapter:p4")
-            // A lock and the other reader end the reader without a notice, as they always did.
-            #expect(label(viewModel.boundaryAfter(Self.t2)) == "end")
-            #expect(label(viewModel.boundaryBefore(Self.p4)) == "end")
+            // Locks remain explicit source-access boundaries even without download support.
+            #expect(label(viewModel.boundaryAfter(Self.t2)) == "locked:p3")
+            #expect(label(viewModel.boundaryBefore(Self.p4)) == "locked:p3")
+            // The other reader retains the unavailable-runtime end behavior.
             #expect(label(viewModel.boundaryAfter(Self.p1)) == "end")
             #expect(label(viewModel.boundaryBefore(Self.p3)) == "end")
             #expect(viewModel.chapterAfter(Self.p4)?.key == "p5")
         }
         #expect(label(text.boundaryAfter(Self.x3)) == "chapter:x4")
-        #expect(label(text.boundaryAfter(Self.i2)) == "end")
-        #expect(label(text.boundaryBefore(Self.x4)) == "end")
+        #expect(label(text.boundaryAfter(Self.i2)) == "locked:x3")
+        #expect(label(text.boundaryBefore(Self.x4)) == "locked:x3")
         #expect(label(text.boundaryAfter(Self.x1)) == "end")
         #expect(text.nextChapter?.key == "x5")
-        #expect(ReaderBoundaryNotice.pages(for: pages.boundaryAfter(Self.t2), isNext: true) == nil)
+        #expect(ReaderBoundaryNotice.pages(for: pages.boundaryAfter(Self.t2), isNext: true)?.text == "Next chapter is locked")
         #expect(ReaderBoundaryNotice.pages(for: pages.boundaryAfter(Self.p1), isNext: true) == nil)
         #expect(ReaderBoundaryNotice.textAfterLast(for: text.boundaryAfter(Self.x1)) == nil)
     }

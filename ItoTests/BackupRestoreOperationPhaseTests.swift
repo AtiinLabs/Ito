@@ -715,6 +715,52 @@ struct BackupRestoreOperationPhaseTests {
         #expect(preferences.1 == unknown)
     }
 
+    @Test func earlierTwentyKeyCatalogKeepsLocalNewKeyOnMergeAndMaterializesItsDefaultOnWipeSoExportStillWorks() async throws {
+        for mode in [BackupRestoreMode.merge, .wipe] {
+            let database = try TestDatabase()
+            defer { database.cleanup() }
+            let local = try AppPreference(key: AppPreferenceCatalog.askBeforeSwitchingGroups, value: true)
+            try await database.dbPool.write { db in try local.insert(db) }
+            let legacy = AppPreferenceCatalogEntry.allCases
+                .filter { $0 != .askBeforeSwitchingGroups }
+                .map { AppPreference(key: $0.rawValue, value: $0.canonicalDefaultJSON) }
+            let source = try TestDatabase()
+            defer { source.cleanup() }
+            try await source.dbPool.write { db in
+                try db.execute(sql: "DELETE FROM libraryCategory")
+                try BackupMetadataRecord(formatVersion: 1, createdAt: Date(timeIntervalSince1970: 1)).insert(db)
+                try BackupCapabilityRecord(component: .scalarAppPreferences, representation: .representedNonempty).insert(db)
+                for preference in legacy { try preference.insert(db) }
+            }
+            let backup = try await ItoNativeImporter().parse(url: source.databaseURL)
+
+            _ = try await operation(database).restore(backup, mode: mode, operationId: "legacy-\(mode)")
+
+            let rows = try await database.dbPool.read { db in try AppPreference.fetchAll(db) }
+            #expect(Set(rows.map(\.key)) == Set(AppPreferenceCatalogEntry.allCases.map(\.rawValue)))
+            let askRow = try #require(rows.first { $0.key == local.key })
+            if mode == .merge {
+                #expect(askRow == local)
+            } else {
+                #expect(askRow.value == AppPreferenceCatalogEntry.askBeforeSwitchingGroups.canonicalDefaultJSON)
+            }
+
+            // The very next export needs the complete catalog, without a relaunch or a settings write.
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("legacy-catalog-export-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let output = directory.appendingPathComponent("backup.itobackup")
+            try await BackupExportOperation(
+                dbPool: database.dbPool,
+                sourceDatabaseURL: database.databaseURL,
+                standardApplicationDomain: "test.app",
+                readinessGate: {}
+            ).export(to: output)
+            #expect(FileManager.default.fileExists(atPath: output.path))
+        }
+    }
+
     @Test func writerSnapshotCannotChangeBetweenPreflightAndTransaction() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }

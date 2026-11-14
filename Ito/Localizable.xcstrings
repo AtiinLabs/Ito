@@ -1017,6 +1017,9 @@
     "Are you sure you want to reject this match?" : {
 
     },
+    "Ask before switching groups" : {
+      "comment" : "Reader setting, off by default: require confirmation before Next, Previous or Resume opens another translation group's upload"
+    },
     "Ask before switching" : {
       "comment" : "Require batch consent before using another group.",
       "localizations" : {
@@ -1344,6 +1347,31 @@
     },
     "Continue from %@" : {
 
+    },
+    "Continue to %@ from %@ for this reading only?" : {
+      "comment" : "Reader consent alert message. %1$@ is the chapter title and %2$@ the translation group name, both untranslated source content ('Unnamed group' stands in when the source names none). Opening is for this reading only: no saved preference or history link changes.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Continue to %1$@ from %2$@ for this reading only?"
+          }
+        }
+      }
+    },
+    "Continue to Chapter %@ from %@ for this reading only?" : {
+      "comment" : "Reader consent alert message for a chapter without a title. %1$@ is the chapter number and %2$@ the translation group name, untranslated source content ('Unnamed group' stands in when the source names none). Opening is for this reading only: no saved preference or history link changes.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Continue to Chapter %1$@ from %2$@ for this reading only?"
+          }
+        }
+      }
+    },
+    "Continue to an unnamed chapter from %@ for this reading only?" : {
+      "comment" : "Reader consent alert message for a chapter with neither title nor number. %1$@ is the translation group name, untranslated source content ('Unnamed group' stands in when the source names none). Opening is for this reading only: no saved preference or history link changes."
     },
     "Cookies, website data and Cloudflare clearance were removed." : {
 
@@ -2490,6 +2518,9 @@
     "Next Unread Chapter" : {
       "comment" : "Download menu item: download the next unread chapter."
     },
+    "Next chapter is from another group. Tap to continue" : {
+      "comment" : "Reader boundary: the next chapter belongs to a different translation group; tapping asks to open that one upload"
+    },
     "Next and Previous" : {
       "comment" : "Adjacent chapter prefetch: the following and the preceding chapter are prefetched"
     },
@@ -2723,6 +2754,9 @@
     "Open Settings" : {
 
     },
+    "Open This Upload" : {
+      "comment" : "Reader consent alert button: opens the one upload from another translation group, for this reading only"
+    },
     "Opens the series" : {
       "comment" : "History: accessibility hint of a series row"
     },
@@ -2889,6 +2923,9 @@
     },
     "Previous Page" : {
 
+    },
+    "Previous chapter is from another group. Tap to continue" : {
+      "comment" : "Reader boundary: the previous chapter belongs to a different translation group; tapping asks to open that one upload"
     },
     "Previous chapter is locked" : {
       "comment" : "Reader: shown before the first page when the previous chapter needs an unlock"
@@ -3688,6 +3725,9 @@
     "Summer" : {
       "comment" : "Anime season"
     },
+    "Switch groups?" : {
+      "comment" : "Reader consent title: open one exact upload from another translation group"
+    },
     "Switch to sectioned layout" : {
 
     },
@@ -4283,6 +4323,9 @@
     },
     "Unmatched Sources" : {
 
+    },
+    "Unnamed group" : {
+      "comment" : "Reader consent: shown in place of the group name when the source supplies none"
     },
     "Unmetered Only" : {
       "comment" : "Download mode that avoids cellular and hotspots"

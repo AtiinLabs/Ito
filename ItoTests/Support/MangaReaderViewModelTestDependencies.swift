@@ -145,6 +145,9 @@ final class MangaReaderProgressFake: MangaReaderProgressTracking {
         return context
     }
 
+    /// Read-only, like production: it never records a capture.
+    func currentCompletionEpoch(media: MediaIdentity, mediaKey: String) -> String? { originatingEpoch }
+
     func markChapterRead(
         context: PluginCompletionContext,
         chapterID: String,
@@ -248,6 +251,14 @@ final class MangaReaderTrackerFake: MangaReaderTrackerUpdating {
 
 @MainActor
 final class MangaReaderSettingsFake: MangaReaderSettingsAccessing {
+    var askBeforeSwitchingGroups = false {
+        didSet { readerContinuationSettingsRevision &+= 1 }
+    }
+    private(set) var readerContinuationSettingsRevision: UInt64 = 0
+    func setAskBeforeSwitchingGroups(_ value: Bool) async throws {
+        if let error { throw error }
+        askBeforeSwitchingGroups = value
+    }
     var mangaReaderPreloadImageCount: Int
     /// Deliberately has no change publisher: tests revoke before the queued UI invalidation can run.
     var policyPath = NetworkPathSnapshot(status: .satisfied) {
