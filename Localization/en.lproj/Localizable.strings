@@ -89,6 +89,9 @@ History filter: every kind of media */
 /* Download menu item: download every chapter, including those already read. */
 "All Chapters" = "All Chapters";
 
+/* Library filter: every series in the Library, whether or not any of its chapters is saved. */
+"All Series" = "All Series";
+
 /* Download menu item: download every unread chapter. */
 "All Unread Chapters" = "All Unread Chapters";
 
@@ -585,6 +588,9 @@ Storage settings offline downloads section */
 
 "Enter values between %@ and %@, with minimum no greater than maximum." = "Enter values between %1$@ and %2$@, with minimum no greater than maximum.";
 
+/* Library filter: series whose every chapter is saved on this device, and the source recently confirmed its chapter list is complete. */
+"Entire Series Offline" = "Entire Series Offline";
+
 /* Series details: every chapter of the series is saved on this device, and the source confirmed its chapter list is complete. */
 "Entire series offline" = "Entire series offline";
 
@@ -669,6 +675,9 @@ History: an episode without a title */
 /* History: filter button */
 "Filter" = "Filter";
 
+/* More Options menu: submenu that filters the Library by saved chapters. */
+"Filter Library" = "Filter Library";
+
 "Filtered" = "Filtered";
 
 /* Filter button */
@@ -710,6 +719,9 @@ History: an episode without a title */
 "Group ID %@" = "Group ID %@";
 
 "HTTPS to HTTP redirect downgrades are prohibited." = "HTTPS to HTTP redirect downgrades are prohibited.";
+
+/* Library filter: series with at least one chapter saved on this device. */
+"Has Saved Chapters" = "Has Saved Chapters";
 
 /* Series status: paused */
 "Hiatus" = "Hiatus";
@@ -1076,6 +1088,9 @@ Manga format */
 
 "No Results" = "No Results";
 
+/* Library filter: series with no chapter saved on this device. Series whose downloads are only queued, damaged or failed count here. */
+"No Saved Chapters" = "No Saved Chapters";
+
 "No Trackers Authenticated" = "No Trackers Authenticated";
 
 /* Scanlator choice: a remembered scanlator that the source's current list has no chapters from. */
@@ -1123,6 +1138,12 @@ Downloads manager empty inventory */
 "No results found." = "No results found.";
 
 "No results found. Try again." = "No results found. Try again.";
+
+/* Library: shown when the saved-chapter filter matches no series and the search is empty. */
+"No series match this filter." = "No series match this filter.";
+
+/* Library: shown when the search text and the saved-chapter filter together match no series. */
+"No series match this search and filter." = "No series match this search and filter.";
 
 /* Distinguishes an ID-less source group from a same-label group with an ID. */
 "No source ID" = "No source ID";

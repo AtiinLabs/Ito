@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import GRDB
 import Testing
@@ -621,6 +622,128 @@ struct LibraryManagerSnapshotTests {
             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM downloadedChapter") ?? 0
         }
         #expect(count == 1)
+    }
+
+    /// The proof observation reads the two small proof tables, so a refresh that changes only its time reaches the
+    /// entire-series filter while the Library's own rows stay exactly as they were.
+    @available(iOS 16, *)
+    @Test(.timeLimit(.minutes(1)))
+    func aRefreshThatChangesOnlyItsTimeIsPublishedToTheProofsAndNotToTheLibrary() async throws {
+        let fixture = try await makeObservedFixture()
+        defer { fixture.database.cleanup() }
+        #expect(try await replace(
+            fixture,
+            try await token(fixture),
+            catalog: LibraryCatalogDescription(scope: .allEligible, completeness: .complete)
+        ) == .replaced)
+        for await proofs in fixture.manager.offlineProofSnapshotPublisher.values
+        where proofs.states[Self.media] != nil {
+            break
+        }
+        let libraryBefore = fixture.manager.items
+
+        let laterRefresh = Self.refreshedAt.addingTimeInterval(3_600)
+        let outcome = try await fixture.manager.replaceSnapshotDurably(
+            try await token(fixture),
+            payload: Self.refreshedPayload,
+            coverUrl: nil,
+            chapterRowCount: 12,
+            catalog: LibraryCatalogDescription(scope: .allEligible, completeness: .complete),
+            refreshedAt: laterRefresh
+        )
+        #expect(outcome == .replaced)
+        for await proofs in fixture.manager.offlineProofSnapshotPublisher.values
+        where proofs.states[Self.media]?.refreshedAt == laterRefresh {
+            break
+        }
+        #expect(fixture.manager.items == libraryBefore)
+    }
+
+    @available(iOS 16, *)
+    @Test(.timeLimit(.minutes(1)))
+    func removingTheSeriesDropsItsProofStateAndItsRememberedEditionTogether() async throws {
+        let fixture = try await makeObservedFixture()
+        defer { fixture.database.cleanup() }
+        #expect(try await replace(
+            fixture,
+            try await token(fixture),
+            catalog: LibraryCatalogDescription(scope: .allEligible, completeness: .complete)
+        ) == .replaced)
+        try await fixture.database.dbPool.write { db in
+            try SeriesEditionPreferenceRecord.save(.allUploads, for: Self.media, at: Self.refreshedAt, in: db)
+        }
+        for await proofs in fixture.manager.offlineProofSnapshotPublisher.values
+        where proofs.states[Self.media] != nil && proofs.preferences[Self.media] != nil {
+            break
+        }
+
+        try await fixture.manager.removeItemDurably(media: Self.media)
+        for await proofs in fixture.manager.offlineProofSnapshotPublisher.values
+        where proofs.states[Self.media] == nil && proofs.preferences[Self.media] == nil {
+            break
+        }
+    }
+
+    @available(iOS 16, *)
+    @Test(.timeLimit(.minutes(1)))
+    func aRememberedEditionReachesTheProofsAsItsStoredBytes() async throws {
+        let fixture = try await makeObservedFixture()
+        defer { fixture.database.cleanup() }
+        let stored = try EditionSelection.scanlators([ScanlatorRef(name: "A")]).storageData()
+        try await fixture.database.dbPool.write { db in
+            try SeriesEditionPreferenceRecord.save(.scanlators([ScanlatorRef(name: "A")]), for: Self.media, at: Self.refreshedAt, in: db)
+        }
+        for await proofs in fixture.manager.offlineProofSnapshotPublisher.values
+        where proofs.preferences[Self.media] == stored {
+            break
+        }
+    }
+
+    @available(iOS 16, *)
+    @Test(.timeLimit(.minutes(1)))
+    func aRekeyedSeriesLosesItsProofStateAtOnce() async throws {
+        let fixture = try await makeObservedFixture()
+        defer { fixture.database.cleanup() }
+        #expect(try await replace(
+            fixture,
+            try await token(fixture),
+            catalog: LibraryCatalogDescription(scope: .allEligible, completeness: .complete)
+        ) == .replaced)
+        for await proofs in fixture.manager.offlineProofSnapshotPublisher.values
+        where proofs.states[Self.media] != nil {
+            break
+        }
+
+        // The statement the rekey runs against the state table.
+        try await fixture.database.dbPool.write { db in
+            try db.execute(
+                sql: "DELETE FROM librarySnapshotState WHERE pluginId = ? AND mediaKind = ? AND canonicalMediaId = ?",
+                arguments: [Self.media.pluginId, Self.media.mediaKind.rawValue, Self.media.canonicalMediaId]
+            )
+        }
+        for await proofs in fixture.manager.offlineProofSnapshotPublisher.values
+        where proofs.states[Self.media] == nil {
+            break
+        }
+    }
+
+    private func makeObservedFixture() async throws -> Fixture {
+        let database = try TestDatabase()
+        let manager = LibraryManager(dbPool: database.dbPool, observationScheduler: ImmediateValueObservationScheduler())
+        try await database.dbPool.write { db in
+            try LibraryItem(
+                id: "series-1",
+                title: "My Label",
+                coverUrl: "https://example.com/original.jpg",
+                pluginId: Self.pluginId,
+                isAnime: false,
+                pluginType: .manga,
+                rawPayload: Self.originalPayload,
+                anilistId: nil
+            ).insert(db)
+        }
+        try await manager.reload()
+        return Fixture(database: database, manager: manager)
     }
 }
 
