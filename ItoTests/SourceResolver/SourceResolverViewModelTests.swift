@@ -9,7 +9,7 @@ final class FakePluginProvider: SourceResolverPluginProviding {
     var installedPlugins: [String: InstalledPlugin] = [:] {
         didSet { installedPluginsSubject.send(installedPlugins) }
     }
-    let networkContexts = PluginNetworkContexts()
+    let networkContexts = PluginNetworkContexts(policy: NetworkPolicyCenter())
     var configuredAdapters: [String: any PluginSearching] = [:]
     private var runners: [String: ItoRunner] = [:]
     private(set) var runnerRequestCount = 0

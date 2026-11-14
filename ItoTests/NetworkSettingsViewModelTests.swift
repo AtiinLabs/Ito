@@ -160,6 +160,79 @@ final class NetworkSettingsViewModelTests: XCTestCase {
         XCTAssertTrue(source.contains(".confirmationDialog("))
     }
 
+    func testEverySettingPersistsThroughTheStoreAndPublishesItsValue() async throws {
+        let (store, _, siteDataClearer) = try await makeNetworkSettingsDependencies(wifiOnly: false)
+        let viewModel = NetworkSettingsViewModel(settingsStore: store, siteDataClearer: siteDataClearer)
+
+        await viewModel.setDownloadMode(.askMetered)
+        await viewModel.setPreload(.ten)
+        await viewModel.setAdjacent(.one)
+        await viewModel.setNovelPrefetch(false)
+
+        XCTAssertEqual(viewModel.downloadMode, .askMetered)
+        XCTAssertEqual(viewModel.preloadImageCount, .ten)
+        XCTAssertEqual(viewModel.adjacentPrefetch, .one)
+        XCTAssertFalse(viewModel.novelPrefetch)
+        XCTAssertNil(viewModel.alert)
+        XCTAssertEqual(store.networkDownloadMode, .askMetered)
+        XCTAssertEqual(store.networkPolicy.current.downloadMode, .askMetered)
+        XCTAssertEqual(store.networkPolicy.current.adjacentChapterPrefetch, 1)
+        XCTAssertEqual(store.networkPolicy.current.preloadImageCount, 10)
+        XCTAssertFalse(store.networkPolicy.current.novelPrefetchChapters)
+    }
+
+    func testAFailedResetKeepsTheStoredValuesAndPresentsSaveFailed() async throws {
+        let (store, persistence, siteDataClearer) = try await makeNetworkSettingsDependencies(wifiOnly: false)
+        let viewModel = NetworkSettingsViewModel(settingsStore: store, siteDataClearer: siteDataClearer)
+        await viewModel.setDownloadMode(.allowMetered)
+
+        await persistence.failNextWriteAttempt()
+        await viewModel.resetNetworkPreferences()
+
+        XCTAssertEqual(viewModel.alert, .saveFailed)
+        XCTAssertEqual(store.networkDownloadMode, .allowMetered)
+        XCTAssertEqual(viewModel.downloadMode, .allowMetered)
+        XCTAssertEqual(store.networkPolicy.current.downloadMode, .allowMetered)
+    }
+
+    func testEffectiveFootnotesFollowThePathWithoutWritingAnyPreference() async throws {
+        let path = ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied, isExpensive: true))
+        let persistence = TestAppSettingsPersistence()
+        let store = AppSettingsStore(persistence: persistence, networkPolicy: NetworkPolicyCenter(path: path))
+        try await store.reload()
+        let viewModel = NetworkSettingsViewModel(settingsStore: store, siteDataClearer: TestSiteDataClearer())
+        await viewModel.setPreload(.five)
+        await viewModel.setAdjacent(.two)
+        let writesBefore = await persistence.writeCallCount
+
+        XCTAssertEqual(viewModel.effective.bulkDownloads, .wait(.meteredNetwork))
+        XCTAssertEqual(viewModel.effective.speculative, .wait(.meteredNetwork))
+        XCTAssertEqual(viewModel.effective.imagePreloadCount, 0)
+        XCTAssertEqual(viewModel.effective.adjacentChapterPrefetch, 0)
+
+        path.set(NetworkPathSnapshot(status: .satisfied))
+        XCTAssertEqual(viewModel.effective.bulkDownloads, .allow)
+        XCTAssertEqual(viewModel.effective.speculative, .allow)
+        XCTAssertEqual(viewModel.effective.imagePreloadCount, 5)
+        XCTAssertEqual(viewModel.effective.adjacentChapterPrefetch, 2)
+        XCTAssertEqual(store.preloadImageCount, .five)
+        let writesAfter = await persistence.writeCallCount
+        XCTAssertEqual(writesAfter, writesBefore)
+    }
+
+    func testAnUnrelatedSettingDoesNotNotifyTheNetworkPolicy() async throws {
+        let (store, _, _) = try await makeNetworkSettingsDependencies(wifiOnly: false)
+        var notifications = 0
+        let subscription = store.networkPolicy.changes.sink { notifications += 1 }
+
+        try await store.set(.light, for: AppPreferenceCatalog.appTheme)
+        XCTAssertEqual(notifications, 0)
+
+        try await store.set(true, for: AppPreferenceCatalog.wifiOnlyUpdates)
+        XCTAssertEqual(notifications, 1)
+        _ = subscription
+    }
+
     private func makeNetworkSettingsDependencies(
         wifiOnly: Bool
     ) async throws -> (
@@ -171,7 +244,7 @@ final class NetworkSettingsViewModelTests: XCTestCase {
             try AppPreference(key: AppPreferenceCatalog.wifiOnlyUpdates, value: wifiOnly)
         ]
         let persistence = TestAppSettingsPersistence(preferences: preferences)
-        let store = AppSettingsStore(persistence: persistence)
+        let store = AppSettingsStore(persistence: persistence, networkPolicy: NetworkPolicyCenter())
         try await store.reload()
         await persistence.resetWriteTracking()
         return (store, persistence, TestSiteDataClearer())

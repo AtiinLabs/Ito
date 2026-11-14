@@ -75,7 +75,7 @@ struct SearchExecutorCrashRetirementTests {
         fixture.handleUrl = handleUrl
         let wasm = TestWasm.build(fixture)
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
             runnerLoader: { _, _, _ in
                 let runner = ItoRunner()

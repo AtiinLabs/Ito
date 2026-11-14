@@ -9,7 +9,7 @@ nonisolated func makeTestNetworkContext(
     operationID: UUID = UUID(),
     batchID: UUID? = nil
 ) -> NetworkOperationContext {
-    PluginNetworkContexts().context(
+    PluginNetworkContexts(policy: NetworkPolicyCenter()).context(
         pluginID: pluginID,
         PluginNetworkOperation(purpose: purpose, operationID: operationID, batchID: batchID)
     )

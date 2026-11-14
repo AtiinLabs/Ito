@@ -851,7 +851,8 @@ final class PluginSettingsViewModelTests: XCTestCase {
         let store = PluginSettingsStore(
             dbPool: testDatabase.dbPool,
             standardApplicationDomain: "test.pr7b",
-            domainFactory: domains.domain
+            domainFactory: domains.domain,
+            networkPolicy: NetworkPolicyCenter()
         )
         let manager = PluginManager(pluginSettingsStore: store, pluginsDirectory: directory)
         try await manager.discoverAndPrepareInstalledPlugins()
