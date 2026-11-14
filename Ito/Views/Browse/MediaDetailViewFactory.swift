@@ -211,7 +211,8 @@ struct MediaDetailViewFactory {
                 mediaKind: .manga,
                 canonicalMediaId: media.key
             ),
-            inventoryChapters: offlineInventory()
+            inventoryChapters: offlineInventory(),
+            enumerateEditions: editionEnumeration(runner: runner, pluginID: pluginID)
         )
         return makeView(media: media, pluginID: pluginID, context: context, openIntent: openIntent)
     }
@@ -273,7 +274,8 @@ struct MediaDetailViewFactory {
                 mediaKind: .novel,
                 canonicalMediaId: media.key
             ),
-            inventoryChapters: offlineInventory()
+            inventoryChapters: offlineInventory(),
+            enumerateEditions: editionEnumeration(runner: runner, pluginID: pluginID)
         )
         return makeView(media: media, pluginID: pluginID, context: context, openIntent: openIntent)
     }
@@ -321,6 +323,16 @@ struct MediaDetailViewFactory {
         let media = MediaIdentity(pluginId: pluginID, canonicalMediaId: canonicalMediaId, mediaKind: mediaKind)
         return { chapter in
             await reader.verifiedEdition(OfflineChapterEdition(media: media, chapterKey: chapter.key))
+        }
+    }
+
+    /// The source's optional listing of every exact upload, for the explicit "Find All Uploads" action only.
+    /// Nil on a saved-only route, which has no source to ask.
+    private func editionEnumeration(runner: ItoRunner?, pluginID: String) -> ChapterEditionEnumeration? {
+        guard let runner else { return nil }
+        let adapter = ChapterEditionsAdapter(runner: runner, pluginID: pluginID, contexts: networkContexts)
+        return { entry, operation, sourceEpoch in
+            try await adapter.enumerate(entry, operation: operation, sourceEpoch: sourceEpoch)
         }
     }
 

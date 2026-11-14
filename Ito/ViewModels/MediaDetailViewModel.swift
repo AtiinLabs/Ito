@@ -139,7 +139,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             progress: dependencies.progress,
             snapshots: snapshots,
             inventory: routeContext.inventoryChapters,
-            loadsFromSource: routeContext.loadDetails != nil
+            loadsFromSource: routeContext.loadDetails != nil,
+            enumerateEditions: routeContext.enumerateEditions
         )
         self.presentationLogger = presentationLogger
         pendingOpenIntent = openIntent

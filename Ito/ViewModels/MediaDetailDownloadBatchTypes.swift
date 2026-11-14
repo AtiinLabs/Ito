@@ -97,6 +97,156 @@ enum DownloadSheet: Identifiable, Equatable {
     case preview(DownloadPreview)
 
     var id: String { "download" }
+
+    /// The chooser this sheet shows; nil for any other sheet.
+    var chooserID: UUID? {
+        guard case .chooser(let presentation) = self else { return nil }
+        return presentation.id
+    }
+}
+
+/// One exact upload an explicit "Find All Uploads" listing found. The row holds only what the sheet shows;
+/// the frozen chapter it queues stays with the model that listed it.
+struct EnumeratedEditionRow: Identifiable, Equatable, Sendable {
+    let key: String
+    let title: String
+    /// The source's group name for this upload, or nil for an upload that names none. Source content.
+    let scanlator: String?
+    /// For uploads that are already saved or queued: which of the two. Read from the live states.
+    let stored: StoredEditionState
+    /// A failed job still holds its upload; it is listed as failed, never as queued. Read from the live states.
+    let isFailed: Bool
+    /// The source marks the upload locked, so it can never be queued from here.
+    let isLocked: Bool
+
+    var id: String { key }
+    /// A locked upload is blocked, and an upload that already has a copy or job needs nothing queued.
+    var isSelectable: Bool { !isLocked && stored == .none }
+
+    func with(stored: StoredEditionState, isFailed: Bool) -> EnumeratedEditionRow {
+        EnumeratedEditionRow(
+            key: key, title: title, scanlator: scanlator, stored: stored, isFailed: isFailed, isLocked: isLocked
+        )
+    }
+}
+
+/// The uploads the source declares to be one reading position, or one upload that declares none.
+struct EnumeratedEditionGroup: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let rows: [EnumeratedEditionRow]
+}
+
+/// What a listing does and does not claim, in the order the sheet says it. The sheet turns each line into
+/// localized text; this type only decides which claims are true.
+struct EditionEnumerationDisclosure: Equatable, Sendable {
+    enum Line: Equatable, Sendable {
+        /// The source reports the list covers every upload it offers for the account and settings in effect.
+        case coversEveryUploadOffered
+        /// Only what the source shows by default was listed, even if the source reports that part complete.
+        case visibleUploadsOnly
+        /// The source did not say which uploads the list covers.
+        case scopeNotStated
+        /// The source reports the list is incomplete.
+        case someUploadsMayBeMissing
+        /// The source did not say whether the list is complete.
+        case completenessNotStated
+        /// Ito stopped listing at its own cap on uploads, with this many listed. More may exist.
+        case stoppedAtUploadLimit(Int)
+        /// Ito stopped listing at its own cap on pages. More may exist.
+        case stoppedAtPageLimit(Int)
+        /// Ito stopped listing at its own cap on data. More may exist.
+        case stoppedAtSizeLimit
+    }
+
+    let lines: [Line]
+
+    /// `listedCount` is how many uploads the listing holds; a cap that stopped the traversal is reported with
+    /// that number, never with the cap's own value, because a page that would pass the cap is left out whole.
+    init(
+        scope: CatalogScope,
+        completeness: CatalogCompleteness,
+        termination: ChapterEditionsResult.Termination,
+        listedCount: Int
+    ) {
+        var lines: [Line] = []
+        switch termination {
+        case .bounded(.rows): lines.append(.stoppedAtUploadLimit(listedCount))
+        case .bounded(.pages): lines.append(.stoppedAtPageLimit(ChapterEditionsLimits.maxPages))
+        case .bounded(.bytes): lines.append(.stoppedAtSizeLimit)
+        case .exhausted:
+            switch completeness {
+            case .complete:
+                if scope == .allEligible { lines.append(.coversEveryUploadOffered) }
+            case .partial: lines.append(.someUploadsMayBeMissing)
+            case .unknown: lines.append(.completenessNotStated)
+            }
+        }
+        // A bounded listing is never exhaustive, so its scope never turns it into a claim of coverage.
+        switch scope {
+        case .visible: lines.append(.visibleUploadsOnly)
+        case .unknown: lines.append(.scopeNotStated)
+        case .allEligible: break
+        }
+        self.lines = lines
+    }
+}
+
+/// What an explicit listing found, grouped by reading position, with what it does and does not claim. Its
+/// `id` names one listing: a refresh of the rows' saved and queued status keeps it, a new listing does not.
+struct EditionEnumerationResult: Equatable, Sendable {
+    let id: UUID
+    /// Uploads the source listed in total.
+    let totalCount: Int
+    /// Listed uploads the series' current chapter list does not have; the groups hold these.
+    let additionalCount: Int
+    let groups: [EnumeratedEditionGroup]
+    let disclosure: EditionEnumerationDisclosure
+
+    init(
+        id: UUID = UUID(),
+        totalCount: Int,
+        additionalCount: Int,
+        groups: [EnumeratedEditionGroup],
+        disclosure: EditionEnumerationDisclosure
+    ) {
+        self.id = id
+        self.totalCount = totalCount
+        self.additionalCount = additionalCount
+        self.groups = groups
+        self.disclosure = disclosure
+    }
+
+    /// The same listing with every row's saved, queued and failed status read again.
+    func updatingStatus(_ status: (String) -> (stored: StoredEditionState, isFailed: Bool)) -> EditionEnumerationResult {
+        EditionEnumerationResult(
+            id: id,
+            totalCount: totalCount,
+            additionalCount: additionalCount,
+            groups: groups.map { group in
+                EnumeratedEditionGroup(
+                    id: group.id,
+                    title: group.title,
+                    rows: group.rows.map { row in
+                        let current = status(row.key)
+                        return row.with(stored: current.stored, isFailed: current.isFailed)
+                    }
+                )
+            },
+            disclosure: disclosure
+        )
+    }
+}
+
+/// The explicit "Find All Uploads" action of the scanlator sheet. The listing belongs to that sheet alone.
+enum EditionEnumerationState: Equatable {
+    case idle
+    case loading
+    /// The source does not list uploads. The chapter list is unchanged.
+    case unsupported
+    /// The listing failed; no upload from it was kept. `message` is the user-facing reason.
+    case failed(message: String)
+    case loaded(EditionEnumerationResult)
 }
 
 /// What the series has stored as its remembered scanlator choice.

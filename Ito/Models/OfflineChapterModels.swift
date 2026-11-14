@@ -231,7 +231,7 @@ nonisolated struct DownloadStoreRecord: Codable, Sendable, FetchableRecord, Pers
     var createdAt: Date
 }
 
-/// What the user asked for when the batch was queued. `single` is one chapter chosen on its own.
+/// What the user asked for when the batch was queued. `single` is exact chapters chosen individually, not from a preset.
 nonisolated enum DownloadBatchPreset: String, Codable, CaseIterable, Sendable {
     case single
     case next

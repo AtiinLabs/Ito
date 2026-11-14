@@ -21,7 +21,16 @@ protocol MediaDetailDownloadBatchHost: AnyObject {
 /// controls. The screen's model owns it and forwards its changes; it reads the screen only through its host.
 @MainActor
 final class MediaDetailDownloadBatchModel: ObservableObject {
-    @Published private(set) var sheet: DownloadSheet?
+    @Published private(set) var sheet: DownloadSheet? {
+        didSet {
+            // A listing belongs to the chooser it was asked from; any other sheet, or none, ends it.
+            if oldValue?.chooserID != sheet?.chooserID { cancelEnumeration() }
+        }
+    }
+    /// The explicit "Find All Uploads" listing of the open chooser. Ephemeral: it is never the series' chapter
+    /// list, never saved, counted or written anywhere, and it ends with the chooser that asked for it. Only the
+    /// listing's own extension writes it, from another file, so its setter cannot be `private`.
+    @Published var enumeration = EditionEnumerationState.idle
     /// SHA-256 hex digest of the chapter list as the source returned it. Empty where nothing is downloadable.
     @Published private(set) var catalogDigest = ""
     /// A batch is being queued; a second one waits for it instead of being dropped.
@@ -51,8 +60,11 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     private let snapshots: MediaDetailSnapshotRefresher
     private let inventory: ((MediaIdentity) async -> [DownloadedChapterRecord])?
     private let loadsFromSource: Bool
+    /// Lists the series' exact uploads; nil where the source has no such export or no source can be asked.
+    let enumerateEditions: ChapterEditionEnumeration?
 
-    private var states: [String: ChapterDownloadState] = [:]
+    /// The extension only reads the states; they are written here, from the store's publication.
+    private(set) var states: [String: ChapterDownloadState] = [:]
     /// The series `states` belong to; they arrive with the identity, not with the list that is current.
     private var statesIdentity: MediaIdentity?
     private var storedKeys = Set<String>()
@@ -69,6 +81,14 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     private var capacityTask: Task<Void, Never>?
     private var bytesTask: Task<Void, Never>?
     private var enqueueTask: Task<Void, Never>?
+    // The listing's state is written by the "Find All Uploads" extension in its own file, which keeps this file
+    // under the file-length limit; `private(set)` would hide these setters from it. Nothing else writes them.
+    /// What the open listing was asked under, and the chapters it returned, frozen for queueing.
+    var enumerationScope: BatchScope?
+    var enumeratedChapters: [Chapter] = []
+    var enumerationTask: Task<Void, Never>?
+    /// The listing that may still publish; a cancelled or replaced listing finds another token and leaves.
+    var enumerationToken: UUID?
     private var choiceOperationID: UUID?
     private var scopeGeneration = 0
     private var lastSavedState: Bool?
@@ -83,7 +103,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         let missing: Set<String>
     }
 
-    private struct BatchScope {
+    struct BatchScope {
         let identity: MediaIdentity
         let generation: Int
         let catalogDigest: String
@@ -95,13 +115,15 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         progress: any MediaDetailProgressServing,
         snapshots: MediaDetailSnapshotRefresher,
         inventory: ((MediaIdentity) async -> [DownloadedChapterRecord])?,
-        loadsFromSource: Bool
+        loadsFromSource: Bool,
+        enumerateEditions: ChapterEditionEnumeration? = nil
     ) {
         self.downloads = downloads
         self.progress = progress
         self.snapshots = snapshots
         self.inventory = inventory
         self.loadsFromSource = loadsFromSource
+        self.enumerateEditions = enumerateEditions
     }
 
     deinit {
@@ -110,6 +132,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         savedOnlyTask?.cancel()
         capacityTask?.cancel()
         bytesTask?.cancel()
+        enumerationTask?.cancel()
     }
 
     // MARK: - Availability
@@ -188,6 +211,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     func statesDidChange(_ states: [String: ChapterDownloadState], for identity: MediaIdentity) {
         self.states = states
         statesIdentity = identity
+        refreshEnumerationStatuses()
         guard isAvailable else { return }
         let current = SeriesDownloadSummary(states: states)
         if current != summary { summary = current }
@@ -213,6 +237,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
 
     /// A new series identity starts over. A batch already submitted is not cancelled; it no longer reports here.
     func reset() {
+        cancelEnumeration()
         scopeGeneration &+= 1
         savedScopeGeneration &+= 1
         releaseEnqueueOwnership()
@@ -408,7 +433,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
 
     /// The scope an action starts under. The source epoch is read once here; the stores compare it again
     /// inside their write transactions. A read that fails is reported: an action never silently does nothing.
-    private func currentBatchScope(reportingFailure: Bool = true) -> BatchScope? {
+    func currentBatchScope(reportingFailure: Bool = true) -> BatchScope? {
         guard let host, host.batchIsSaved else { return nil }
         guard let epoch = try? downloads.editionPreferenceEpoch(for: host.batchIdentity.pluginId) else {
             if reportingFailure { host.presentBatchMessage(.downloadActionFailed) }
@@ -420,7 +445,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         )
     }
 
-    private func isCurrent(_ scope: BatchScope) -> Bool {
+    func isCurrent(_ scope: BatchScope) -> Bool {
         host?.batchIdentity == scope.identity
             && host?.batchIsSaved == true
             && scopeGeneration == scope.generation
@@ -429,14 +454,14 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
 
     /// Whether the source's epoch is still the one a sheet was made under. A read that fails is not "the
     /// same": the consent is stale.
-    private func isCurrentEpoch(_ epoch: String, for identity: MediaIdentity) -> Bool {
+    func isCurrentEpoch(_ epoch: String, for identity: MediaIdentity) -> Bool {
         (try? downloads.editionPreferenceEpoch(for: identity.pluginId)) == epoch
     }
 
     /// A consent was made under a source epoch, policy or catalog that is no longer current. The sheet closes,
     /// nothing is stored or queued, and the user is asked to review again; a confirm that cannot work is
     /// never left on screen.
-    private func closeStaleConsent() {
+    func closeStaleConsent() {
         sheet = nil
         choiceOperationID = nil
         isApplyingChoice = false
@@ -674,7 +699,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             return Task {}
         }
         return enqueueBatch(
-            preset: preview.preset,
+            preset: DownloadBatchPreset(preview.preset),
             selection: preview.selection,
             chapters: chapters,
             alreadyStored: preview.storedCount,
@@ -759,7 +784,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         return PlannedDownload(chapters: chapters, plan: plan)
     }
 
-    private func isFailed(_ key: String) -> Bool {
+    func isFailed(_ key: String) -> Bool {
         if case .failed? = states[key] { return true }
         return false
     }
@@ -795,7 +820,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             return nil
         }
         return enqueueBatch(
-            preset: preset,
+            preset: DownloadBatchPreset(preset),
             selection: selection,
             chapters: queueable,
             alreadyStored: planned.plan.satisfied.count,
@@ -972,13 +997,14 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         }
     }
 
-    private func enqueueBatch(
-        preset: DownloadPreset,
+    func enqueueBatch(
+        preset: DownloadBatchPreset,
         selection: EditionSelection,
         chapters: [Chapter],
         alreadyStored: Int,
         scope: BatchScope,
-        policy: RememberedEditionChoice
+        policy: RememberedEditionChoice,
+        recordsCatalogDigest: Bool = true
     ) -> Task<Void, Never>? {
         guard !isEnqueuing, isCurrent(scope), let host,
               let entry = host.batchEntry,
@@ -992,9 +1018,9 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             canonicalMediaId: scope.identity.canonicalMediaId,
             entry: entry,
             seriesTitle: host.batchSeriesTitle,
-            preset: DownloadBatchPreset(preset),
+            preset: preset,
             selection: storedSelection,
-            catalogDigest: scope.catalogDigest.isEmpty ? nil : scope.catalogDigest,
+            catalogDigest: recordsCatalogDigest && !scope.catalogDigest.isEmpty ? scope.catalogDigest : nil,
             chapters: chapters,
             reviewedSourceEpoch: scope.sourceEpoch,
             reviewedPolicy: reviewedPolicy(of: policy)
@@ -1073,6 +1099,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         await savedOnlyTask?.value
         await capacityTask?.value
         await bytesTask?.value
+        await enumerationTask?.value
     }
 #endif
 }
