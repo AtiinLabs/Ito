@@ -66,7 +66,7 @@ final class VideoPlayerDependencyBoundaryTests: XCTestCase {
             mangaReaderDependencies: .unavailable(),
             novelReaderDependencies: .unavailable(),
             videoPlayerDependencies: dependencies,
-            networkContexts: PluginNetworkContexts()
+            networkContexts: PluginNetworkContexts(policy: NetworkPolicyCenter())
         )
         let runner = ItoRunner()
         let anime = Anime(key: "anime", title: "Anime")
@@ -170,7 +170,7 @@ final class VideoPlayerDependencyBoundaryTests: XCTestCase {
         )
         let discord = DiscordRPCManager(libraryManager: library)
         let plugin = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool)
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         )
         let logger = PresentationEventCaptureSpy()
 

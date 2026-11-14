@@ -17,7 +17,7 @@ struct StorageDownloadsTests {
         ]
         service.failedSeries = [second]
         let cache = TestSettingsStorageAccess()
-        let model = StorageSettingsViewModel(settingsStore: AppSettingsStore(dbPool: database.dbPool),
+        let model = StorageSettingsViewModel(settingsStore: AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
                                              storageAccess: cache, downloads: service)
         #expect(model.hasDownloads)
         await model.refreshDownloadsUsage()
@@ -42,7 +42,7 @@ struct StorageDownloadsTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let cache = TestSettingsStorageAccess()
-        let model = StorageSettingsViewModel(settingsStore: AppSettingsStore(dbPool: database.dbPool), storageAccess: cache)
+        let model = StorageSettingsViewModel(settingsStore: AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()), storageAccess: cache)
         #expect(!model.hasDownloads)
         await model.refreshDownloadsUsage()
         await model.clearDownloads()
@@ -62,7 +62,7 @@ struct StorageDownloadsTests {
         #expect(try await fixture.offline.rowCount("downloadedChapter") == 1)
         #expect(try await fixture.store.jobs().count == 2)
         let model = StorageSettingsViewModel(
-            settingsStore: AppSettingsStore(dbPool: database.dbPool), storageAccess: TestSettingsStorageAccess(),
+            settingsStore: AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()), storageAccess: TestSettingsStorageAccess(),
             downloads: LiveDownloadsOverview(center: fixture.center, store: fixture.store)
         )
 

@@ -583,7 +583,7 @@ private final class DiscoverDetailPluginProviderFake: SourceResolverPluginProvid
     private(set) var installedPlugins: [String: InstalledPlugin] = [:]
     var runnerError: Error?
     private let runner = ItoRunner()
-    let networkContexts = PluginNetworkContexts()
+    let networkContexts = PluginNetworkContexts(policy: NetworkPolicyCenter())
 
     var installedPluginsPublisher: AnyPublisher<[String: InstalledPlugin], Never> {
         installedPluginsSubject.eraseToAnyPublisher()

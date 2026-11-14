@@ -901,7 +901,7 @@ struct AppPreferenceCatalogTests {
 
     @Test func allCatalogEntriesHaveExactDefaultsBridgesAndValidation() throws {
         let fixtures = catalogFixtures
-        #expect(fixtures.count == 21)
+        #expect(fixtures.count == AppPreferenceCatalogEntry.allCases.count)
         #expect(Set(fixtures.map(\.entry)) == Set(AppPreferenceCatalogEntry.allCases))
 
         for fixture in fixtures {
@@ -999,6 +999,8 @@ struct AppPreferenceCatalogTests {
             .init(entry: .askBeforeSwitchingGroups, source: .booleanNSNumber, defaultJSON: "false", accepted: [NSNumber(value: false), NSNumber(value: true)], invalid: boolInvalid),
             .init(entry: .incognitoMode, source: .booleanNSNumber, defaultJSON: "false", accepted: [NSNumber(value: false), NSNumber(value: true)], invalid: boolInvalid),
             .init(entry: .autoSyncTrackersToLocal, source: .booleanNSNumber, defaultJSON: "true", accepted: [NSNumber(value: false), NSNumber(value: true)], invalid: boolInvalid),
+            .init(entry: .networkDownloadMode, source: .string, defaultJSON: "\"unmeteredOnly\"", accepted: NetworkDownloadMode.allCases.map(\.rawValue), invalid: ["Unknown", "", NSNumber(value: true)]),
+            .init(entry: .adjacentChapterPrefetchCount, source: .integerNSNumber, defaultJSON: "2", accepted: [0, 1, 2].map(NSNumber.init(value:)), invalid: [NSNumber(value: -1), NSNumber(value: 3), NSNumber(value: 0.5), NSNumber(value: true)]),
             .init(entry: .diskCacheLimitGB, source: .numericNSNumber, defaultJSON: "10", accepted: [NSNumber(value: 1), NSNumber(value: 50)], invalid: numericInvalid + [NSNumber(value: 0), NSNumber(value: 2.5), NSNumber(value: 51)])
         ]
     }
@@ -1026,6 +1028,8 @@ struct AppPreferenceCatalogTests {
         case .incognitoMode: AppPreferenceKeys.incognitoMode
         case .autoSyncTrackersToLocal: AppPreferenceKeys.autoSyncTrackersToLocal
         case .diskCacheLimitGB: AppPreferenceKeys.diskCacheLimitGB
+        case .networkDownloadMode: AppPreferenceKeys.networkDownloadMode
+        case .adjacentChapterPrefetchCount: AppPreferenceKeys.adjacentChapterPrefetchCount
         }
     }
 
@@ -1052,6 +1056,8 @@ struct AppPreferenceCatalogTests {
         case .incognitoMode: try assertRoundTrip(AppPreferenceCatalog.incognitoMode)
         case .autoSyncTrackersToLocal: try assertRoundTrip(AppPreferenceCatalog.autoSyncTrackersToLocal)
         case .diskCacheLimitGB: try assertRoundTrip(AppPreferenceCatalog.diskCacheLimitGB)
+        case .networkDownloadMode: try assertRoundTrip(AppPreferenceCatalog.networkDownloadMode)
+        case .adjacentChapterPrefetchCount: try assertRoundTrip(AppPreferenceCatalog.adjacentChapterPrefetchCount)
         }
     }
 

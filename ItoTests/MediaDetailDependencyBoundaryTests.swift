@@ -179,7 +179,7 @@ final class MediaDetailDependencyBoundaryTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
         let pluginManager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory
         )
         let library = LibraryManager(dbPool: database.dbPool)
@@ -194,13 +194,13 @@ final class MediaDetailDependencyBoundaryTests: XCTestCase {
         )
         let tracking = PreparedTrackingDependencies.production(
             trackerManager: tracker,
-            settingsStore: AppSettingsStore(dbPool: database.dbPool),
+            settingsStore: AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             readProgressManager: progress
         )
         let theme = ThemeManager.shared
         let remapper = LibrarySourceRemapper(dbPool: database.dbPool)
         let baseline = UpdateManager(dbPool: database.dbPool)
-        let settings = AppSettingsStore(dbPool: database.dbPool)
+        let settings = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         let discord = DiscordRPCManager(libraryManager: library)
 
         let dependencies = PreparedMediaDetailDependencies.production(

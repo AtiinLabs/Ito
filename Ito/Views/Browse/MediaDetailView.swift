@@ -76,8 +76,34 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             .sheet(item: relinkPresentationBinding) { _ in
                 relinkSearchSheet
             }
-            .sheet(item: downloadSheetBinding) { sheet in
+            .sheet(item: downloadSheetBinding, onDismiss: {
+                // Reports the end of the dismissal, so a metered prompt held behind this sheet can be shown.
+                viewModel.downloadBatch.downloadSheetDidDismiss()
+            }) { sheet in
                 downloadSheetContent(sheet)
+                    // Only a sheet that was shown reports its dismissal; the model waits for that and no other.
+                    .onAppear { viewModel.downloadBatch.downloadSheetDidAppear() }
+            }
+            .confirmationDialog(
+                String(localized: "Use Metered Data?", comment: "Confirmation for one download batch on cellular or a hotspot"),
+                isPresented: Binding(
+                    get: { viewModel.downloadBatch.meteredPrompt != nil },
+                    // The dialog hides itself while a button's action is still to run: that action resolves the
+                    // batch it presented, so only Cancel drops it.
+                    set: { if !$0 { viewModel.downloadBatch.hideMeteredPrompt() } }
+                ),
+                titleVisibility: .visible,
+                presenting: viewModel.downloadBatch.meteredPrompt
+            ) { prompt in
+                Button(String(localized: "Use Metered Data for This Batch", comment: "Grants cellular permission only to this exact download batch")) {
+                    viewModel.downloadBatch.resolveMeteredPrompt(prompt.id, useMeteredData: true)
+                }
+                Button(String(localized: "Queue and Wait for Wi-Fi", comment: "Queues downloads without cellular permission")) {
+                    viewModel.downloadBatch.resolveMeteredPrompt(prompt.id, useMeteredData: false)
+                }
+                Button("Cancel", role: .cancel) { viewModel.downloadBatch.cancelMeteredPrompt() }
+            } message: { _ in
+                Text("This batch may use cellular data or a personal hotspot while the app stays in the foreground. Other downloads and prefetching are not approved.", comment: "Scope of temporary metered download permission")
             }
             .alert(
                 String(localized: "Switch groups?", comment: "Reader consent title: open one exact upload from another translation group"),

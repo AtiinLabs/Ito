@@ -2,43 +2,6 @@ import Combine
 import Foundation
 import ito_runner
 
-enum NovelReaderLoadPhase: Equatable {
-    case idle
-    case loading
-    case content
-    case failure(String)
-}
-
-struct NovelLoadedChapter: Identifiable, Equatable {
-    let id: UUID
-    let chapter: Novel.Chapter
-    let pages: [Page]
-
-    init(id: UUID = UUID(), chapter: Novel.Chapter, pages: [Page]) {
-        self.id = id
-        self.chapter = chapter
-        self.pages = pages
-    }
-
-    static func == (lhs: NovelLoadedChapter, rhs: NovelLoadedChapter) -> Bool {
-        lhs.id == rhs.id
-    }
-}
-
-/// A place to reopen a loaded chapter at; `offset` is a `NovelTextOffsets` offset.
-struct NovelReadingAnchor: Equatable {
-    let chapterID: UUID
-    let offset: Int
-}
-
-/// A block of a loaded chapter in continuous mode, by index into its pages; the chapter's
-/// heading comes before them all.
-struct NovelBlockReference: Hashable {
-    static let titleIndex = -1
-    let chapterID: UUID
-    let index: Int
-}
-
 @MainActor
 final class NovelReaderViewModel: ObservableObject {
     let pluginID: String
@@ -87,8 +50,11 @@ final class NovelReaderViewModel: ObservableObject {
 
     private var mainLoadTask: Task<Void, Never>?
     private var mainLoadOperationID: UUID?
+    // The group-switch consent extension in its own file ends an append, so these setters stay internal.
     var appendTask: Task<Void, Never>?
     var appendOperationID: UUID?
+    private var appendPrefetchEpoch: NetworkPrefetchEpoch?
+    private var networkSubscription: AnyCancellable?
     /// The last append was refused only because the next chapter is not downloaded and cannot be fetched.
     private var appendWaitsForBoundary = false
     private var effectTasks: [UUID: Task<Void, Never>] = [:]
@@ -152,8 +118,30 @@ final class NovelReaderViewModel: ObservableObject {
                 guard let self, self.isActive else { return }
                 self.applySettings(settings)
             }
+        networkSubscription = dependencies.settings.novelReaderNetworkChanges.sink { @Sendable [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.objectWillChange.send()
+                guard self.appendPrefetchEpoch != nil, !self.speculativeAppendAdmitted,
+                      let operationID = self.appendOperationID else { return }
+                let task = self.appendTask
+                self.finishAppend(operationID: operationID, outcome: .ignoredStale)
+                task?.cancel()
+            }
+        }
         // A download finishing or the network changing moves a boundary: the prompts follow.
         offline.observe { [weak self] in self?.offlineAvailabilityChanged() }
+    }
+
+    /// An effective restriction must still leave an explicit interactive continuation available.
+    var showsManualNextChapter: Bool {
+        !prefetchChapters || !dependencies.settings.novelReaderAllowsSpeculativePrefetch
+    }
+
+    private var speculativeAppendAdmitted: Bool {
+        guard let appendPrefetchEpoch else { return true }
+        return prefetchChapters && dependencies.settings.novelReaderAllowsSpeculativePrefetch
+            && appendPrefetchEpoch == dependencies.settings.novelReaderPrefetchEpoch
     }
 
     var nextChapter: Novel.Chapter? {
@@ -607,6 +595,7 @@ final class NovelReaderViewModel: ObservableObject {
     }
 
     func loadNextChapter(trigger: NextChapterTrigger) {
+        guard trigger != .seamless || !showsManualNextChapter else { return }
         guard isActive,
               appendOperationID == nil,
               !isLoadingNext,
@@ -634,6 +623,7 @@ final class NovelReaderViewModel: ObservableObject {
         let loader = chapterLoader
         let entry = entry
         appendOperationID = operationID
+        appendPrefetchEpoch = trigger == .seamless ? dependencies.settings.novelReaderPrefetchEpoch : nil
         isLoadingNext = true
         logStarted(kind: .chapterAppend, operationID: operationID)
         let operation = PluginNetworkOperation(
@@ -643,6 +633,13 @@ final class NovelReaderViewModel: ObservableObject {
 
         let task = Task { @MainActor [weak self, loader, entry] in
             defer { self?.finishTestingOperation(operationID) }
+            guard self?.isCurrentAppend(
+                boundaryID: boundaryID, boundaryToken: boundaryToken, operationID: operationID,
+                session: session, generation: generation
+            ) == true else {
+                self?.finishAppend(operationID: operationID, outcome: .ignoredStale)
+                return
+            }
             do {
                 let pages = try await loader.content(for: entry, chapter: next, operation: operation)
                 self?.completeAppend(
@@ -687,6 +684,7 @@ final class NovelReaderViewModel: ObservableObject {
                 operationID: operationID,
                 outcome: .ignoredStale
             )
+            finishAppend(operationID: operationID, outcome: .ignoredStale)
             return
         }
         loadedChapters.append(
@@ -704,6 +702,7 @@ final class NovelReaderViewModel: ObservableObject {
         generation: UInt64
     ) {
         guard isActive,
+              speculativeAppendAdmitted,
               sessionID == session,
               contentGeneration == generation,
               appendOperationID == operationID,
@@ -713,6 +712,7 @@ final class NovelReaderViewModel: ObservableObject {
                 operationID: operationID,
                 outcome: .ignoredStale
             )
+            finishAppend(operationID: operationID, outcome: .ignoredStale)
             return
         }
         appendFailed = true
@@ -726,6 +726,7 @@ final class NovelReaderViewModel: ObservableObject {
         guard appendOperationID == operationID else { return }
         appendTask = nil
         appendOperationID = nil
+        appendPrefetchEpoch = nil
         isLoadingNext = false
         logFinishedOnce(kind: .chapterAppend, operationID: operationID, outcome: outcome)
     }
@@ -738,6 +739,7 @@ final class NovelReaderViewModel: ObservableObject {
         generation: UInt64
     ) -> Bool {
         isActive
+            && speculativeAppendAdmitted
             && sessionID == session
             && contentGeneration == generation
             && appendOperationID == operationID
@@ -1065,6 +1067,7 @@ final class NovelReaderViewModel: ObservableObject {
         appendTask?.cancel()
         appendTask = nil
         appendOperationID = nil
+        appendPrefetchEpoch = nil
         isLoadingNext = false
         appendFailed = false
     }
@@ -1136,37 +1139,3 @@ private enum NovelReaderSettingKind: Hashable, CaseIterable {
     case prefetchChapters
 }
 
-struct NovelChapterToken: Equatable {
-    let key: String
-    let title: String?
-    /// Raw runner numbers, not the Float boundary: request identity must stay exact.
-    let volume: Double?
-    let chapter: Double?
-    let dateUpdated: Double?
-    let scanlator: String?
-    let url: String?
-    let language: String?
-    let paywalled: Bool?
-    let scanlatorID: String?
-    let kind: ContentKind?
-    let logicalUnitID: String?
-    let readingOrder: Int64?
-    let revision: String?
-
-    init(_ chapter: Novel.Chapter) {
-        key = chapter.key
-        title = chapter.title
-        volume = chapter.volume
-        self.chapter = chapter.chapter
-        dateUpdated = chapter.dateUpdated
-        scanlator = chapter.scanlator
-        url = chapter.url
-        language = chapter.lang
-        paywalled = chapter.paywalled
-        scanlatorID = chapter.scanlatorID
-        kind = chapter.kind
-        logicalUnitID = chapter.logicalUnitID
-        readingOrder = chapter.readingOrder
-        revision = chapter.revision
-    }
-}

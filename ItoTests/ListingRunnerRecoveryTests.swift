@@ -253,7 +253,7 @@ struct ListingRunnerRecoveryTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
             runnerLoader: { _, _, _ in ItoRunner() }
         )

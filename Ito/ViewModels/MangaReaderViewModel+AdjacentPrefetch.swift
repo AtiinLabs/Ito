@@ -9,7 +9,7 @@ extension MangaReaderViewModel {
         adjacentPrefetchTask?.cancel()
         let reference = currentChapter
         let referenceToken = ChapterToken(reference)
-        let candidates = [boundaryAfter(reference).chapter, boundaryBefore(reference).chapter].compactMap { $0 }
+        let candidates = adjacentPrefetchCandidates(for: reference)
         adjacentPrefetchKeys = Set(candidates.map(\.key))
         let missing = candidates.filter { prefetchedChapters[$0.key] == nil }
         guard !missing.isEmpty, isActive, isPaged else {
@@ -23,6 +23,7 @@ extension MangaReaderViewModel {
         let generation = contentGeneration
         let loader = pageLoader
         let entry = entry
+        adjacentPrefetchEpoch = dependencies.settings.mangaReaderPrefetchEpoch
         adjacentPrefetchOperationID = operationID
         logStarted(kind: .chapterPrefetch, operationID: operationID)
         let operation = PluginNetworkOperation(purpose: .prefetch, operationID: operationID)
@@ -74,6 +75,8 @@ extension MangaReaderViewModel {
         generation: UInt64
     ) -> Bool {
         isActive
+            && dependencies.settings.mangaReaderAdjacentPrefetchCount > 0
+            && adjacentPrefetchEpoch == dependencies.settings.mangaReaderPrefetchEpoch
             && isPaged
             && sessionID == session
             && contentGeneration == generation

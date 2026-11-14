@@ -528,6 +528,7 @@ public struct ItoNativeImporter: BackupImporter {
             if capability.component == .scalarAppPreferences,
                capability.representation == .representedNonempty {
                 let preferenceKeys = Set(backup.preferences.map(\.key))
+                // A backup made before an optional preference existed is still complete without it.
                 guard backup.preferences.count == preferenceKeys.count,
                       AppPreferenceCatalogEntry.isCompleteBackupKeySet(preferenceKeys),
                       Set(backup.representedPreferenceKeys) == preferenceKeys else {

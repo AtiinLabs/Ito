@@ -74,7 +74,7 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
             .appendingPathComponent("ItoTestPlugins_\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
         let pluginManager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory
         )
 
@@ -218,7 +218,7 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
             .appendingPathComponent("ItoTestPlugins_\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
         let pluginManager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory
         )
 
@@ -277,7 +277,7 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
             .appendingPathComponent("ItoTestPlugins_\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: pluginsDirectory) }
         let pluginManager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory
         )
 
