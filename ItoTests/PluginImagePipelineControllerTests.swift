@@ -108,6 +108,56 @@ final class PluginImagePipelineControllerTests: XCTestCase {
         withExtendedLifetime((oldTask, currentTask)) {}
     }
 
+    func testPlainHTTPSourceEpochPartitionsBothCachesAndPreservesProcessorAndHeaderIdentity() throws {
+        let contexts = PluginNetworkContexts(epochs: [
+            "A": String(repeating: "a", count: 32), "B": String(repeating: "b", count: 32)
+        ])
+        let url = try XCTUnwrap(URL(string: "https://shared.example/cover"))
+        let requests = SourceCoverRequests(contexts: contexts)
+        var a = try XCTUnwrap(requests.request(url, pluginID: "A"))
+        a.processors = [.resize(width: 48)]
+        var b = try XCTUnwrap(requests.request(url, pluginID: "B"))
+        b.processors = a.processors
+        let recorder = PipelineRecorder()
+        let controller = makeController(MemoryImageDataCache(), recorder)
+        controller.install(epoch: String(repeating: "d", count: 32))
+        let pipeline = try XCTUnwrap(recorder.latest)
+        let image = ImageContainer(image: UIImage())
+        pipeline.cache.storeCachedImage(image, for: a)
+        pipeline.cache.storeCachedData(Data([1]), for: a)
+        XCTAssertNotNil(pipeline.cache.cachedImage(for: a))
+        XCTAssertEqual(pipeline.cache.cachedData(for: a), Data([1]))
+        XCTAssertNil(pipeline.cache.cachedImage(for: b))
+        XCTAssertNil(pipeline.cache.cachedData(for: b))
+        let appOwned = ImageRequest(url: url, processors: a.processors)
+        XCTAssertNil(pipeline.cache.cachedImage(for: appOwned))
+        XCTAssertNil(pipeline.cache.cachedData(for: appOwned))
+        var resized = a
+        resized.processors = [.resize(width: 96)]
+        XCTAssertNil(pipeline.cache.cachedImage(for: resized))
+        XCTAssertNil(pipeline.cache.cachedData(for: resized))
+        var wire = try XCTUnwrap(a.urlRequest)
+        wire.setValue("https://reader.example/", forHTTPHeaderField: "Referer")
+        var withHeader = ImageRequest(urlRequest: wire)
+        withHeader.processors = a.processors
+        XCTAssertNil(pipeline.cache.cachedImage(for: withHeader))
+        XCTAssertNil(pipeline.cache.cachedData(for: withHeader))
+        contexts.replaceEpochs(["A": String(repeating: "c", count: 32), "B": String(repeating: "b", count: 32)])
+        var newA = try XCTUnwrap(requests.request(url, pluginID: "A"))
+        newA.processors = a.processors
+        XCTAssertEqual(newA.url, a.url, "Cache isolation must not rewrite the wire URL")
+        XCTAssertNil(pipeline.cache.cachedImage(for: newA))
+        XCTAssertNil(pipeline.cache.cachedData(for: newA))
+        // A late old response remains confined to its frozen partition.
+        pipeline.cache.storeCachedData(Data([2]), for: a)
+        XCTAssertNil(pipeline.cache.cachedData(for: newA))
+        XCTAssertEqual(pipeline.cache.cachedData(for: a), Data([2]))
+        pipeline.cache.storeCachedData(Data([3]), for: b)
+        var currentB = try XCTUnwrap(requests.request(url, pluginID: "B"))
+        currentB.processors = b.processors
+        XCTAssertEqual(pipeline.cache.cachedData(for: currentB), Data([3]))
+    }
+
     private func makeController(_ disk: MemoryImageDataCache, _ recorder: PipelineRecorder) -> PluginImagePipelineController {
         PluginImagePipelineController(
             dataCache: disk,

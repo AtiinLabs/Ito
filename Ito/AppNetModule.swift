@@ -51,17 +51,11 @@ extension AppNetCloudflareHandling {
 }
 struct LiveAppNetCloudflareHandler: AppNetCloudflareHandling {
     nonisolated func cachedUserAgent(for host: String) async -> String {
-        await MainActor.run {
-            CloudflareManager.shared.getCachedUserAgent(for: host)
-        }
+        CloudflareManager.defaultUserAgent
     }
 
     nonisolated func resolveChallenge(for url: URL) async throws -> AppNetCloudflareResolution {
-        let result = try await CloudflareManager.shared.resolveChallenge(for: url)
-        return AppNetCloudflareResolution(
-            userAgent: result.userAgent,
-            cookies: result.cookies
-        )
+        throw HostNetworkPolicyOutcome.foregroundPermissionRequired
     }
 
     nonisolated func resolveChallenge(for url: URL, authority: NetworkRequestAuthority?) async throws -> AppNetCloudflareResolution {
@@ -70,9 +64,7 @@ struct LiveAppNetCloudflareHandler: AppNetCloudflareHandling {
     }
 }
 
-/// Network for one plugin's runner. Requests carry the shared store's cookies (Cloudflare
-/// clearance) and then this plugin's own cookies; cookies the site sets are kept for this plugin
-/// only.
+/// Network for one plugin's runner. Site cookies are stored for this plugin only.
 actor AppNetModule: NetModule {
     /// Replaced when this plugin's trust changes; see `PluginSessionPool`.
     private let sessions: PluginSessionPool
@@ -137,6 +129,7 @@ actor AppNetModule: NetModule {
         try admitContext(context)
         let authority = contexts.map { NetworkRequestAuthority(contexts: $0, context: context) }
         try authority?.check()
+        let cookieGeneration = cookieJar.captureWriteGeneration()
         guard let url = URL(string: request.url) else {
             throw URLError(.badURL)
         }
@@ -183,7 +176,9 @@ actor AppNetModule: NetModule {
             originalHost: url.host,
             explicitCookies: explicitCookies,
             storedCookies: { url in Self.storedCookies(for: url, pluginID: pluginID, in: cookieJar) },
-            keep: { response in Self.keepSetCookies(of: response, pluginID: pluginID, in: cookieJar) },
+            keep: { response in
+                Self.keepSetCookies(of: response, pluginID: pluginID, in: cookieJar, generation: cookieGeneration)
+            },
             pluginID: pluginID,
             trust: trust,
             admission: {
@@ -195,20 +190,23 @@ actor AppNetModule: NetModule {
         let data: Data
         let response: URLResponse
         let wireRequest = urlRequest
+        let method = request.method.uppercased()
+        let refusesLateResult = ["GET", "HEAD", "OPTIONS"].contains(method)
         do {
             let transfer: @Sendable () async throws -> (Data, URLResponse) = {
                 try await sessions.withSession(for: pluginID) { session in
                     try await session.data(for: wireRequest, delegate: redirects)
                 }
             }
+
             if let authority {
-                (data, response) = try await authority.perform(transfer)
+                (data, response) = try await authority.perform(refusesLateResult: refusesLateResult, transfer)
             } else {
                 (data, response) = try await transfer()
             }
         } catch {
             if Task.isCancelled { throw CancellationError() }
-            if let refusal = redirects.policyError { throw refusal }
+            if refusesLateResult, let refusal = redirects.policyError { throw refusal }
             if let trustError = redirects.trustError { throw trustError }
             if (error as? URLError)?.code == .timedOut { throw ItoError.hostCallTimedOut(.net) }
             throw error
@@ -217,7 +215,7 @@ actor AppNetModule: NetModule {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
-        Self.keepSetCookies(of: httpResponse, pluginID: pluginID, in: cookieJar)
+        Self.keepSetCookies(of: httpResponse, pluginID: pluginID, in: cookieJar, generation: cookieGeneration)
 
         // --- Cloudflare challenge interception ---
         // Cloudflare marks every challenge page with `cf-mitigated: challenge`. A block page
@@ -239,7 +237,9 @@ actor AppNetModule: NetModule {
 
                 try Task.checkCancellation()
                 try authority?.check()
-                try cookieJar.store(bypassResult.cookies, pluginID: pluginID)
+                guard try cookieJar.store(bypassResult.cookies, pluginID: pluginID, ifCurrent: cookieGeneration) else {
+                    throw CancellationError()
+                }
                 var retriedRequest = request
                 var retriedHeaders = request.headers
 
@@ -288,8 +288,8 @@ actor AppNetModule: NetModule {
         cookieJar.cookies(pluginID: pluginID, for: url)
     }
 
-    /// The Cookie header for a request: the shared store's cookies (Cloudflare clearance), then this
-    /// plugin's own, then those the plugin set itself; later layers win on the same name.
+    /// The Cookie header for a request: this plugin's stored cookies, then those the plugin set itself;
+    /// later layers win on the same name.
     nonisolated static func cookieHeader(stored: [HTTPCookie], explicit: String?) -> String? {
         var names: [String] = []
         var values: [String: String] = [:]
@@ -311,14 +311,16 @@ actor AppNetModule: NetModule {
 
     /// Keeps the cookies `response` sets, for the URL that actually answered. A Keychain failure
     /// loses only this update; the response still reaches the plugin.
-    nonisolated static func keepSetCookies(of response: HTTPURLResponse, pluginID: String, in cookieJar: PluginCookieJar) {
+    nonisolated static func keepSetCookies(
+        of response: HTTPURLResponse, pluginID: String, in cookieJar: PluginCookieJar, generation: UInt64
+    ) {
         guard let url = response.url else { return }
         let fields = response.allHeaderFields.reduce(into: [String: String]()) { fields, field in
             fields[String(describing: field.key)] = String(describing: field.value)
         }
         let cookies = HTTPCookie.cookies(withResponseHeaderFields: fields, for: url)
         guard !cookies.isEmpty else { return }
-        try? cookieJar.store(cookies, pluginID: pluginID)
+        _ = try? cookieJar.store(cookies, pluginID: pluginID, ifCurrent: generation)
     }
 }
 

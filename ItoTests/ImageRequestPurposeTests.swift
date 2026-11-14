@@ -218,6 +218,149 @@ final class ImageRequestPurposeTests: XCTestCase {
         XCTAssertEqual(ImageRequest(urlRequest: marked).imageId, ImageRequest(urlRequest: plain).imageId)
     }
 
+    func testPlainHTTPSourceEpochRevokesOnlyItsOwnHeldTransferAndStripsBothMarks() async throws {
+        let contexts = PluginNetworkContexts(
+            epochs: ["A": String(repeating: "a", count: 32), "B": String(repeating: "b", count: 32)],
+            policy: NetworkPolicyCenter(path: ManualNetworkPathObserver(initial: .init(status: .satisfied)))
+        )
+        let held = AuthorityHeldImageLoader()
+        let loader = PluginDataLoader(
+            configuration: .ephemeral, contexts: contexts, defaultLoader: held,
+            runnerProvider: { _ in PurposeRecordingImageRunner() }
+        )
+        let url = try XCTUnwrap(URL(string: "https://images.example/same.png"))
+        let request = URLRequest(url: url)
+        let a = ImageRequestSourceAuthority.capture(pluginID: "A", contexts: contexts)
+        let b = ImageRequestSourceAuthority.capture(pluginID: "B", contexts: contexts)
+        let refused = expectation(description: "A is refused")
+        let bDone = expectation(description: "B completes")
+        let appDone = expectation(description: "App completes")
+        let aLoad = loader.loadData(
+            with: ImageRequestSourceAuthority.applied(
+                ImageRequestSourceAuthority.withPurpose(.foregroundReading, authority: a),
+                to: ImageRequestPurpose.foregroundReading.applied(to: request)
+            ),
+            didReceiveData: { _, _ in XCTFail("Revoked A published bytes") },
+            completion: { error in
+                XCTAssertEqual(error as? HostNetworkPolicyOutcome, .sourceAuthorizationFailure)
+                refused.fulfill()
+            }
+        )
+        let bLoad = loader.loadData(
+            with: ImageRequestSourceAuthority.applied(b, to: request),
+            didReceiveData: { _, _ in },
+            completion: { error in XCTAssertNil(error); bDone.fulfill() }
+        )
+        let appLoad = loader.loadData(
+            with: request, didReceiveData: { _, _ in },
+            completion: { error in XCTAssertNil(error); appDone.fulfill() }
+        )
+        XCTAssertEqual(held.requests.count, 3)
+        XCTAssertEqual(held.authorities.map(\.context.sourceID), ["A", "B", NetworkRequestAuthority.appSourceID])
+        for wire in held.requests {
+            XCTAssertNil(ImageRequestPurpose.marked(on: wire))
+            XCTAssertNil(ImageRequestSourceAuthority.marked(on: wire))
+            XCTAssertEqual(wire.url, url)
+        }
+        contexts.replaceEpochs(["A": String(repeating: "c", count: 32), "B": String(repeating: "b", count: 32)])
+        await fulfillment(of: [refused], timeout: 5)
+        XCTAssertEqual(held.cancelled, [0])
+        held.finishAll()
+        await fulfillment(of: [bDone, appDone], timeout: 5)
+        withExtendedLifetime((aLoad, bLoad, appLoad)) {}
+    }
+
+    func testReaderPlainHTTPPagesKeepFrozenSourceOperationAndPurpose() async throws {
+        let contexts = PluginNetworkContexts(
+            epochs: ["A": String(repeating: "a", count: 32)],
+            policy: NetworkPolicyCenter(path: ManualNetworkPathObserver(initial: .init(status: .satisfied)))
+        )
+        let held = AuthorityHeldImageLoader()
+        let loader = PluginDataLoader(
+            configuration: .ephemeral, contexts: contexts, defaultLoader: held,
+            runnerProvider: { _ in PurposeRecordingImageRunner() }
+        )
+        let started = expectation(description: "Visible and two prefetches start")
+        started.expectedFulfillmentCount = 3
+        held.onStart = { started.fulfill() }
+        let authority = ImageRequestSourceAuthority.capture(pluginID: "A", contexts: contexts)
+        let session = ReaderPageImageSession(pipeline: makePipeline(loader: loader), sourceAuthority: authority)
+        func descriptor(_ index: Int) -> ReaderPageImageDescriptor {
+            ReaderPageImageDescriptor(pageID: String(index), request: URLRequest(url: URL(string: "https://pages.example/\(index)")!))
+        }
+        let visible = session.acquire(descriptor(0), consumer: .visible)
+        session.setPrefetch([descriptor(1), descriptor(2), descriptor(3)])
+        await fulfillment(of: [started], timeout: 5)
+        XCTAssertEqual(Set(held.authorities.map(\.context.sourceID)), ["A"])
+        XCTAssertEqual(Set(held.authorities.map(\.context.operationID)), [authority.context.operationID])
+        XCTAssertEqual(held.authorities.filter { $0.context.purpose == .foregroundReading }.count, 1)
+        XCTAssertEqual(held.authorities.filter { $0.context.purpose == .prefetch }.count, 2)
+        contexts.replaceEpochs(["A": String(repeating: "b", count: 32)])
+        held.finishAll()
+        session.release(visible)
+        session.deactivate()
+        XCTAssertEqual(held.requests.count, 3, "The old session cannot start its queued fourth page")
+    }
+
+    func testFrozenItoDirectRewriteDoesNotBorrowTheNewSourceEpoch() async throws {
+        let contexts = PluginNetworkContexts(
+            epochs: ["A": String(repeating: "a", count: 32)],
+            policy: NetworkPolicyCenter(path: ManualNetworkPathObserver(initial: .init(status: .satisfied)))
+        )
+        let authority = ImageRequestSourceAuthority.capture(pluginID: "A", contexts: contexts)
+        let held = AuthorityHeldImageLoader()
+        let started = expectation(description: "Direct rewrite starts")
+        held.onStart = { started.fulfill() }
+        let done = expectation(description: "Frozen direct transfer refused")
+        let loader = PluginDataLoader(
+            configuration: .ephemeral, contexts: contexts, defaultLoader: held,
+            runnerProvider: { _ in PurposeRecordingImageRunner() }
+        )
+        let request = ImageRequestSourceAuthority.applied(authority, to: URLRequest(
+            url: try XCTUnwrap(URL(string: "ito://A/https://images.example/direct.png"))
+        ))
+        let load = loader.loadData(with: request, didReceiveData: { _, _ in XCTFail("Old direct transfer published") }) { error in
+            XCTAssertEqual(error as? HostNetworkPolicyOutcome, .sourceAuthorizationFailure)
+            done.fulfill()
+        }
+        await fulfillment(of: [started], timeout: 5)
+        XCTAssertEqual(held.authorities.first?.context.authorizationScope, authority.context.authorizationScope)
+        XCTAssertNil(held.requests.first.flatMap { ImageRequestSourceAuthority.marked(on: $0) })
+        contexts.replaceEpochs(["A": String(repeating: "b", count: 32)])
+        held.finishAll()
+        await fulfillment(of: [done], timeout: 5)
+        withExtendedLifetime(load) {}
+    }
+
+    func testStalePlainHTTPAuthorityIsRefusedBeforeWireForEveryImagePurpose() async throws {
+        let contexts = PluginNetworkContexts(
+            epochs: ["A": String(repeating: "a", count: 32)],
+            policy: NetworkPolicyCenter(path: ManualNetworkPathObserver(initial: .init(status: .satisfied)))
+        )
+        let original = ImageRequestSourceAuthority.capture(pluginID: "A", contexts: contexts)
+        contexts.replaceEpochs(["A": String(repeating: "b", count: 32)])
+        let held = AuthorityHeldImageLoader()
+        let loader = PluginDataLoader(
+            configuration: .ephemeral, contexts: contexts, defaultLoader: held,
+            runnerProvider: { _ in PurposeRecordingImageRunner() }
+        )
+        for purpose in [nil, .foregroundReading, .prefetch] as [ImageRequestPurpose?] {
+            let refused = expectation(description: "Stale image refused")
+            let authority = purpose.map { ImageRequestSourceAuthority.withPurpose($0, authority: original) } ?? original
+            let request = ImageRequestSourceAuthority.applied(
+                authority, to: URLRequest(url: URL(string: "https://images.example/stale.png")!)
+            )
+            let load = loader.loadData(with: request, didReceiveData: { _, _ in XCTFail("Stale image delivered") }) { error in
+                XCTAssertEqual(error as? HostNetworkPolicyOutcome, .sourceAuthorizationFailure)
+                refused.fulfill()
+            }
+            await fulfillment(of: [refused], timeout: 5)
+            withExtendedLifetime(load) {}
+        }
+        XCTAssertTrue(held.requests.isEmpty)
+        XCTAssertNil(SourceCoverRequests(contexts: nil).request(URL(string: "https://images.example/cover"), pluginID: "A"))
+    }
+
     // MARK: - Helpers
 
     private func makeLoader(
@@ -259,4 +402,61 @@ final class ImageRequestPurposeTests: XCTestCase {
             _ = loader.loadData(with: request, didReceiveData: { _, _ in }, completion: { _ in continuation.resume() })
         }
     }
+}
+
+/// Deliberately answers even cancelled work, exercising the host's late-publication guard.
+private final class AuthorityHeldImageLoader: AuthorizedDataLoading, @unchecked Sendable {
+    private struct Pending {
+        let request: URLRequest
+        let authority: NetworkRequestAuthority
+        let receive: @Sendable (Data, URLResponse) -> Void
+        let complete: @Sendable (Error?) -> Void
+    }
+    private let lock = NSLock()
+    private var pending: [Pending] = []
+    private var cancellations: Set<Int> = []
+    var onStart: (@Sendable () -> Void)?
+    var requests: [URLRequest] { lock.withLock { pending.map(\.request) } }
+    var authorities: [NetworkRequestAuthority] { lock.withLock { pending.map(\.authority) } }
+    var cancelled: Set<Int> { lock.withLock { cancellations } }
+
+    func loadData(
+        with request: URLRequest,
+        didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void,
+        completion: @escaping @Sendable (Error?) -> Void
+    ) -> any Cancellable {
+        XCTFail("Source transfer lost its authority")
+        completion(URLError(.cancelled))
+        return NoOpCancellable()
+    }
+
+    func loadData(
+        with request: URLRequest, authority: NetworkRequestAuthority,
+        didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void,
+        completion: @escaping @Sendable (Error?) -> Void
+    ) -> any Cancellable {
+        let index = lock.withLock {
+            pending.append(Pending(request: request, authority: authority, receive: didReceiveData, complete: completion))
+            return pending.count - 1
+        }
+        onStart?()
+        return AuthorityHeldCancellation { [weak self] in
+            _ = self?.lock.withLock { self?.cancellations.insert(index) }
+        }
+    }
+
+    func finishAll() {
+        let snapshot = lock.withLock { pending }
+        for entry in snapshot {
+            let data = Data([1])
+            entry.receive(data, URLResponse(url: entry.request.url!, mimeType: "image/png", expectedContentLength: 1, textEncodingName: nil))
+            entry.complete(nil)
+        }
+    }
+}
+
+private final class AuthorityHeldCancellation: Cancellable {
+    private let action: @Sendable () -> Void
+    init(_ action: @escaping @Sendable () -> Void) { self.action = action }
+    func cancel() { action() }
 }

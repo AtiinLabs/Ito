@@ -7,19 +7,13 @@ import ito_runner
 @MainActor
 final class CloudflareManager: NSObject, ObservableObject {
     static let shared = CloudflareManager()
-    static let defaultUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
+    nonisolated static let defaultUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
     private var challenges: [UUID: CloudflareChallenge] = [:]
 
-    // A host-only lookup is not allowed to recover another source's authorization.
-    func getCachedUserAgent(for host: String) -> String { Self.defaultUserAgent }
-    func clearCachedUserAgents() {
+    func cancelAllChallenges() {
         let retired = Array(challenges.values)
         challenges.removeAll()
         retired.forEach { $0.finish(.failure(CancellationError())) }
-    }
-
-    func resolveChallenge(for url: URL) async throws -> (userAgent: String, cookies: [HTTPCookie]) {
-        throw HostNetworkPolicyOutcome.foregroundPermissionRequired
     }
 
     func resolveChallenge(for url: URL, authority: NetworkRequestAuthority) async throws -> AppNetCloudflareResolution {
@@ -116,7 +110,7 @@ private final class CloudflareChallenge: NSObject, WKNavigationDelegate, WKHTTPC
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
-                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+                 decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
         guard self.webView === webView, completion != nil else { decisionHandler(.cancel); return }
         do {
             try authority.checkInteractive()

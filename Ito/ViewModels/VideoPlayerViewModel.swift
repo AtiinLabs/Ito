@@ -416,7 +416,7 @@ final class VideoPlayerViewModel: ObservableObject {
         }
         preparationTask = nil
         preparationOperationID = nil
-        if completesInitialLoad {
+        if completesInitialLoad || error is HostNetworkPolicyOutcome {
             loadPhase = .failure(Self.message(for: error))
         }
         logFinishedOnce(

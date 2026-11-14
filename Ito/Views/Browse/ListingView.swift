@@ -12,6 +12,7 @@ struct ListingView: View {
 
     var body: some View {
         listingContent
+            .environment(\.imageSourceID, viewModel.identity.pluginID)
             .navigationTitle(viewModel.title)
             .navigationBarTitleDisplayMode(.inline)
             .task {

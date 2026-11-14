@@ -9,11 +9,25 @@ import ito_runner
 /// Source-bound authorities also check the live source/account epoch. App-owned authorities (repositories,
 /// subtitles, trackers) have no source epoch and ask the policy alone.
 nonisolated struct NetworkRequestAuthority: Sendable {
-    /// The source ID that marks a destination the app owns itself.
+    /// A host-owned label, not a capability: a plugin using this ID must still validate its source epoch.
     static let appSourceID = "ito.app"
+    private static let appAuthorizationScope = UUID()
 
     let contexts: PluginNetworkContexts
     let context: NetworkOperationContext
+    private let isAppOwned: Bool
+
+    init(contexts: PluginNetworkContexts, context: NetworkOperationContext) {
+        self.contexts = contexts
+        self.context = context
+        isAppOwned = false
+    }
+
+    private init(appContext: NetworkOperationContext, contexts: PluginNetworkContexts) {
+        self.contexts = contexts
+        context = appContext
+        isAppOwned = true
+    }
 
     var changes: AnyPublisher<Void, Never> {
         contexts.policy.changes.merge(with: contexts.scopeChanges).eraseToAnyPublisher()
@@ -26,8 +40,11 @@ nonisolated struct NetworkRequestAuthority: Sendable {
         operationID: UUID = UUID()
     ) -> NetworkRequestAuthority {
         NetworkRequestAuthority(
-            contexts: contexts,
-            context: contexts.context(pluginID: appSourceID, PluginNetworkOperation(purpose: purpose, operationID: operationID))
+            appContext: NetworkOperationContext(
+                purpose: purpose, sourceID: appSourceID, authorizationScope: appAuthorizationScope,
+                operationID: operationID, policyRevision: contexts.policy.revision, generation: UUID()
+            ),
+            contexts: contexts
         )
     }
 
@@ -44,7 +61,7 @@ nonisolated struct NetworkRequestAuthority: Sendable {
 
     /// Throws the typed host outcome when the request may not start or continue now.
     func check() throws {
-        if context.authorizationScope != contexts.liveScope(pluginID: context.sourceID) {
+        if !isAppOwned, context.authorizationScope != contexts.liveScope(pluginID: context.sourceID) {
             throw HostNetworkPolicyOutcome.sourceAuthorizationFailure
         }
         let policy = contexts.policy

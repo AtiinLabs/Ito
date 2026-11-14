@@ -27,6 +27,7 @@ struct SourceView: View {
 
     var body: some View {
         sourceContent
+            .environment(\.imageSourceID, viewModel.plugin.id)
             .navigationTitle(viewModel.plugin.info.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

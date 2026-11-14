@@ -23,9 +23,6 @@ public final class TrackerManager: ObservableObject {
     @Published private(set) var credentialBootstrapState: CredentialBootstrapState = .notStarted
     @Published private(set) var malCredentialBootstrapState: CredentialBootstrapState = .notStarted
     @Published private(set) var mangaBakaCredentialBootstrapState: CredentialBootstrapState = .notStarted
-    /// Last acknowledged/deferred/unknown result of automatic sync. This is presentation state, not a retry outbox;
-    /// callers may report a pending update without claiming a write succeeded or rolled back.
-    @Published private(set) var progressUpdateReports: [MediaIdentity: ProgressUpdateReport] = [:]
 
     public let providers: [any TrackerProvider]
 
@@ -282,41 +279,14 @@ public final class TrackerManager: ObservableObject {
         providers.filter(\.isAuthenticated)
     }
 
-    /// What an automatic progress update did, per tracker. Automatic writes have no durable retry queue, so a
-    /// tracker the policy deferred is reported as deferred, and the next progress update sends the absolute value
-    /// again; it is neither sent, failed, nor lost silently.
-    struct ProgressUpdateReport: Equatable {
-        /// Trackers whose write was acknowledged.
-        var sent: [String] = []
-        /// Trackers the network policy refused before any request: nothing was sent, and sending again is safe.
-        var deferred: [String] = []
-        /// Trackers whose write failed. A failure after the request started may have reached the remote.
-        var failed: [String] = []
-
-        mutating func recordFailure(providerID: String, error: any Error) {
-            if error is HostNetworkPolicyOutcome {
-                deferred.append(providerID)
-            } else {
-                // A transport failure is not proof the remote rejected or rolled back the request.
-                failed.append(providerID)
-            }
-        }
-    }
-
+    /// Automatic progress writes have no durable retry queue; each invocation reports only to diagnostics.
     public func updateProgress(media: MediaIdentity, progress: Int) async {
-        _ = await updateProgressReport(media: media, progress: progress)
-    }
-
-    func updateProgressReport(media: MediaIdentity, progress: Int) async -> ProgressUpdateReport {
         let mappings = trackerMappings[media] ?? [:]
-        var report = ProgressUpdateReport()
         for provider in authenticatedProviders {
             guard let remoteMediaId = mappings[provider.identifier] else { continue }
             do {
                 try await provider.updateProgress(mediaId: remoteMediaId, progress: progress, status: nil)
-                report.sent.append(provider.identifier)
             } catch {
-                report.recordFailure(providerID: provider.identifier, error: error)
                 if error is HostNetworkPolicyOutcome {
                     AppLogger.auth.info("Tracker progress update deferred by network policy.")
                 } else {
@@ -324,8 +294,6 @@ public final class TrackerManager: ObservableObject {
                 }
             }
         }
-        progressUpdateReports[media] = report
-        return report
     }
 }
 

@@ -12,6 +12,8 @@ nonisolated public final class PluginCookieJar: @unchecked Sendable {
     private let lock = NSLock()
     /// Stored cookies by plugin id; each plugin's item is read from the Keychain once.
     private var cache: [String: [StoredCookie]] = [:]
+    /// Retires response writers when site data is cleared, even if their response has already completed.
+    private var writeGeneration: UInt64 = 0
 
     public init(
         keychain: any PluginSecretKeychain = SystemPluginSecretKeychain(service: PluginCookieJar.productionService),
@@ -41,10 +43,29 @@ nonisolated public final class PluginCookieJar: @unchecked Sendable {
     /// Adds or replaces cookies by name, domain and path; an already expired cookie removes the
     /// stored one, as a site does to sign out.
     public func store(_ cookies: [HTTPCookie], pluginID: String) throws {
-        guard !cookies.isEmpty else { return }
-        let date = now()
         lock.lock()
         defer { lock.unlock() }
+        try storeLocked(cookies, pluginID: pluginID)
+    }
+
+    func captureWriteGeneration() -> UInt64 {
+        lock.lock()
+        defer { lock.unlock() }
+        return writeGeneration
+    }
+
+    /// Admission and storage share the clear's lock: a response captured before a clear cannot restore cookies.
+    func store(_ cookies: [HTTPCookie], pluginID: String, ifCurrent generation: UInt64) throws -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard generation == writeGeneration else { return false }
+        try storeLocked(cookies, pluginID: pluginID)
+        return true
+    }
+
+    private func storeLocked(_ cookies: [HTTPCookie], pluginID: String) throws {
+        guard !cookies.isEmpty else { return }
+        let date = now()
         let previous = load(pluginID)
         var stored = previous
         for cookie in cookies {
@@ -86,6 +107,7 @@ nonisolated public final class PluginCookieJar: @unchecked Sendable {
     public func removeEveryPlugin() throws {
         lock.lock()
         defer { lock.unlock() }
+        writeGeneration &+= 1
         let status = keychain.deleteAll()
         guard status == errSecSuccess || status == errSecItemNotFound else {
             cache.removeAll()

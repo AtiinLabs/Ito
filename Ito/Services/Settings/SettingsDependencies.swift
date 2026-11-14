@@ -96,7 +96,7 @@ final class SystemSiteDataClearer: SiteDataClearing {
     func clearSiteData() async throws {
         // Pending pages and challenges end, and every per-source web data store is emptied, before the clear is
         // acknowledged, so none of them can publish into the next session.
-        CloudflareManager.shared.clearCachedUserAgents()
+        CloudflareManager.shared.cancelAllChallenges()
         await SourceWebsiteContexts.shared.clear()
         if let cookies = HTTPCookieStorage.shared.cookies {
             for cookie in cookies {

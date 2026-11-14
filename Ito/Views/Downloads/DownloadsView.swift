@@ -203,6 +203,7 @@ private struct DownloadsManagedCover: View {
 }
 
 private struct DownloadsCover: View {
+    @Environment(\.sourceCoverRequests) private var coverRequests
     let cover: LibraryDurableCover?
     let item: LibraryItem?
 
@@ -212,7 +213,7 @@ private struct DownloadsCover: View {
                cover.coverURLSHA256 == LibraryCoverThumbnailStore.coverHash(address) {
                 Image(uiImage: cover.image).resizable().scaledToFill()
             } else if let cover = item?.coverUrl, let url = URL(string: cover) {
-                LazyImage(url: url) { state in
+                LazyImage(request: coverRequests.request(url, pluginID: item?.pluginId)) { state in
                     if let image = state.image { image.resizable().scaledToFill() } else { placeholder }
                 }
             } else {

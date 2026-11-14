@@ -146,16 +146,6 @@ final class TransportEnforcementTests: XCTestCase {
         XCTAssertNil(coordinator.surface)
     }
 
-    @MainActor
-    func testTrackerDeferralIsNotAcknowledgmentOrUnknownWriteFailure() {
-        var report = TrackerManager.ProgressUpdateReport()
-        report.recordFailure(providerID: "anilist", error: HostNetworkPolicyOutcome.deferred(.offline))
-        report.recordFailure(providerID: "mal", error: URLError(.networkConnectionLost))
-        XCTAssertTrue(report.sent.isEmpty)
-        XCTAssertEqual(report.deferred, ["anilist"])
-        XCTAssertEqual(report.failed, ["mal"])
-    }
-
     func testZeroEffectiveImagePreloadRefusesSpeculativeResolution() {
         let contexts = makeContexts()
         var configured = contexts.policy.current
@@ -196,6 +186,30 @@ final class TransportEnforcementTests: XCTestCase {
         XCTAssertEqual(received.values, [1, 0])
         second.complete(nil)
         XCTAssertEqual(received.values, [1, 1])
+    }
+
+    func testAppOwnedAuthoritySurvivesUnrelatedSourceRotation() throws {
+        let contexts = PluginNetworkContexts(
+            epochs: ["fixture": String(repeating: "a", count: 32)],
+            policy: NetworkPolicyCenter(path: ManualNetworkPathObserver(initial: .init(status: .satisfied)))
+        )
+        let request = NetworkRequestAuthority.appOwned(contexts: contexts, purpose: .manualCatalogRefresh)
+        contexts.replaceEpochs(["fixture": String(repeating: "b", count: 32)])
+        XCTAssertNoThrow(try request.check())
+    }
+
+    func testAPluginCannotClaimAppAuthorityByUsingTheAppSourceLabel() throws {
+        let sourceID = NetworkRequestAuthority.appSourceID
+        let policy = NetworkPolicyCenter(path: ManualNetworkPathObserver(initial: .init(status: .satisfied)))
+        let contexts = PluginNetworkContexts(epochs: [sourceID: String(repeating: "a", count: 32)], policy: policy)
+        let operation = PluginNetworkOperation(purpose: .foregroundReading, operationID: UUID())
+        let source = NetworkRequestAuthority(contexts: contexts, context: contexts.context(pluginID: sourceID, operation))
+        let app = NetworkRequestAuthority.appOwned(contexts: contexts, purpose: .manualCatalogRefresh)
+
+        contexts.replaceEpochs([sourceID: String(repeating: "b", count: 32)])
+
+        assertRefusal(.sourceAuthorizationFailure) { try source.check() }
+        XCTAssertNoThrow(try app.check())
     }
 
     private func makeContexts(path: ManualNetworkPathObserver = ManualNetworkPathObserver(initial: .init(status: .satisfied))) -> PluginNetworkContexts {

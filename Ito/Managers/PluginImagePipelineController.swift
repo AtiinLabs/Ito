@@ -19,10 +19,20 @@ nonisolated final class PluginEpochDataCache: DataCaching {
     func removeAll() { underlying.removeAll() }
 }
 
-nonisolated private final class PluginImageCacheDelegate: ImagePipelineDelegate {
+/// Mutable partition caches are confined to `lock`; all other dependencies are immutable and thread-safe.
+nonisolated private final class PluginImageCacheDelegate: ImagePipelineDelegate, @unchecked Sendable {
     let pluginMemory: (any ImageCaching)?
     private let pluginDisk: (any DataCaching)?
     private let diagnostics: any ImagePipelineDelegate
+    private let lock = NSLock()
+    private var sourceMemory: [String: ImageCache] = [:]
+    private var sourceDisk: [String: any DataCaching] = [:]
+
+    /// Partition the caches, not Nuke's key: its complete processor/thumbnail identity stays intact.
+    private func sourcePartition(_ request: ImageRequest) -> String? {
+        guard let wire = request.urlRequest else { return nil }
+        return ImageRequestSourceAuthority.cachePartition(on: wire)
+    }
 
     init(epoch: String?, dataCache: (any DataCaching)?, diagnostics: any ImagePipelineDelegate) {
         self.diagnostics = diagnostics
@@ -37,11 +47,30 @@ nonisolated private final class PluginImageCacheDelegate: ImagePipelineDelegate 
     }
 
     func imageCache(for request: ImageRequest, pipeline: ImagePipeline) -> (any ImageCaching)? {
-        request.url?.scheme?.lowercased() == "ito" ? pluginMemory : pipeline.configuration.imageCache
+        if request.url?.scheme?.lowercased() == "ito", pluginMemory == nil { return nil }
+        if let partition = sourcePartition(request) {
+            return lock.withLock {
+                if let cache = sourceMemory[partition] { return cache }
+                let cache = ImageCache()
+                sourceMemory[partition] = cache
+                return cache
+            }
+        }
+        return request.url?.scheme?.lowercased() == "ito" ? pluginMemory : pipeline.configuration.imageCache
     }
 
     func dataCache(for request: ImageRequest, pipeline: ImagePipeline) -> (any DataCaching)? {
-        request.url?.scheme?.lowercased() == "ito" ? pluginDisk : pipeline.configuration.dataCache
+        if let partition = sourcePartition(request) {
+            guard let underlying = request.url?.scheme?.lowercased() == "ito"
+                ? pluginDisk : pipeline.configuration.dataCache else { return nil }
+            return lock.withLock {
+                if let cache = sourceDisk[partition] { return cache }
+                let cache = PluginEpochDataCache(underlying: underlying, epoch: partition)
+                sourceDisk[partition] = cache
+                return cache
+            }
+        }
+        return request.url?.scheme?.lowercased() == "ito" ? pluginDisk : pipeline.configuration.dataCache
     }
 
     func imageTask(_ task: ImageTask, didReceiveEvent event: ImageTask.Event, pipeline: ImagePipeline) {

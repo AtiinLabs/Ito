@@ -106,7 +106,7 @@ final class MangaReaderViewModel: ObservableObject {
         self.offline = offline
         currentChapter = entry.chapters?.first { $0.key == initialChapter.key } ?? initialChapter
         self.dependencies = dependencies
-        imagePrefetcher = dependencies.makeImagePrefetcher()
+        imagePrefetcher = dependencies.makeImagePrefetcher(pluginID)
         imageSession = imagePrefetcher.imageSession
         preloadImageCount = dependencies.settings.mangaReaderPreloadImageCount
         mediaIdentity = MediaIdentity(pluginId: pluginID, canonicalMediaId: entry.key, mediaKind: entry.kind)

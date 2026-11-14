@@ -1,5 +1,6 @@
 import Foundation
 import Nuke
+import ito_runner
 
 /// A default image loader that can carry the host's request authority to the wire.
 ///
@@ -17,13 +18,21 @@ nonisolated protocol AuthorizedDataLoading: DataLoading {
 
 nonisolated final class PolicyDataLoader: AuthorizedDataLoading, @unchecked Sendable {
     private let session: URLSession
+    /// Nuke owns source/epoch-partitioned caching. URLCache's URL-only namespace must not bridge epochs.
+    private let sourceSession: URLSession
 
     init(configuration: URLSessionConfiguration) {
         session = URLSession(configuration: configuration)
+        guard let sourceConfiguration = configuration.copy() as? URLSessionConfiguration else {
+            preconditionFailure("Unable to isolate source image transport cache")
+        }
+        sourceConfiguration.urlCache = nil
+        sourceSession = URLSession(configuration: sourceConfiguration)
     }
 
     deinit {
         session.invalidateAndCancel()
+        sourceSession.invalidateAndCancel()
     }
 
     func loadData(
@@ -42,7 +51,10 @@ nonisolated final class PolicyDataLoader: AuthorizedDataLoading, @unchecked Send
     ) -> any Cancellable {
         start(
             request,
-            transport: PolicyHTTPTransport(session: session, authority: authority),
+            transport: PolicyHTTPTransport(
+                session: authority.context.sourceID == NetworkRequestAuthority.appSourceID ? session : sourceSession,
+                authority: authority
+            ),
             didReceiveData: didReceiveData,
             completion: completion
         )

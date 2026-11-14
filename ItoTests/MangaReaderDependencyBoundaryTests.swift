@@ -56,7 +56,7 @@ final class MangaReaderDependencyBoundaryTests: XCTestCase {
             settings: subject.settings,
             presence: subject.presence,
             pluginMetadata: subject.metadata,
-            makeImagePrefetcher: { subject.imagePrefetcher },
+            makeImagePrefetcher: { _ in subject.imagePrefetcher },
             presentationLogger: subject.logger
         )
         let factory = MediaDetailReaderViewFactory(
@@ -156,7 +156,7 @@ final class MangaReaderDependencyBoundaryTests: XCTestCase {
         XCTAssertTrue(dependencies.pluginMetadata as AnyObject === plugin)
         XCTAssertTrue(dependencies.presentationLogger as AnyObject === logger)
         XCTAssertFalse(
-            dependencies.makeImagePrefetcher() === dependencies.makeImagePrefetcher()
+            dependencies.makeImagePrefetcher("source") === dependencies.makeImagePrefetcher("source")
         )
     }
 

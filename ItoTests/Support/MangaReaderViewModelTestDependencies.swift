@@ -357,7 +357,7 @@ func makeMangaReaderSubject(
         settings: settings,
         presence: presence,
         pluginMetadata: metadata,
-        makeImagePrefetcher: { imagePrefetcher },
+        makeImagePrefetcher: { _ in imagePrefetcher },
         presentationLogger: logger
     )
     let viewModel = MangaReaderViewModel(

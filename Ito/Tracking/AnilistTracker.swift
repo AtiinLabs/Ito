@@ -138,19 +138,21 @@ public class AnilistTracker: TrackerProvider {
             return listStatus
         }
 
-        if let progress = progress {
+        if let progress {
             do {
                 if let entry = try await getMediaListEntry(mediaId: mediaId),
-                   let currentProgress = entry.progress {
-                    if currentProgress >= progress && (status == nil || entry.status == status) {
-                        return
-                    }
+                   let currentProgress = entry.progress,
+                   currentProgress >= progress && (status == nil || entry.status == status) {
+                    return
                 }
+            } catch let outcome as HostNetworkPolicyOutcome {
+                throw outcome
             } catch {
-                AppLogger.auth.error("Failed to fetch existing entry before updating, proceeding with update.")
+                AppLogger.auth.error("Failed to fetch existing entry before updating.")
             }
         }
 
+        try authorities?.admit(.trackerWrite)
         _ = try await client.execute(SaveMediaListEntryMutation(mediaId: idInt, status: listStatus, progress: progress))
     }
 

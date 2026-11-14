@@ -4,6 +4,8 @@ import NukeUI
 import ito_runner
 
 public struct MediaRowView<M: MediaDisplayable, Destination: View>: View {
+    @Environment(\.sourceCoverRequests) private var coverRequests
+    @Environment(\.imageSourceID) private var imageSourceID
     let media: M
     let destination: () -> Destination
 
@@ -16,7 +18,7 @@ public struct MediaRowView<M: MediaDisplayable, Destination: View>: View {
         NavigationLink(destination: destination()) {
             HStack(alignment: .top, spacing: 12) {
                 if let coverURL = media.cover, let url = URL(string: coverURL) {
-                    LazyImage(url: url) { state in
+                    LazyImage(request: coverRequests.request(url, pluginID: imageSourceID)) { state in
                         if let image = state.image {
                             image
                                 .resizable()

@@ -3,6 +3,7 @@ import NukeUI
 import Nuke
 
 public struct PluginResultRow: View {
+    @Environment(\.sourceCoverRequests) private var coverRequests
     public let result: PluginSearchResult
 
     public init(result: PluginSearchResult) {
@@ -12,7 +13,7 @@ public struct PluginResultRow: View {
     public var body: some View {
         HStack(alignment: .top, spacing: 12) {
             if let coverURL = result.cover, let url = URL(string: coverURL) {
-                LazyImage(url: url) { state in
+                LazyImage(request: coverRequests.request(url, pluginID: result.destination.pluginID)) { state in
                     if let image = state.image {
                         image.resizable().scaledToFill()
                     } else {

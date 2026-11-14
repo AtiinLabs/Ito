@@ -81,7 +81,6 @@ nonisolated final class PluginNetworkContexts: @unchecked Sendable {
         )
     }
 
-    /// The authorization scope of a source now, as the mirror of committed epochs has it.
     func liveScope(pluginID: String) -> UUID {
         lock.withLock {
             if let mirrored = epochScopes[pluginID] { return mirrored }

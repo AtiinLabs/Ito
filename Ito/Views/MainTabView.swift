@@ -9,6 +9,7 @@ struct MainTabView: View {
             router: appScope.router,
             messageCenter: appScope.messageCenter
         )
+        .environment(\.sourceCoverRequests, appScope.viewFactory.sourceCoverRequests)
     }
 }
 

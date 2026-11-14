@@ -2291,6 +2291,9 @@
     "Network" : {
 
     },
+    "Network settings changed. Try again." : {
+      "comment" : "A request was stopped because its captured network policy is no longer current."
+    },
     "New List" : {
 
     },
@@ -2368,6 +2371,9 @@
     },
     "No group listed" : {
       "comment" : "Scanlator choice: the chapters whose source names no scanlator."
+    },
+    "No internet connection. Try again when connected." : {
+      "comment" : "A request was not sent because the device is offline."
     },
     "No items in %@." : {
 
@@ -2522,6 +2528,9 @@
     "Open Settings" : {
 
     },
+    "Open this source to continue in the foreground." : {
+      "comment" : "A source needs user interaction that background work cannot perform."
+    },
     "Opens the series" : {
       "comment" : "History: accessibility hint of a series row"
     },
@@ -2597,6 +2606,9 @@
     },
     "Planning" : {
 
+    },
+    "Playback stopped because the source or network settings changed. Try again." : {
+      "comment" : "Video player error when settings changed while an episode was loading or playing."
     },
     "Please drop a valid .ito plugin file." : {
 
@@ -3719,6 +3731,9 @@
     "The source was saved, but could not be opened. Try Open again." : {
 
     },
+    "The source's sign-in or settings changed. Review them and try again." : {
+      "comment" : "The request belongs to a source authorization scope that is no longer current."
+    },
     "The source's web page failed: %@" : {
 
     },
@@ -3823,6 +3838,15 @@
     },
     "This repository is already in your list." : {
 
+    },
+    "This request is blocked by your network settings." : {
+      "comment" : "An explicit user network restriction blocks the request."
+    },
+    "This request is paused while Low Data Mode is enabled." : {
+      "comment" : "Network policy refuses a request on a constrained connection."
+    },
+    "This request is waiting for an unmetered network." : {
+      "comment" : "Network policy refuses a request on a metered connection."
     },
     "This series is no longer available on MangaBaka. Stop tracking it and link it again." : {
 
@@ -4136,6 +4160,9 @@
     "Waiting for a connection" : {
       "comment" : "Chapter download status\nEffective network policy refusal"
     },
+    "Waiting for a network connection." : {
+      "comment" : "A request is waiting until the network path is known."
+    },
     "Waiting for a network reading" : {
       "comment" : "No path observation yet"
     },
@@ -4235,6 +4262,9 @@
     "You stopped this episode at %@." : {
 
     },
+    "You're offline. Connect to the internet to play this episode." : {
+      "comment" : "Video player error when playback needs a network connection that is not available."
+    },
     "Your Library is Empty" : {
 
     },
@@ -4261,6 +4291,9 @@
     },
     "Your list order couldn't be saved. Please try again." : {
 
+    },
+    "Your network settings don't allow this episode to play right now." : {
+      "comment" : "Video player error when the network policy refuses to start or continue playback."
     },
     "Your restored data is saved. Refresh must finish before a report can be shown." : {
 

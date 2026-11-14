@@ -26,6 +26,22 @@ struct PluginCookieJarTests {
 
     private func names(_ cookies: [HTTPCookie]) -> Set<String> { Set(cookies.map(\.name)) }
 
+    @Test func clearingSiteDataRejectsCookiesFromAnAlreadyCompletedOldChallenge() throws {
+        let jar = jar()
+        let url = try #require(URL(string: "https://example.com/"))
+        let completedChallenge = [try cookie("cf_clearance", "old")]
+        let generation = jar.captureWriteGeneration()
+        try jar.store([try cookie("session")], pluginID: "a")
+
+        try jar.removeEveryPlugin()
+        #expect(try jar.store(completedChallenge, pluginID: "a", ifCurrent: generation) == false)
+        #expect(jar.cookies(pluginID: "a", for: url).isEmpty)
+
+        let freshGeneration = jar.captureWriteGeneration()
+        #expect(try jar.store([try cookie("session", "new")], pluginID: "a", ifCurrent: freshGeneration))
+        #expect(jar.cookies(pluginID: "a", for: url).map(\.value) == ["new"])
+    }
+
     @Test func aCookieGoesToItsSiteAndSubdomainsOnly() throws {
         let jar = jar()
         try jar.store([try cookie("session")], pluginID: "a")

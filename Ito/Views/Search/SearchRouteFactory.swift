@@ -113,6 +113,8 @@ struct AppViewFactory {
         )
     }
 
+    var sourceCoverRequests: SourceCoverRequests { SourceCoverRequests(contexts: networkContexts) }
+
     func makeSearchView() -> SearchView {
         SearchView(
             viewModel: rootModels.searchViewModel,

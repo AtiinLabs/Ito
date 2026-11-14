@@ -66,18 +66,18 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
         guard let url = request.url, url.scheme == "ito" else {
             // The reader's purpose mark stays on this side. A remote request is admitted under the purpose it was
             // marked with (an unmarked one is a cover image) before any byte is requested.
-            let forwarded = ImageRequestPurpose.unmarked(request)
+            let forwarded = ImageRequestSourceAuthority.unmarked(ImageRequestPurpose.unmarked(request))
             guard Self.isRemote(request.url) else {
                 return defaultLoader.loadData(with: forwarded, didReceiveData: didReceiveData, completion: completion)
             }
-            let authority = NetworkRequestAuthority.appOwned(
+            let authority = ImageRequestSourceAuthority.marked(on: request) ?? NetworkRequestAuthority.appOwned(
                 contexts: networkContexts,
                 purpose: mark?.networkPurpose ?? .coverImage
             )
             return admittedTransfer(forwarded, authority: authority, didReceiveData: didReceiveData, completion: completion)
         }
 
-        let admission = startAuthority(for: url, mark: mark)
+        let admission = ImageRequestSourceAuthority.marked(on: request) ?? startAuthority(for: url, mark: mark)
         let load = AdmittedImageLoad(authority: admission, completion: completion)
         let task = Task {
             var usedRunner: (any PluginImageRunner)?
@@ -86,6 +86,9 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                 let locator = try PluginImageLocator.parse(url)
                 let pluginId = locator.pluginID
                 targetPluginId = pluginId
+                guard admission.context.sourceID == pluginId else {
+                    throw HostNetworkPolicyOutcome.sourceAuthorizationFailure
+                }
 
                 // Refused before the runner starts; the resolution and wire transfer keep the original scope.
                 try admission.checkImageAdmission()
@@ -119,7 +122,7 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                     load.deliver(data, response, to: didReceiveData)
                     load.complete(nil)
                 case .direct(let realUrl):
-                    var realRequest = ImageRequestPurpose.unmarked(request)
+                    var realRequest = ImageRequestSourceAuthority.unmarked(ImageRequestPurpose.unmarked(request))
                     realRequest.url = realUrl
                     guard !Task.isCancelled else { throw CancellationError() }
                     guard Self.isRemote(realUrl) else { throw URLError(.unsupportedURL) }
