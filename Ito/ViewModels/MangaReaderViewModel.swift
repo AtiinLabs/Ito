@@ -694,7 +694,6 @@ final class MangaReaderViewModel: ObservableObject {
             && !Task.isCancelled
     }
 
-
     // MARK: - Continuous chapter loading
 
     /// Retries the next-chapter append after `appendFailed`.

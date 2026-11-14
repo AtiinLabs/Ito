@@ -1138,4 +1138,3 @@ private enum NovelReaderSettingKind: Hashable, CaseIterable {
     case isPaging
     case prefetchChapters
 }
-
