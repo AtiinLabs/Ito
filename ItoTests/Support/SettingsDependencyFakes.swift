@@ -56,6 +56,13 @@ actor TestAppSettingsPersistence: AppSettingsPersistence {
         return self.preferences
     }
 
+    /// Writes only the network preferences that are absent, so a stored value is never replaced.
+    func insertAbsentNetworkPreferences() async throws -> [AppPreference] {
+        let missing = NetworkPreferenceMigration.missingRows(in: preferences)
+        guard !missing.isEmpty else { return preferences }
+        return try await writePreferences(missing)
+    }
+
     func failNextWriteAttempt() {
         failNextWrite = true
     }
@@ -210,9 +217,7 @@ struct TestPreparedSettingsDependencyBundle {
     let siteDataClearer: TestSiteDataClearer
 
     init(
-        settingsStore: AppSettingsStore = AppSettingsStore(
-            persistence: TestAppSettingsPersistence()
-        ),
+        settingsStore: AppSettingsStore = AppSettingsStore(persistence: TestAppSettingsPersistence(), networkPolicy: NetworkPolicyCenter()),
         notificationAuthorization: TestNotificationAuthorization = TestNotificationAuthorization(),
         applicationSettingsOpener: TestApplicationSettingsOpener = TestApplicationSettingsOpener(),
         storageAccess: TestSettingsStorageAccess = TestSettingsStorageAccess(),
@@ -262,7 +267,7 @@ func verifyLiveSettingsRestorePropagation(
     let persistence = TestAppSettingsPersistence(preferences: [
         try AppPreference(key: AppPreferenceCatalog.updateNotifications, value: false)
     ])
-    let store = AppSettingsStore(persistence: persistence)
+    let store = AppSettingsStore(persistence: persistence, networkPolicy: NetworkPolicyCenter())
     try await store.reloadAfterRestore()
     XCTAssertFalse(store.updateNotifications)
     await persistence.resetWriteTracking()

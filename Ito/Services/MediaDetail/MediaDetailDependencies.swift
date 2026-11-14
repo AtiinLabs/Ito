@@ -319,6 +319,8 @@ enum MediaDetailMessage: Equatable {
     case downloadRefused
     /// A Download, Cancel, Retry or Delete did not reach the store.
     case downloadActionFailed
+    /// A download was asked for while another batch was still being queued; nothing was queued for this one.
+    case downloadBatchBusy
     /// A preset queued chapters. `alreadyStored` counts the chapters of its range that were saved or queued.
     case downloadsQueued(queued: Int, alreadyStored: Int)
     /// A preset found nothing new to queue.
@@ -331,6 +333,11 @@ enum MediaDetailMessage: Equatable {
     case editionChoiceUnreadable
     /// Reading the stored choice failed this time. `reviewing` says the download goes on to a preview.
     case editionChoiceReadFailed(reviewing: Bool)
+    /// The source, catalog or edition policy changed after a choice or preview was shown, so nothing was
+    /// stored or queued and the user reviews again.
+    case editionChoiceChanged
+    /// The remembered preferred group has no chapters in the source's current list, so nothing was queued.
+    case preferredGroupNotListed
 }
 
 @MainActor
@@ -367,6 +374,8 @@ final class AppMessageMediaDetailPresenter: MediaDetailMessagePresenting {
             messageCenter.publish(.mediaDetailDownloadRefused)
         case .downloadActionFailed:
             messageCenter.publish(.mediaDetailDownloadActionFailed)
+        case .downloadBatchBusy:
+            messageCenter.publish(.mediaDetailDownloadBatchBusy)
         case .downloadsQueued(let queued, let alreadyStored):
             messageCenter.publish(.mediaDetailDownloadsQueued(queued: queued, alreadyStored: alreadyStored))
         case .nothingToDownload:
@@ -379,6 +388,10 @@ final class AppMessageMediaDetailPresenter: MediaDetailMessagePresenting {
             messageCenter.publish(.mediaDetailEditionChoiceUnreadable)
         case .editionChoiceReadFailed(let reviewing):
             messageCenter.publish(.mediaDetailEditionChoiceReadFailed(reviewing: reviewing))
+        case .editionChoiceChanged:
+            messageCenter.publish(.mediaDetailEditionChoiceChanged)
+        case .preferredGroupNotListed:
+            messageCenter.publish(.mediaDetailPreferredGroupNotListed)
         }
     }
 

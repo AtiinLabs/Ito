@@ -290,6 +290,8 @@ nonisolated enum SeriesEditionPreferenceError: Error, Equatable {
     case unreadable
     /// A remembered choice cannot recreate or outlive its saved Library scope.
     case seriesNotSaved
+    /// The source's settings or account changed after the choice was reviewed, so it is not stored.
+    case sourceChanged
 }
 
 /// The scanlators a user chose to download for one series, when they asked to remember the choice.
@@ -345,6 +347,22 @@ nonisolated struct DownloadBatchRequest: Sendable {
     /// SHA-256 hex digest (64 characters) of the chapter list the plan was made from, if any.
     let catalogDigest: String?
     let chapters: [Chapter]
+    /// The source epoch the user reviewed this batch under. When set, the store refuses the whole request in
+    /// its write transaction unless the source's epoch is still this one; nil takes the epoch of the moment.
+    var reviewedSourceEpoch: String?
+    /// The remembered edition policy the plan was made under. When set, the store refuses the whole request in
+    /// the same write transaction unless the stored policy is still exactly this one, so a screen holding an
+    /// older copy of the series' policy cannot queue under it. Nil does not check.
+    var reviewedPolicy: ReviewedEditionPolicy?
+}
+
+/// What the series' remembered edition policy was when a batch was reviewed.
+nonisolated enum ReviewedEditionPolicy: Equatable, Sendable {
+    /// No policy was remembered.
+    case none
+    /// A policy was stored that this build cannot read.
+    case unreadable
+    case selection(EditionSelection)
 }
 
 /// How each requested chapter was settled. The counts add up to the number of chapters requested
@@ -403,6 +421,10 @@ nonisolated enum DownloadRefusal: Equatable, Sendable {
     case paywalled
     case unsupportedKind
     case unavailable
+    /// The source's settings or account changed after the batch was reviewed; nothing was queued.
+    case sourceChanged
+    /// The series' remembered edition policy changed after the batch was reviewed; nothing was queued.
+    case policyChanged
 }
 
 nonisolated enum DownloadEnqueueOutcome: Equatable, Sendable {

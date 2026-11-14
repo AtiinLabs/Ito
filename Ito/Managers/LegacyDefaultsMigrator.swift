@@ -1181,6 +1181,7 @@ public final class LegacyDefaultsMigrator: @unchecked Sendable {
             && lhs.anilistId == rhs.anilistId && lhs.status == rhs.status
             && lhs.lastCheckedAt == rhs.lastCheckedAt && lhs.lastUpdatedAt == rhs.lastUpdatedAt
             && lhs.knownChapterCount == rhs.knownChapterCount
+            && lhs.knownChapterCountBasis == rhs.knownChapterCountBasis
     }
 
     private static func normalizedRepositoryURL(_ url: String) -> String {

@@ -111,7 +111,7 @@ extension MangaReaderSettingsAccessing {
     var mangaReaderEffectivePreloadImageCount: Int { mangaReaderPreloadImageCount }
     var mangaReaderAdjacentPrefetchCount: Int { mangaReaderPreloadImageCount == 0 ? 0 : 2 }
     var mangaReaderNetworkChanges: AnyPublisher<Void, Never> { Empty().eraseToAnyPublisher() }
-    var mangaReaderPrefetchEpoch: NetworkPrefetchEpoch { .init(policyRevision: 0, pathGeneration: 0) }
+    var mangaReaderPrefetchEpoch: NetworkPrefetchEpoch { .init(speculativeRevision: 0, pathGeneration: 0) }
 }
 
 extension AppSettingsStore: MangaReaderSettingsAccessing {

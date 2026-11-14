@@ -124,6 +124,8 @@ public final class DurableStateBootstrap: ObservableObject {
         let recentSearchDefaults: UserDefaults
         let completionCoordinator: PluginCompletionCoordinator
         let downloads: DownloadStack?
+        /// The one in-memory durable-cover service, shared by the Library screens and the restore refresh.
+        let coverThumbnails: LibraryCoverThumbnails
     }
 
     /// - Parameter networkPath: The process's one network path monitor. It is shared with the download queue
@@ -406,6 +408,7 @@ public final class DurableStateBootstrap: ObservableObject {
         progress.configure(updateManager: updates)
         library.configure(updateManager: updates)
 
+        let coverThumbnails = LibraryCoverThumbnails(database: dbPool)
         let refresher = BackupRestoreRefresher(
             dbPool: dbPool,
             appSettings: settings,
@@ -414,6 +417,7 @@ public final class DurableStateBootstrap: ObservableObject {
             repoManager: repositories,
             pluginResolver: resolver,
             libraryManager: library,
+            coverThumbnails: coverThumbnails,
             historyManager: history,
             readProgressManager: progress,
             trackerManager: tracker,
@@ -491,7 +495,8 @@ public final class DurableStateBootstrap: ObservableObject {
             restoreRefresher: refresher,
             recentSearchDefaults: usernameDefaults,
             completionCoordinator: completionCoordinator,
-            downloads: downloads
+            downloads: downloads,
+            coverThumbnails: coverThumbnails
         )
     }
 
@@ -579,7 +584,7 @@ public final class DurableStateBootstrap: ObservableObject {
             completionRecovery: runtime.completionCoordinator,
             downloads: runtime.downloads,
             connectivity: NetworkPathConnectivity(observer: networkPath),
-            coverThumbnails: LibraryCoverThumbnails(database: dbPool)
+            coverThumbnails: runtime.coverThumbnails
         )
     }
 
@@ -832,7 +837,8 @@ struct InstalledPluginSuiteBootstrapExtension: DurableStateBootstrapExtension {
                 }
             }
         }
-        try PluginSettingsStore(dbPool: dbPool).prepareForDurableSnapshot(discoveries)
+        // Discovery metadata only: this store makes no network request, so it takes no live path policy.
+        try PluginSettingsStore(dbPool: dbPool, networkPolicy: NetworkPolicyCenter()).prepareForDurableSnapshot(discoveries)
     }
 
     private static func defaultPluginsDirectory(_ fileManager: FileManager) throws -> URL {

@@ -34,6 +34,12 @@ public struct ItoNativeImporter: BackupImporter {
             let categories = try fetchIfPresent(LibraryCategory.self, in: db)
             let items = try fetchLibraryItems(in: db)
             let links = try fetchIfPresent(ItemCategoryLink.self, in: db)
+            let savedLibraryThumbnails = try capabilities.contains {
+                $0.component == .savedLibraryThumbnails && $0.representation != .unrepresented
+            }
+                ? fetchBoundedThumbnails(in: db)
+                : []
+
             var legacyStateArchives = try fetchArchives(in: db)
             let capturedAt = metadata?.createdAt ?? Date()
             let resolver = try LegacyMediaKindResolver(db: db)
@@ -194,7 +200,8 @@ public struct ItoNativeImporter: BackupImporter {
                 pluginIdentityAliases: pluginIdentityAliases,
                 pluginSettings: pluginSettings,
                 legacyUnscopedMediaState: legacyUnscopedMediaState,
-                legacyStateArchives: legacyStateArchives
+                legacyStateArchives: legacyStateArchives,
+                savedLibraryThumbnails: savedLibraryThumbnails
             )
             try imported.validateCapabilityMetadata()
             try validateCapabilityRepresentations(imported)
@@ -280,7 +287,7 @@ public struct ItoNativeImporter: BackupImporter {
         }
 
         let availableColumns = Set(try db.columns(in: "libraryItem").map(\.name))
-        let optionalColumns = ["status", "lastCheckedAt", "lastUpdatedAt", "knownChapterCount"]
+        let optionalColumns = ["status", "lastCheckedAt", "lastUpdatedAt", "knownChapterCount", "knownChapterCountBasis"]
         let projections = requiredColumns + optionalColumns.map { column in
             availableColumns.contains(column) ? column : "NULL AS \(column)"
         }
@@ -507,6 +514,7 @@ public struct ItoNativeImporter: BackupImporter {
     nonisolated private func validateCapabilityRepresentations(
         _ backup: ImportedBackup
     ) throws {
+        try validateSavedThumbnails(backup.savedLibraryThumbnails, items: backup.items)
         guard backup.metadata != nil else { return }
         for component in BackupComponent.allCases
         where backup.representation(of: component) == .unrepresented
@@ -549,6 +557,36 @@ public struct ItoNativeImporter: BackupImporter {
         }
     }
 
+    /// The backup's thumbnails, once their total size is known to fit the budget: a backup can't make the
+    /// importer load more than a backup may carry. The size is counted in bytes whatever type a crafted file
+    /// stores, since `length` of TEXT counts characters.
+    nonisolated private func fetchBoundedThumbnails(in db: Database) throws -> [LibraryCoverThumbnailRecord] {
+        guard try db.tableExists(LibraryCoverThumbnailRecord.databaseTableName) else { return [] }
+        let bytes = try Int.fetchOne(
+            db,
+            sql: "SELECT COALESCE(SUM(length(CAST(imageData AS BLOB))), 0) FROM libraryCoverThumbnail"
+        ) ?? 0
+        guard bytes <= LibraryCoverThumbnailRecord.maximumPortableAggregateByteCount else {
+            throw invalidCapability(component: .savedLibraryThumbnails, code: "thumbnailBudgetExceeded")
+        }
+        return try LibraryCoverThumbnailRecord.fetchAll(db)
+    }
+
+    nonisolated private func validateSavedThumbnails(
+        _ thumbnails: [LibraryCoverThumbnailRecord],
+        items: [LibraryItem]
+    ) throws {
+        let itemsById = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var seen = Set<String>()
+        for thumbnail in thumbnails {
+            guard seen.insert(thumbnail.libraryItemId).inserted,
+                  thumbnail.isPortable(coverUrl: itemsById[thumbnail.libraryItemId]?.coverUrl)
+            else {
+                throw invalidCapability(component: .savedLibraryThumbnails, code: "invalidThumbnail")
+            }
+        }
+    }
+
     nonisolated private func representation(
         hasRows: Bool
     ) -> BackupRepresentation {
@@ -586,6 +624,8 @@ public struct ItoNativeImporter: BackupImporter {
             !backup.pluginSettings.isEmpty
         case .legacyUnscopedMediaState:
             !backup.legacyUnscopedMediaState.isEmpty
+        case .savedLibraryThumbnails:
+            !backup.savedLibraryThumbnails.isEmpty
         case .legacyStateArchive:
             !backup.legacyStateArchives.isEmpty
         }

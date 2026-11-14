@@ -32,7 +32,7 @@ nonisolated final class PluginNetworkContexts: @unchecked Sendable {
     /// The live network policy every context is stamped from.
     let policy: NetworkPolicyCenter
 
-    init(epochs: [String: String] = [:], policy: NetworkPolicyCenter = NetworkPolicyCenter()) {
+    init(epochs: [String: String] = [:], policy: NetworkPolicyCenter) {
         self.policy = policy
         replaceEpochs(epochs)
     }

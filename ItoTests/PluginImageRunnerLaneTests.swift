@@ -367,7 +367,7 @@ final class PluginImageRunnerLaneTests: XCTestCase {
         database: TestDatabase
     ) -> PluginManager {
         PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
             runnerLoader: loader.load
         )

@@ -118,4 +118,35 @@ struct NetworkConsentAdmissionTests {
         #expect(try await fixture.copy() == nil)
         #expect(try await fixture.job()?.waitingReason == .meteredNetwork)
     }
+
+    @Test func cancellingOneChapterKeepsTheBatchConsentForItsSiblings() async throws {
+        let fixture = try DownloadWorkerFixture()
+        await fixture.coordinator.reconcile()
+        fixture.path.set(.init(status: .satisfied, isExpensive: true))
+        var configuration = fixture.networkContexts.policy.current
+        configuration.downloadMode = .askMetered
+        fixture.networkContexts.policy.apply(configuration)
+        fixture.networkContexts.policy.enterForeground()
+        let result = await fixture.center.enqueueBatch(
+            OfflineStoreFixture.batchRequest(chapterKeys: ["chapter-1", "chapter-2"]),
+            confirmedMeteredUse: true
+        )
+        #expect(result.queued == 2)
+        let batchID = try #require(result.batchId.flatMap(UUID.init(uuidString:)))
+        let actualBinding = fixture.networkContexts.consentBinding(batchID: batchID, pluginID: DownloadWorkerFixture.plugin)
+        #expect(fixture.networkContexts.policy.hasValidConsent(actualBinding))
+
+        let first = OfflineChapterEdition(
+            pluginId: DownloadWorkerFixture.plugin, mediaKind: .manga, canonicalMediaId: "series-1", chapterKey: "chapter-1"
+        )
+        try await fixture.center.cancel(first)
+        #expect(fixture.networkContexts.policy.hasValidConsent(actualBinding))
+
+        let second = OfflineChapterEdition(
+            pluginId: DownloadWorkerFixture.plugin, mediaKind: .manga, canonicalMediaId: "series-1", chapterKey: "chapter-2"
+        )
+        let secondJob = try #require(try await fixture.store.job(for: second))
+        try await fixture.center.cancel(jobIDs: [secondJob.id])
+        #expect(!fixture.networkContexts.policy.hasValidConsent(actualBinding))
+    }
 }

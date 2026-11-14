@@ -164,17 +164,23 @@ final class MultiKindDurableIdentityTests: XCTestCase {
         let updates = UpdateManager(dbPool: database.dbPool)
         library.configure(updateManager: updates)
 
-        let mangaID = try await library.saveMangaDurably(manga: Manga(key: "42", title: "Manga 42"), pluginId: "source.multi")
-        let novelID = try await library.saveNovelDurably(novel: Novel(key: "42", title: "Novel 42"), pluginId: "source.multi")
+        // Nonempty saves establish the exact-key baselines; growth then yields the badges.
+        let mangaID = try await library.saveMangaDurably(
+            manga: Manga(key: "42", title: "Manga 42", chapters: [Chapter(key: "m1")]), pluginId: "source.multi"
+        )
+        let novelID = try await library.saveNovelDurably(
+            novel: Novel(key: "42", title: "Novel 42", chapters: [Chapter(key: "n1"), Chapter(key: "n2")]),
+            pluginId: "source.multi"
+        )
 
         let mangaItem = try await database.dbPool.read { db in try XCTUnwrap(try LibraryItem.fetchOne(db, key: mangaID)) }
         let novelItem = try await database.dbPool.read { db in try XCTUnwrap(try LibraryItem.fetchOne(db, key: novelID)) }
 
         _ = await updates.processUpdate(for: mangaItem) {
-            UpdateManager.SuccessfulUpdate(freshCount: 3, status: "ongoing")
+            UpdateManager.SuccessfulUpdate(freshCount: 4, status: "ongoing")
         }
         _ = await updates.processUpdate(for: novelItem) {
-            UpdateManager.SuccessfulUpdate(freshCount: 7, status: "ongoing")
+            UpdateManager.SuccessfulUpdate(freshCount: 9, status: "ongoing")
         }
 
         XCTAssertEqual(updates.badgeCount(for: mangaItem.mediaIdentity), 3)
@@ -345,7 +351,7 @@ final class MultiKindDurableIdentityTests: XCTestCase {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let library = LibraryManager(dbPool: database.dbPool, observationScheduler: ManualLibraryObservationScheduler())
-        let settings = AppSettingsStore(dbPool: database.dbPool)
+        let settings = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         try await settings.reload()
         let history = HistoryManager(dbPool: database.dbPool, libraryManager: library)
         history.configure(settingsStore: settings)

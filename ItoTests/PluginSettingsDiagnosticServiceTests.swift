@@ -15,7 +15,7 @@ struct PluginSettingsDiagnosticServiceTests {
 
         let keychain = InMemoryPluginSecretKeychain()
         let secrets = PluginSecretStore(keychain: keychain)
-        let store = PluginSettingsStore(dbPool: database.dbPool, secrets: secrets)
+        let store = PluginSettingsStore(dbPool: database.dbPool, secrets: secrets, networkPolicy: NetworkPolicyCenter())
 
         let pluginID = "com.test.source"
         let otherPluginID = "com.test.other"
@@ -77,7 +77,7 @@ struct PluginSettingsDiagnosticServiceTests {
 
         let keychain = InMemoryPluginSecretKeychain()
         let secrets = PluginSecretStore(keychain: keychain)
-        let store = PluginSettingsStore(dbPool: database.dbPool, secrets: secrets)
+        let store = PluginSettingsStore(dbPool: database.dbPool, secrets: secrets, networkPolicy: NetworkPolicyCenter())
 
         let pluginA = "com.test.alpha"
         let pluginAPrefix = "com.test.alpha.beta"
@@ -108,7 +108,7 @@ struct PluginSettingsDiagnosticServiceTests {
 
         let keychain = InMemoryPluginSecretKeychain()
         let secrets = PluginSecretStore(keychain: keychain)
-        let store = PluginSettingsStore(dbPool: database.dbPool, secrets: secrets)
+        let store = PluginSettingsStore(dbPool: database.dbPool, secrets: secrets, networkPolicy: NetworkPolicyCenter())
 
         let pluginID = "com.test.diagnostic"
 
@@ -199,7 +199,7 @@ struct PluginSettingsDiagnosticServiceTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let secrets = PluginSecretStore(keychain: InMemoryPluginSecretKeychain())
-        let store = PluginSettingsStore(dbPool: database.dbPool, secrets: secrets)
+        let store = PluginSettingsStore(dbPool: database.dbPool, secrets: secrets, networkPolicy: NetworkPolicyCenter())
         #expect(store.setSecret(pluginId: "rich", key: "credential", value: "saved"))
         let form = SettingsForm(sections: [
             ControlSection(id: "account", title: "Account", summary: nil, flags: [], controls: [
@@ -255,7 +255,7 @@ struct PluginSettingsDiagnosticServiceTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
 
-        let store = PluginSettingsStore(dbPool: database.dbPool)
+        let store = PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         let service = await MainActor.run {
             PluginSettingsDiagnosticService(
                 settingsStore: store,

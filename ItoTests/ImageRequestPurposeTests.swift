@@ -192,7 +192,7 @@ final class ImageRequestPurposeTests: XCTestCase {
         let session = DataLoader(configuration: PurposeProbeURLProtocol.configuration())
         let loader = PluginDataLoader(
             configuration: PurposeProbeURLProtocol.configuration(),
-            contexts: PluginNetworkContexts(),
+            contexts: PluginNetworkContexts(policy: NetworkPolicyCenter()),
             runnerProvider: { _ in PurposeRecordingImageRunner() }
         )
 

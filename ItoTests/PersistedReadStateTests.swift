@@ -136,12 +136,12 @@ struct PersistedReadStateTests {
         #expect(progress.isRead(media: Self.media, chapterId: "unlisted", chapterNum: fresh.chapterNumber))
     }
 
-    @Test func theExactAndWidenedDecimalsCountAsOneChapterAsUnderTheFloatModel() async throws {
+    @Test func distinctExactKeysCountSeparatelyDespiteWidenedDecimalCollision() async throws {
         let stored = try Self.chapter("ch-004-decimal", in: try await Self.widenedChapters())
         let fresh = Chapter(key: "exact", chapter: 1.1)
         #expect(stored.chapter != fresh.chapter, "The two Doubles must differ, or the test proves nothing")
 
-        #expect([fresh, stored].distinctChapterCount == 1)
+        #expect([fresh, stored].distinctChapterCount == 2)
     }
 
     // MARK: - History
@@ -177,7 +177,7 @@ struct PersistedReadStateTests {
         defer { database.cleanup() }
         let library = LibraryManager(dbPool: database.dbPool)
         try await library.reload()
-        let settings = AppSettingsStore(dbPool: database.dbPool)
+        let settings = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         try await settings.reload()
         let history = HistoryManager(dbPool: database.dbPool, libraryManager: library)
         history.configure(settingsStore: settings)

@@ -109,7 +109,7 @@ nonisolated public final class PluginSettingsStore: ObservableObject, @unchecked
             keychain: SystemPluginSecretKeychain(service: PluginSecretStore.tokenService)
         ),
         trust: PluginTrustStore = PluginTrustStore(),
-        networkPolicy: NetworkPolicyCenter = NetworkPolicyCenter()
+        networkPolicy: NetworkPolicyCenter
     ) {
         self.dbPool = dbPool
         self.standardApplicationDomain = standardApplicationDomain

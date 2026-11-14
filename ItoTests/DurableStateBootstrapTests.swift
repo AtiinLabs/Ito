@@ -194,7 +194,7 @@ struct DurableStateBootstrapTests {
             .appendingPathComponent("Plugins", isDirectory: true)
         try makeCorruptInstalledPlugin(in: pluginsDirectory)
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory
         )
 

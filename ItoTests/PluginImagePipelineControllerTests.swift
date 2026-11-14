@@ -111,7 +111,7 @@ final class PluginImagePipelineControllerTests: XCTestCase {
     func testPlainHTTPSourceEpochPartitionsBothCachesAndPreservesProcessorAndHeaderIdentity() throws {
         let contexts = PluginNetworkContexts(epochs: [
             "A": String(repeating: "a", count: 32), "B": String(repeating: "b", count: 32)
-        ])
+        ], policy: NetworkPolicyCenter(path: ManualNetworkPathObserver(initial: .init(status: .satisfied))))
         let url = try XCTUnwrap(URL(string: "https://shared.example/cover"))
         let requests = SourceCoverRequests(contexts: contexts)
         var a = try XCTUnwrap(requests.request(url, pluginID: "A"))

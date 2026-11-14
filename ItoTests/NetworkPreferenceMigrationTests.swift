@@ -8,7 +8,7 @@ struct NetworkPreferenceMigrationTests {
     @Test func representedEmptyScalarWipeAndRefreshDoNotMaterializeNetworkDefaults() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let settings = AppSettingsStore(dbPool: database.dbPool)
+        let settings = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         try await settings.reload()
         let backup = ImportedBackup(
             metadata: BackupMetadataRecord(formatVersion: 1, createdAt: Date(timeIntervalSince1970: 1)),
@@ -27,7 +27,7 @@ struct NetworkPreferenceMigrationTests {
     func olderCompleteScalarCatalogRestoresThroughComponentOperation(mode: BackupRestoreMode) async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let settings = AppSettingsStore(dbPool: database.dbPool)
+        let settings = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         try await settings.reload()
         try await settings.set(.allowMetered, for: AppPreferenceCatalog.networkDownloadMode)
         try await settings.set(.one, for: AppPreferenceCatalog.adjacentChapterPrefetchCount)
@@ -87,7 +87,7 @@ struct NetworkPreferenceMigrationTests {
             try AppPreference(key: AppPreferenceCatalog.novelPrefetchChapters, value: false).save(db)
             try NetworkPreferenceMigration.insertMissing(in: db)
         }
-        let store = AppSettingsStore(dbPool: database.dbPool)
+        let store = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         try await store.reload()
         #expect(store.adjacentChapterPrefetchCount == .none)
         #expect(store.preloadImageCount == .none)
@@ -113,7 +113,7 @@ struct NetworkPreferenceMigrationTests {
     @Test func resetTouchesOnlyNetworkPreferences() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let store = AppSettingsStore(dbPool: database.dbPool)
+        let store = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         try await store.reload()
         try await store.set(.dark, for: AppPreferenceCatalog.appTheme)
         try await store.set(true, for: AppPreferenceCatalog.incognitoMode)
@@ -135,5 +135,20 @@ struct NetworkPreferenceMigrationTests {
         var missing = AppPreferenceCatalogEntry.backupRequiredKeys
         missing.remove(AppPreferenceKeys.preloadImageCount)
         #expect(!AppPreferenceCatalogEntry.isCompleteBackupKeySet(missing))
+    }
+
+    @Test func insertAbsentNetworkPreferencesNeverReplacesAStoredRow() async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        try await database.dbPool.write { db in
+            try AppPreference(key: AppPreferenceCatalog.adjacentChapterPrefetchCount, value: AdjacentChapterPrefetchPreference.one).insert(db)
+            try AppPreference(key: AppPreferenceCatalog.preloadImageCount, value: ImagePreloadCountPreference.none).insert(db)
+        }
+        let rows = try await GRDBAppSettingsPersistence(dbPool: database.dbPool).insertAbsentNetworkPreferences()
+
+        let adjacent = try #require(rows.first { $0.key == AppPreferenceKeys.adjacentChapterPrefetchCount })
+        #expect(try adjacent.decodedValue(for: AppPreferenceCatalog.adjacentChapterPrefetchCount) == .one)
+        let mode = try #require(rows.first { $0.key == AppPreferenceKeys.networkDownloadMode })
+        #expect(try mode.decodedValue(for: AppPreferenceCatalog.networkDownloadMode) == .unmeteredOnly)
     }
 }

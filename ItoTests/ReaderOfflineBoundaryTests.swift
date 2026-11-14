@@ -608,7 +608,7 @@ struct ReaderChapterBoundaryTests {
             novelReaderDependencies: novelBase.dependencies,
             downloads: UnavailableMediaDetailDownloads(),
             connectivity: ConnectivityFake(isOffline: true),
-            networkContexts: PluginNetworkContexts()
+            networkContexts: PluginNetworkContexts(policy: NetworkPolicyCenter())
         )
         let pages = factory.makeMangaViewModel(
             content: ReaderContentSource(remote: ItoRunner()),
@@ -657,7 +657,7 @@ struct ReaderChapterBoundaryTests {
             mangaReaderDependencies: base.dependencies,
             downloads: MediaDetailDownloadsFake(isAvailable: true),
             connectivity: connectivity,
-            networkContexts: PluginNetworkContexts()
+            networkContexts: PluginNetworkContexts(policy: NetworkPolicyCenter())
         )
         let viewModel = factory.makeMangaViewModel(
             content: ReaderContentSource(remote: ItoRunner()),

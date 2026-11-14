@@ -378,7 +378,7 @@ final class AppScopeIdentityTests: XCTestCase {
         )
         defer { try? FileManager.default.removeItem(at: fixtureRoot) }
 
-        let pluginSettings = PluginSettingsStore(dbPool: database.dbPool)
+        let pluginSettings = PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         let pluginManager = PluginManager(
             pluginSettingsStore: pluginSettings,
             pluginsDirectory: pluginsDirectory
@@ -387,7 +387,7 @@ final class AppScopeIdentityTests: XCTestCase {
             dbPool: database.dbPool,
             pluginManager: pluginManager
         )
-        let settingsStore = AppSettingsStore(dbPool: database.dbPool)
+        let settingsStore = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         let trackerManager = TrackerManager(
             dbPool: database.dbPool,
             credentialStore: FakeTrackerCredentialStore(),
@@ -555,7 +555,7 @@ final class AppScopeIdentityTests: XCTestCase {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let pluginManager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool)
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         )
         let repository = GRDBSourceMappingRepository(dbWriter: database.dbPool)
         let dependencies = PreparedApplicationDependencies(
@@ -646,7 +646,7 @@ final class AppScopeIdentityTests: XCTestCase {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let pluginManager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool)
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         )
         pluginManager.publishPreparedInstalledPlugins(["plugin.tls": InstalledPlugin(
             url: URL(fileURLWithPath: "/plugins/plugin.tls.ito"),

@@ -110,6 +110,7 @@ public final class BackupRestoreRefresher {
         repoManager: RepoManager,
         pluginResolver: PluginResolver,
         libraryManager: LibraryManager,
+        coverThumbnails: LibraryCoverThumbnails,
         historyManager: HistoryManager,
         readProgressManager: ReadProgressManager,
         trackerManager: TrackerManager,
@@ -125,7 +126,11 @@ public final class BackupRestoreRefresher {
                 pluginSettings: { try pluginSettings.reload() },
                 repositories: { try await repoManager.reload() },
                 userImporterAliases: { try await pluginResolver.reload() },
-                library: { try await libraryManager.reload() },
+                library: {
+                    // A restore replaces stored thumbnails behind the in-memory service's back.
+                    coverThumbnails.invalidateAll()
+                    try await libraryManager.reload()
+                },
                 history: { try await historyManager.reload() },
                 readProgress: { try await readProgressManager.reload() },
                 trackerLinks: { try await trackerManager.reload() },

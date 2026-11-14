@@ -43,6 +43,17 @@ public struct LibraryCategory: Codable, Identifiable, Hashable, Sendable, Fetcha
     }
 }
 
+/// The identity used by a stored update-count baseline, not a release-event detector.
+public enum ChapterCountBasis: String, Codable, Hashable, Sendable {
+    case exactChapterKeys
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        self = Self(rawValue: value) ?? .unknown
+    }
+}
+
 // Ensure decoding from legacy JSON still works seamlessly while bridging to SQLite
 public struct LibraryItem: Codable, Identifiable, Hashable, Sendable, FetchableRecord, PersistableRecord {
     public let id: String
@@ -63,6 +74,8 @@ public struct LibraryItem: Codable, Identifiable, Hashable, Sendable, FetchableR
     public var lastCheckedAt: Date?
     public var lastUpdatedAt: Date?
     public var knownChapterCount: Int?
+    // v23: nil on older rows/backups until a current nonempty catalog establishes the basis.
+    public var knownChapterCountBasis: ChapterCountBasis?
 
     public nonisolated var effectiveType: MediaKind {
         if let pt = pluginType { return pt }
@@ -86,8 +99,10 @@ public struct LibraryItem: Codable, Identifiable, Hashable, Sendable, FetchableR
         public static let lastCheckedAt = Column(CodingKeys.lastCheckedAt)
         public static let lastUpdatedAt = Column(CodingKeys.lastUpdatedAt)
         public static let knownChapterCount = Column(CodingKeys.knownChapterCount)
+        public static let knownChapterCountBasis = Column(CodingKeys.knownChapterCountBasis)
     }
 
+    // Identity only: mutable update-count metadata, including its basis, is not identity.
     public static func == (lhs: LibraryItem, rhs: LibraryItem) -> Bool {
         return lhs.id == rhs.id && lhs.anilistId == rhs.anilistId
     }

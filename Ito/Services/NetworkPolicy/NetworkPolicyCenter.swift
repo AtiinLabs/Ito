@@ -1,9 +1,11 @@
 import Combine
 import Foundation
 
-/// Captured by speculative work before scheduling; a revoke-and-allow sequence cannot revive that work.
+/// Captured by speculative work before scheduling. A revoke-and-allow sequence cannot revive that work, and a
+/// change of the speculative values (image preload, adjacent chapters, novel prefetch) invalidates it. Bulk
+/// consent does not move this epoch, so a speculative change never restarts a running download attempt.
 nonisolated struct NetworkPrefetchEpoch: Equatable, Sendable {
-    let policyRevision: UInt64
+    let speculativeRevision: UInt64
     let pathGeneration: UInt64
 }
 
@@ -15,20 +17,28 @@ nonisolated struct NetworkConsentBinding: Sendable {
     let liveAuthorizationScope: @Sendable () -> UUID
 }
 
-/// The live network policy of one runtime: the configured values the settings store acknowledged, a revision
-/// that advances with each change of them, and the in-memory registry of batch consents.
+/// The live network policy of one runtime: the configured values the settings store acknowledged, the revisions
+/// that advance with the changes that matter to them, and the in-memory registry of batch consents.
 ///
 /// Configured values reach it only through `apply(_:)`, which the settings store calls after the values are
 /// stored. Nothing here is persisted or exported.
 ///
-/// A consent is a grant for one exact batch. It binds the batch ID, the source scope, the policy revision, the
-/// path class generation and the foreground session it was minted in, and `hasValidConsent` checks every
-/// binding on each admission. It expires when the batch is revoked, the app leaves the foreground, the path
-/// class changes, the policy changes, or the source scope changes. A UUID reference to it may travel in a host
-/// context, but the reference alone is never authority.
+/// Two revisions exist because two kinds of work depend on different values:
+/// - `revision` (bulk) advances only when the download mode changes. It is what consents and bulk attempts are
+///   stamped with, so changing a speculative value never revokes consent or requeues a running attempt.
+/// - `prefetchEpoch` advances when a speculative value changes, so speculative work captured before the change
+///   stops publishing.
+///
+/// A consent is a grant for one exact batch. It binds the batch ID, the source scope, the bulk revision, the path
+/// class generation and the foreground session it was minted in, and `hasValidConsent` checks every binding on
+/// each admission. It expires when the batch is revoked, the app leaves the foreground, the path class changes,
+/// the download mode changes, or the source scope changes. A UUID reference to it may travel in a host context,
+/// but the reference alone is never authority.
 nonisolated final class NetworkPolicyCenter: @unchecked Sendable {
     var prefetchEpoch: NetworkPrefetchEpoch {
-        lock.withLock { NetworkPrefetchEpoch(policyRevision: currentRevision, pathGeneration: currentPathGeneration) }
+        lock.withLock {
+            NetworkPrefetchEpoch(speculativeRevision: currentSpeculativeRevision, pathGeneration: currentPathGeneration)
+        }
     }
 
     struct Confirmation: Equatable, Sendable {
@@ -62,6 +72,7 @@ nonisolated final class NetworkPolicyCenter: @unchecked Sendable {
     private let path: (any NetworkPathObserving)?
     private var configuration: NetworkPolicyConfiguration
     private var currentRevision: UInt64 = 1
+    private var currentSpeculativeRevision: UInt64 = 1
     private var currentPathGeneration: UInt64 = 0
     private var lastPath: NetworkPathSnapshot?
     private var foregroundSession: UUID?
@@ -84,8 +95,9 @@ nonisolated final class NetworkPolicyCenter: @unchecked Sendable {
         }
     }
 
-    // MARK: - Configured values and revision
+    // MARK: - Configured values and revisions
 
+    /// The bulk revision. It advances only when the download mode changes.
     var revision: UInt64 {
         lock.withLock { currentRevision }
     }
@@ -96,26 +108,35 @@ nonisolated final class NetworkPolicyCenter: @unchecked Sendable {
 
     var observedPath: NetworkPathSnapshot? { path?.current }
 
-    /// Emits the new revision after each change of the configured values. Never emits for an unchanged value.
+    /// Emits the new bulk revision after each change of the download mode. Never emits for an unchanged value.
     var revisions: AnyPublisher<UInt64, Never> {
         revisionSubject.eraseToAnyPublisher()
     }
 
-    /// Adopts acknowledged configured values. Each changed network/prefetch configuration advances the revision
-    /// and expires consent. An unrelated preference write or a reload of identical values advances nothing.
+    /// Adopts acknowledged configured values. A change of the download mode advances the bulk revision and expires
+    /// every consent; a change of a speculative value advances only the prefetch epoch. Any other change, and a
+    /// reload of identical values, advances nothing and publishes nothing.
     func apply(_ newConfiguration: NetworkPolicyConfiguration) {
-        let newRevision: UInt64? = lock.withLock {
-            let changesDecisions = newConfiguration != configuration
+        let outcome: (bulkRevision: UInt64?, changed: Bool) = lock.withLock {
+            let previous = configuration
+            guard newConfiguration != previous else { return (nil, false) }
             configuration = newConfiguration
-            guard changesDecisions else { return nil }
+            if newConfiguration.preloadImageCount != previous.preloadImageCount
+                || newConfiguration.adjacentChapterPrefetch != previous.adjacentChapterPrefetch
+                || newConfiguration.novelPrefetchChapters != previous.novelPrefetchChapters {
+                currentSpeculativeRevision += 1
+            }
+            guard newConfiguration.downloadMode != previous.downloadMode else { return (nil, true) }
             currentRevision += 1
             grants = [:]
-            return currentRevision
+            return (currentRevision, true)
         }
-        if let newRevision {
-            revisionSubject.send(newRevision)
+        if let revision = outcome.bulkRevision {
+            revisionSubject.send(revision)
         }
-        changeSubject.send(())
+        if outcome.changed {
+            changeSubject.send(())
+        }
     }
 
     // MARK: - Decisions
@@ -134,6 +155,17 @@ nonisolated final class NetworkPolicyCenter: @unchecked Sendable {
 
     func projection(path snapshot: NetworkPathSnapshot) -> NetworkEffectiveProjection {
         NetworkPolicy.projection(configuration: current, path: snapshot)
+    }
+
+    /// The first path the observer reports that is known. It reads the observer's replaying stream, so an unknown
+    /// path is awaited rather than judged as offline, and the wait ends with the caller's task. It waits for the
+    /// system's report, never for a timer. Nil when there is no observer or the wait is cancelled.
+    func firstKnownPath() async -> NetworkPathSnapshot? {
+        guard let path else { return nil }
+        for await snapshot in path.updates.values where snapshot.status != .unknown {
+            return snapshot
+        }
+        return nil
     }
 
     // MARK: - Foreground session and path class

@@ -125,7 +125,7 @@ protocol NovelReaderSettingsAccessing: AnyObject {
 extension NovelReaderSettingsAccessing {
     var novelReaderAllowsSpeculativePrefetch: Bool { novelReaderSettings.prefetchChapters }
     var novelReaderNetworkChanges: AnyPublisher<Void, Never> { Empty().eraseToAnyPublisher() }
-    var novelReaderPrefetchEpoch: NetworkPrefetchEpoch { .init(policyRevision: 0, pathGeneration: 0) }
+    var novelReaderPrefetchEpoch: NetworkPrefetchEpoch { .init(speculativeRevision: 0, pathGeneration: 0) }
 }
 
 extension AppSettingsStore: NovelReaderSettingsAccessing {

@@ -1,3 +1,4 @@
+import Combine
 import ito_runner
 import Foundation
 import Testing
@@ -73,11 +74,15 @@ struct NetworkPolicyTests {
         path.set(.init(status: .satisfied))
         path.set(.init(status: .satisfied, isExpensive: true))
         #expect(!policy.hasValidConsent(binding))
-        policy.mintBatchConsent(binding)
-        configuration.wifiOnlyUpdates.toggle()
-        policy.apply(configuration)
+        #expect(policy.mintBatchConsent(binding) != nil)
+        var metered = policy.current
+        metered.downloadMode = .allowMetered
+        policy.apply(metered)
         #expect(!policy.hasValidConsent(binding))
-        policy.mintBatchConsent(binding)
+        metered.downloadMode = .askMetered
+        policy.apply(metered)
+        #expect(!policy.hasValidConsent(binding))
+        #expect(policy.mintBatchConsent(binding) != nil)
         contexts.replaceEpochs([:])
         #expect(!policy.hasValidConsent(binding))
     }
@@ -95,5 +100,78 @@ struct NetworkPolicyTests {
         policy.apply(configuration)
         #expect(!gate.isCurrent(old))
         #expect(gate.isCurrent(contexts.context(pluginID: "fixture", .init(purpose: .manualBulkDownload, operationID: UUID()))))
+    }
+
+    @Test func speculativeAndWifiOnlyChangesPreserveBulkConsent() {
+        let path = ManualNetworkPathObserver(initial: .init(status: .satisfied, isExpensive: true))
+        var configuration = NetworkPolicyConfiguration.defaults
+        configuration.downloadMode = .askMetered
+        let policy = NetworkPolicyCenter(configuration: configuration, path: path)
+        let contexts = PluginNetworkContexts(policy: policy)
+        policy.enterForeground()
+        let binding = contexts.consentBinding(batchID: UUID(), pluginID: "fixture")
+        #expect(policy.mintBatchConsent(binding) != nil)
+        let revision = policy.revision
+        let epoch = policy.prefetchEpoch
+
+        var wifiOnly = policy.current
+        wifiOnly.wifiOnlyUpdates.toggle()
+        policy.apply(wifiOnly)
+        #expect(policy.revision == revision)
+        #expect(policy.hasValidConsent(binding))
+        #expect(policy.prefetchEpoch == epoch)
+
+        var speculative = policy.current
+        speculative.preloadImageCount = 10
+        speculative.adjacentChapterPrefetch = 1
+        speculative.novelPrefetchChapters = false
+        policy.apply(speculative)
+
+        #expect(policy.revision == revision)
+        #expect(policy.hasValidConsent(binding))
+        #expect(policy.prefetchEpoch != epoch)
+    }
+
+    @Test func aDownloadModeChangeAdvancesTheBulkRevisionAndExpiresConsent() {
+        let path = ManualNetworkPathObserver(initial: .init(status: .satisfied, isExpensive: true))
+        var configuration = NetworkPolicyConfiguration.defaults
+        configuration.downloadMode = .askMetered
+        let policy = NetworkPolicyCenter(configuration: configuration, path: path)
+        let contexts = PluginNetworkContexts(policy: policy)
+        policy.enterForeground()
+        let binding = contexts.consentBinding(batchID: UUID(), pluginID: "fixture")
+        #expect(policy.mintBatchConsent(binding) != nil)
+        let revision = policy.revision
+
+        var allowed = policy.current
+        allowed.downloadMode = .allowMetered
+        policy.apply(allowed)
+
+        #expect(policy.revision == revision + 1)
+        #expect(!policy.hasValidConsent(binding))
+    }
+
+    @Test func reapplyingTheSameConfigurationPublishesNothing() {
+        let policy = NetworkPolicyCenter(path: ManualNetworkPathObserver(initial: .init(status: .satisfied)))
+        var notifications = 0
+        let subscription = policy.changes.sink { notifications += 1 }
+
+        policy.apply(policy.current)
+        #expect(notifications == 0)
+
+        var changed = policy.current
+        changed.preloadImageCount = 3
+        policy.apply(changed)
+        #expect(notifications == 1)
+        _ = subscription
+    }
+
+    @Test func anUnknownPathIsAwaitedUntilTheObserverReportsAKnownOne() async {
+        let path = ManualNetworkPathObserver(initial: .unknown)
+        let policy = NetworkPolicyCenter(path: path)
+        let reported = Task { await policy.firstKnownPath() }
+        path.set(NetworkPathSnapshot(status: .satisfied, isExpensive: true))
+        let value = await reported.value
+        #expect(value == NetworkPathSnapshot(status: .satisfied, isExpensive: true))
     }
 }
