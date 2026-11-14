@@ -10,7 +10,7 @@ final class PluginDataLoaderFallbackTests: XCTestCase {
         let inner = RecordingInnerLoader()
         let loader = PluginDataLoader(
             configuration: .ephemeral,
-            contexts: PluginNetworkContexts(),
+            contexts: PluginNetworkContexts(policy: NetworkPolicyCenter()),
             defaultLoader: inner,
             runnerProvider: { _ in
                 XCTFail("A non-plugin request never loads a plugin")

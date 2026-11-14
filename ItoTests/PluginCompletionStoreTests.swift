@@ -961,7 +961,8 @@ private struct CompletionFixture {
             dbPool: database.dbPool,
             domainFactory: { CompletionTestDomain(name: $0) },
             secrets: secrets,
-            tokens: tokens
+            tokens: tokens,
+            networkPolicy: NetworkPolicyCenter()
         )
         store = PluginCompletionStore(dbPool: database.dbPool, secrets: secrets, tokens: tokens)
         manager = ReadProgressManager(dbPool: database.dbPool)

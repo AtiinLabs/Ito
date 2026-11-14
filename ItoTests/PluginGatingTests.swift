@@ -163,7 +163,7 @@ struct PluginGatingTests {
         )
             .write(to: pluginsDirectory.appendingPathComponent("newer-abi.ito"))
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory
         )
 
@@ -182,7 +182,7 @@ struct PluginGatingTests {
         defer { database.cleanup() }
         var loads = 0
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
             runnerLoader: { _, _, _ in
                 loads += 1
@@ -222,7 +222,7 @@ struct PluginGatingTests {
         defer { database.cleanup() }
         var loads = 0
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
             runnerLoader: { _, _, _ in
                 loads += 1
@@ -257,7 +257,7 @@ struct PluginGatingTests {
         let url = pluginsDirectory.appendingPathComponent("future.ito")
         try makeTestPluginArchiveData(id: "future", version: "1.0", wasm: wasm).write(to: url)
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory
         )
         let plugin = InstalledPlugin(
@@ -278,7 +278,7 @@ struct PluginGatingTests {
         defer { database.cleanup() }
         var loads = 0
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
             runnerLoader: { _, _, _ in
                 loads += 1
@@ -308,7 +308,7 @@ struct PluginGatingTests {
         let modules = PluginRunnerHostModules(
             net: DownloadNetModule(
                 inner: ScriptedInnerNet(contexts: NetworkContextRecorder()),
-                gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver()),
+                gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver(), policy: NetworkPolicyCenter()),
                 recorder: DownloadPolicyRecorder()
             ),
             webview: DownloadWebviewModule(recorder: DownloadPolicyRecorder())
@@ -337,7 +337,7 @@ struct PluginGatingTests {
         defer { database.cleanup() }
         var loads = 0
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
             runnerLoader: { _, _, _ in
                 loads += 1
@@ -358,7 +358,7 @@ struct PluginGatingTests {
         let modules = PluginRunnerHostModules(
             net: DownloadNetModule(
                 inner: ScriptedInnerNet(contexts: NetworkContextRecorder()),
-                gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver()),
+                gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver(), policy: NetworkPolicyCenter()),
                 recorder: DownloadPolicyRecorder()
             ),
             webview: DownloadWebviewModule(recorder: DownloadPolicyRecorder())
@@ -381,7 +381,7 @@ struct PluginGatingTests {
         defer { database.cleanup() }
         var loads = 0
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
             runnerLoader: { _, _, _ in
                 loads += 1

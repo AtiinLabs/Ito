@@ -21,7 +21,7 @@ struct DownloadRuntimeTests {
         let foregroundLoads = DownloadCallCounter()
         let downloadLoads = DownloadCallCounter()
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
             runnerLoader: { _, _, _ in
                 foregroundLoads.increment()
@@ -37,7 +37,7 @@ struct DownloadRuntimeTests {
         let modules = PluginRunnerHostModules(
             net: DownloadNetModule(
                 inner: ScriptedInnerNet(contexts: NetworkContextRecorder()),
-                gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver()),
+                gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver(), policy: NetworkPolicyCenter()),
                 recorder: recorder
             ),
             webview: DownloadWebviewModule(recorder: recorder)
@@ -56,7 +56,7 @@ struct DownloadRuntimeTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
             runnerLoader: { _, _, _ in ItoRunner() },
             downloadRunnerLoader: { _, _, _, _, _, _ in ItoRunner() }
@@ -66,7 +66,7 @@ struct DownloadRuntimeTests {
         let modules = PluginRunnerHostModules(
             net: DownloadNetModule(
                 inner: ScriptedInnerNet(contexts: NetworkContextRecorder()),
-                gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver()),
+                gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver(), policy: NetworkPolicyCenter()),
                 recorder: recorder
             ),
             webview: DownloadWebviewModule(recorder: recorder)
@@ -83,7 +83,7 @@ struct DownloadRuntimeTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
             runnerLoader: { _, _, _ in ItoRunner() },
             downloadRunnerLoader: { _, _, _, _, _, _ in ItoRunner() }

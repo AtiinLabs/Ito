@@ -666,7 +666,7 @@ struct EditionEnumerationTests {
     // MARK: - The runner adapter
 
     @Test func theAdapterRunsTheExportUnderTheFrozenEpochAndTheCallersOperation() async throws {
-        let contexts = PluginNetworkContexts()
+        let contexts = PluginNetworkContexts(policy: NetworkPolicyCenter())
         var seen: [NetworkOperationContext] = []
         let listing = Self.found(Self.everyUpload)
         let adapter = ChapterEditionsAdapter(pluginID: "plugin.test", contexts: contexts) { _, context in
@@ -689,7 +689,7 @@ struct EditionEnumerationTests {
     }
 
     @Test func theAdapterKeepsNilAsTheOnlyUnsupportedAndMapsEveryFailureToAPluginCallError() async throws {
-        let contexts = PluginNetworkContexts()
+        let contexts = PluginNetworkContexts(policy: NetworkPolicyCenter())
         let operation = PluginNetworkOperation(purpose: .manualCatalogRefresh, operationID: UUID())
         let entry = MediaEntry.manga(Manga(key: "series-1", title: "Series"))
 

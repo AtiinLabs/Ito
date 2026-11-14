@@ -64,7 +64,7 @@ struct BackupRestoreRefresherTests {
             createdAt: Date(timeIntervalSince1970: 1)
         )
         try await insertJournal(report: report, status: .pendingRefresh, database: database)
-        let settings = AppSettingsStore(dbPool: database.dbPool)
+        let settings = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         let before = try await appPreferences(database)
         let recorder = RefreshRecorder()
         let refresher = makeRefresher(

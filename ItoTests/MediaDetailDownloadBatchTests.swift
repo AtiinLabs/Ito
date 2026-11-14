@@ -862,6 +862,22 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.offlineCoverage(), .saved(2))
     }
 
+    func testAnUnreadableRememberedChoiceMakesNoEntireSeriesClaimEvenWhenEverythingIsSaved() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let downloads = MediaDetailDownloadsFake()
+        downloads.preferenceReadFailure = SeriesEditionPreferenceError.unreadable
+        let subject = await makeSubject(
+            chapters: Self.numbered(1...2),
+            downloads: downloads,
+            basis: Self.basis(scope: .allEligible, completeness: .complete, refreshedAt: now)
+        )
+        XCTAssertEqual(subject.viewModel.downloadBatch.remembered, .unreadable)
+        for key in ["c1", "c2"] { subject.downloads.set(.downloaded, chapterKey: key) }
+
+        // The source's list would make this an entire series; a choice this build cannot read does not.
+        XCTAssertEqual(subject.viewModel.offlineCoverage(now: now), .saved(2))
+    }
+
     func testAFreshRefreshRereadsWhatTheSavedDetailsSay() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let subject = await makeSubject(chapters: Self.numbered(1...2))
@@ -1085,6 +1101,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         presenter.present(.editionChoiceNotRemembered)
         presenter.present(.editionChoiceNotSaved)
         presenter.present(.editionChoiceUnreadable)
+        presenter.present(.downloadBatchBusy)
 
         var kinds: [AppMessageKind] = []
         while let message = center.currentMessage {
@@ -1096,7 +1113,8 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
             .mediaDetailNothingToDownload,
             .mediaDetailEditionChoiceNotRemembered,
             .mediaDetailEditionChoiceNotSaved,
-            .mediaDetailEditionChoiceUnreadable
+            .mediaDetailEditionChoiceUnreadable,
+            .mediaDetailDownloadBatchBusy
         ])
     }
 

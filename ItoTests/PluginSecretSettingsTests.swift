@@ -264,13 +264,11 @@ struct PluginSecretSettingsTests {
     }
 
     private func makeStore(_ database: TestDatabase) -> PluginSettingsStore {
-        PluginSettingsStore(
-            dbPool: database.dbPool,
-            domainFactory: { SecretTestPluginDomain(name: $0) },
-            secrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain()),
-            cookies: PluginCookieJar(keychain: InMemoryPluginSecretKeychain()),
-            tokens: PluginSecretStore(keychain: InMemoryPluginSecretKeychain())
-        )
+        PluginSettingsStore(dbPool: database.dbPool,
+        domainFactory: { SecretTestPluginDomain(name: $0) },
+        secrets: PluginSecretStore(keychain: InMemoryPluginSecretKeychain()),
+        cookies: PluginCookieJar(keychain: InMemoryPluginSecretKeychain()),
+        tokens: PluginSecretStore(keychain: InMemoryPluginSecretKeychain()), networkPolicy: NetworkPolicyCenter())
     }
 
     private func settingRowCount(_ database: TestDatabase, key: String) throws -> Int {

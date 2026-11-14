@@ -64,6 +64,11 @@ extension MediaDetailViewModel {
                 presentDownloadMessage(.downloadRefused)
                 return Task {}
             }
+            // Under "Ask on Metered Networks" a single chapter is a one-chapter batch: it takes the same foreground
+            // confirmation, and nothing is queued until the user answers the prompt.
+            if downloads.meteredUseNeedsConfirmation() {
+                return downloadBatch.queueSingleChapter(request.chapter)
+            }
             let identity = mediaIdentity
             let title = media.title
             return Task { [weak self] in

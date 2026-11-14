@@ -509,16 +509,14 @@ struct PluginSettingsStoreTests {
         let suiteDomain = "moe.ito.runners.unavailable"
         let standardSentinel = fixture.domain(fixture.standardDomain)
         standardSentinel.set("must-remain", forKey: "standard-only")
-        let store = PluginSettingsStore(
-            dbPool: fixture.database.dbPool,
-            standardApplicationDomain: fixture.standardDomain,
-            domainFactory: { domainName in
-                guard domainName != suiteDomain else {
-                    throw PluginSettingsReadinessError.suiteUnavailable(domainName)
-                }
-                return standardSentinel
+        let store = PluginSettingsStore(dbPool: fixture.database.dbPool,
+        standardApplicationDomain: fixture.standardDomain,
+        domainFactory: { domainName in
+            guard domainName != suiteDomain else {
+                throw PluginSettingsReadinessError.suiteUnavailable(domainName)
             }
-        )
+            return standardSentinel
+        }, networkPolicy: NetworkPolicyCenter())
         try store.registerInstalledPlugin(manifestId: "unavailable", filenameId: "unavailable")
         let registrationBefore = try fixture.database.dbPool.read { db in
             (
@@ -952,13 +950,11 @@ private final class StoreFixture {
         faultHandler: @escaping PluginSettingsStore.FaultHandler = { _, _ in },
         operationFault: @escaping PluginSettingsStore.OperationFault = { _ in }
     ) -> PluginSettingsStore {
-        PluginSettingsStore(
-            dbPool: database.dbPool,
-            standardApplicationDomain: standardDomain,
-            domainFactory: catalog.domain,
-            faultHandler: faultHandler,
-            operationFault: operationFault
-        )
+        PluginSettingsStore(dbPool: database.dbPool,
+        standardApplicationDomain: standardDomain,
+        domainFactory: catalog.domain,
+        faultHandler: faultHandler,
+        operationFault: operationFault, networkPolicy: NetworkPolicyCenter())
     }
 
     func domain(_ name: String) -> MemoryPluginDomain {

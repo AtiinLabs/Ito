@@ -954,11 +954,20 @@
     "Adds this series to the list" : {
 
     },
+    "Adjacent Chapters" : {
+      "comment" : "Number of neighbor manga chapter manifests to prefetch"
+    },
+    "Adjacent prefetch is off while Image Preload is off." : {
+      "comment" : "Explains effective restriction without changing configured adjacent amount"
+    },
     "All" : {
       "comment" : "Filter chip: show every list\nHistory filter: every kind of media"
     },
     "All Chapters" : {
       "comment" : "Download menu item: download every chapter, including those already read."
+    },
+    "All Series" : {
+      "comment" : "Library filter: every series in the Library, whether or not any of its chapters is saved."
     },
     "All Unread Chapters" : {
       "comment" : "Download menu item: download every unread chapter."
@@ -971,6 +980,9 @@
     },
     "All-Time Popular" : {
 
+    },
+    "Allow Metered Networks" : {
+      "comment" : "Download mode permitting cellular and hotspots"
     },
     "Already added" : {
 
@@ -1051,6 +1063,9 @@
     "Asks the source to list every upload it has for this series. Nothing is downloaded until you choose uploads." : {
       "comment" : "Footer under Find All Uploads: it only lists uploads; the user picks which to download afterwards."
     },
+    "Ask on Metered Networks" : {
+      "comment" : "Download mode requiring batch confirmation on cellular"
+    },
     "Audio" : {
       "comment" : "Audio track button when no track is selected"
     },
@@ -1087,6 +1102,9 @@
     },
     "Available Plugins" : {
 
+    },
+    "Available on this network" : {
+      "comment" : "Effective network policy status"
     },
     "A⁺" : {
       "shouldTranslate" : false
@@ -1661,6 +1679,9 @@
         }
       }
     },
+    "Download Network" : {
+      "comment" : "Configured bulk download network mode"
+    },
     "Download all editions" : {
       "comment" : "Advanced action: download every exact upload, including multiple translations of one chapter.",
       "localizations" : {
@@ -1821,6 +1842,9 @@
         }
       }
     },
+    "Entire Series Offline" : {
+      "comment" : "Library filter: series whose every chapter is saved on this device, and the source recently confirmed its chapter list is complete."
+    },
     "Entire series offline" : {
       "comment" : "Series details: every chapter of the series is saved on this device, and the source confirmed its chapter list is complete."
     },
@@ -1964,6 +1988,9 @@
     "Filter" : {
       "comment" : "History: filter button"
     },
+    "Filter Library" : {
+      "comment" : "More Options menu: submenu that filters the Library by saved chapters."
+    },
     "Filtered" : {
 
     },
@@ -2032,6 +2059,9 @@
     "HTTPS to HTTP redirect downgrades are prohibited." : {
 
     },
+    "Has Saved Chapters" : {
+      "comment" : "Library filter: series with at least one chapter saved on this device."
+    },
     "Hiatus" : {
       "comment" : "Series status: paused"
     },
@@ -2073,6 +2103,9 @@
     },
     "Image & Network Cache" : {
 
+    },
+    "Image Preload" : {
+      "comment" : "Configured number of speculative reader images"
     },
     "Import" : {
 
@@ -2524,11 +2557,17 @@
     "Next Chapter" : {
 
     },
+    "Next Chapter Only" : {
+      "comment" : "Adjacent chapter prefetch picker value: only the following chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch."
+    },
     "Next Page" : {
 
     },
     "Next Unread Chapter" : {
       "comment" : "Download menu item: download the next unread chapter."
+    },
+    "Next and Previous" : {
+      "comment" : "Adjacent chapter prefetch: the following and the preceding chapter are prefetched"
     },
     "Next chapter is locked" : {
       "comment" : "Reader: shown after the last page when the next chapter needs an unlock"
@@ -2541,6 +2580,9 @@
     },
     "Next chapter opens in the text reader" : {
       "comment" : "Reader: the next chapter is text; go back to the series to open it"
+    },
+    "No Adjacent Chapters" : {
+      "comment" : "Adjacent chapter prefetch picker value: no neighbouring chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch."
     },
     "No History" : {
 
@@ -2556,6 +2598,9 @@
     },
     "No Results" : {
 
+    },
+    "No Saved Chapters" : {
+      "comment" : "Library filter: series with no chapter saved on this device. Series whose downloads are only queued, damaged or failed count here."
     },
     "No Trackers Authenticated" : {
 
@@ -2622,6 +2667,12 @@
     },
     "No results found. Try again." : {
 
+    },
+    "No series match this filter." : {
+      "comment" : "Library: shown when the saved-chapter filter matches no series and the search is empty."
+    },
+    "No series match this search and filter." : {
+      "comment" : "Library: shown when the search text and the saved-chapter filter together match no series."
     },
     "No source ID" : {
       "comment" : "Distinguishes an ID-less source group from a same-label group with an ID."
@@ -2812,6 +2863,9 @@
     "Paused after a restore" : {
       "comment" : "Chapter download status: the queue came from a restored backup. Retry to download again."
     },
+    "Paused by Low Data Mode" : {
+      "comment" : "Effective network policy refusal"
+    },
     "Paused in the background" : {
       "comment" : "Chapter download status: downloads run only while the app is open"
     },
@@ -2868,6 +2922,9 @@
     },
     "Preferences" : {
 
+    },
+    "Prefetch Novel Chapters" : {
+      "comment" : "Configured speculative novel chapter loading"
     },
     "Preferred edition unavailable" : {
       "comment" : "Some positions are not currently offered by the preferred group.",
@@ -2930,6 +2987,9 @@
     "Progress" : {
 
     },
+    "Queue and Wait for Wi-Fi" : {
+      "comment" : "Queues downloads without cellular permission"
+    },
     "Queued" : {
       "comment" : "Chapter download status: waiting for its turn"
     },
@@ -2982,6 +3042,9 @@
     },
     "Read/Watched" : {
 
+    },
+    "Reader Prefetch" : {
+      "comment" : "Network settings section for speculative reader work"
     },
     "Reader Settings" : {
 
@@ -3147,6 +3210,9 @@
     "Requires a newer Ito" : {
 
     },
+    "Requires confirmation for each batch" : {
+      "comment" : "Metered download consent is batch-scoped"
+    },
     "Requires v%@" : {
 
     },
@@ -3155,6 +3221,12 @@
     },
     "Reset Filters" : {
 
+    },
+    "Reset Network and Prefetch Settings" : {
+      "comment" : "Resets only five network and reader prefetch preferences"
+    },
+    "Reset Network and Prefetch Settings?" : {
+      "comment" : "Confirmation of scoped settings reset"
     },
     "Resolve Conflicting Data" : {
 
@@ -3179,6 +3251,9 @@
     },
     "Restore report was already acknowledged." : {
 
+    },
+    "Restores network and prefetch defaults only. Credentials, cookies, site data and reading state are kept." : {
+      "comment" : "Exact scope of network settings reset"
     },
     "Resume" : {
 
@@ -3663,6 +3738,9 @@
     "Still in library" : {
 
     },
+    "Still queuing downloads" : {
+      "comment" : "Series details: a download was tapped while an earlier download request was still being queued, so nothing was queued for the new one."
+    },
     "Stop Tracking" : {
 
     },
@@ -4044,11 +4122,11 @@
     "The source's web page failed: %@" : {
 
     },
-    "The source's web page took too long to respond. Try again." : {
-      "comment" : "Error: a web page the source loaded did not respond in time"
-    },
     "The source, chapter list or edition choice changed. Review again." : {
       "comment" : "Series details: detail when a draft was invalidated before confirmation because the source, chapter list or edition policy changed; no changed plan was submitted automatically."
+    },
+    "The source's web page took too long to respond. Try again." : {
+      "comment" : "Error: a web page the source loaded did not respond in time"
     },
     "The specified HTTP header is prohibited." : {
 
@@ -4079,6 +4157,9 @@
     },
     "This action is unsupported by the source." : {
 
+    },
+    "This batch may use cellular data or a personal hotspot while the app stays in the foreground. Other downloads and prefetching are not approved." : {
+      "comment" : "Scope of temporary metered download permission"
     },
     "This chapter can't be downloaded." : {
       "comment" : "Series details: the chapter is locked, or its source can't be saved for offline reading."
@@ -4349,6 +4430,9 @@
     "Unmatched Sources" : {
 
     },
+    "Unmetered Only" : {
+      "comment" : "Download mode that avoids cellular and hotspots"
+    },
     "Unread/Unwatched" : {
 
     },
@@ -4393,6 +4477,12 @@
     },
     "Updating queued progress…" : {
 
+    },
+    "Use Metered Data for This Batch" : {
+      "comment" : "Grants cellular permission only to this exact download batch"
+    },
+    "Use Metered Data?" : {
+      "comment" : "Confirmation for one download batch on cellular or a hotspot"
     },
     "Use %lld selected alternatives this time" : {
       "comment" : "Confirm exact alternatives ticked in the preview for this batch only; does not remember fallback permission. The placeholder is the number ticked and needs plural forms.",
@@ -4480,11 +4570,20 @@
         }
       }
     },
+    "Wait a moment, then download this again." : {
+      "comment" : "Series details: detail asking the user to repeat a download that was not queued because an earlier request was still being queued."
+    },
     "Waiting for Wi-Fi" : {
       "comment" : "Chapter download status: downloads do not use cellular or other metered networks"
     },
     "Waiting for a connection" : {
-      "comment" : "Chapter download status"
+      "comment" : "Chapter download status\nEffective network policy refusal"
+    },
+    "Waiting for a network reading" : {
+      "comment" : "No path observation yet"
+    },
+    "Waiting for an unmetered network" : {
+      "comment" : "Effective network policy refusal"
     },
     "Waiting for free storage" : {
       "comment" : "Chapter download status"

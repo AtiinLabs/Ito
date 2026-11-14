@@ -351,7 +351,7 @@ final class MultiKindDurableIdentityTests: XCTestCase {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let library = LibraryManager(dbPool: database.dbPool, observationScheduler: ManualLibraryObservationScheduler())
-        let settings = AppSettingsStore(dbPool: database.dbPool)
+        let settings = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         try await settings.reload()
         let history = HistoryManager(dbPool: database.dbPool, libraryManager: library)
         history.configure(settingsStore: settings)

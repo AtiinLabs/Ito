@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import GRDB
 import ito_runner
@@ -8,6 +9,9 @@ nonisolated public struct PluginNetworkOperation: Sendable, Equatable {
     let purpose: NetworkOperationContext.Purpose
     let operationID: UUID
     var batchID: UUID?
+    /// Captured by the initiating scheduler; context construction never borrows a replacement grant.
+    var scopedGrant: UUID?
+    var policyRevision: UInt64?
 }
 
 /// Builds the host context for one runner export. Synchronous and lock-protected, so it can be read
@@ -18,41 +22,52 @@ nonisolated public struct PluginNetworkOperation: Sendable, Equatable {
 /// rotates an epoch. Frozen operations (downloads, completion) pass the epoch they captured instead.
 nonisolated final class PluginNetworkContexts: @unchecked Sendable {
     private let lock = NSLock()
+    private let scopeChangeSubject = PassthroughSubject<Void, Never>()
+    var scopeChanges: AnyPublisher<Void, Never> { scopeChangeSubject.eraseToAnyPublisher() }
     private var epochScopes: [String: UUID] = [:]
     /// Scopes handed out for plugins without a committed epoch. Stable until the next mirror refresh,
     /// so repeated lookups agree; never derived from credentials.
     private var ephemeralScopes: [String: UUID] = [:]
 
-    init(epochs: [String: String] = [:]) {
+    /// The live network policy every context is stamped from.
+    let policy: NetworkPolicyCenter
+
+    init(epochs: [String: String] = [:], policy: NetworkPolicyCenter) {
+        self.policy = policy
         replaceEpochs(epochs)
     }
 
     /// Replaces the mirror with the committed epochs, keyed by plugin ID. Called from the commit that
     /// wrote them, so a lookup after the write returns sees the new scope.
     func replaceEpochs(_ epochs: [String: String]) {
-        lock.withLock {
-            epochScopes = epochs.compactMapValues(PluginNetworkScopeID.uuid(epoch:))
+        let changed = lock.withLock {
+            let replacement = epochs.compactMapValues(PluginNetworkScopeID.uuid(epoch:))
+            let changed = epochScopes != replacement || !ephemeralScopes.isEmpty
+            epochScopes = replacement
             ephemeralScopes = [:]
+            return changed
+        }
+        if changed {
+            policy.revokeAllConsent()
+            scopeChangeSubject.send(())
         }
     }
 
     /// The context for one export of `operation`. Every call gets a new `generation`. `frozenScope`,
     /// when given, is the epoch the operation captured and wins over the mirror. A frozen epoch that
-    /// is not a valid epoch yields a random scope, which no grant or identity can match.
+    /// is not a valid epoch yields a random scope, which no grant or identity can match. The context carries
+    /// the policy revision in force when it is built; a transport that sees a later revision refuses it as
+    /// `policyChanged`, and the scheduler builds a new one.
     func context(
         pluginID: String,
         _ operation: PluginNetworkOperation,
         frozenScope: String? = nil
     ) -> NetworkOperationContext {
-        let scope: UUID = lock.withLock {
-            if let frozenScope {
-                return PluginNetworkScopeID.uuid(epoch: frozenScope) ?? UUID()
-            }
-            if let mirrored = epochScopes[pluginID] { return mirrored }
-            if let ephemeral = ephemeralScopes[pluginID] { return ephemeral }
-            let fresh = UUID()
-            ephemeralScopes[pluginID] = fresh
-            return fresh
+        let scope: UUID
+        if let frozenScope {
+            scope = PluginNetworkScopeID.uuid(epoch: frozenScope) ?? UUID()
+        } else {
+            scope = liveScope(pluginID: pluginID)
         }
         return NetworkOperationContext(
             purpose: operation.purpose,
@@ -60,10 +75,28 @@ nonisolated final class PluginNetworkContexts: @unchecked Sendable {
             authorizationScope: scope,
             operationID: operation.operationID,
             batchID: operation.batchID,
-            policyRevision: BulkDownloadPolicy.revision,
+            policyRevision: operation.policyRevision ?? policy.revision,
             generation: UUID(),
-            scopedGrant: nil
+            scopedGrant: operation.scopedGrant
         )
+    }
+
+    /// The authorization scope of a source now, as the mirror of committed epochs has it.
+    func liveScope(pluginID: String) -> UUID {
+        lock.withLock {
+            if let mirrored = epochScopes[pluginID] { return mirrored }
+            if let ephemeral = ephemeralScopes[pluginID] { return ephemeral }
+            let fresh = UUID()
+            ephemeralScopes[pluginID] = fresh
+            return fresh
+        }
+    }
+
+    /// What the policy checks a batch's consent against: the batch, its source, and that source's scope now.
+    func consentBinding(batchID: UUID, pluginID: String) -> NetworkConsentBinding {
+        NetworkConsentBinding(batchID: batchID, sourceID: pluginID) { [weak self] in
+            self?.liveScope(pluginID: pluginID) ?? UUID()
+        }
     }
 }
 

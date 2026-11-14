@@ -206,3 +206,19 @@ from it is refused, and the sheet asks for review. A failure keeps no rows and i
 Ticked uploads queue through the shared batch as the exact chapters the source listed, under the
 source epoch and remembered policy the sheet was reviewed under; locked uploads stay blocked and no
 group choice is remembered unless the sheet's own Remember flow is used.
+
+## Network preference upgrade checks
+
+Network preferences are scalar GRDB configuration, not runtime permissions. Upgrade and older-backup restore derive a missing adjacent-chapter prefetch amount once from the stored image preload (zero → zero, positive or absent → two); explicit values survive. No database schema migration is needed.
+
+An explicitly represented-empty scalar restore remains empty. Refresh derives dependent network keys only when a stored preload exists; it does not materialize defaults for an empty or no-preload partial snapshot. Publishing already downloaded, verified bytes is local work: P5 retains source/runtime/trust/job validation, not soft network admission.
+
+Before shipping network changes, exercise `NetworkPolicyTests`, `NetworkPreferenceMigrationTests`, `AppSettingsStoreTests`, `NetworkSettingsViewModelTests`, `DownloadNetModuleTests`, `DownloadCenterBatchTests`, `DownloadAttemptTests`, `UpdateRunTests` and reader prefetch suites. Confirm metered permission is limited to one foreground batch and expires on background, source, path-class or policy change. Reset affects only download mode, Wi-Fi-only automatic checks, image preload, adjacent prefetch and novel prefetch. Runtime grants and effective values must not appear in backups.
+
+Network policy regressions also include `NetworkConsentAdmissionTests` and `ReaderNetworkPolicyTests`: exact capability incarnation/source/operation lineage, foreground grant revocation during a held transfer, speculative-versus-interactive continuous manga admission, and novel start/publication races and manual continuation under effective restrictions. Their barriers do not depend on sleeps or notification-task ordering.
+
+Speculative reader work (image preload, adjacent manga chapters and novel prefetch) never runs on a cellular, personal hotspot or Low Data Mode path, whatever the download mode is. Those settings are off there by default, and no metered consent turns them on. The default download mode remains Unmetered Only.
+
+"Ask on Metered Networks" applies the same foreground confirmation to a single-chapter download as to a batch. Cancelling one chapter keeps the batch's consent for its remaining chapters; the consent ends when the batch has no jobs left, the app leaves the foreground, the path class changes, or the download mode changes. A job waiting for a metered network offers Cancel only, not Retry: the wait clears when an unmetered network is available, and a queued job cannot be granted metered consent after the fact. Cancel it and download the chapter again to be asked.
+
+Backups written by this build carry the new `Ito.NetworkDownloadMode` and `Ito.AdjacentChapterPrefetchCount` keys. Older app versions require an exact scalar-key catalog and reject backups containing these new keys; restore them only on a current build.

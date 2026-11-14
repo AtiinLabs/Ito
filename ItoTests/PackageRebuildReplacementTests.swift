@@ -55,7 +55,7 @@ struct PackageRebuildReplacementTests {
         let installedFile = pluginsDirectory.appendingPathComponent("plugin.declared.ito")
         try makeTestPluginArchiveData(id: "plugin.declared", version: "1.0", wasm: makeTestPluginWasm(abi: 2))
             .write(to: installedFile)
-        let settings = PluginSettingsStore(dbPool: database.dbPool)
+        let settings = PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         #expect(settings.set(pluginId: "plugin.declared", key: "endpoint", value: "kept"))
         let pluginManager = PluginManager(
             pluginSettingsStore: settings,

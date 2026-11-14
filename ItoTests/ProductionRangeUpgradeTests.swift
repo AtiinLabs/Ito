@@ -54,7 +54,7 @@ struct ProductionRangeUpgradeTests {
         let installedFile = pluginsDirectory.appendingPathComponent("plugin.upgrade.ito")
         try makeTestPluginArchiveData(id: "plugin.upgrade", version: "1.0", wasm: makeTestPluginWasm(abi: 2))
             .write(to: installedFile)
-        let settings = PluginSettingsStore(dbPool: database.dbPool)
+        let settings = PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         #expect(settings.set(pluginId: "plugin.upgrade", key: "endpoint", value: "kept"))
         let pluginManager = PluginManager(pluginSettingsStore: settings, pluginsDirectory: pluginsDirectory)
         await pluginManager.reloadInstalledPlugins()

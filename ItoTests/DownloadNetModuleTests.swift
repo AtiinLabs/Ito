@@ -106,7 +106,7 @@ struct DownloadNetModuleTests {
         let recorder = DownloadPolicyRecorder()
         let net = DownloadNetModule(
             inner: inner,
-            gate: NetworkPathAdmissionGate(observer: path),
+            gate: NetworkPathAdmissionGate(observer: path, policy: NetworkPolicyCenter()),
             recorder: recorder
         )
 
@@ -123,7 +123,7 @@ struct DownloadNetModuleTests {
         let recorder = DownloadPolicyRecorder()
         let net = DownloadNetModule(
             inner: inner,
-            gate: NetworkPathAdmissionGate(observer: path),
+            gate: NetworkPathAdmissionGate(observer: path, policy: NetworkPolicyCenter()),
             recorder: recorder
         )
 
@@ -145,7 +145,7 @@ struct DownloadNetModuleTests {
         let recorder = DownloadPolicyRecorder()
         let net = DownloadNetModule(
             inner: FailingNet(error),
-            gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied))),
+            gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied)), policy: NetworkPolicyCenter()),
             recorder: recorder
         )
 
@@ -161,7 +161,7 @@ struct DownloadNetModuleTests {
         let recorder = DownloadPolicyRecorder()
         let net = DownloadNetModule(
             inner: FailingNet(error),
-            gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied))),
+            gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied)), policy: NetworkPolicyCenter()),
             recorder: recorder
         )
 
@@ -175,7 +175,7 @@ struct DownloadNetModuleTests {
         let recorder = DownloadPolicyRecorder()
         let net = DownloadNetModule(
             inner: FailingNet(URLError(.timedOut)),
-            gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied))),
+            gate: NetworkPathAdmissionGate(observer: ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied)), policy: NetworkPolicyCenter()),
             recorder: recorder
         )
 
@@ -281,7 +281,7 @@ struct DownloadNetModuleTests {
         let recorder = DownloadPolicyRecorder()
         let module = CountingNetModule(DownloadNetModule(
             inner: inner,
-            gate: NetworkPathAdmissionGate(observer: path),
+            gate: NetworkPathAdmissionGate(observer: path, policy: NetworkPolicyCenter()),
             recorder: recorder
         ))
         let runner = ItoRunner()
@@ -312,7 +312,7 @@ struct DownloadNetModuleTests {
         let runner = ItoRunner()
         await runner.setNetModule(DownloadNetModule(
             inner: inner,
-            gate: NetworkPathAdmissionGate(observer: path),
+            gate: NetworkPathAdmissionGate(observer: path, policy: NetworkPolicyCenter()),
             recorder: recorder
         ))
         await runner.setWebviewModule(DownloadWebviewModule(recorder: recorder))

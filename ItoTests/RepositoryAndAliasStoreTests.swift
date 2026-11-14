@@ -436,7 +436,7 @@ struct RepositoryAndAliasStoreTests {
             id: packageID, version: "2.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
         )
         let pluginManager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory
         )
         let manager = RepoManager(
@@ -467,7 +467,7 @@ struct RepositoryAndAliasStoreTests {
             id: "plugin.rollback", version: "1.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
         )
         let pluginManager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory
         )
         let manager = RepoManager(
@@ -513,7 +513,7 @@ struct RepositoryAndAliasStoreTests {
         )
             .write(to: installedFile)
         let pluginManager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory
         )
         await pluginManager.reloadInstalledPlugins()
@@ -563,7 +563,7 @@ struct RepositoryAndAliasStoreTests {
             id: "plugin.listed", version: "2.0", wasm: makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound)
         )
         let pluginManager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory
         )
         let manager = RepoManager(
@@ -604,7 +604,7 @@ struct RepositoryAndAliasStoreTests {
             wasm: malformedModule ? Data("not a module".utf8) : makeTestPluginWasm(abi: ItoRunner.supportedABIVersions.upperBound + 1)
         )
         let pluginManager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory
         )
         await pluginManager.reloadInstalledPlugins()
@@ -646,7 +646,7 @@ struct RepositoryAndAliasStoreTests {
             id: "plugin.start", version: "2.0", wasm: startSectionModuleWasm
         )
         let pluginManager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory
         )
         await pluginManager.reloadInstalledPlugins()
@@ -678,7 +678,7 @@ struct RepositoryAndAliasStoreTests {
         try makeTestPluginArchiveData(id: "plugin.rebuilt", version: "1.0", wasm: makeTestPluginWasm(abi: 2))
             .write(to: installedFile)
         let pluginManager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory,
             supportedABI: host
         )
@@ -724,7 +724,7 @@ struct RepositoryAndAliasStoreTests {
             id: "plugin.rebuilt", version: "1.0", wasm: makeTestPluginWasm(abi: 2)
         )
         try installedArchive.write(to: installedFile)
-        let settings = PluginSettingsStore(dbPool: database.dbPool)
+        let settings = PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         let pluginManager = PluginManager(
             pluginSettingsStore: settings,
             pluginsDirectory: pluginsDirectory,
@@ -779,7 +779,7 @@ struct RepositoryAndAliasStoreTests {
             id: "plugin.older", version: "2.0", wasm: makeTestPluginWasm(abi: 2)
         )
         let pluginManager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory
         )
         await pluginManager.reloadInstalledPlugins()
@@ -815,7 +815,7 @@ struct RepositoryAndAliasStoreTests {
             id: "plugin.manifest", version: "2.0", minAppVersion: "999.0", wasm: makeTestPluginWasm(abi: 2)
         )
         let pluginManager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: pluginsDirectory
         )
         await pluginManager.reloadInstalledPlugins()

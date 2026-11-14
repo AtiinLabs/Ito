@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import UIKit
+import ito_runner
 
 struct LibraryPresentationGroup: Identifiable, Equatable {
     let id: String
@@ -97,6 +98,11 @@ final class LibraryViewModel: ObservableObject {
     @Published private(set) var isOffline: Bool
     /// Saved chapters per series and which series hold downloads, from one observation of the whole Library.
     @Published private(set) var downloadSummary: LibraryDownloadSummary
+    /// The entire-series proof of each series that has one, with the time it lapses. Only proven series are present.
+    @Published private(set) var entireSeriesProofs: [MediaIdentity: Date] = [:]
+    @Published private(set) var offlineFacet: LibraryOfflineFacet = .all
+    /// True while saved payloads are being decoded for the entire-series filter.
+    @Published private(set) var isPreparingOfflineFacet = false
 
     private let dependencies: PreparedLibraryDependencies
     private let tabRouter: any LibraryTabRouting
@@ -120,16 +126,49 @@ final class LibraryViewModel: ObservableObject {
     private var hasPresentedDiscord = false
     private var cancellables: Set<AnyCancellable> = []
 
+    /// Everything a proof is judged from, apart from the clock. Equal inputs always give the same proof.
+    private struct ProofInputs: Equatable {
+        let proof: LibrarySnapshotStateRecord
+        let preference: Data?
+        let payloadSHA256: String
+        let states: [String: ChapterDownloadState]
+    }
+
+    private struct ProofMemo {
+        let inputs: ProofInputs
+        let proof: LibraryEntireSeriesProof
+    }
+
+    private var proofSnapshot: LibraryOfflineProofSnapshot
+    private var catalogCache: [MediaIdentity: LibraryPreparedCatalog] = [:]
+    private var proofMemo: [MediaIdentity: ProofMemo] = [:]
+    private var prepareTask: Task<Void, Never>?
+    private var prepareGeneration: UInt64 = 0
+    /// Unlike the start sequence, cancellation clears ownership without consuming an operation identity.
+    private var activePreparation: UInt64?
+    private var preparingRequests: [LibraryCatalogPreparation] = []
+    private var expiryTask: Task<Void, Never>?
+    private let currentDate: @MainActor () -> Date
+    private let prepareCatalogs: LibraryCatalogPreparer
+    private let preparationConsumed: @MainActor @Sendable (UInt64) async -> Void
+
     init(
         dependencies: PreparedLibraryDependencies,
         tabRouter: any LibraryTabRouting,
         messagePresenter: any LibraryMessagePresenting,
-        presentationLogger: any PresentationEventLogging
+        presentationLogger: any PresentationEventLogging,
+        now: @escaping @MainActor () -> Date = { Date() },
+        prepare: @escaping LibraryCatalogPreparer = LibraryOfflineFacetEvaluator.prepareInBackground,
+        preparationConsumed: @escaping @MainActor @Sendable (UInt64) async -> Void = { _ in }
     ) {
         self.dependencies = dependencies
         self.tabRouter = tabRouter
         self.messagePresenter = messagePresenter
         self.presentationLogger = presentationLogger
+        currentDate = now
+        self.preparationConsumed = preparationConsumed
+        prepareCatalogs = prepare
+        proofSnapshot = dependencies.offlineProofs.offlineProofSnapshot
         snapshot = dependencies.library.rootSnapshot
         categoryMembers = Self.members(of: dependencies.library.rootSnapshot)
         let initialLayout = Self.layoutStyle(from: dependencies.layout.storedLibraryLayoutStyle)
@@ -168,6 +207,13 @@ final class LibraryViewModel: ObservableObject {
         dependencies.downloads.downloadSummaryPublisher
             .sink { [weak self] summary in
                 self?.downloadSummary = summary
+                self?.recomputeOfflineProofs()
+            }
+            .store(in: &cancellables)
+        dependencies.offlineProofs.offlineProofSnapshotPublisher
+            .sink { [weak self] snapshot in
+                self?.proofSnapshot = snapshot
+                self?.recomputeOfflineProofs()
             }
             .store(in: &cancellables)
     }
@@ -178,6 +224,8 @@ final class LibraryViewModel: ObservableObject {
         badgeTasks.values.forEach { $0.cancel() }
         updateTask?.cancel()
         exportTask?.cancel()
+        prepareTask?.cancel()
+        expiryTask?.cancel()
     }
 
     var phase: Phase {
@@ -186,10 +234,11 @@ final class LibraryViewModel: ObservableObject {
     }
 
     var filteredItems: [LibraryItem] {
-        guard !searchText.isEmpty else { return snapshot.items }
-        return snapshot.items.filter {
-            $0.title.localizedCaseInsensitiveContains(searchText)
-        }
+        let searched = searchText.isEmpty
+            ? snapshot.items
+            : snapshot.items.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+        guard offlineFacet != .all else { return searched }
+        return searched.filter { matchesOfflineFacet($0) }
     }
 
     var categories: [LibraryCategoryPresentation] {
@@ -208,9 +257,9 @@ final class LibraryViewModel: ObservableObject {
             }
             let memberIDs = categoryMembers[category.id] ?? []
             let categoryItems = items.filter { memberIDs.contains($0.id) }
-            if layoutStyle == .sectioned,
-               categoryItems.isEmpty,
-               snapshot.categories.count > 1 {
+            // A filtered Library never shows an empty list: the "add to this list" state is for a list that is empty.
+            if categoryItems.isEmpty,
+               offlineFacet != .all || (layoutStyle == .sectioned && snapshot.categories.count > 1) {
                 return nil
             }
             return LibraryPresentationGroup(
@@ -228,14 +277,180 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
-    /// Whether a search matches nothing on screen. "All" in the tabbed layout lists every series,
-    /// while the other views list the series of each list.
+    /// Whether the search or the saved-chapter filter matches nothing on screen. "All" in the tabbed layout lists
+    /// every series, while the other views list the series of each list.
     var showsNoResults: Bool {
-        guard !searchText.isEmpty else { return false }
+        guard !searchText.isEmpty || offlineFacet != .all else { return false }
         if layoutStyle == .tabbed && selectedCategoryID == nil {
             return filteredItems.isEmpty
         }
         return groups.allSatisfy(\.items.isEmpty)
+    }
+
+    /// The saved-chapter filter needs the Library's inventory. Without it the filter is not offered at all.
+    var supportsOfflineFacets: Bool { dependencies.downloads.isInventoryAvailable }
+
+    /// Whether the entire-series filter is still waiting for what it judges from: the proof observation, or a payload.
+    var isAwaitingOfflineProofs: Bool {
+        offlineFacet == .entireKnownSeries && (proofSnapshot.availability == .loading || isPreparingOfflineFacet)
+    }
+
+    func selectOfflineFacet(_ facet: LibraryOfflineFacet) {
+        let requested = supportsOfflineFacets ? facet : .all
+        guard requested != offlineFacet else { return }
+        offlineFacet = requested
+        recomputeOfflineProofs()
+    }
+
+    private func matchesOfflineFacet(_ item: LibraryItem) -> Bool {
+        let media = item.mediaIdentity
+        switch offlineFacet {
+        case .all:
+            return true
+        case .anyVerified:
+            return downloadSummary.savedCount(for: media) > 0
+        case .noneVerified:
+            return downloadSummary.savedCount(for: media) == 0
+        case .entireKnownSeries:
+            guard let until = entireSeriesProofs[media] else { return false }
+            return currentDate() <= until
+        }
+    }
+
+    /// Re-judges the entire-series proofs from the snapshot, the proof observation, the edition policies and the
+    /// downloads. The result is published synchronously, so a removed copy drops its series at once. A payload that
+    /// has not been decoded for its current bytes is decoded off the main actor, then judged again.
+    private func recomputeOfflineProofs() {
+        let now = currentDate()
+        guard offlineFacet == .entireKnownSeries, proofSnapshot.availability == .available else {
+            cancelPreparation()
+            scheduleExpiry(earliest: nil, now: now)
+            publishEntireSeriesProofs([:])
+            return
+        }
+        let liveMedia = Set(snapshot.items.map(\.mediaIdentity))
+        catalogCache = catalogCache.filter { liveMedia.contains($0.key) }
+        proofMemo = proofMemo.filter { liveMedia.contains($0.key) }
+        // An identity that more than one item holds has no single saved state to judge: it makes no claim and asks for no decode.
+        let identityCounts = Dictionary(snapshot.items.map { ($0.mediaIdentity, 1) }, uniquingKeysWith: +)
+
+        var proven: [MediaIdentity: Date] = [:]
+        var pending: [LibraryCatalogPreparation] = []
+        for item in snapshot.items {
+            let media = item.mediaIdentity
+            guard identityCounts[media] == 1,
+                  media.mediaKind != .anime,
+                  downloadSummary.savedCount(for: media) > 0,
+                  let proof = proofSnapshot.states[media],
+                  proof.coversEntireSeries,
+                  proof.refreshedAt.addingTimeInterval(SeriesOfflineCoverage.freshnessWindow) >= now
+            else { continue }
+            let preference = proofSnapshot.preferences[media]
+            let states = downloadSummary.chapterStates(for: media)
+            // Facts left nil by a decode against another digest are a miss once the proof names these same bytes.
+            guard let catalog = catalogCache[media], catalog.payload == item.rawPayload,
+                  !(catalog.facts == nil && catalog.payloadSHA256 == proof.payloadSHA256) else {
+                pending.append(LibraryCatalogPreparation(
+                    media: media,
+                    kind: media.mediaKind,
+                    payload: item.rawPayload,
+                    expectedSHA256: proof.payloadSHA256
+                ))
+                continue
+            }
+            let inputs = ProofInputs(
+                proof: proof,
+                preference: preference,
+                payloadSHA256: catalog.payloadSHA256,
+                states: states
+            )
+            let result: LibraryEntireSeriesProof
+            if let memo = proofMemo[media], memo.inputs == inputs {
+                result = memo.proof
+            } else {
+                result = LibraryOfflineFacetEvaluator.entireSeriesProof(
+                    kind: media.mediaKind,
+                    proof: proof,
+                    preference: preference,
+                    catalog: catalog,
+                    states: states,
+                    now: now
+                )
+                proofMemo[media] = ProofMemo(inputs: inputs, proof: result)
+            }
+            if case .proven(let until) = result, now <= until {
+                proven[media] = until
+            }
+        }
+        publishEntireSeriesProofs(proven)
+        scheduleExpiry(earliest: proven.values.min(), now: now)
+
+        if pending.isEmpty {
+            cancelPreparation()
+        } else if prepareTask == nil || pending != preparingRequests {
+            startPreparing(pending)
+        }
+    }
+
+    private func publishEntireSeriesProofs(_ proofs: [MediaIdentity: Date]) {
+        if entireSeriesProofs != proofs { entireSeriesProofs = proofs }
+    }
+
+    /// Decodes the payloads the entire-series filter cannot judge yet, off the main actor. A newer request supersedes
+    /// this one, and only the current request may apply its result.
+    private func startPreparing(_ requests: [LibraryCatalogPreparation]) {
+        prepareTask?.cancel()
+        prepareGeneration &+= 1
+        let generation = prepareGeneration
+        activePreparation = generation
+        preparingRequests = requests
+        isPreparingOfflineFacet = true
+        let prepare = prepareCatalogs
+        let preparationConsumed = preparationConsumed
+        prepareTask = Task { @MainActor [weak self] in
+            let prepared = await prepare(requests)
+            guard let self, generation == self.activePreparation else {
+                await preparationConsumed(generation)
+                return
+            }
+            self.prepareTask = nil
+            self.activePreparation = nil
+            self.preparingRequests = []
+            self.isPreparingOfflineFacet = false
+            guard !Task.isCancelled, self.offlineFacet == .entireKnownSeries else {
+                await preparationConsumed(generation)
+                return
+            }
+            self.catalogCache.merge(prepared) { _, decoded in decoded }
+            self.recomputeOfflineProofs()
+            await preparationConsumed(generation)
+        }
+    }
+
+    /// Stops a decode in flight. Its late result is dropped by generation, so nothing it held is published.
+    private func cancelPreparation() {
+        prepareTask?.cancel()
+        prepareTask = nil
+        preparingRequests = []
+        activePreparation = nil
+        if isPreparingOfflineFacet { isPreparingOfflineFacet = false }
+    }
+
+    /// Wakes the Library when the earliest proof lapses, so the series leaves the filter with no other change.
+    /// Correctness does not depend on it: membership is checked against the clock on every read.
+    private func scheduleExpiry(earliest: Date?, now: Date) {
+        expiryTask?.cancel()
+        expiryTask = nil
+        guard let earliest else { return }
+        // A millisecond past `until`: at exactly `until` the proof still holds, so waking then would wake again at once.
+        // Capped at the freshness window, so one sleep never asks for more than the window it is waiting out.
+        let delay = min(max(earliest.timeIntervalSince(now), 0) + 0.001, SeriesOfflineCoverage.freshnessWindow)
+        expiryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            self.expiryTask = nil
+            self.recomputeOfflineProofs()
+        }
     }
 
     var updateProgressCurrent: Int { updateSnapshot.current }
@@ -506,6 +721,7 @@ final class LibraryViewModel: ObservableObject {
         isVisible = true
         hasPresentedDiscord = false
         presentDiscordIfNeeded()
+        recomputeOfflineProofs()
     }
 
     func disappear() {
@@ -544,6 +760,7 @@ final class LibraryViewModel: ObservableObject {
         if oldCategoryName != selectedCategoryName || selectedCategoryID == nil {
             presentDiscordIfNeeded()
         }
+        recomputeOfflineProofs()
     }
 
     private func applyAuthoritativeLayout(_ rawValue: Int) {

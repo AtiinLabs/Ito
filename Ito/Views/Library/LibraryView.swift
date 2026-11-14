@@ -127,7 +127,11 @@ struct LibraryView: View {
             }
             if viewModel.showsNoResults {
                 updateFailureSection
-                noResultsView
+                LibraryNoResultsView(
+                    searchText: viewModel.searchText,
+                    isFiltered: viewModel.offlineFacet != .all,
+                    isAwaitingOfflineProofs: viewModel.isAwaitingOfflineProofs
+                )
             } else {
                 contentScrollView
             }
@@ -392,6 +396,9 @@ struct LibraryView: View {
                     }
                 }
                 Menu {
+                    if viewModel.supportsOfflineFacets {
+                        LibraryOfflineFilterPicker(viewModel: viewModel)
+                    }
                     if viewModel.hasItems {
                         Button {
                             Task { await viewModel.requestUpdate() }
@@ -407,8 +414,13 @@ struct LibraryView: View {
                     }
                     .disabled(viewModel.isGeneratingExport)
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Image(systemName: viewModel.offlineFacet == .all ? "ellipsis.circle" : "ellipsis.circle.fill")
                         .accessibilityLabel("More Options")
+                        .accessibilityValue(
+                            viewModel.offlineFacet == .all
+                                ? Text(verbatim: "")
+                                : LibraryOfflineFilterPicker.title(for: viewModel.offlineFacet)
+                        )
                 }
             }
         }
@@ -477,23 +489,6 @@ struct LibraryView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 60)
-    }
-
-    private var noResultsView: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 44, weight: .thin))
-                .foregroundStyle(.tertiary)
-            Text("No Results")
-                .font(.title3)
-                .fontWeight(.semibold)
-            Text("Nothing in your library matches\n\"\(viewModel.searchText)\".")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.bottom, 60)
     }
 }
 

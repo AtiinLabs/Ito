@@ -25,17 +25,73 @@ nonisolated extension DownloadAttemptOutcome {
     }
 }
 
-/// Whether the network path admits bulk downloads right now.
+/// Whether the policy admits this attempt's bulk transfers right now.
 nonisolated protocol DownloadAdmissionGate: Sendable {
-    func admission() -> BulkDownloadAdmission
+    func admission() -> NetworkDecision
+    var authorityIsCurrent: Bool { get }
+    /// Whether an expensive, unconstrained path would be admitted now. The attempt's transport allows the system to
+    /// use such a path only then.
+    var allowsExpensiveTransport: Bool { get }
+    /// Whether `context` was stamped under the policy revision in force now.
+    func isCurrent(_ context: NetworkOperationContext) -> Bool
 }
 
-/// Admission read from the live network path through `BulkDownloadPolicy`.
+/// Admission decided by `NetworkPolicy` from the live configuration, the observed path and, for an exact batch,
+/// its scoped consent.
 nonisolated struct NetworkPathAdmissionGate: DownloadAdmissionGate {
     let observer: any NetworkPathObserving
+    let policy: NetworkPolicyCenter
+    var intent: NetworkIntent = .manualBulkDownload
+    var consent: NetworkConsentBinding?
+    var operation: PluginNetworkOperation?
+    var authorizationScope: UUID?
 
-    func admission() -> BulkDownloadAdmission {
-        BulkDownloadPolicy.admit(observer.current)
+    private var hasRequestConsent: Bool {
+        guard let consent, let operation, let authorizationScope else { return false }
+        guard operation.purpose == .manualBulkDownload || operation.purpose == .automaticBulkDownload else { return false }
+        return policy.hasValidConsent(
+            consent, reference: operation.scopedGrant, operationID: operation.operationID,
+            authorizationScope: authorizationScope
+        )
+    }
+
+    var authorityIsCurrent: Bool {
+        guard let operation else { return true }
+        guard operation.policyRevision == nil || operation.policyRevision == policy.revision else { return false }
+        if let consent, authorizationScope != consent.liveAuthorizationScope() { return false }
+        return operation.scopedGrant == nil || hasRequestConsent
+    }
+
+    func admission() -> NetworkDecision {
+        NetworkPolicy.evaluate(intent, path: observer.current, configuration: policy.current, hasBatchConsent: hasRequestConsent)
+    }
+
+    var allowsExpensiveTransport: Bool {
+        NetworkPolicy.evaluate(
+            intent, path: NetworkPathSnapshot(status: .satisfied, isExpensive: true),
+            configuration: policy.current, hasBatchConsent: hasRequestConsent
+        ) == .allow
+    }
+
+    func isCurrent(_ context: NetworkOperationContext) -> Bool {
+        guard context.policyRevision == policy.revision else { return false }
+        if let authorizationScope, context.authorizationScope != authorizationScope { return false }
+        if let consent {
+            guard context.batchID == consent.batchID, context.sourceID == consent.sourceID,
+                  context.authorizationScope == consent.liveAuthorizationScope() else { return false }
+        }
+        if let operation {
+            guard context.operationID == operation.operationID, context.purpose == operation.purpose,
+                  context.scopedGrant == operation.scopedGrant else { return false }
+        }
+        if context.scopedGrant != nil {
+            guard context.purpose == .manualBulkDownload || context.purpose == .automaticBulkDownload else { return false }
+            guard let consent, policy.hasValidConsent(
+                consent, reference: context.scopedGrant, operationID: context.operationID,
+                authorizationScope: context.authorizationScope
+            ) else { return false }
+        }
+        return true
     }
 }
 
@@ -97,6 +153,11 @@ nonisolated final class DownloadNetModule: NetModule, Sendable {
 
     func fetch(request: NetRequest, context: NetworkOperationContext) async throws -> NetResponse {
         if let denial = recorder.firstDenial { throw denial }
+        // A context stamped under an earlier policy revision never decides for the current one: the attempt
+        // is queued again and rebuilds its contexts under the revision in force.
+        if !gate.isCurrent(context) {
+            try recorder.deny(.deferred(.policyChanged))
+        }
         if case .wait(let wait) = gate.admission() {
             try recorder.deny(wait.policyOutcome)
         }
@@ -165,7 +226,7 @@ extension PluginRunnerHostModules {
         cloudflareUserAgent: @escaping @Sendable (String) async -> String
     ) -> PluginRunnerHostModules {
         let transport = AppNetModule(
-            configuration: .bulkDownload,
+            configuration: .bulkDownload(allowingExpensiveAccess: gate.allowsExpensiveTransport),
             cloudflare: RefusingCloudflareHandler(recorder: recorder, userAgent: cloudflareUserAgent),
             retryLogger: OSLogAppNetRetryLogger(),
             pluginID: pluginID,
