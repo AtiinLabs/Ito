@@ -17,7 +17,7 @@ nonisolated struct DownloadListRow: Identifiable, Equatable, Sendable {
 
     var canRetry: Bool {
         switch state {
-        case .failed: true
+        case .failed(let reason): !reason.endsReplacement
         case .waiting(let reason): reason.requiresRetry
         default: false
         }

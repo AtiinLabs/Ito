@@ -26,18 +26,12 @@ struct DownloadPresetsMigrationTests {
                         ?, 'Series', NULL, 'queued', NULL, NULL, NULL, 0, 0, 0)
                 """, arguments: [Self.jobID, Self.batchID, Data("{}".utf8)])
             try db.execute(sql: "INSERT INTO backupCapability (component, representation) VALUES ('savedLibraryThumbnails', 'representedEmpty')")
-            // Synthetic v24-style child table: this base has no replacement migration, but the relation must
-            // survive the parent-table rebuild exactly as the real replacement intent does.
+            // A v24 replacement intent on the job: the relation must survive the parent-table rebuild.
             try db.execute(sql: """
-                CREATE TABLE downloadReplacementIntent (
-                  id TEXT PRIMARY KEY NOT NULL,
-                  jobId TEXT NOT NULL REFERENCES downloadJob(id) ON DELETE CASCADE
-                )
-                """)
-            try db.execute(
-                sql: "INSERT INTO downloadReplacementIntent (id, jobId) VALUES ('intent', ?)",
-                arguments: [Self.jobID]
-            )
+                INSERT INTO downloadReplacementIntent
+                  (jobId, expectedVersionId, expectedRevision, targetRevision, sourceEpoch, authorizationId)
+                VALUES (?, 'version-1', NULL, NULL, 'epoch', 'authorization')
+                """, arguments: [Self.jobID])
         }
         return queue
     }
