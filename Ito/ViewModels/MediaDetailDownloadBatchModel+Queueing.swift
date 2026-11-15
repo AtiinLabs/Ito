@@ -13,18 +13,17 @@ extension MediaDetailDownloadBatchModel {
         scope: BatchScope,
         policy: RememberedEditionChoice
     ) -> Task<Void, Never>? {
-        let requestedMore: Int? = if case .more(let count) = action.window { count.value } else { nil }
-        return enqueueBatch(
-            provenance: action.provenance, requestedMore: requestedMore, selection: selection, chapters: chapters,
+        enqueueBatch(
+            provenance: action.provenance, selection: selection, chapters: chapters,
             alreadyStored: alreadyStored, scope: scope, policy: policy
         )
     }
 
     /// Queues `chapters` with the given provenance. Exact uploads chosen from a listing are `single` and record no
-    /// catalog digest, because they were not planned from the chapter list.
+    /// catalog digest, because they were not planned from the chapter list. A More window reports the count it
+    /// asked for against what was queued.
     func enqueueBatch(
         provenance: DownloadBatchProvenance,
-        requestedMore: Int? = nil,
         selection: EditionSelection,
         chapters: [Chapter],
         alreadyStored: Int,
@@ -51,6 +50,7 @@ extension MediaDetailDownloadBatchModel {
             reviewedSourceEpoch: scope.sourceEpoch,
             reviewedPolicy: reviewedPolicy(of: policy)
         )
+        let requestedMore = provenance.windowKind == .more ? provenance.positionCount : nil
         return queueOrHold(request, alreadyStored: alreadyStored, requestedMore: requestedMore, scope: scope)
     }
 

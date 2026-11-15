@@ -258,7 +258,7 @@ nonisolated struct DownloadBatchProvenance: Equatable, Sendable {
     let positionCount: Int?
     let customPresetId: String?
 
-    /// A chapter queued on its own: every optional field is nil.
+    /// Exact chapters chosen individually, not from a preset: every optional field is nil.
     static let single = builtIn(.single)
 
     /// A request for a built-in preset, which has no window, count or custom definition.
