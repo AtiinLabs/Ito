@@ -37,7 +37,7 @@ extension MangaReaderViewModel {
                 preferredScanlator: currentChapter.scanlator,
                 preferredScanlatorID: askBeforeSwitching ? currentChapter.scanlatorID : nil
             ),
-            opensHere: { pagesChapter($0) != nil }
+            opensHere: { opensHere($0) }
         ).requiringGroupConsent(from: chapter, enabled: askBeforeSwitching)
     }
 
@@ -50,7 +50,7 @@ extension MangaReaderViewModel {
                 preferredScanlator: currentChapter.scanlator,
                 preferredScanlatorID: askBeforeSwitching ? currentChapter.scanlatorID : nil
             ),
-            opensHere: { pagesChapter($0) != nil }
+            opensHere: { opensHere($0) }
         ).requiringGroupConsent(from: chapter, enabled: askBeforeSwitching)
     }
 
@@ -70,6 +70,11 @@ extension MangaReaderViewModel {
     var canReadDownloadedCopy: Bool {
         guard case .failure = loadPhase else { return false }
         return offline.canReadDownloadedCopy(chapterKey: currentChapter.key)
+    }
+
+    /// Whether the chapter reads in this reader: declared as pages, and not found to be saved as text.
+    private func opensHere(_ chapter: Manga.Chapter) -> Bool {
+        pagesChapter(chapter) != nil && heldPayloads[ExactChapterKey(chapter.key)] == nil
     }
 
     private func pagesChapter(_ chapter: Manga.Chapter) -> Manga.Chapter? {

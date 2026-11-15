@@ -28,6 +28,9 @@ struct MangaImage: View {
     var fillsRowWidth = false
     let interaction: MangaImageInteraction
     var imageLabel = String(localized: "Illustration", comment: "Accessibility label of a manga page image")
+    /// Told, with the request's key, each time this view holds a visible lease on its image. A route hands the
+    /// first image it showed over to the renderer's own lease with it.
+    var onVisibleLeaseAcquired: ((ReaderPageImageKey) -> Void)?
 
     @State private var imageState = ReaderPageImageState(phase: .idle, pixelSize: nil, revision: 0)
     @State private var lease: ReaderImageLease?
@@ -152,6 +155,7 @@ struct MangaImage: View {
         }
         lease = session.acquire(descriptor, consumer: .visible)
         imageState = session.state(for: key)
+        onVisibleLeaseAcquired?(key)
     }
 
     private func retry() {

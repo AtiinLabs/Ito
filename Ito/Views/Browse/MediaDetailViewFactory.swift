@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import ito_runner
 
@@ -32,15 +33,11 @@ struct MediaDetailReaderViewFactory {
     @ViewBuilder
     func destination(for destination: MediaDetailReaderDestination) -> some View {
         switch destination {
-        case .pages(_, let content, let pluginID, let entry, let chapter):
-            ReaderView(
-                viewModel: makeMangaViewModel(
-                    content: content,
-                    pluginID: pluginID,
-                    entry: entry,
-                    chapter: chapter
-                )
+        case .pages(let id, let content, let pluginID, let entry, let chapter):
+            ReaderRouteView(
+                coordinator: makeRoute(content: content, pluginID: pluginID, entry: entry, chapter: chapter, format: .pages)
             )
+            .id(id)
         case .anime(_, let runner, let pluginID, let media, let episode):
             VideoPlayerView(
                 viewModel: makeVideoPlayerViewModel(
@@ -50,39 +47,78 @@ struct MediaDetailReaderViewFactory {
                     episode: episode
                 )
             )
-        case .text(_, let content, let pluginID, let entry, let chapter):
-            NovelReaderView(
-                viewModel: makeNovelViewModel(
-                    content: content,
-                    pluginID: pluginID,
-                    entry: entry,
-                    chapter: chapter
-                )
+        case .text(let id, let content, let pluginID, let entry, let chapter):
+            ReaderRouteView(
+                coordinator: makeRoute(content: content, pluginID: pluginID, entry: entry, chapter: chapter, format: .text)
             )
+            .id(id)
         }
+    }
+
+    /// The one coordinator of a reader opening. It lives as long as the opening's route view and moves the
+    /// route between the page reader and the text reader; the detail screen never learns of the swap.
+    func makeRoute(
+        content: ReaderContentSource,
+        pluginID: String,
+        entry: MediaEntry,
+        chapter: Chapter,
+        format: HistoryReaderFormat
+    ) -> ReaderRouteCoordinator {
+        let session = ReaderRouteSession(
+            media: MediaIdentity(pluginId: pluginID, canonicalMediaId: entry.key, mediaKind: entry.kind),
+            mediaKey: entry.key,
+            scope: mangaReaderDependencies.progress
+        )
+        return ReaderRouteCoordinator(
+            rootID: UUID(),
+            pluginID: pluginID,
+            entry: entry,
+            chapter: chapter,
+            format: format,
+            content: content,
+            session: session,
+            preparer: makeChapterPreparer(content: content, pluginID: pluginID),
+            presentations: ReaderRouteComposition(factory: self, pluginID: pluginID, content: content),
+            settings: mangaReaderDependencies.settings,
+            network: PluginContextsReaderRouteNetwork(contexts: networkContexts)
+        )
+    }
+
+    /// Prepares any chapter of one opening, with the opening's own source choice.
+    func makeChapterPreparer(content: ReaderContentSource, pluginID: String) -> any ReaderChapterPreparing {
+        MediaDetailReaderChapterPreparer(
+            pluginID: pluginID,
+            content: content,
+            local: offlineReading,
+            remoteManga: content.remote.map {
+                ItoRunnerMangaPageLoader(runner: $0, pluginID: pluginID, contexts: networkContexts) as any MangaPageLoading
+            },
+            remoteNovel: content.remote.map {
+                ItoRunnerNovelChapterLoader(runner: $0, pluginID: pluginID, contexts: networkContexts) as any NovelChapterLoading
+            }
+        )
     }
 
     func makeMangaViewModel(
         content: ReaderContentSource,
         pluginID: String,
         entry: MediaEntry,
-        chapter: Chapter
+        chapter: Chapter,
+        session: ReaderRouteSession,
+        preparer: any ReaderChapterPreparing,
+        visitID: UUID,
+        mode: ReaderPresentationMode
     ) -> MangaReaderViewModel {
-        let loader = ResolvingMangaPageLoader(
-            pluginID: pluginID,
-            local: offlineReading,
-            remote: content.remote.map {
-                ItoRunnerMangaPageLoader(runner: $0, pluginID: pluginID, contexts: networkContexts) as any MangaPageLoading
-            },
-            preference: content.preference
-        )
-        return MangaReaderViewModel(
-            pageLoader: loader,
+        MangaReaderViewModel(
+            chapterPreparer: preparer,
+            routeSession: session,
+            routeVisitID: visitID,
+            presentationMode: mode,
             pluginID: pluginID,
             entry: entry,
             initialChapter: chapter,
             dependencies: mangaReaderDependencies,
-            offline: makeOfflineContext(pluginID: pluginID, entry: entry, content: content, loader: loader)
+            offline: makeOfflineContext(pluginID: pluginID, entry: entry, content: content)
         )
     }
 
@@ -90,23 +126,22 @@ struct MediaDetailReaderViewFactory {
         content: ReaderContentSource,
         pluginID: String,
         entry: MediaEntry,
-        chapter: Chapter
+        chapter: Chapter,
+        session: ReaderRouteSession,
+        preparer: any ReaderChapterPreparing,
+        visitID: UUID,
+        mode: ReaderPresentationMode
     ) -> NovelReaderViewModel {
-        let loader = ResolvingNovelChapterLoader(
-            pluginID: pluginID,
-            local: offlineReading,
-            remote: content.remote.map {
-                ItoRunnerNovelChapterLoader(runner: $0, pluginID: pluginID, contexts: networkContexts) as any NovelChapterLoading
-            },
-            preference: content.preference
-        )
-        return NovelReaderViewModel(
-            chapterLoader: loader,
+        NovelReaderViewModel(
+            chapterPreparer: preparer,
+            routeSession: session,
+            routeVisitID: visitID,
+            presentationMode: mode,
             pluginID: pluginID,
             entry: entry,
             initialChapter: chapter,
             dependencies: novelReaderDependencies,
-            offline: makeOfflineContext(pluginID: pluginID, entry: entry, content: content, loader: loader)
+            offline: makeOfflineContext(pluginID: pluginID, entry: entry, content: content)
         )
     }
 
@@ -115,8 +150,7 @@ struct MediaDetailReaderViewFactory {
     private func makeOfflineContext(
         pluginID: String,
         entry: MediaEntry,
-        content: ReaderContentSource,
-        loader: any DownloadedCopyReopening
+        content: ReaderContentSource
     ) -> ReaderOfflineContext {
         guard downloads.isAvailable else { return ReaderOfflineContext() }
         return ReaderOfflineContext(
@@ -125,8 +159,7 @@ struct MediaDetailReaderViewFactory {
                 downloads: downloads,
                 connectivity: connectivity
             ),
-            isSavedOnly: content.remote == nil,
-            downloadedCopy: loader
+            isSavedOnly: content.remote == nil
         )
     }
 
@@ -393,4 +426,200 @@ struct MediaDetailViewFactory {
             categoryHistoryViewFactory: categoryHistoryViewFactory
         )
     }
+}
+
+// MARK: - Chapter preparation
+
+/// Loads one chapter of a reader opening with the form it is actually stored or served in, so a reader is
+/// chosen from what the chapter is rather than from what the catalog declared.
+@MainActor
+protocol ReaderChapterPreparing: AnyObject {
+    func prepareChapter(
+        entry: MediaEntry,
+        chapter: Chapter,
+        operation: PluginNetworkOperation
+    ) async throws -> ReaderPreparedChapter
+    /// Whether the chapter is held on the installed source for this opening only.
+    func isReadingRemoteThisTime(chapterKey: String) -> Bool
+    /// Ends that choice: the chapter reads local-first from its next preparation on.
+    func readLocalFirst(chapterKey: String)
+}
+
+/// One opening's chapter preparation. A resolver is made for each new chapter and handed to the payload that
+/// is returned, so the pins of a copy live exactly as long as the content that reads it; this object keeps
+/// none. The chapter is fetched once: a verified copy is read from its own lease, and otherwise the source's
+/// one chapter export is called, as the chapter's declared kind says.
+@MainActor
+final class MediaDetailReaderChapterPreparer: ReaderChapterPreparing {
+    private let pluginID: String
+    private let content: ReaderContentSource
+    private let local: any OfflineChapterReading
+    let remoteManga: (any MangaPageLoading)?
+    let remoteNovel: (any NovelChapterLoading)?
+    /// Chapters whose "read online this time" choice the user ended.
+    private var releasedRemoteKeys: Set<ExactChapterKey> = []
+
+    init(
+        pluginID: String,
+        content: ReaderContentSource,
+        local: any OfflineChapterReading,
+        remoteManga: (any MangaPageLoading)?,
+        remoteNovel: (any NovelChapterLoading)?
+    ) {
+        self.pluginID = pluginID
+        self.content = content
+        self.local = local
+        self.remoteManga = remoteManga
+        self.remoteNovel = remoteNovel
+    }
+
+    private var preference: ReaderContentPreference {
+        if case .remoteThisTime(let key) = content.preference, releasedRemoteKeys.contains(ExactChapterKey(key)) {
+            return .localFirst
+        }
+        return content.preference
+    }
+
+    func isReadingRemoteThisTime(chapterKey: String) -> Bool {
+        guard content.remote != nil, case .remoteThisTime(let key) = preference else { return false }
+        return key == chapterKey
+    }
+
+    func readLocalFirst(chapterKey: String) {
+        releasedRemoteKeys.insert(ExactChapterKey(chapterKey))
+    }
+
+    func prepareChapter(
+        entry: MediaEntry,
+        chapter: Chapter,
+        operation: PluginNetworkOperation
+    ) async throws -> ReaderPreparedChapter {
+        let resolver = OfflineChapterSourceResolver(
+            pluginID: pluginID,
+            local: local,
+            hasRemote: content.remote != nil,
+            preference: preference
+        )
+        var pages: [Page]?
+        var savedForm: OfflineContentKind?
+        if case .local(let lease) = try await resolver.source(for: entry, chapter: chapter) {
+            pages = try await resolver.localPages(lease, chapter: chapter)
+            if pages != nil { savedForm = lease.manifest.contentKind }
+        }
+        let declared = entry.contentKind(of: chapter)
+        let kind: ContentKind
+        switch savedForm {
+        case .text?: kind = .text
+        case .images?: kind = .images
+        case .mixed?, nil: kind = declared
+        }
+        if pages == nil {
+            // The documented fallback of an unreadable ordinary copy, or no copy at all.
+            pages = try await remotePages(kind: kind, entry: entry, chapter: chapter, operation: operation)
+        }
+        guard let pages else { throw OfflineReadError.notDownloaded }
+        var overridden = chapter
+        overridden.kind = kind
+        return ReaderPreparedChapter(
+            entry: kind == declared ? entry : entry.pinning(overridden),
+            chapter: chapter,
+            pages: ReaderPageOrdering.ascending(pages),
+            format: kind == .text ? .text : .pages,
+            resolver: resolver,
+            content: content
+        )
+    }
+
+    private func remotePages(
+        kind: ContentKind,
+        entry: MediaEntry,
+        chapter: Chapter,
+        operation: PluginNetworkOperation
+    ) async throws -> [Page] {
+        switch kind {
+        case .text:
+            guard let remoteNovel else { throw OfflineReadError.notDownloaded }
+            return try await remoteNovel.content(for: entry, chapter: chapter, operation: operation)
+        case .images:
+            guard let remoteManga else { throw OfflineReadError.notDownloaded }
+            return try await remoteManga.pages(for: entry, chapter: chapter, operation: operation)
+        }
+    }
+}
+
+// MARK: - Route composition
+
+/// Builds the readers of one route from the factory: the first one, and the destinations a handoff stages.
+@MainActor
+struct ReaderRouteComposition: ReaderRoutePresentationMaking {
+    let factory: MediaDetailReaderViewFactory
+    let pluginID: String
+    let content: ReaderContentSource
+
+    func makeInitialPresentation(
+        format: HistoryReaderFormat,
+        entry: MediaEntry,
+        chapter: Chapter,
+        session: ReaderRouteSession,
+        preparer: any ReaderChapterPreparing,
+        visitID: UUID
+    ) -> ReaderRoutePresentation {
+        switch format {
+        case .text:
+            .text(visitID: visitID, factory.makeNovelViewModel(
+                content: content, pluginID: pluginID, entry: entry, chapter: chapter,
+                session: session, preparer: preparer, visitID: visitID, mode: .live
+            ))
+        case .pages, .video:
+            .pages(visitID: visitID, factory.makeMangaViewModel(
+                content: content, pluginID: pluginID, entry: entry, chapter: chapter,
+                session: session, preparer: preparer, visitID: visitID, mode: .live
+            ))
+        }
+    }
+
+    func makePreparedPresentation(
+        _ prepared: ReaderPreparedChapter,
+        position: ReaderEntryPosition,
+        session: ReaderRouteSession,
+        preparer: any ReaderChapterPreparing,
+        visitID: UUID,
+        mode: ReaderPresentationMode
+    ) -> ReaderRoutePresentation {
+        switch prepared.format {
+        case .text:
+            let model = factory.makeNovelViewModel(
+                content: content, pluginID: pluginID, entry: prepared.entry, chapter: prepared.chapter,
+                session: session, preparer: preparer, visitID: visitID, mode: mode
+            )
+            model.installPreparedChapter(prepared.pages, position: position)
+            model.retain(prepared)
+            return .text(visitID: visitID, model)
+        case .pages, .video:
+            let model = factory.makeMangaViewModel(
+                content: content, pluginID: pluginID, entry: prepared.entry, chapter: prepared.chapter,
+                session: session, preparer: preparer, visitID: visitID, mode: mode
+            )
+            model.installPreparedChapter(prepared.pages, position: position)
+            model.retain(prepared)
+            return .pages(visitID: visitID, model)
+        }
+    }
+}
+
+/// The live network facts of the plugin contexts, read by a route and never captured.
+@MainActor
+final class PluginContextsReaderRouteNetwork: ReaderRouteNetworking {
+    private let contexts: PluginNetworkContexts
+
+    init(contexts: PluginNetworkContexts) {
+        self.contexts = contexts
+    }
+
+    func liveScope(pluginID: String) -> UUID { contexts.liveScope(pluginID: pluginID) }
+    var policyRevision: UInt64 { contexts.policy.revision }
+    var pathGeneration: UInt64 { contexts.policy.pathGeneration }
+
+    var policyChanges: AnyPublisher<Void, Never> { contexts.policy.changes }
+    var scopeChanges: AnyPublisher<Void, Never> { contexts.scopeChanges }
 }

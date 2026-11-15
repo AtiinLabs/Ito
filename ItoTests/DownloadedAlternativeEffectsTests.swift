@@ -75,7 +75,10 @@ struct DownloadedAlternativeEffectsTests {
             preference: content.preference
         )
         let viewModel = NovelReaderViewModel(
-            chapterLoader: loader,
+            chapterPreparer: LoaderBackedChapterPreparer(novel: loader),
+            routeSession: subject.session,
+            routeVisitID: UUID(),
+            presentationMode: .live,
             pluginID: Self.pluginID,
             entry: entry,
             initialChapter: chapter,

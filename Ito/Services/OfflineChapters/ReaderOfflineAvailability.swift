@@ -8,7 +8,8 @@ import ito_runner
 protocol ReaderOfflineAvailability: AnyObject {
     /// Whether offline chapters exist on this build. When false, stored copies and the network change
     /// nothing a reader shows or does, with one exception: a source lock (`locked`) is still reported
-    /// as a boundary instead of ending the reader.
+    /// as a boundary instead of ending the reader. A neighbor of the other format still continues in
+    /// the other reader, because that needs the installed source, not stored copies.
     var isAvailable: Bool { get }
     /// Whether the system reports no network.
     var isOffline: Bool { get }
@@ -25,44 +26,44 @@ final class ReaderOfflineContext {
     private let availability: any ReaderOfflineAvailability
     /// The route has no installed source, so only stored chapters can be opened.
     private let isSavedOnly: Bool
-    private let downloadedCopy: (any DownloadedCopyReopening)?
+    /// The reader that holds what it loaded, bound by that reader itself.
+    private weak var downloadedCopy: (any DownloadedCopyReopening)?
     private var subscription: AnyCancellable?
 
     init(
         availability: any ReaderOfflineAvailability = UnavailableReaderOfflineAvailability(),
-        isSavedOnly: Bool = false,
-        downloadedCopy: (any DownloadedCopyReopening)? = nil
+        isSavedOnly: Bool = false
     ) {
         self.availability = availability
         self.isSavedOnly = isSavedOnly
+    }
+
+    /// Lets the owning reader answer which of its loaded chapters read from the source.
+    func bind(downloadedCopy: any DownloadedCopyReopening) {
         self.downloadedCopy = downloadedCopy
     }
 
-    /// Adds what only a reader knows to the ordering's answer. A chapter of the other format opens
-    /// elsewhere, and one with neither a copy nor a way to fetch it is not available. Without offline
-    /// support, other-reader boundaries retain the earlier end behavior; source locks always remain
-    /// explicit boundaries.
+    /// Adds what only a reader knows to the ordering's answer. A neighbor with neither a stored copy
+    /// nor a way to fetch it is not available, whatever its format. One that is available but made for
+    /// the other reader continues there, with or without offline support. Source locks come first and
+    /// always remain explicit boundaries.
     func resolving(
         _ boundary: ReaderChapterBoundary<Chapter>,
         opensHere: (Chapter) -> Bool
     ) -> ReaderChapterBoundary<Chapter> {
         // Source access is a boundary even when this runtime has no offline inventory service.
-        // Absence of download support must not disguise a locked neighbor as the end.
         if case .locked = boundary { return boundary }
-        guard availability.isAvailable else {
-            guard case .chapter(let chapter) = boundary, opensHere(chapter) else { return .end }
-            return boundary
-        }
         guard case .chapter(let chapter) = boundary else { return boundary }
-        guard opensHere(chapter) else { return .otherReader(chapter) }
-        // A chapter that reads from the source (chosen so, or loaded there before its copy finished) is
-        // not read from its copy, whatever is stored.
-        let readsStoredCopy = availability.isVerified(chapterKey: chapter.key)
-            && downloadedCopy?.readsFromSource(chapterKey: chapter.key) != true
-        if !readsStoredCopy, isSavedOnly || availability.isOffline {
-            return .notAvailableOffline(chapter)
+        if availability.isAvailable {
+            // A chapter that reads from the source (chosen so, or loaded there before its copy finished) is
+            // not read from its copy, whatever is stored.
+            let readsStoredCopy = availability.isVerified(chapterKey: chapter.key)
+                && downloadedCopy?.readsFromSource(chapterKey: chapter.key) != true
+            if !readsStoredCopy, isSavedOnly || availability.isOffline {
+                return .notAvailableOffline(chapter)
+            }
         }
-        return boundary
+        return opensHere(chapter) ? boundary : .handoff(chapter, requiresGroupConsent: false)
     }
 
     /// Calls `onChange` after a download finishes or the network flips, since either moves a boundary.
@@ -83,8 +84,8 @@ final class ReaderOfflineContext {
 }
 
 /// No offline store: nothing is verified and the device is never offline, so stored copies and the
-/// network change nothing. A reader keeps its earlier behavior at a neighbor of the other format
-/// (it ends there), but a source lock is still reported as a lock rather than as the end.
+/// network change nothing. A neighbor of the other format still continues in the other reader, and a
+/// source lock is still reported as a lock rather than as the end.
 @MainActor
 final class UnavailableReaderOfflineAvailability: ReaderOfflineAvailability {
     let isAvailable = false

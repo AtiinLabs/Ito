@@ -4,16 +4,28 @@ import ito_runner
 // MARK: - ReaderView
 
 struct ReaderView: View {
-    @StateObject private var viewModel: MangaReaderViewModel
+    @ObservedObject private var viewModel: MangaReaderViewModel
+    /// The route is asking, preparing or laying out a handoff; the pager's notice then reads as loading.
+    let isHandoffBusy: Bool
+    let onPresentationReady: (UUID, UUID) -> Void
+    let onInitialImageVisibleLeaseAcquired: (UUID, UUID) -> Void
     @State private var showSettings = false
     @State private var showUI = true
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
-    /// `viewModel` is evaluated once, when SwiftUI first creates this view's state.
-    init(viewModel: @autoclosure @escaping () -> MangaReaderViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel())
+    /// The route owns the reader; this view only draws it and reports what the route asked to be told.
+    init(
+        viewModel: MangaReaderViewModel,
+        isHandoffBusy: Bool,
+        onPresentationReady: @escaping (UUID, UUID) -> Void,
+        onInitialImageVisibleLeaseAcquired: @escaping (UUID, UUID) -> Void
+    ) {
+        self.viewModel = viewModel
+        self.isHandoffBusy = isHandoffBusy
+        self.onPresentationReady = onPresentationReady
+        self.onInitialImageVisibleLeaseAcquired = onInitialImageVisibleLeaseAcquired
     }
 
     var body: some View {
@@ -123,10 +135,8 @@ struct ReaderView: View {
                         displayTotal: viewModel.isPaged
                             ? viewModel.pagedPages.count
                             : viewModel.continuousChapterPage.count,
-                        hasPrev: viewModel.boundaryBefore(viewModel.currentChapter).chapter != nil
-                            || viewModel.boundaryBefore(viewModel.currentChapter).needsGroupConsent,
-                        hasNext: viewModel.boundaryAfter(viewModel.currentChapter).chapter != nil
-                            || viewModel.boundaryAfter(viewModel.currentChapter).needsGroupConsent,
+                        hasPrev: viewModel.boundaryBefore(viewModel.currentChapter).canNavigate,
+                        hasNext: viewModel.boundaryAfter(viewModel.currentChapter).canNavigate,
                         overrideViewer: Binding(
                             get: { viewModel.overrideViewer },
                             set: { viewModel.setViewerOverride($0) }
@@ -210,7 +220,10 @@ struct ReaderView: View {
 
     @ViewBuilder
     private func neighborView(_ boundary: ReaderChapterBoundary<Manga.Chapter>, isNext: Bool) -> some View {
-        if let notice = ReaderBoundaryNotice.pages(for: boundary, isNext: isNext) {
+        if boundary.isHandoff, isHandoffBusy, let chapter = boundary.candidate {
+            // The route is preparing it: the pager rests on its loading page, as for a chapter of this reader.
+            loadingChapterView(chapter: chapter, isNext: isNext)
+        } else if let notice = ReaderBoundaryNotice.pages(for: boundary, isNext: isNext) {
             boundaryNoticeView(notice, chapter: boundary.candidate, isNext: isNext)
         } else if let chapter = boundary.chapter {
             loadingChapterView(chapter: chapter, isNext: isNext)
@@ -222,7 +235,13 @@ struct ReaderView: View {
     /// Handles every tap itself: a SwiftUI tap gesture around a UIKit view would also fire for
     /// taps the pages already handle.
     private var continuousReader: some View {
-        MangaContinuousReaderView(viewModel: viewModel, onToggleUI: toggleUI)
+        MangaContinuousReaderView(viewModel: viewModel, onToggleUI: toggleUI, onInitialLayout: reportInitialContinuousLayout)
+    }
+
+    /// The continuous renderer applied the destination's first position.
+    private func reportInitialContinuousLayout() {
+        guard case .staged(let requestID, let visitID) = viewModel.presentationMode else { return }
+        onPresentationReady(requestID, visitID)
     }
 
     // MARK: - Shared views
@@ -246,10 +265,17 @@ struct ReaderView: View {
         .frame(maxWidth: .infinity, minHeight: 400, maxHeight: .infinity, alignment: .center)
         .padding(40)
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(notice.requestsGroupConsent ? .isButton : [])
+        .accessibilityAddTraits(notice.requestsGroupConsent || notice.requestsHandoff ? .isButton : [])
         .contentShape(Rectangle())
         .onTapGesture {
-            if notice.requestsGroupConsent {
+            if notice.requestsHandoff {
+                viewModel.requestHandoff(
+                    direction: isNext ? .next : .previous,
+                    position: isNext ? .start : .end,
+                    trigger: .chapterControl,
+                    atLoadedEdge: false
+                )
+            } else if notice.requestsGroupConsent {
                 viewModel.requestGroupSwitch(isNext ? .next : .previous, opensAtEnd: !isNext)
             } else {
                 toggleUI()
@@ -286,7 +312,8 @@ struct ReaderView: View {
                 session: viewModel.imageSession,
                 pageID: pageID,
                 interaction: .pagedZoom(onTap: toggleUI),
-                imageLabel: String(localized: "Page \(number)", comment: "Accessibility label of a manga page; number is its position in the chapter")
+                imageLabel: String(localized: "Page \(number)", comment: "Accessibility label of a manga page; number is its position in the chapter"),
+                onVisibleLeaseAcquired: { key in reportInitialImage(key, position: number - 1) }
             )
         case .text(let text):
             Text(text)
@@ -295,7 +322,22 @@ struct ReaderView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 .contentShape(Rectangle())
                 .onTapGesture(perform: toggleUI)
+                .onAppear { reportInitialLayout(position: number - 1) }
         }
+    }
+
+    /// A destination built behind the visible reader reports that its first page is on screen.
+    private func reportInitialLayout(position: Int) {
+        guard case .staged(let requestID, let visitID) = viewModel.presentationMode,
+              position == viewModel.pagedIndex else { return }
+        onPresentationReady(requestID, visitID)
+    }
+
+    /// The first image holds a lease of this renderer now, which is when the route's own lease can go.
+    private func reportInitialImage(_ key: ReaderPageImageKey, position: Int) {
+        guard let requestID = viewModel.arrivalRequestID, key == viewModel.preparedImageKey else { return }
+        onInitialImageVisibleLeaseAcquired(requestID, viewModel.routeVisitID)
+        reportInitialLayout(position: position)
     }
 
     private func toggleUI() {

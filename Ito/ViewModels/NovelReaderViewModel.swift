@@ -8,25 +8,40 @@ final class NovelReaderViewModel: ObservableObject {
     /// The series being read: a novel, or a manga whose chapter is text.
     let entry: MediaEntry
     let imageSession: ReaderPageImageSession
-    let chapterLoader: any NovelChapterLoading
+    /// Loads a chapter with the form it is actually stored or served in.
+    let chapterPreparer: any ReaderChapterPreparing
+    /// What every renderer visit of this route shares: History, completion and position writes.
+    let routeSession: ReaderRouteSession
+    /// Identifies this renderer visit among the route's.
+    let routeVisitID: UUID
     /// Stored copies and the route's source: where reading stops, and the downloaded copy to offer.
     let offline: ReaderOfflineContext
 
-    @Published private(set) var currentChapter: Novel.Chapter
-    @Published private(set) var loadedChapters: [NovelLoadedChapter] = [] {
+    /// Live, or built behind the visible reader for one handoff request.
+    @Published var presentationMode: ReaderPresentationMode
+    weak var handoffRouter: (any ReaderHandoffRouting)?
+    /// The handoff request this reader was built for, kept after it goes live.
+    var arrivalRequestID: UUID?
+    /// The request of the first image the destination shows, for handing the route's lease over.
+    var preparedImageKey: ReaderPageImageKey?
+    /// Some block of the loaded chapter scrolled off the screen, so the reader was moved by the user and not by layout.
+    var userScrolledSinceInstall = false
+
+    @Published var currentChapter: Novel.Chapter
+    @Published var loadedChapters: [NovelLoadedChapter] = [] {
         didSet {
             let ids = Set(loadedChapters.map(\.id))
             visibleBlocks = visibleBlocks.filter { ids.contains($0.chapterID) }
             visibleChapterEnds.formIntersection(ids)
         }
     }
-    @Published private(set) var loadPhase: NovelReaderLoadPhase = .idle
+    @Published var loadPhase: NovelReaderLoadPhase = .idle
     @Published private(set) var isLoadingNext = false
     /// The last next-chapter load failed; it waits for `retryNextChapter` instead of being
     /// started again by scrolling or page turns.
     @Published private(set) var appendFailed = false
     /// Where the reader should open the loaded chapter; the view applies it once and consumes it.
-    @Published private(set) var restoreAnchor: NovelReadingAnchor?
+    @Published var restoreAnchor: NovelReadingAnchor?
 
     @Published private(set) var fontSize: Double
     @Published private(set) var lineSpacing: Double
@@ -40,13 +55,24 @@ final class NovelReaderViewModel: ObservableObject {
 
     let dependencies: PreparedNovelReaderDependencies
     let mediaIdentity: MediaIdentity
-    /// Captured once per reader session; every chapter in the session shares it.
-    let completionContext: PluginCompletionContext
+    /// Captured once per route; every chapter and both readers share it.
+    var completionContext: PluginCompletionContext { routeSession.completionContext }
 
-    private(set) var isActive = true
-    private var hasPresentedPresence = false
+    var isActive = true
+    var hasPresentedPresence = false
     private(set) var sessionID = UUID()
-    private var contentGeneration: UInt64 = 0
+    var contentGeneration: UInt64 = 0
+    /// Set when the route replaced this reader with the other one, not when it was closed.
+    var handoffRetired = false
+    /// The reader's view is mounted; a destination uses it to present itself once it goes live.
+    var viewAppeared = false
+    var effectGate = ReaderEffectGate()
+    var handoffLatch: ReaderHandoffLatch?
+    var transition: NovelTransitionSnapshot?
+    /// What each loaded chapter's source choice pins, for as long as the chapter is in this window.
+    var chapterResolvers: [ExactChapterKey: OfflineChapterSourceResolver] = [:]
+    /// Neighbors found to be made for the other reader, with what was already loaded for them.
+    var heldPayloads: [ExactChapterKey: ReaderPreparedChapter] = [:]
 
     private var mainLoadTask: Task<Void, Never>?
     private var mainLoadOperationID: UUID?
@@ -57,18 +83,14 @@ final class NovelReaderViewModel: ObservableObject {
     private var networkSubscription: AnyCancellable?
     /// The last append was refused only because the next chapter is not downloaded and cannot be fetched.
     private var appendWaitsForBoundary = false
-    private var effectTasks: [UUID: Task<Void, Never>] = [:]
-    private var finishedChapterKeys: Set<String> = []
+    var effectTasks: [UUID: Task<Void, Never>] = [:]
     /// Continuous-mode blocks on screen; the topmost one is where the reader is.
     private var visibleBlocks: Set<NovelBlockReference> = []
     /// The last place reported in either mode, reopened after switching between them.
     private var lastPosition: NovelReadingAnchor?
     /// Chapters whose end marker is on screen: the reader is at their end.
     private var visibleChapterEnds: Set<UUID> = []
-    private var historyChapterKeys: Set<String> = []
-    /// Offset writes run one after another so an older write cannot land after a newer one.
-    private var offsetWriteTask: Task<Void, Never>?
-    private var lastSavedOffset: (chapterKey: String, offset: Int)?
+    var lastSavedOffset: (chapterKey: String, offset: Int)?
     private var settingsWriteTasks: [UUID: Task<Void, Never>] = [:]
     private var settingsWriteTailTasks: [NovelReaderSettingKind: Task<Void, Never>] = [:]
     private var settingsWriteOperationIDs: [NovelReaderSettingKind: UUID] = [:]
@@ -85,14 +107,21 @@ final class NovelReaderViewModel: ObservableObject {
     var askBeforeSwitchingGroups: Bool { dependencies.settings.askBeforeSwitchingGroups }
 
     init(
-        chapterLoader: any NovelChapterLoading,
+        chapterPreparer: any ReaderChapterPreparing,
+        routeSession: ReaderRouteSession,
+        routeVisitID: UUID,
+        presentationMode: ReaderPresentationMode,
         pluginID: String,
         entry: MediaEntry,
         initialChapter: Novel.Chapter,
         dependencies: PreparedNovelReaderDependencies,
         offline: ReaderOfflineContext
     ) {
-        self.chapterLoader = chapterLoader
+        self.chapterPreparer = chapterPreparer
+        self.routeSession = routeSession
+        self.routeVisitID = routeVisitID
+        self.presentationMode = presentationMode
+        if case .staged(let requestID, _) = presentationMode { arrivalRequestID = requestID }
         imageSession = dependencies.makeImageSession(pluginID)
         self.pluginID = pluginID
         self.entry = entry
@@ -100,10 +129,6 @@ final class NovelReaderViewModel: ObservableObject {
         currentChapter = entry.chapters?.first { $0.key == initialChapter.key } ?? initialChapter
         self.dependencies = dependencies
         mediaIdentity = MediaIdentity(pluginId: pluginID, canonicalMediaId: entry.key, mediaKind: entry.kind)
-        completionContext = dependencies.progress.captureCompletionContext(
-            media: mediaIdentity,
-            mediaKey: entry.key
-        )
 
         let settings = dependencies.settings.novelReaderSettings
         fontSize = settings.fontSize
@@ -131,6 +156,7 @@ final class NovelReaderViewModel: ObservableObject {
         }
         // A download finishing or the network changing moves a boundary: the prompts follow.
         offline.observe { [weak self] in self?.offlineAvailabilityChanged() }
+        offline.bind(downloadedCopy: self)
     }
 
     /// An effective restriction must still leave an explicit interactive continuation available.
@@ -155,7 +181,7 @@ final class NovelReaderViewModel: ObservableObject {
     // MARK: - Presentation lifecycle
 
     func start() {
-        guard isActive else { return }
+        guard isActive, presentationMode.isLive else { return }
         switch loadPhase {
         case .content, .failure:
             return
@@ -168,10 +194,14 @@ final class NovelReaderViewModel: ObservableObject {
     }
 
     func appear() {
+        viewAppeared = true
+        // A destination built behind the visible reader only records that it is mounted.
+        guard presentationMode.isLive, !handoffRetired else { return }
         let shouldRestartLoad = !isActive && loadPhase == .loading
         if !isActive {
             isActive = true
             sessionID = UUID()
+            effectGate = ReaderEffectGate()
             applySettings(dependencies.settings.novelReaderSettings)
         }
         hasPresentedPresence = true
@@ -183,8 +213,13 @@ final class NovelReaderViewModel: ObservableObject {
     }
 
     func disappear() {
+        guard presentationMode.isLive else {
+            discardPreparedPresentation()
+            return
+        }
         guard isActive else { return }
         isActive = false
+        viewAppeared = false
         imageSession.deactivate()
         hasPresentedPresence = false
         sessionID = UUID()
@@ -193,8 +228,9 @@ final class NovelReaderViewModel: ObservableObject {
         cancelContentOperations(finishingAs: .cancelled)
 
         // The local read mark is durable progress and must finish even if the reader closes
-        // right after the end, so effect tasks are not cancelled; their tracker step checks
-        // that this presentation is still current.
+        // right after the end, so effect tasks are not cancelled; their tracker step needs the gate open,
+        // which a reader that is closed (not one handing off to the other) shuts.
+        if !handoffRetired { effectGate.isOpen = false }
         for operationID in effectTasks.keys {
             logFinishedOnce(
                 kind: .chapterEffects,
@@ -233,13 +269,18 @@ final class NovelReaderViewModel: ObservableObject {
     /// What follows `chapter` for this reader: a chapter it can open, or why it stops. With the
     /// continuation setting on, another group's upload is a consent boundary, not an open chapter.
     func boundaryAfter(_ chapter: Novel.Chapter) -> ReaderChapterBoundary<Novel.Chapter> {
-        offline.resolving(ReaderChapterOrdering.boundary(after: chapter, in: entry.chapters), opensHere: { textChapter($0) != nil })
+        offline.resolving(ReaderChapterOrdering.boundary(after: chapter, in: entry.chapters), opensHere: { opensHere($0) })
             .requiringGroupConsent(from: chapter, enabled: askBeforeSwitchingGroups)
     }
 
     func boundaryBefore(_ chapter: Novel.Chapter) -> ReaderChapterBoundary<Novel.Chapter> {
-        offline.resolving(ReaderChapterOrdering.boundary(before: chapter, in: entry.chapters), opensHere: { textChapter($0) != nil })
+        offline.resolving(ReaderChapterOrdering.boundary(before: chapter, in: entry.chapters), opensHere: { opensHere($0) })
             .requiringGroupConsent(from: chapter, enabled: askBeforeSwitchingGroups)
+    }
+
+    /// Whether the chapter reads in this reader: declared as text, and not found to be saved as pages.
+    private func opensHere(_ chapter: Novel.Chapter) -> Bool {
+        textChapter(chapter) != nil && heldPayloads[ExactChapterKey(chapter.key)] == nil
     }
 
     private func textChapter(_ chapter: Novel.Chapter) -> Novel.Chapter? {
@@ -247,12 +288,16 @@ final class NovelReaderViewModel: ObservableObject {
     }
 
     func goToNextChapter() {
+        if boundaryAfter(currentChapter).isHandoff {
+            requestHandoff(direction: .next, position: .resume, trigger: .chapterControl, atLoadedEdge: false)
+            return
+        }
         if boundaryAfter(currentChapter).needsGroupConsent {
             requestGroupSwitch(.next)
             return
         }
         guard let nextChapter else { return }
-        goToChapter(nextChapter)
+        goToChapter(nextChapter, direction: .next)
     }
 
     var continuationSettingsTask: Task<Void, Never>?
@@ -269,18 +314,30 @@ final class NovelReaderViewModel: ObservableObject {
     }
 
     func goToPreviousChapter() {
+        if boundaryBefore(currentChapter).isHandoff {
+            requestHandoff(direction: .previous, position: .resume, trigger: .chapterControl, atLoadedEdge: false)
+            return
+        }
         if boundaryBefore(currentChapter).needsGroupConsent {
             requestGroupSwitch(.previous)
             return
         }
         guard let previousChapter else { return }
-        goToChapter(previousChapter)
+        goToChapter(previousChapter, direction: .previous)
     }
 
-    func goToChapter(_ chapter: Novel.Chapter) {
+    func goToChapter(
+        _ chapter: Novel.Chapter,
+        direction: ReaderHandoffDirection = .next,
+        trigger: ReaderHandoffTrigger = .chapterControl,
+        approved: Bool = false
+    ) {
         appendWaitsForBoundary = false
         let chapter = entry.chapters?.first { $0.key == chapter.key } ?? chapter
-        guard isActive, !chapter.isPaywalled else { return }
+        guard isActive, presentationMode.isLive, !chapter.isPaywalled else { return }
+        // What the reader holds now, until the chapter proves to be made for this reader.
+        beginTransitionSnapshot(direction: direction, trigger: trigger, approved: approved)
+        handoffLatch = nil
         changeCurrentChapter(to: chapter)
         loadedChapters = []
         restoreAnchor = nil
@@ -418,7 +475,7 @@ final class NovelReaderViewModel: ObservableObject {
     // MARK: - Main chapter load
 
     private func beginMainLoad(for chapter: Novel.Chapter) {
-        guard isActive, !chapter.isPaywalled else { return }
+        guard isActive, presentationMode.isLive, !chapter.isPaywalled else { return }
         let token = NovelChapterToken(chapter)
         if mainLoadOperationID != nil,
            token == NovelChapterToken(currentChapter) {
@@ -428,19 +485,19 @@ final class NovelReaderViewModel: ObservableObject {
         let operationID = UUID()
         let session = sessionID
         let generation = contentGeneration
-        let loader = chapterLoader
+        let preparer = chapterPreparer
         let entry = entry
         mainLoadOperationID = operationID
         loadPhase = .loading
         logStarted(kind: .remoteLoad, operationID: operationID)
         let operation = PluginNetworkOperation(purpose: .foregroundReading, operationID: operationID)
 
-        let task = Task { @MainActor [weak self, loader, entry] in
+        let task = Task { @MainActor [weak self, preparer, entry] in
             defer { self?.finishTestingOperation(operationID) }
             do {
-                let pages = try await loader.content(for: entry, chapter: chapter, operation: operation)
+                let prepared = try await preparer.prepareChapter(entry: entry, chapter: chapter, operation: operation)
                 self?.completeMainLoad(
-                    pages,
+                    prepared,
                     chapter: chapter,
                     token: token,
                     operationID: operationID,
@@ -462,7 +519,7 @@ final class NovelReaderViewModel: ObservableObject {
     }
 
     private func completeMainLoad(
-        _ pages: [Page],
+        _ prepared: ReaderPreparedChapter,
         chapter: Novel.Chapter,
         token: NovelChapterToken,
         operationID: UUID,
@@ -483,17 +540,36 @@ final class NovelReaderViewModel: ObservableObject {
             return
         }
 
-        let loaded = NovelLoadedChapter(
-            chapter: chapter,
-            pages: ReaderPageOrdering.ascending(pages)
-        )
-        loadedChapters = [loaded]
-        restoreAnchor = savedAnchor(for: loaded)
-        loadPhase = .content
         mainLoadTask = nil
         mainLoadOperationID = nil
+        guard prepared.format == .text else {
+            // Made for the other reader: this one is put back as it was and the route takes over.
+            logFinishedOnce(kind: .remoteLoad, operationID: operationID, outcome: .succeeded)
+            if transition != nil {
+                divertTransition(prepared)
+            } else {
+                divertOpening(prepared)
+            }
+            return
+        }
+        transition = nil
+        retain(prepared)
+        installMainChapter(prepared.pages, chapter: chapter, position: .resume)
         logFinishedOnce(kind: .remoteLoad, operationID: operationID, outcome: .succeeded)
         chapterOpened(chapter)
+    }
+
+    /// Publishes a loaded chapter at the native position `position` names.
+    func installMainChapter(_ pages: [Page], chapter: Novel.Chapter, position: ReaderEntryPosition) {
+        let loaded = NovelLoadedChapter(chapter: chapter, pages: pages)
+        loadedChapters = [loaded]
+        userScrolledSinceInstall = false
+        switch position {
+        case .start: restoreAnchor = nil
+        case .end: restoreAnchor = NovelReadingAnchor(chapterID: loaded.id, offset: NovelTextOffsets.bodyLength(pages))
+        case .resume: restoreAnchor = savedAnchor(for: loaded)
+        }
+        loadPhase = .content
     }
 
     /// Where the reader stopped in `loaded` last time, unless it was finished.
@@ -527,6 +603,7 @@ final class NovelReaderViewModel: ObservableObject {
         }
         mainLoadTask = nil
         mainLoadOperationID = nil
+        transition = nil
         loadPhase = .failure(error.localizedDescription)
         let outcome: PresentationEventOutcome = error is CancellationError
             ? .cancelled
@@ -567,6 +644,7 @@ final class NovelReaderViewModel: ObservableObject {
         guard isActive, !isPaging,
               visibleBlocks.remove(NovelBlockReference(chapterID: chapterID, index: pageIndex)) != nil
         else { return }
+        if restoreAnchor == nil, presentationMode.isLive { userScrolledSinceInstall = true }
         updateContinuousPosition()
     }
 
@@ -597,6 +675,7 @@ final class NovelReaderViewModel: ObservableObject {
     func loadNextChapter(trigger: NextChapterTrigger) {
         guard trigger != .seamless || !showsManualNextChapter else { return }
         guard isActive,
+              presentationMode.isLive,
               appendOperationID == nil,
               !isLoadingNext,
               !appendFailed,
@@ -620,7 +699,7 @@ final class NovelReaderViewModel: ObservableObject {
         let generation = contentGeneration
         let boundaryID = last.id
         let boundaryToken = NovelChapterToken(last.chapter)
-        let loader = chapterLoader
+        let preparer = chapterPreparer
         let entry = entry
         appendOperationID = operationID
         appendPrefetchEpoch = trigger == .seamless ? dependencies.settings.novelReaderPrefetchEpoch : nil
@@ -631,7 +710,7 @@ final class NovelReaderViewModel: ObservableObject {
             operationID: operationID
         )
 
-        let task = Task { @MainActor [weak self, loader, entry] in
+        let task = Task { @MainActor [weak self, preparer, entry] in
             defer { self?.finishTestingOperation(operationID) }
             guard self?.isCurrentAppend(
                 boundaryID: boundaryID, boundaryToken: boundaryToken, operationID: operationID,
@@ -641,10 +720,9 @@ final class NovelReaderViewModel: ObservableObject {
                 return
             }
             do {
-                let pages = try await loader.content(for: entry, chapter: next, operation: operation)
+                let prepared = try await preparer.prepareChapter(entry: entry, chapter: next, operation: operation)
                 self?.completeAppend(
-                    pages,
-                    chapter: next,
+                    prepared,
                     boundaryID: boundaryID,
                     boundaryToken: boundaryToken,
                     operationID: operationID,
@@ -664,8 +742,7 @@ final class NovelReaderViewModel: ObservableObject {
     }
 
     private func completeAppend(
-        _ pages: [Page],
-        chapter: Novel.Chapter,
+        _ prepared: ReaderPreparedChapter,
         boundaryID: UUID,
         boundaryToken: NovelChapterToken,
         operationID: UUID,
@@ -687,13 +764,19 @@ final class NovelReaderViewModel: ObservableObject {
             finishAppend(operationID: operationID, outcome: .ignoredStale)
             return
         }
-        loadedChapters.append(
-            NovelLoadedChapter(
-                chapter: chapter,
-                pages: ReaderPageOrdering.ascending(pages)
-            )
-        )
+        guard prepared.format == .text else {
+            // Made for the other reader: stop here and keep the payload for the crossing.
+            holdForHandoff(prepared)
+            finishAppend(operationID: operationID, outcome: .succeeded)
+            return
+        }
+        retainAfterAppend(prepared)
         finishAppend(operationID: operationID, outcome: .succeeded)
+    }
+
+    private func retainAfterAppend(_ prepared: ReaderPreparedChapter) {
+        loadedChapters.append(NovelLoadedChapter(chapter: prepared.chapter, pages: prepared.pages))
+        retain(prepared)
     }
 
     private func failAppend(
@@ -746,109 +829,6 @@ final class NovelReaderViewModel: ObservableObject {
             && loadedChapters.last?.id == boundaryID
             && loadedChapters.last.map { NovelChapterToken($0.chapter) } == boundaryToken
             && !Task.isCancelled
-    }
-
-    // MARK: - Chapter effects
-
-    /// Records the chapter in history once per reader session; crossing back and forth over a
-    /// chapter boundary does not add a row each time.
-    private func chapterOpened(_ chapter: Novel.Chapter) {
-        guard isActive,
-              let loaded = loadedChapters.first(where: { $0.chapter.key == chapter.key }),
-              historyChapterKeys.insert(chapter.key).inserted else { return }
-        dependencies.history.recordChapter(
-            of: entry,
-            chapter: HistoryChapter(
-                chapter,
-                format: .text,
-                textLength: NovelTextOffsets.bodyLength(loaded.pages)
-            ),
-            pluginID: pluginID
-        )
-    }
-
-    private func saveOffset(_ offset: Int, in chapter: Novel.Chapter) {
-        if let lastSavedOffset,
-           lastSavedOffset.chapterKey == chapter.key,
-           lastSavedOffset.offset == offset {
-            return
-        }
-        lastSavedOffset = (chapter.key, offset)
-        let operationID = UUID()
-        let progress = dependencies.progress
-        let identity = mediaIdentity
-        let preceding = offsetWriteTask
-        let task = Task { @MainActor [weak self, progress] in
-            defer { self?.finishTestingOperation(operationID) }
-            await preceding?.value
-            // Saving the position is best effort; reading carries on if it fails.
-            try? await progress.saveNovelOffset(offset, media: identity, chapterID: chapter.key)
-        }
-        offsetWriteTask = task
-        retainTestingOperation(task, operationID: operationID)
-    }
-
-    func markChapterFinished(_ chapter: Novel.Chapter) {
-        guard isActive else { return }
-        let plan = ReaderSessionEffectPlan.chapterFinished(
-            chapterNumber: chapter.chapterNumber,
-            titleOrKey: chapter.title ?? chapter.key,
-            alreadyMarked: finishedChapterKeys.contains(chapter.key)
-        )
-
-        guard !plan.effects.isEmpty else { return }
-        finishedChapterKeys.insert(chapter.key)
-        let operationID = UUID()
-        let session = sessionID
-        let progress = dependencies.progress
-        let tracker = dependencies.tracker
-        let identity = mediaIdentity
-        let context = completionContext
-        logStarted(kind: .chapterEffects, operationID: operationID)
-
-        let task = Task { @MainActor [weak self, progress, tracker] in
-            defer { self?.finishTestingOperation(operationID) }
-            do {
-                for effect in plan.effects {
-                    switch effect {
-                    case .markLocalProgress:
-                        try await progress.markNovelChapterRead(
-                            context: context,
-                            chapterID: chapter.key,
-                            chapterNumber: chapter.chapterNumber
-                        )
-                    case .updateTracker(let progressValue):
-                        guard let self,
-                              self.isCurrentEffect(operationID: operationID, session: session)
-                        else { return }
-                        await tracker.updateNovelProgress(
-                            media: identity,
-                            progress: progressValue
-                        )
-                    }
-                }
-                self?.finishEffect(operationID: operationID, outcome: .succeeded)
-            } catch {
-                self?.finishEffect(
-                    operationID: operationID,
-                    outcome: .failed(.persistence)
-                )
-            }
-        }
-        effectTasks[operationID] = task
-        retainTestingOperation(task, operationID: operationID)
-    }
-
-    private func isCurrentEffect(operationID: UUID, session: UUID) -> Bool {
-        isActive
-            && sessionID == session
-            && effectTasks[operationID] != nil
-            && !Task.isCancelled
-    }
-
-    private func finishEffect(operationID: UUID, outcome: PresentationEventOutcome) {
-        guard effectTasks.removeValue(forKey: operationID) != nil else { return }
-        logFinishedOnce(kind: .chapterEffects, operationID: operationID, outcome: outcome)
     }
 
     // MARK: - Settings
@@ -1026,7 +1006,7 @@ final class NovelReaderViewModel: ObservableObject {
 
     // MARK: - Discord presence
 
-    private func presentPresence(for chapter: Novel.Chapter, resetTimer: Bool) {
+    func presentPresence(for chapter: Novel.Chapter, resetTimer: Bool) {
         guard isActive else { return }
         let anilistID = dependencies.tracker.novelReaderAnilistID(for: mediaIdentity)
         let detailsURL = anilistID.map { "https://anilist.co/manga/\($0)" }
@@ -1048,12 +1028,12 @@ final class NovelReaderViewModel: ObservableObject {
 
     // MARK: - Operation invalidation and logging
 
-    private func invalidateContentOperations() {
+    func invalidateContentOperations() {
         contentGeneration &+= 1
         cancelContentOperations(finishingAs: nil)
     }
 
-    private func cancelContentOperations(finishingAs outcome: PresentationEventOutcome?) {
+    func cancelContentOperations(finishingAs outcome: PresentationEventOutcome?) {
         if let outcome, let operationID = mainLoadOperationID {
             logFinishedOnce(kind: .remoteLoad, operationID: operationID, outcome: outcome)
         }
@@ -1072,13 +1052,13 @@ final class NovelReaderViewModel: ObservableObject {
         appendFailed = false
     }
 
-    private func logStarted(kind: PresentationEventKind, operationID: UUID) {
+    func logStarted(kind: PresentationEventKind, operationID: UUID) {
         dependencies.presentationLogger.log(
             .started(feature: .novelReader, kind: kind, operationID: operationID)
         )
     }
 
-    private func logFinishedOnce(
+    func logFinishedOnce(
         kind: PresentationEventKind,
         operationID: UUID,
         outcome: PresentationEventOutcome
@@ -1110,23 +1090,23 @@ final class NovelReaderViewModel: ObservableObject {
         }
     }
 
-    private func retainTestingOperation(
+    func retainTestingOperation(
         _ task: Task<Void, Never>,
         operationID: UUID
     ) {
         testingOperationTasks[operationID] = task
     }
 
-    private func finishTestingOperation(_ operationID: UUID) {
+    func finishTestingOperation(_ operationID: UUID) {
         testingOperationTasks[operationID] = nil
     }
 #else
-    private func retainTestingOperation(
+    func retainTestingOperation(
         _: Task<Void, Never>,
         operationID _: UUID
     ) {}
 
-    private func finishTestingOperation(_: UUID) {}
+    func finishTestingOperation(_: UUID) {}
 #endif
 }
 

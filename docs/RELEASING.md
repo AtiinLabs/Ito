@@ -254,3 +254,35 @@ locked device and a rotated source epoch fail instead of opening another copy, a
 never reads from the source, including on retry. The reader opens only after the sheet has closed; a
 dismissal that is stale, cancelled or from another presentation opens nothing and leaves no lease.
 Ordinary local-first reading, Read Online This Time and the source fallback for a damaged copy are unchanged.
+
+## Image/text reader handoff checks
+
+A reader opening is one route. When the chapter after (or before) the one being read is made for the other
+reader, the route moves between the page reader and the text reader inside the same full-screen cover; the
+series screen, its navigation path and the closing gesture do not change. The first chapter of a route also
+opens in the reader its actual saved or served form needs, even when the catalog declared another kind.
+
+What the implementation guarantees, and what the unit tests exercise: the destination is prepared and laid
+out behind the visible reader, which stays mounted with its own pages, position and image leases until the
+destination can be drawn. A failed, cancelled, stale or refused handoff (source scope, continuation
+setting, catalog, foreground, policy refusal, a locked or damaged copy) leaves the source reader as it was
+and shows a retry/cancel notice. Nothing is recorded for the destination before it is shown: no History
+row, position write, completion, tracker update or presence. A chapter that was loaded for the destination
+is reused for the swap and is never fetched a second time. History and completion are claimed once per
+exact chapter key for the whole route, a pending tracker step of the retired reader still runs after a
+swap, and position writes stay in order across readers. A different-group neighbor asks for the same one-
+upload consent before any destination request when "Ask before switching groups" is on (off by default);
+the answer is not remembered. A chapter whose saved copy is of another form than the catalog says stops a
+same-reader append or prefetch at that boundary instead of being appended into the wrong reader.
+
+Not observed: the rendering. No simulator or device recording of the seamless swap, the continuous-reading
+edge crossings, the paged edge notice, the consent alert on the route, RTL paging or VoiceOver was made
+with this change. The "drawable" handshake (first image decoded and held, first paged text layout applied,
+first continuous scroll position acknowledged) is verified at the session and coordinator level with
+explicit barriers, not on screen. Before shipping, exercise a page→text and text→page crossing in both
+catalog kinds, paged both directions, continuous both directions, Cancel at a held load, the late answer
+after Close, the A→B→A History rows, a selected saved copy opening and continuing offline, and a corrupt
+or protected copy failure, on a device, and read the screen. The text reader's paged mode continues past
+its last page only through the visible notice (no swipe past the end), and its continuous mode crosses by
+the user's own scrolling to the end row; both are by design, not oversights. One-time notes: the
+boundary notice strings and the "Opening the next/previous chapter…" status are new localized text.

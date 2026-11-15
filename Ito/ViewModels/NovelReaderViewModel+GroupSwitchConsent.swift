@@ -38,7 +38,7 @@ extension NovelReaderViewModel {
               let origin = consentOrigin(key: consent.originKey, direction: consent.direction),
               let candidate = groupConsentCandidate(after: origin, direction: consent.direction),
               NovelChapterToken(candidate) == NovelChapterToken(consent.chapter) else { return }
-        goToChapter(candidate)
+        goToChapter(candidate, direction: consent.direction == .next ? .next : .previous, approved: true)
     }
 
     /// A read of the source's current scope; nil when it cannot be verified.

@@ -131,12 +131,15 @@ struct ReaderReadOnlineThisTimeTests {
             preference: .remoteThisTime(chapterKey: "chapter-1")
         )
         let viewModel = MangaReaderViewModel(
-            pageLoader: online,
+            chapterPreparer: LoaderBackedChapterPreparer(manga: online),
+            routeSession: subject.session,
+            routeVisitID: UUID(),
+            presentationMode: .live,
             pluginID: "plugin.test",
             entry: Self.entry,
             initialChapter: Self.first,
             dependencies: subject.dependencies,
-            offline: ReaderOfflineContext(availability: availability, downloadedCopy: online)
+            offline: ReaderOfflineContext(availability: availability)
         )
         #expect(!viewModel.canReadDownloadedCopy)
         viewModel.start()
@@ -185,12 +188,15 @@ struct ReaderReadOnlineThisTimeTests {
             preference: .remoteThisTime(chapterKey: "chapter-1")
         )
         let viewModel = NovelReaderViewModel(
-            chapterLoader: online,
+            chapterPreparer: LoaderBackedChapterPreparer(novel: online),
+            routeSession: subject.session,
+            routeVisitID: UUID(),
+            presentationMode: .live,
             pluginID: "plugin.test",
             entry: Self.entry,
             initialChapter: Self.first,
             dependencies: subject.dependencies,
-            offline: ReaderOfflineContext(availability: availability, downloadedCopy: online)
+            offline: ReaderOfflineContext(availability: availability)
         )
         viewModel.start()
         await viewModel.waitForCurrentMainLoadForTesting()
@@ -225,12 +231,15 @@ struct ReaderReadOnlineThisTimeTests {
         let subject = makeMangaReaderSubject(manga: Manga(key: "series-1", title: "Series One"), initialChapter: Self.first)
         let loader = ResolvingMangaPageLoader(pluginID: "plugin.test", local: store, remote: nil)
         let viewModel = MangaReaderViewModel(
-            pageLoader: loader,
+            chapterPreparer: LoaderBackedChapterPreparer(manga: loader),
+            routeSession: subject.session,
+            routeVisitID: UUID(),
+            presentationMode: .live,
             pluginID: "plugin.test",
             entry: Self.entry,
             initialChapter: Self.first,
             dependencies: subject.dependencies,
-            offline: ReaderOfflineContext(availability: ReaderAvailabilityFake(verified: ["chapter-1"]), downloadedCopy: loader)
+            offline: ReaderOfflineContext(availability: ReaderAvailabilityFake(verified: ["chapter-1"]))
         )
 
         viewModel.start()

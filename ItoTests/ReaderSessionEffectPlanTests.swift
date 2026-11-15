@@ -44,33 +44,6 @@ final class ReaderSessionEffectPlanTests: XCTestCase {
         XCTAssertFalse(callback.contains("ReadProgressManager"))
     }
 
-    func testMangaNovelAndVideoReadersAdoptScreenOwnedViewModels() throws {
-        let manga = try sourceFile("Ito/Views/Reader/ReaderView.swift")
-        XCTAssertTrue(manga.contains("@StateObject private var viewModel: MangaReaderViewModel"))
-        XCTAssertFalse(manga.contains("ReaderViewModel("))
-
-        let novel = try sourceFile("Ito/Views/Reader/NovelReaderView.swift")
-        XCTAssertTrue(novel.contains("@StateObject private var viewModel: NovelReaderViewModel"))
-        XCTAssertFalse(novel.contains("ReaderViewModel("))
-
-        let video = try sourceFile("Ito/Views/Reader/VideoPlayerView.swift")
-        XCTAssertTrue(video.contains("@StateObject private var viewModel: VideoPlayerViewModel"))
-        XCTAssertFalse(video.contains("ReaderViewModel("))
-
-        let paging = try sourceFile("Ito/Views/Reader/NovelPagingReaderView.swift")
-        XCTAssertFalse(paging.contains("ReaderViewModel("))
-        XCTAssertFalse(paging.contains("@StateObject"))
-
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        XCTAssertFalse(
-            FileManager.default.fileExists(
-                atPath: root.appendingPathComponent("Ito/ViewModels/ReaderViewModel.swift").path
-            )
-        )
-    }
-
     func testFinishedChapterPlanMarksProgressThenUpdatesTracker() {
         let plan = ReaderSessionEffectPlan.chapterFinished(
             chapterNumber: 12.75,
