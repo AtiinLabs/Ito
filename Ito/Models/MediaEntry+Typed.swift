@@ -50,6 +50,37 @@ nonisolated extension MediaEntry {
         }
     }
 
+    /// This entry for one reading, with `chapter` as the descriptor its exact key names. Only that chapter is
+    /// replaced. A key the list does not hold, or one a different key could be mistaken for by Unicode
+    /// equivalence, leaves `chapter` alone in the list, so no neighbor or order is claimed for it.
+    func pinning(_ chapter: Chapter) -> MediaEntry {
+        func pinned(_ list: [Chapter]?) -> [Chapter] {
+            guard let list else { return [chapter] }
+            var replaced = false
+            var result = list
+            for index in list.indices {
+                let key = list[index].key
+                if key.utf8.elementsEqual(chapter.key.utf8) {
+                    result[index] = chapter
+                    replaced = true
+                } else if key == chapter.key {
+                    return [chapter]
+                }
+            }
+            return replaced ? result : [chapter]
+        }
+        switch self {
+        case .manga(var manga):
+            manga.chapters = pinned(manga.chapters)
+            return .manga(manga)
+        case .novel(var novel):
+            novel.chapters = pinned(novel.chapters)
+            return .novel(novel)
+        case .anime:
+            return self
+        }
+    }
+
     /// The entry as the kind a caller asked the plugin for. The runner already refuses an update
     /// of another kind, so a mismatch is a plugin failure, never shown.
     func expecting<Value>(_ kind: KeyPath<MediaEntry, Value?>) throws -> Value {

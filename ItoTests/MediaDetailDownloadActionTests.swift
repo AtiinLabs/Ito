@@ -624,9 +624,10 @@ final class MediaDetailDownloadActionTests: XCTestCase {
                     entry: .manga(Self.series),
                     chapter: Chapter(key: "chapter-1", chapter: 1)
                 )
-            }
+            },
+            makeDownloadedAlternativeDestination: { _, _, _ in throw UnexpectedDownloadedAlternativeOpening() }
         )
-        var dependencies = PreparedMediaDetailDependencies(
+        let dependencies = PreparedMediaDetailDependencies(
             library: MediaDetailLibraryFake(state: state),
             progress: progress,
             tracker: MediaDetailTrackerFake(),
@@ -635,9 +636,9 @@ final class MediaDetailDownloadActionTests: XCTestCase {
             baseline: MediaDetailBaselineFake(),
             settings: MediaDetailSettingsFake(alwaysShowCategoryPicker: false, autoSyncTrackersToLocal: true),
             pluginMetadata: MediaDetailPluginMetadataFake(),
-            discord: MediaDetailDiscordFake()
+            discord: MediaDetailDiscordFake(),
+            downloads: downloads
         )
-        dependencies.downloads = downloads
         return MediaDetailViewModel(
             media: media,
             pluginID: Self.pluginID,
@@ -827,11 +828,15 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
         return batchOutcome ?? DownloadBatchOutcome(queued: request.chapters.count)
     }
 
+    /// Runs once a held preference read is pending, so a test can act at that point without polling.
+    var onPreferenceReadPending: (() -> Void)?
+
     func editionPreference(for media: MediaIdentity) async throws -> EditionSelection? {
         preferenceReadCount += 1
         if holdsPreferenceReads {
             await withCheckedContinuation { continuation in
                 pendingPreferenceReads.append(continuation)
+                onPreferenceReadPending?()
                 let waiters = preferenceReadArrivalWaiters
                 preferenceReadArrivalWaiters.removeAll()
                 waiters.forEach { $0.resume() }
@@ -873,6 +878,45 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
 
     func storedByteCount(for media: MediaIdentity) async -> Int64? {
         storedBytes
+    }
+
+    // MARK: - Downloaded alternatives
+
+    /// What an alternative operation that no test configured does: it refuses, never answers empty or nil.
+    struct UnexpectedAlternativeOperation: Error, Equatable {
+        let name: String
+    }
+
+    var alternativeLookup: ((OfflineChapterAlternativeAnchor) async throws -> DownloadedChapterAlternatives)?
+    var alternativeEpoch: ((String) throws -> String?)?
+    var alternativeOpen: ((DownloadedChapterAlternative, String?) async throws -> OfflineChapterLease)?
+    private(set) var alternativeLookupCount = 0
+    private(set) var alternativeEpochReadCount = 0
+    private(set) var alternativeOpenCount = 0
+    private(set) var openedCandidateIDs: [String] = []
+
+    func downloadedAlternatives(
+        for anchor: OfflineChapterAlternativeAnchor
+    ) async throws -> DownloadedChapterAlternatives {
+        alternativeLookupCount += 1
+        guard let alternativeLookup else { throw UnexpectedAlternativeOperation(name: "lookup") }
+        return try await alternativeLookup(anchor)
+    }
+
+    func downloadedAlternativeEpoch(for pluginID: String) throws -> String? {
+        alternativeEpochReadCount += 1
+        guard let alternativeEpoch else { throw UnexpectedAlternativeOperation(name: "epoch") }
+        return try alternativeEpoch(pluginID)
+    }
+
+    func openDownloadedAlternative(
+        _ candidate: DownloadedChapterAlternative,
+        sourceEpoch: String?
+    ) async throws -> OfflineChapterLease {
+        alternativeOpenCount += 1
+        openedCandidateIDs.append(candidate.id)
+        guard let alternativeOpen else { throw UnexpectedAlternativeOperation(name: "open") }
+        return try await alternativeOpen(candidate, sourceEpoch)
     }
 
     func waitForPendingPreferenceRead() async {

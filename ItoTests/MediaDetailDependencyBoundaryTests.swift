@@ -213,7 +213,7 @@ final class MediaDetailDependencyBoundaryTests: XCTestCase {
             settingsStore: settings,
             pluginManager: pluginManager,
             discordRPCManager: discord,
-            downloads: nil
+            downloads: UnavailableMediaDetailDownloads()
         )
 
         XCTAssertTrue(dependencies.library as AnyObject === library)

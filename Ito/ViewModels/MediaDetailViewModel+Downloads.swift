@@ -51,8 +51,18 @@ extension MediaDetailViewModel {
     /// What the chapter's menu offers. Download needs a saved series whose source can fetch it, so a
     /// locked chapter and a saved-only series offer none. Reading a downloaded chapter online this time
     /// needs the same source and an unlocked chapter. A Retry is offered only where an event cannot
-    /// clear the wait.
+    /// clear the wait. Choosing a downloaded version needs neither a saved series, a copy of this chapter nor a
+    /// network: it is offered for any row whose source named its reading position, ahead of the destructive
+    /// Delete. A saved-only route or row is anchored on its own stored copy, so it is offered only where that
+    /// copy is downloaded.
     func downloadActions(for chapter: M.Chapter) -> [ChapterDownloadAction] {
+        var actions = rowDownloadActions(for: chapter)
+        guard offersDownloadedAlternatives(for: chapter) else { return actions }
+        actions.insert(.chooseDownloadedAlternative, at: actions.firstIndex(of: .delete) ?? actions.endIndex)
+        return actions
+    }
+
+    private func rowDownloadActions(for chapter: M.Chapter) -> [ChapterDownloadAction] {
         guard showsDownloadControls else { return [] }
         if let activity = replacementState(for: chapter) {
             return replacementActions(for: chapter, activity: activity)
@@ -157,6 +167,8 @@ extension MediaDetailViewModel {
                 readOnlineThisTime(current)
             }
             return Task {}
+        case .chooseDownloadedAlternative:
+            return showDownloadedAlternatives(for: chapter)
         case .cancel, .cancelReplacement, .retry, .delete:
             return Task { [weak self] in
                 do {
@@ -164,7 +176,7 @@ extension MediaDetailViewModel {
                     case .cancel, .cancelReplacement: try await downloads.cancel(edition)
                     case .retry: try await downloads.retry(edition)
                     case .delete: try await downloads.delete(edition)
-                    case .download, .replace, .readOnlineThisTime: break
+                    case .download, .replace, .readOnlineThisTime, .chooseDownloadedAlternative: break
                     }
                 } catch {
                     self?.presentDownloadMessage(.downloadActionFailed)

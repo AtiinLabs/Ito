@@ -30,7 +30,17 @@ extension MediaDetailViewModel: MediaDetailDownloadBatchHost {
     /// The digest of the chapter list the presets plan from.
     var catalogDigest: String { downloadBatch.catalogDigest }
 
-    var downloadSheet: DownloadSheet? { downloadBatch.sheet }
+    /// The one sheet the download controls present: a saved-copy choice while one is loading, open or failed,
+    /// nothing while one is closing for its hand-off, and otherwise the batch's chooser or preview.
+    var downloadSheet: DownloadSheet? {
+        switch downloadedAlternatives.state {
+        case .idle: downloadBatch.sheet
+        case .handingOff: nil
+        case .loading(let context), .failed(let context, _),
+             .choosing(let context, _, _, _), .acquiring(let context, _, _):
+            .downloadedAlternatives(id: context.id)
+        }
+    }
 
     /// "Entire series offline" or the saved count, from the catalog saved with the Library item.
     func offlineCoverage(now: Date = Date()) -> SeriesOfflineCoverage.Result? {
