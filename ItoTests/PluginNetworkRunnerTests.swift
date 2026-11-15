@@ -142,7 +142,7 @@ struct PluginNetworkRunnerTests {
     func twoExportsOfOneOperationShareItsIDAndTheirOwnGenerations() async throws {
         let recorder = HostCallRecorder()
         let runner = try await Self.runner(try TestWasm.sending(Self.request), net: recorder, webview: recorder)
-        let contexts = PluginNetworkContexts()
+        let contexts = PluginNetworkContexts(policy: NetworkPolicyCenter())
         let operation = PluginNetworkOperation(purpose: .trackerWrite, operationID: UUID())
 
         _ = try await runner.markCompleted(
@@ -215,7 +215,7 @@ struct PluginNetworkRunnerTests {
         let plugin = try Self.installedPlugin()
         let loads = DownloadCallCounter()
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: database.databaseURL.deletingLastPathComponent(),
             runnerLoader: { _, _, _ in
                 loads.increment()

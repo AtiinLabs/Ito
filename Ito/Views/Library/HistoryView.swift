@@ -202,7 +202,10 @@ struct HistoryView: View {
     private func resume(_ series: HistorySeries) {
         open(
             viewModel.libraryItem(for: series),
-            intent: .resume(preferredScanlator: series.latest.record.scanlator)
+            intent: .resume(
+                preferredScanlator: series.latest.record.scanlator,
+                preferredScanlatorID: series.latest.record.scanlatorID
+            )
         )
     }
 
@@ -213,7 +216,8 @@ struct HistoryView: View {
             key: record.chapterKey,
             number: record.chapterNumber.map(Float.init),
             volume: record.volume.map(Float.init),
-            scanlator: record.scanlator
+            scanlator: record.scanlator,
+            scanlatorID: record.scanlatorID
         )
         open(viewModel.libraryItem(for: entry), intent: .chapter(reference))
     }

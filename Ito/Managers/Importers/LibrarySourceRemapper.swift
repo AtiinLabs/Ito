@@ -199,7 +199,8 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                     status: source.status,
                     lastCheckedAt: source.lastCheckedAt,
                     lastUpdatedAt: source.lastUpdatedAt,
-                    knownChapterCount: source.knownChapterCount
+                    knownChapterCount: source.knownChapterCount,
+                    knownChapterCountBasis: source.knownChapterCountBasis
                 )
                 try destination.insert(db)
             }
@@ -217,10 +218,14 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                 try db.execute(
                     sql: """
                         UPDATE readingHistory
-                        SET libraryItemId = ?, mediaKey = ?, pluginId = ?
+                        SET libraryItemId = ?, mediaKey = ?, pluginId = ?,
+                            scanlatorID = CASE WHEN ? = ? THEN scanlatorID ELSE NULL END
                         WHERE id = ?
                         """,
-                    arguments: [mapping.destinationId, mapping.destinationId, newPluginId, history.id]
+                    arguments: [
+                        mapping.destinationId, mapping.destinationId, newPluginId,
+                        oldPluginId, newPluginId, history.id
+                    ]
                 )
             }
 
@@ -421,7 +426,8 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                 status: source.status,
                 lastCheckedAt: source.lastCheckedAt,
                 lastUpdatedAt: source.lastUpdatedAt,
-                knownChapterCount: source.knownChapterCount
+                knownChapterCount: source.knownChapterCount,
+                knownChapterCountBasis: source.knownChapterCountBasis
             ).insert(db)
 
             try db.execute(

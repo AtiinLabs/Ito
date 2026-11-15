@@ -195,3 +195,23 @@ nonisolated enum LibrarySnapshotReplaceOutcome: Equatable, Sendable {
     /// The refreshed list has no chapters, so it is not evidence about the series and nothing is saved.
     case rejectedIncomplete
 }
+
+/// What the Library needs from the two small proof tables to judge "entire series offline". It is read in an
+/// observation of its own, so a refresh that changes only its time, or a policy change, never refetches a payload.
+nonisolated struct LibraryOfflineProofSnapshot: Equatable, Sendable {
+    enum Availability: Equatable, Sendable {
+        case loading
+        case available
+        case unavailable
+    }
+
+    let availability: Availability
+    /// The freshness record of each saved series, one per series.
+    let states: [MediaIdentity: LibrarySnapshotStateRecord]
+    /// The raw remembered edition choice of each series. A choice is judged by its reader, never here, so
+    /// bytes this build cannot read stay bytes and fail closed there.
+    let preferences: [MediaIdentity: Data]
+
+    static let loading = LibraryOfflineProofSnapshot(availability: .loading, states: [:], preferences: [:])
+    static let unavailable = LibraryOfflineProofSnapshot(availability: .unavailable, states: [:], preferences: [:])
+}

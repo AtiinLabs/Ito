@@ -13,7 +13,14 @@ struct LibraryOfflineMetadataSchemaTests {
         let item = makeLibraryItem(id: "series-1", pluginId: "plugin.test", anilistId: nil)
         let suppressedAt = Date(timeIntervalSince1970: 1_000)
         try dbQueue.write { db in
-            try item.insert(db)
+            // The v19 libraryItem shape: later nullable columns do not exist yet.
+            try db.execute(
+                sql: """
+                    INSERT INTO libraryItem (id, title, coverUrl, pluginId, isAnime, pluginType, rawPayload, anilistId)
+                    VALUES (?, ?, NULL, ?, 0, NULL, ?, NULL)
+                    """,
+                arguments: [item.id, item.title, item.pluginId, item.rawPayload]
+            )
             try DownloadSuppressionRecord(
                 pluginId: "plugin.test",
                 mediaKind: .manga,

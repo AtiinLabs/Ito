@@ -217,10 +217,7 @@ public class UpdateManager: ObservableObject {
             isRefreshing = false
             runDeadline = nil
         }
-        if isBackground, settingsStore.wifiOnlyUpdates, await !networkConditions.isOnUnmeteredNetwork() {
-            AppLogger.update.debug("🔄 [UpdateManager] Wi-Fi only: skipping the automatic check on this network.")
-            return []
-        }
+        if isBackground, await !automaticChecksAdmitted() { return [] }
 
         let items: [LibraryItem]
         do {
@@ -327,6 +324,25 @@ public class UpdateManager: ObservableObject {
         }
     }
 
+    /// Re-evaluated before every series, not just once at the beginning of a scheduled run. A path that has not been
+    /// reported yet is awaited rather than read as offline, so a cold background launch is not skipped by timing. The
+    /// wait ends with the run's task, which the background task's expiration cancels.
+    private func automaticChecksAdmitted() async -> Bool {
+        guard let settingsStore else { return false }
+        let policy = settingsStore.networkPolicy
+        let path: NetworkPathSnapshot
+        if let observed = policy.observedPath {
+            guard observed.status != .unknown else {
+                guard let reported = await policy.firstKnownPath() else { return false }
+                return policy.decide(.automaticMetadata, path: reported) == .allow
+            }
+            path = observed
+        } else {
+            path = NetworkPathSnapshot(status: .satisfied, isExpensive: await !networkConditions.isOnUnmeteredNetwork())
+        }
+        return policy.decide(.automaticMetadata, path: path) == .allow
+    }
+
     private func check(queue: [LibraryItem], operation: PluginNetworkOperation) async -> [(LibraryItem, Int)] {
         var updated: [(LibraryItem, Int)] = []
         for (index, item) in queue.enumerated() {
@@ -344,6 +360,7 @@ public class UpdateManager: ObservableObject {
                 AppLogger.update.debug("🔄 [UpdateManager] Time budget used up, leaving the rest for the next run.")
                 break
             }
+            if operation.purpose == .automaticLibraryUpdate, await !automaticChecksAdmitted() { break }
             if let delta = await checkSingleItem(item, operation: operation), delta > 0 {
                 updated.append((item, delta))
             }
@@ -420,12 +437,20 @@ public class UpdateManager: ObservableObject {
 
                 let oldCount = dbItem.knownChapterCount
                 // A source that refuses or fails a request can still answer with an empty list.
-                // That is not evidence its chapters are gone, and taking it as the new baseline
-                // would report every chapter as new on the next real answer.
+                // That is not evidence its chapters are gone: it never replaces a known nonempty
+                // baseline (or its status) and never establishes the exact-key basis. With no
+                // known nonempty baseline an empty answer is recorded as before (count 0, status).
                 let refusedEmpty = update.freshCount == 0 && (oldCount ?? 0) > 0
-                let delta = oldCount.map { max(0, update.freshCount - $0) } ?? 0
+                let matchedBasis = dbItem.effectiveType == .anime
+                    || dbItem.knownChapterCountBasis == .exactChapterKeys
+                let delta = !refusedEmpty && matchedBasis
+                    ? oldCount.map { max(0, update.freshCount - $0) } ?? 0
+                    : 0
                 if !refusedEmpty {
                     dbItem.knownChapterCount = update.freshCount
+                    if dbItem.effectiveType != .anime && update.freshCount > 0 {
+                        dbItem.knownChapterCountBasis = .exactChapterKeys
+                    }
                     if let status = update.status {
                         dbItem.status = status
                     }
@@ -493,6 +518,7 @@ public class UpdateManager: ObservableObject {
     }
 
     public func advanceBaseline(media: MediaIdentity, knownChapterCount: Int) async throws {
+        guard knownChapterCount > 0 else { return }
         try await dbPool.write { db in
             let candidateIDs = ImportedMediaIdentity.localItemIDs(
                 pluginId: media.pluginId,
@@ -504,6 +530,9 @@ public class UpdateManager: ObservableObject {
                       item.pluginId == media.pluginId,
                       item.effectiveType == media.mediaKind else { continue }
                 item.knownChapterCount = knownChapterCount
+                if item.effectiveType != .anime {
+                    item.knownChapterCountBasis = .exactChapterKeys
+                }
                 try item.update(db)
                 break
             }

@@ -316,9 +316,13 @@ public final class DurableStateBootstrap: ObservableObject {
     }
 
     private func makeRuntime() -> Runtime {
-        let settings = AppSettingsStore(dbPool: dbPool)
+        // One live network policy per runtime: the settings store feeds it, and every host context and the
+        // download queue read it, so no consumer holds its own copy of the configured values.
+        let networkPolicy = NetworkPolicyCenter(path: networkPath)
+        let settings = AppSettingsStore(dbPool: dbPool, networkPolicy: networkPolicy)
         let pluginSettings = PluginSettingsStore(
-            dbPool: dbPool, secrets: pluginSecrets, cookies: pluginCookies, tokens: pluginTokens, trust: pluginTrust
+            dbPool: dbPool, secrets: pluginSecrets, cookies: pluginCookies, tokens: pluginTokens, trust: pluginTrust,
+            networkPolicy: networkPolicy
         )
         let plugins: PluginManager = {
             guard let installedPluginsDirectory else {
@@ -831,7 +835,8 @@ struct InstalledPluginSuiteBootstrapExtension: DurableStateBootstrapExtension {
                 }
             }
         }
-        try PluginSettingsStore(dbPool: dbPool).prepareForDurableSnapshot(discoveries)
+        // Discovery metadata only: this store makes no network request, so it takes no live path policy.
+        try PluginSettingsStore(dbPool: dbPool, networkPolicy: NetworkPolicyCenter()).prepareForDurableSnapshot(discoveries)
     }
 
     private static func defaultPluginsDirectory(_ fileManager: FileManager) throws -> URL {

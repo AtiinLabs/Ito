@@ -124,6 +124,7 @@ actor DownloadAttempt {
             let (input, pageBytes) = try await materialize(page)
             do {
                 try Task.checkCancellation()
+                try requirePolicyCurrent()
                 try await staging.append(input)
             } catch {
                 Self.discardTemporaryFile(input)
@@ -135,9 +136,12 @@ actor DownloadAttempt {
 
         try throwIfDenied()
         try requirePluginCurrent()
+        try requirePolicyCurrent()
         let isPluginCurrent = runtime.isPluginCurrent
         let isTrustCurrent = runtime.isTrustCurrent
         return DownloadAttemptCompletion(staging: staging) { _ in
+            // P5 publishes verified local bytes. Soft network permissions no longer govern this commit;
+            // the store independently rechecks the source epoch and live job in the same transaction.
             isPluginCurrent() && isTrustCurrent()
         }
     }
@@ -147,10 +151,17 @@ actor DownloadAttempt {
         try Task.checkCancellation()
         try throwIfDenied()
         try requirePluginCurrent()
+        try requirePolicyCurrent()
+        try await store.ensureCapacityForNextAsset()
+    }
+
+    private func requirePolicyCurrent() throws {
+        guard admission.authorityIsCurrent else {
+            throw DownloadAttemptFailure(outcome: .queued)
+        }
         if case .wait(let wait) = admission.admission() {
             throw DownloadAttemptFailure(outcome: .waiting(wait.waitingReason))
         }
-        try await store.ensureCapacityForNextAsset()
     }
 
     private func throwIfDenied() throws {
@@ -215,21 +226,29 @@ actor DownloadAttempt {
             let resolver = try await imageRunnerForAttempt()
             switch try await PluginImageResolution.resolve(locator, runner: resolver, context: { networkContext() }) {
             case .fetch(let target, let targetHeaders, let allowedOrigins):
+                let allowsExpensive = admission.allowsExpensiveTransport
                 return try await transfer {
                     try await fetcher.fetchPluginImage(
                         url: target,
                         headers: targetHeaders,
                         allowedOrigins: allowedOrigins,
-                        pluginID: job.pluginId
+                        pluginID: job.pluginId,
+                        allowsExpensiveAccess: allowsExpensive
                     )
                 }
             case .bytes(let data):
                 return .data(data)
             case .direct(let realURL):
-                return try await transfer { try await fetcher.fetchDirect(Self.request(url: realURL, headers: headers)) }
+                let allowsExpensive = admission.allowsExpensiveTransport
+                return try await transfer {
+                    try await fetcher.fetchDirect(Self.request(url: realURL, headers: headers), allowsExpensiveAccess: allowsExpensive)
+                }
             }
         case "http", "https":
-            return try await transfer { try await fetcher.fetchDirect(Self.request(url: url, headers: headers)) }
+            let allowsExpensive = admission.allowsExpensiveTransport
+            return try await transfer {
+                try await fetcher.fetchDirect(Self.request(url: url, headers: headers), allowsExpensiveAccess: allowsExpensive)
+            }
         default:
             throw DownloadAttemptFailure(outcome: .failed(.unsupportedPageLocator))
         }

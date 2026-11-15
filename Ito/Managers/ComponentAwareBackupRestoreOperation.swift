@@ -385,9 +385,10 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         }
         if backup.metadata != nil,
            backup.representation(of: .scalarAppPreferences) == .representedNonempty {
-            let catalog = Set(AppPreferenceCatalogEntry.allCases.map(\.rawValue))
-            guard preferenceKeys == catalog,
-                  Set(backup.preferences.map(\.key)) == catalog else {
+            // A backup made before an optional preference existed is still complete without it; restore
+            // derives that preference instead of rejecting the backup.
+            guard AppPreferenceCatalogEntry.isCompleteBackupKeySet(preferenceKeys),
+                  Set(backup.preferences.map(\.key)) == preferenceKeys else {
                 throw rejection(
                     .invalidCapabilityMetadata(
                         component: .scalarAppPreferences,
@@ -1589,6 +1590,22 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                 outcomes[.scalarAppPreferences]?.inserted += 1
             }
         }
+        // A backup made before the network preferences existed carries none. Derive them from the restored
+        // image preload in this same transaction, so the stored catalog is never left incomplete and a default
+        // never takes the place of a derived value.
+        // Represented-empty wipe restores remain empty; there is no legacy configuration to migrate.
+        if try AppPreference.fetchCount(db) > 0 {
+            try NetworkPreferenceMigration.insertMissing(in: db)
+        }
+        // A wipe leaves no local value to keep, and the catalog must stay complete for the next export:
+        // any other optional entry an older backup never carried gets its canonical default, as launch
+        // would write it.
+        if plan.mode == .wipe, plan.backup.metadata != nil, !plan.backup.preferences.isEmpty {
+            for entry in AppPreferenceCatalogEntry.allCases where entry.isOptionalInBackupCatalog {
+                guard try AppPreference.fetchOne(db, key: entry.rawValue) == nil else { continue }
+                try AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON).insert(db)
+            }
+        }
     }
 
     /// `sourceMapping` uses its declared five-column primary key as merge identity.
@@ -2085,7 +2102,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             status: item.status,
             lastCheckedAt: item.lastCheckedAt,
             lastUpdatedAt: item.lastUpdatedAt,
-            knownChapterCount: item.knownChapterCount
+            knownChapterCount: item.knownChapterCount,
+            knownChapterCountBasis: item.knownChapterCountBasis
         )
     }
 
@@ -2287,6 +2305,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             && lhs.lastCheckedAt == rhs.lastCheckedAt
             && lhs.lastUpdatedAt == rhs.lastUpdatedAt
             && lhs.knownChapterCount == rhs.knownChapterCount
+            && lhs.knownChapterCountBasis == rhs.knownChapterCountBasis
     }
 
     private func linkSort(_ lhs: ItemCategoryLink, _ rhs: ItemCategoryLink) -> Bool {

@@ -10,14 +10,17 @@ import ito_runner
 private final class RunningAttempt {
     let jobID: String
     let edition: OfflineChapterEdition
+    /// The gate that decides this attempt's transfers, so a policy or path change can ask it again.
+    let gate: NetworkPathAdmissionGate
     private(set) var versionId: String?
     private var task: Task<DownloadAttemptCompletion, Error>?
     private(set) var isCancelRequested = false
     private(set) var cancelOutcome: DownloadAttemptOutcome?
 
-    init(jobID: String, edition: OfflineChapterEdition) {
+    init(jobID: String, edition: OfflineChapterEdition, gate: NetworkPathAdmissionGate) {
         self.jobID = jobID
         self.edition = edition
+        self.gate = gate
     }
 
     /// Binds the store's staging version once `beginAttempt` has reserved it.
@@ -118,6 +121,12 @@ final class DownloadQueueCoordinator {
                 Task { @MainActor in self?.pathChanged() }
             }
             .store(in: &subscriptions)
+        contexts.policy.changes
+            .merge(with: contexts.scopeChanges)
+            .sink { @Sendable [weak self] _ in
+                Task { @MainActor in self?.policyChanged() }
+            }
+            .store(in: &subscriptions)
         protectedDataBecameAvailable
             .sink { @Sendable [weak self] in
                 Task { @MainActor in self?.protectedDataChanged() }
@@ -141,6 +150,7 @@ final class DownloadQueueCoordinator {
     /// Starts the worker in the foreground. Calling it again while running changes nothing. A loop left
     /// over from a suspension finishes its last attempt's bookkeeping before the new one looks at the queue.
     func start() {
+        contexts.policy.enterForeground()
         guard loopTask == nil else { return }
         loopGeneration += 1
         let generation = loopGeneration
@@ -170,6 +180,7 @@ final class DownloadQueueCoordinator {
     /// The loop itself is not cancelled: the attempt's store writes run in it, and a cancelled task's database
     /// writes fail, which would leave the chapter marked as downloading.
     func suspend() {
+        contexts.policy.enterBackground()
         stopLoop()
         running?.cancel(.waiting(.appInBackground))
         settleIfIdle()
@@ -183,6 +194,12 @@ final class DownloadQueueCoordinator {
     /// system refuses the grant or reclaims its time, the attempt is cancelled as waiting for the foreground, and the
     /// grant ends at once, because UIKit requires that inside the handler.
     func suspend(allowingInFlightCompletion granting: any BackgroundExecutionGranting) {
+        // Every metered-data consent was minted in the foreground, so leaving it ends them all, whether or not an
+        // attempt is still finishing.
+        contexts.policy.enterBackground()
+        // Revoking foreground consent is not extended by an OS execution-time grant.
+        // Re-evaluate synchronously before any continuation can resume on the main actor.
+        cancelRunningIfNotAdmitted()
         guard let retired = loopTask else { return }
         guard running != nil else {
             suspend()
@@ -277,13 +294,29 @@ final class DownloadQueueCoordinator {
         isRunning && loopGeneration == generation
     }
 
-    /// A path that stops admitting bulk work cancels the attempt. The path is read now, not taken from the
+    /// A path that stops admitting this attempt's work cancels it. The path is read now, not taken from the
     /// delivered snapshot, because updates reach the main actor through separate tasks and may reorder.
     private func pathChanged() {
-        if case .wait(let wait) = BulkDownloadPolicy.admit(path.current) {
-            running?.cancel(.waiting(wait.waitingReason))
-        }
+        cancelRunningIfNotAdmitted()
         wake()
+    }
+
+    /// A changed policy, acknowledged by the settings store, cancels the attempt in flight when it no longer admits it,
+    /// and wakes the worker either way: waiting chapters may be admitted now. An attempt the new policy still admits
+    /// carries a context from the earlier revision, which its transport refuses as `policyChanged`; it is queued
+    /// again and rebuilt under the revision in force.
+    private func policyChanged() {
+        cancelRunningIfNotAdmitted()
+        wake()
+    }
+
+    private func cancelRunningIfNotAdmitted() {
+        guard let running else { return }
+        if case .wait(let wait) = running.gate.admission() {
+            running.cancel(.waiting(wait.waitingReason))
+        } else if !running.gate.authorityIsCurrent {
+            running.cancel(.queued)
+        }
     }
 
     private func protectedDataChanged() {
@@ -305,12 +338,31 @@ final class DownloadQueueCoordinator {
         }
     }
 
+    /// The gate that decides one job's transfers: the live policy, the observed path and, for the job's batch, its
+    /// consent. Every admission reads the consent again, so one that expired stops the next transfer.
+    private func admissionGate(for job: DownloadJobRecord, operation: PluginNetworkOperation) -> NetworkPathAdmissionGate {
+        NetworkPathAdmissionGate(
+            observer: path,
+            policy: contexts.policy,
+            intent: .manualBulkDownload,
+            consent: UUID(uuidString: job.batchId).map { contexts.consentBinding(batchID: $0, pluginID: job.pluginId) },
+            operation: operation,
+            authorizationScope: job.sourceEpoch.flatMap(PluginNetworkScopeID.uuid(epoch:))
+        )
+    }
+
     /// Moves waiting chapters back to the queue when the condition that paused them has cleared. Reasons
-    /// that need an explicit Retry are never listed here.
+    /// that need an explicit Retry are never listed here. A path that waits only for a batch's consent readmits
+    /// the metered waits too: each job's own admission then decides whether its batch holds one.
     private func readmitClearedWaits() async {
         var cleared: Set<DownloadWaitingReason> = [.appInBackground]
-        if case .allow = BulkDownloadPolicy.admit(path.current) {
-            cleared.formUnion(BulkDownloadWait.allCases.map(\.waitingReason))
+        switch contexts.policy.decide(.manualBulkDownload, path: path.current) {
+        case .allow:
+            cleared.formUnion(NetworkDeferral.networkWaitingReasons)
+        case .wait(.meteredConsentRequired):
+            cleared.insert(.meteredNetwork)
+        case .wait:
+            break
         }
         if await protectedData.isProtectedDataAvailable() {
             cleared.insert(.protectedDataUnavailable)
@@ -331,7 +383,18 @@ final class DownloadQueueCoordinator {
     private func runOne(_ work: DownloadJobWork, generation: Int) async -> Step {
         let job = work.job
         guard isCurrent(generation) else { return .blocked }
-        let current = RunningAttempt(jobID: job.id, edition: job.edition)
+        var operation = PluginNetworkOperation(
+            purpose: .manualBulkDownload, operationID: UUID(), batchID: UUID(uuidString: job.batchId),
+            policyRevision: contexts.policy.revision
+        )
+        if let batchID = operation.batchID,
+           job.sourceEpoch.flatMap(PluginNetworkScopeID.uuid(epoch:)) == contexts.liveScope(pluginID: job.pluginId) {
+            operation.scopedGrant = contexts.policy.authorizeBatchOperation(
+                contexts.consentBinding(batchID: batchID, pluginID: job.pluginId), operationID: operation.operationID
+            )
+        }
+        let gate = admissionGate(for: job, operation: operation)
+        let current = RunningAttempt(jobID: job.id, edition: job.edition, gate: gate)
         running = current
         defer {
             if running === current {
@@ -341,7 +404,6 @@ final class DownloadQueueCoordinator {
         }
 
         let recorder = DownloadPolicyRecorder()
-        let gate = NetworkPathAdmissionGate(observer: path)
 
         let currentEpoch = try? await store.currentSourceEpoch(pluginId: job.pluginId)
         if let step = await stopBeforeAttempt(current, job: job, generation: generation) { return step }
@@ -350,18 +412,20 @@ final class DownloadQueueCoordinator {
         }
 
         // A network condition holds every queued chapter. One write marks them all and the pass stops. A path that
-        // clears wakes the worker, and the next pass readmits the chapters in queue order.
+        // clears wakes the worker, and the next pass readmits the chapters in queue order. A condition that is this
+        // batch's own, a metered-data consent it lacks, holds only this batch and the pass goes on to the next one.
         if case .wait(let wait) = gate.admission() {
-            _ = try? await store.setWaitingForQueuedJobs(reason: wait.waitingReason)
-            return .blocked
+            do {
+                try await store.setWaitingForQueuedJobs(
+                    reason: wait.waitingReason,
+                    batchId: wait.isBatchSpecific ? job.batchId : nil
+                )
+            } catch {
+                return .blocked
+            }
+            return wait.isBatchSpecific ? .proceeded : .blocked
         }
 
-        // One operation per attempt: the runner loads and every export of the attempt share its ID and batch.
-        let operation = PluginNetworkOperation(
-            purpose: .manualBulkDownload,
-            operationID: UUID(),
-            batchID: UUID(uuidString: job.batchId)
-        )
         let runtime: DownloadPluginRuntime
         do {
             runtime = try await runtimes.makeDownloadRuntime(
@@ -428,6 +492,9 @@ final class DownloadQueueCoordinator {
                 // next launch settles it, so there is nothing more to write here.
                 _ = try? await store.publish(completion.staging, commitGuard: completion.commitGuard)
             }
+        }
+        if let batchID = UUID(uuidString: job.batchId), (try? await store.batchHasJobs(job.batchId)) == false {
+            contexts.policy.revokeConsent(forBatch: batchID)
         }
         return .proceeded
     }

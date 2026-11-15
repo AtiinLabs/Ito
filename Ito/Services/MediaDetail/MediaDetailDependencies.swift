@@ -113,7 +113,7 @@ extension LibraryManager: MediaDetailLibraryServing {
 }
 
 @MainActor
-protocol MediaDetailProgressServing: AnyObject {
+protocol MediaDetailProgressServing: PluginCompletionScopeCapturing, AnyObject {
     var progressPublisher: AnyPublisher<Void, Never> { get }
 
     func isRead(media: MediaIdentity, chapterID: String, chapterNumber: Float?) -> Bool
@@ -251,12 +251,19 @@ extension UpdateManager: MediaDetailBaselineAdvancing {
 }
 
 @MainActor
-protocol MediaDetailSettingsReading: AnyObject {
+protocol MediaDetailSettingsReading: ReaderContinuationSettingsReading {
     var alwaysShowCategoryPicker: Bool { get }
     var autoSyncTrackersToLocal: Bool { get }
 }
 
 extension AppSettingsStore: MediaDetailSettingsReading {}
+
+@MainActor
+protocol MediaDetailHistoryReading: AnyObject {
+    func recordedGroup(media: MediaIdentity, chapterKey: String) async throws -> ReaderContinuationGroup?
+}
+
+extension HistoryManager: MediaDetailHistoryReading {}
 
 @MainActor
 protocol MediaDetailPluginMetadataProviding: AnyObject {
@@ -319,6 +326,8 @@ enum MediaDetailMessage: Equatable {
     case downloadRefused
     /// A Download, Cancel, Retry or Delete did not reach the store.
     case downloadActionFailed
+    /// A download was asked for while another batch was still being queued; nothing was queued for this one.
+    case downloadBatchBusy
     /// A preset queued chapters. `alreadyStored` counts the chapters of its range that were saved or queued.
     case downloadsQueued(queued: Int, alreadyStored: Int)
     /// Download More queued chapters. `requested` is the number asked for; `storedMeanwhile` counts the chapters of
@@ -375,6 +384,8 @@ final class AppMessageMediaDetailPresenter: MediaDetailMessagePresenting {
             messageCenter.publish(.mediaDetailDownloadRefused)
         case .downloadActionFailed:
             messageCenter.publish(.mediaDetailDownloadActionFailed)
+        case .downloadBatchBusy:
+            messageCenter.publish(.mediaDetailDownloadBatchBusy)
         case .downloadsQueued(let queued, let alreadyStored):
             messageCenter.publish(.mediaDetailDownloadsQueued(queued: queued, alreadyStored: alreadyStored))
         case .downloadsQueuedMore(let requested, let queued, let storedMeanwhile):
@@ -420,6 +431,7 @@ struct PreparedMediaDetailDependencies {
     var downloadPresets: any DownloadPresetProviding = NoDownloadPresets()
     /// Never offline unless the composition root passes the live observer.
     var connectivity: any ConnectivityServing = UnavailableConnectivity()
+    var history: (any MediaDetailHistoryReading)?
 
     static func production(
         libraryManager: LibraryManager,
@@ -433,7 +445,8 @@ struct PreparedMediaDetailDependencies {
         discordRPCManager: DiscordRPCManager,
         downloads: (any MediaDetailDownloadServing)?,
         downloadPresets: (any DownloadPresetProviding)? = nil,
-        connectivity: any ConnectivityServing = UnavailableConnectivity()
+        connectivity: any ConnectivityServing = UnavailableConnectivity(),
+        historyManager: HistoryManager? = nil
     ) -> Self {
         Self(
             library: libraryManager,
@@ -449,7 +462,8 @@ struct PreparedMediaDetailDependencies {
             discord: discordRPCManager,
             downloads: downloads ?? UnavailableMediaDetailDownloads(),
             downloadPresets: downloadPresets ?? NoDownloadPresets(),
-            connectivity: connectivity
+            connectivity: connectivity,
+            history: historyManager
         )
     }
 }

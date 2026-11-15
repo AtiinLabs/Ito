@@ -30,7 +30,8 @@ struct LibrarySourceRemapperTests {
             status: "reading",
             lastCheckedAt: checkedAt,
             lastUpdatedAt: updatedAt,
-            knownChapterCount: 17
+            knownChapterCount: 17,
+            knownChapterCountBasis: .exactChapterKeys
         )
         let untouched = LibraryItem(
             id: untouchedId,
@@ -55,7 +56,8 @@ struct LibrarySourceRemapperTests {
             pluginId: oldPluginId,
             mediaKind: .manga,
             chapterKey: "chapter-1",
-            chapterTitle: "Chapter 1"
+            chapterTitle: "Chapter 1",
+            scanlatorID: "source-group-imported"
         )
         let nativeHistory = ReadingHistoryRecord(
             id: "history-native",
@@ -66,7 +68,8 @@ struct LibrarySourceRemapperTests {
             pluginId: oldPluginId,
             mediaKind: .manga,
             chapterKey: "chapter-2",
-            chapterTitle: "Chapter 2"
+            chapterTitle: "Chapter 2",
+            scanlatorID: "source-group-native"
         )
 
         try await database.dbPool.write { db in
@@ -144,6 +147,7 @@ struct LibrarySourceRemapperTests {
             #expect(destination.lastCheckedAt == checkedAt)
             #expect(destination.lastUpdatedAt == updatedAt)
             #expect(destination.knownChapterCount == source.knownChapterCount)
+            #expect(destination.knownChapterCountBasis == source.knownChapterCountBasis)
             #expect(persistedUntouched == untouched)
 
             let links = try ItemCategoryLink
@@ -156,7 +160,8 @@ struct LibrarySourceRemapperTests {
             #expect(histories.allSatisfy {
                 $0.libraryItemId == destinationId &&
                 $0.mediaKey == destinationId &&
-                $0.pluginId == newPluginId
+                $0.pluginId == newPluginId &&
+                $0.scanlatorID == nil
             })
 
             let readKey = try ReadProgressKeyRecord.fetchOne(db)

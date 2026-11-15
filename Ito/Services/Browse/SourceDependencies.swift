@@ -478,7 +478,7 @@ struct PreparedSourceDependencies {
             settingsStore: dependency,
             pluginStatePublisher: dependency,
             fileDeletion: dependency,
-            networkContexts: PluginNetworkContexts()
+            networkContexts: PluginNetworkContexts(policy: NetworkPolicyCenter())
         )
     }
 }

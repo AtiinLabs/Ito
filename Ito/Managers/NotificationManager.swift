@@ -48,7 +48,7 @@ public class NotificationManager: ObservableObject {
         self.settingsStore = settingsStore
     }
 
-    /// Keeps the app icon badge equal to the library's unread new chapters.
+    /// Keeps the app icon badge equal to the Library's unacknowledged edition/episode updates.
     func configure(updateManager: UpdateManager) {
         self.updateManager = updateManager
         iconBadgeSubscription = $isAuthorized
@@ -104,7 +104,7 @@ public class NotificationManager: ObservableObject {
             content.title = String(localized: "New Update")
             content.body = item.isAnime
                 ? String(localized: "\(item.title) has \(chapters) new episodes.")
-                : String(localized: "\(item.title) has \(chapters) new chapters.")
+                : String(localized: "\(item.title) has \(chapters) new editions.", comment: "Manga/novel update-count heuristic: exact uploads, possibly alternate translations, not unique logical chapters.")
         } else {
             content.title = String(localized: "Library Updates")
             let itemsString = ListFormatter.localizedString(byJoining: updatedItems.prefix(2).map { $0.0.title })

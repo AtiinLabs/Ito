@@ -172,7 +172,8 @@ struct PreparedApplicationDependencies {
                 discordRPCManager: discordRPCManager,
                 downloads: downloads?.center,
                 downloadPresets: downloads?.presets,
-                connectivity: connectivity ?? UnavailableConnectivity()
+                connectivity: connectivity ?? UnavailableConnectivity(),
+                historyManager: historyManager
             ),
             mangaReader: .production(
                 readProgressManager: readProgressManager,

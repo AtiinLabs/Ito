@@ -26,20 +26,40 @@ extension ChapterDisplayable {
     public var readingOrder: Int64? { nil }
 }
 
+/// String's canonical Unicode equality must not merge distinct source keys.
+private nonisolated struct ChapterCountKey: Hashable {
+    let value: String
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.value.utf8.elementsEqual(rhs.value.utf8)
+    }
+
+    func hash(into hasher: inout Hasher) {
+        for byte in value.utf8 { hasher.combine(byte) }
+    }
+}
+
 extension Sequence where Element: ChapterDisplayable {
-    /// The number of distinct chapters, which update checks and their baselines compare. Several
-    /// scanlations or languages of one numbered chapter count once; unnumbered chapters count by key.
+    /// Manga/novel uploads count by byte-exact key, independently of display numbers or metadata.
+    /// Anime retains its existing numbered-episode/language aggregation.
     var distinctChapterCount: Int {
-        var numbers = Set<Float>()
-        var unnumberedKeys = Set<String>()
-        for chapter in self {
-            if let number = chapter.chapterNumber, number.isFinite {
-                numbers.insert(number)
-            } else {
-                unnumberedKeys.insert(chapter.key)
+        if Element.self == Anime.Episode.self {
+            var numbers = Set<Float>()
+            var unnumberedKeys = Set<String>()
+            for episode in self {
+                if let number = episode.chapterNumber, number.isFinite {
+                    numbers.insert(number)
+                } else {
+                    unnumberedKeys.insert(episode.key)
+                }
             }
+            return numbers.count + unnumberedKeys.count
         }
-        return numbers.count + unnumberedKeys.count
+        var keys = Set<ChapterCountKey>()
+        for chapter in self {
+            keys.insert(ChapterCountKey(value: chapter.key))
+        }
+        return keys.count
     }
 
     /// The text chapters, when the list also has page chapters; empty otherwise, so an all-text

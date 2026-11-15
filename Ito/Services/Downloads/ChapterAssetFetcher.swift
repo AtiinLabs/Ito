@@ -8,15 +8,19 @@ nonisolated enum FetchedAsset: Sendable {
 
 /// Transfers for chapter page assets. The attempt chooses the route; a fetcher only moves bytes and
 /// checks the response. Tests substitute a fake.
+///
+/// `allowsExpensiveAccess` says whether the policy admits an expensive path (cellular, hotspot) for this
+/// transfer. When it does not, the system itself refuses such a path. Low Data Mode is refused either way.
 nonisolated protocol DirectAssetFetching: Sendable {
     /// A direct http(s) page, requested with the page's headers as the reader requests it.
-    func fetchDirect(_ request: URLRequest) async throws -> FetchedAsset
+    func fetchDirect(_ request: URLRequest, allowsExpensiveAccess: Bool) async throws -> FetchedAsset
     /// An image a plugin resolved to a URL, fetched through the plugin's allowed origins.
     func fetchPluginImage(
         url: URL,
         headers: [String: String]?,
         allowedOrigins: [String],
-        pluginID: String
+        pluginID: String,
+        allowsExpensiveAccess: Bool
     ) async throws -> FetchedAsset
 }
 
@@ -26,29 +30,44 @@ nonisolated enum ChapterAssetError: Error, Equatable, Sendable {
     case tooLarge
 }
 
-/// Production transfers. Both routes use the bulk configuration, so the system refuses metered and Low
-/// Data Mode paths, and neither route uses the URL cache.
+/// Production transfers. Both routes use the bulk configuration, so the system refuses Low Data Mode paths,
+/// and metered paths unless the policy admitted one, and neither route uses the URL cache.
 nonisolated final class URLSessionAssetFetcher: DirectAssetFetching, Sendable {
     /// Largest single asset. The size check runs after the transfer, so it bounds what is kept, not
     /// what crosses the wire.
     static let maximumAssetBytes: Int64 = 64 * 1024 * 1024
 
-    private let session: URLSession
-    private let imageTransport: PluginImageTransport
-
-    init(trust: PluginTrustStore, userAgent: String) {
-        let configuration = URLSessionConfiguration.bulkDownload
-        configuration.urlCache = nil
-        configuration.httpAdditionalHeaders = ["User-Agent": userAgent]
-        session = URLSession(configuration: configuration)
-        imageTransport = PluginImageTransport(configuration: configuration, trust: trust)
+    private struct Route: Sendable {
+        let session: URLSession
+        let imageTransport: PluginImageTransport
     }
 
-    func fetchDirect(_ request: URLRequest) async throws -> FetchedAsset {
+    private let unmetered: Route
+    private let metered: Route
+
+    init(trust: PluginTrustStore, userAgent: String) {
+        func route(allowingExpensiveAccess: Bool) -> Route {
+            let configuration = URLSessionConfiguration.bulkDownload(allowingExpensiveAccess: allowingExpensiveAccess)
+            configuration.urlCache = nil
+            configuration.httpAdditionalHeaders = ["User-Agent": userAgent]
+            return Route(
+                session: URLSession(configuration: configuration),
+                imageTransport: PluginImageTransport(configuration: configuration, trust: trust)
+            )
+        }
+        unmetered = route(allowingExpensiveAccess: false)
+        metered = route(allowingExpensiveAccess: true)
+    }
+
+    private func route(allowingExpensiveAccess: Bool) -> Route {
+        allowingExpensiveAccess ? metered : unmetered
+    }
+
+    func fetchDirect(_ request: URLRequest, allowsExpensiveAccess: Bool) async throws -> FetchedAsset {
         let location: URL
         let response: URLResponse
         do {
-            (location, response) = try await session.download(for: request)
+            (location, response) = try await route(allowingExpensiveAccess: allowsExpensiveAccess).session.download(for: request)
         } catch {
             // A cancelled transfer surfaces as a URL error; callers treat it as a cancellation.
             if Task.isCancelled || (error as? URLError)?.code == .cancelled {
@@ -78,9 +97,10 @@ nonisolated final class URLSessionAssetFetcher: DirectAssetFetching, Sendable {
         url: URL,
         headers: [String: String]?,
         allowedOrigins: [String],
-        pluginID: String
+        pluginID: String,
+        allowsExpensiveAccess: Bool
     ) async throws -> FetchedAsset {
-        let (data, response) = try await imageTransport.fetch(
+        let (data, response) = try await route(allowingExpensiveAccess: allowsExpensiveAccess).imageTransport.fetch(
             url: url,
             headers: headers,
             allowedOrigins: allowedOrigins,
