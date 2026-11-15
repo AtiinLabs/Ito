@@ -429,8 +429,8 @@ struct PreparedMediaDetailDependencies {
     let settings: any MediaDetailSettingsReading
     let pluginMetadata: any MediaDetailPluginMetadataProviding
     let discord: any MediaDetailDiscordPresenting
-    /// Unavailable unless the composition root passes the live download center.
-    var downloads: any MediaDetailDownloadServing = UnavailableMediaDetailDownloads()
+    /// The live download center where offline chapters are composed, otherwise an explicit unavailable seam.
+    let downloads: any MediaDetailDownloadServing
     /// The saved custom presets. Empty unless the composition root passes the live store.
     var downloadPresets: any DownloadPresetProviding = NoDownloadPresets()
     /// Never offline unless the composition root passes the live observer.
@@ -447,7 +447,7 @@ struct PreparedMediaDetailDependencies {
         settingsStore: AppSettingsStore,
         pluginManager: PluginManager,
         discordRPCManager: DiscordRPCManager,
-        downloads: (any MediaDetailDownloadServing)?,
+        downloads: any MediaDetailDownloadServing,
         downloadPresets: (any DownloadPresetProviding)? = nil,
         connectivity: any ConnectivityServing = UnavailableConnectivity(),
         historyManager: HistoryManager? = nil
@@ -464,7 +464,7 @@ struct PreparedMediaDetailDependencies {
             settings: settingsStore,
             pluginMetadata: pluginManager,
             discord: discordRPCManager,
-            downloads: downloads ?? UnavailableMediaDetailDownloads(),
+            downloads: downloads,
             downloadPresets: downloadPresets ?? NoDownloadPresets(),
             connectivity: connectivity,
             history: historyManager

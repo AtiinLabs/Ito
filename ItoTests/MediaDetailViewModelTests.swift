@@ -1038,7 +1038,8 @@ final class MediaDetailViewModelTests: XCTestCase {
                     entry: .manga(parent),
                     chapter: selected
                 )
-            }
+            },
+            makeDownloadedAlternativeDestination: { _, _, _ in throw UnexpectedDownloadedAlternativeOpening() }
         )
         let viewModel = MediaDetailViewModel(
             media: media,
@@ -1054,6 +1055,7 @@ final class MediaDetailViewModelTests: XCTestCase {
                 settings: settings,
                 pluginMetadata: metadata,
                 discord: discord,
+                downloads: UnavailableMediaDetailDownloads(),
                 history: history
             ),
             messagePresenter: messages,
@@ -1093,7 +1095,8 @@ final class MediaDetailViewModelTests: XCTestCase {
             baseline: MediaDetailBaselineFake(),
             settings: MediaDetailSettingsFake(),
             pluginMetadata: MediaDetailPluginMetadataFake(),
-            discord: MediaDetailDiscordFake()
+            discord: MediaDetailDiscordFake(),
+            downloads: UnavailableMediaDetailDownloads()
         )
         let runner = ItoRunner()
         let viewModel = MediaDetailViewModel(
@@ -1110,7 +1113,8 @@ final class MediaDetailViewModelTests: XCTestCase {
                         media: parent,
                         episode: selected
                     )
-                }
+                },
+                makeDownloadedAlternativeDestination: { _, _, _ in throw UnexpectedDownloadedAlternativeOpening() }
             ),
             dependencies: dependencies,
             messagePresenter: MediaDetailMessageSpy(),
@@ -1143,7 +1147,8 @@ final class MediaDetailViewModelTests: XCTestCase {
                         entry: .novel(parent),
                         chapter: selected
                     )
-                }
+                },
+                makeDownloadedAlternativeDestination: { _, _, _ in throw UnexpectedDownloadedAlternativeOpening() }
             ),
             dependencies: dependencies,
             messagePresenter: MediaDetailMessageSpy(),
@@ -1162,7 +1167,8 @@ final class MediaDetailViewModelTests: XCTestCase {
             baseline: MediaDetailBaselineFake(),
             settings: MediaDetailSettingsFake(),
             pluginMetadata: MediaDetailPluginMetadataFake(),
-            discord: MediaDetailDiscordFake()
+            discord: MediaDetailDiscordFake(),
+            downloads: UnavailableMediaDetailDownloads()
         )
     }
 

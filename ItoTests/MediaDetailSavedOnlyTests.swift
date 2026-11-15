@@ -123,6 +123,7 @@ final class MediaDetailSavedOnlyTests: XCTestCase {
                     chapter: selected
                 )
             },
+            makeDownloadedAlternativeDestination: { _, _, _ in throw UnexpectedDownloadedAlternativeOpening() },
             isChapterAvailableOffline: availability
         )
         let viewModel = MediaDetailViewModel(
@@ -141,7 +142,8 @@ final class MediaDetailSavedOnlyTests: XCTestCase {
                     autoSyncTrackersToLocal: true
                 ),
                 pluginMetadata: MediaDetailPluginMetadataFake(),
-                discord: MediaDetailDiscordFake()
+                discord: MediaDetailDiscordFake(),
+                downloads: UnavailableMediaDetailDownloads()
             ),
             messagePresenter: messages,
             presentationLogger: PresentationEventCaptureSpy()
