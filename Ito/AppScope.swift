@@ -34,6 +34,7 @@ struct PreparedApplicationDependencies {
     let offlineReading: any OfflineChapterReading
     let downloadsOverview: (any DownloadsOverviewServing)?
     let downloadsThumbnails: any DownloadsThumbnailServing
+    let downloadPresets: DownloadPresetStore?
 
     init(
         settings: PreparedSettingsDependencies,
@@ -66,7 +67,8 @@ struct PreparedApplicationDependencies {
         pluginTrust: PluginTrustStore? = nil,
         offlineReading: any OfflineChapterReading = UnavailableOfflineChapterReading(),
         downloadsOverview: (any DownloadsOverviewServing)? = nil,
-        downloadsThumbnails: any DownloadsThumbnailServing = UnavailableDownloadsThumbnails()
+        downloadsThumbnails: any DownloadsThumbnailServing = UnavailableDownloadsThumbnails(),
+        downloadPresets: DownloadPresetStore? = nil
     ) {
         self.settings = settings
         self.tracking = tracking ?? .unavailable()
@@ -99,6 +101,7 @@ struct PreparedApplicationDependencies {
         self.offlineReading = offlineReading
         self.downloadsOverview = downloadsOverview
         self.downloadsThumbnails = downloadsThumbnails
+        self.downloadPresets = downloadPresets
     }
 
     static func production(
@@ -168,6 +171,7 @@ struct PreparedApplicationDependencies {
                 pluginManager: pluginManager,
                 discordRPCManager: discordRPCManager,
                 downloads: downloads?.center,
+                downloadPresets: downloads?.presets,
                 connectivity: connectivity ?? UnavailableConnectivity(),
                 historyManager: historyManager
             ),
@@ -267,7 +271,8 @@ struct PreparedApplicationDependencies {
             pluginTrust: pluginManager.pluginSettingsStore.trust,
             offlineReading: downloads?.store ?? UnavailableOfflineChapterReading(),
             downloadsOverview: downloads.map { LiveDownloadsOverview(center: $0.center, store: $0.store) },
-            downloadsThumbnails: LibraryDownloadsThumbnails(covers: covers)
+            downloadsThumbnails: LibraryDownloadsThumbnails(covers: covers),
+            downloadPresets: downloads?.presets
         )
     }
 }
@@ -574,7 +579,8 @@ final class AppScope {
             pluginCookies: preparedDependencies.pluginCookies,
             pluginTrust: preparedDependencies.pluginTrust,
             downloadsOverview: preparedDependencies.downloadsOverview,
-            downloadsThumbnails: preparedDependencies.downloadsThumbnails
+            downloadsThumbnails: preparedDependencies.downloadsThumbnails,
+            downloadPresets: preparedDependencies.downloadPresets
         )
     }
 

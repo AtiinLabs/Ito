@@ -122,12 +122,12 @@ struct EditionEnumerationTests {
         #expect(fake.calls.isEmpty, "Opening and loading the detail screen never lists uploads")
 
         await subject.viewModel.refresh()
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         subject.viewModel.downloadBatch.dismissDownloadSheet()
-        await subject.viewModel.downloadBatch.startDownload(.next).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
         _ = await openChooser(subject)
         subject.viewModel.downloadBatch.dismissDownloadSheet()
-        await subject.viewModel.downloadBatch.applyEditionChoice(.allUploads, remember: false, then: .all).value
+        await subject.viewModel.downloadBatch.applyEditionChoice(.allUploads, remember: false, then: .builtIn(.all)).value
 
         #expect(fake.calls.isEmpty, "Presets, refreshes and the chooser itself never list uploads")
         #expect(subject.viewModel.downloadBatch.enumeration == .idle)
@@ -484,7 +484,7 @@ struct EditionEnumerationTests {
         #expect(downloads.batchRequests.count == 1)
         #expect(request.chapters.map(\.key) == ["c1", "x"], "Exactly the ticked unlocked uploads, in reading order")
         #expect(request.chapters.first?.scanlatorID == "gc")
-        #expect(request.preset == .single)
+        #expect(request.provenance == .single)
         #expect(request.reviewedSourceEpoch == chooser.sourceEpoch)
         #expect(request.catalogDigest == nil, "The batch was not planned from the normal list")
         #expect(request.reviewedPolicy == ReviewedEditionPolicy.none)

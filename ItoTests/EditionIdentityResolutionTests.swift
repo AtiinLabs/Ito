@@ -94,7 +94,7 @@ struct EditionIdentityResolutionTests {
             DownloadPlanRow(facts: ChapterFacts(key: "new", number: 1, scanlator: "Current label", scanlatorID: "same-id"))
         ]
         let sameID = DownloadPresetResolver.plan(
-            rows: duplicateIDs, preset: .all, selection: .sourceList, anchorKey: nil
+            rows: duplicateIDs, window: .all, selection: .sourceList, anchorKey: nil
         )
         #expect(!sameID.issues.contains(.multipleScanlators))
         #expect(!sameID.issues.contains(.alternativeUploads))
@@ -104,7 +104,7 @@ struct EditionIdentityResolutionTests {
             DownloadPlanRow(facts: ChapterFacts(key: "b", number: 1, scanlator: "Shared", scanlatorID: "id-b"))
         ]
         let sameLabel = DownloadPresetResolver.plan(
-            rows: differentIDs, preset: .all, selection: .sourceList, anchorKey: nil
+            rows: differentIDs, window: .all, selection: .sourceList, anchorKey: nil
         )
         #expect(sameLabel.issues.contains(.multipleScanlators))
         #expect(sameLabel.issues.contains(.alternativeUploads))
@@ -114,7 +114,7 @@ struct EditionIdentityResolutionTests {
             DownloadPlanRow(facts: ChapterFacts(key: "d", number: 1, scanlator: "e\u{301}"))
         ]
         let exactLabels = DownloadPresetResolver.plan(
-            rows: byteDistinctNames, preset: .all, selection: .sourceList, anchorKey: nil
+            rows: byteDistinctNames, window: .all, selection: .sourceList, anchorKey: nil
         )
         #expect(exactLabels.issues.contains(.multipleScanlators))
         #expect(exactLabels.issues.contains(.alternativeUploads))
@@ -141,7 +141,7 @@ struct EditionIdentityResolutionTests {
         ]
         let result = DownloadPresetResolver.plan(
             rows: rows,
-            preset: .all,
+            window: .all,
             selection: .scanlators([ScanlatorRef(name: "Group")]),
             anchorKey: nil
         )

@@ -208,7 +208,7 @@ struct EditionChooserSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(action: confirm) {
-                        if presentation.preset == nil {
+                        if presentation.action == nil {
                             Text("Done")
                         } else {
                             Text("Use Selection", comment: "Button on the scanlator sheet: apply the choice and continue with the download.")

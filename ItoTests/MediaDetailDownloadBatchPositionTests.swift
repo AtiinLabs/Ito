@@ -33,13 +33,13 @@ extension MediaDetailDownloadBatchTests {
         let subject = await makeSubject(chapters: Self.overlapping(1...3))
 
         await subject.viewModel.downloadBatch
-            .applyEditionChoice(Self.choice("B", "A"), remember: false, then: .all).value
+            .applyEditionChoice(Self.choice("B", "A"), remember: false, then: .builtIn(.all)).value
 
         XCTAssertEqual(subject.downloads.batchRequests.first?.chapters.map(\.key), ["b1", "b2", "b3"])
 
         let everything = await makeSubject(chapters: Self.overlapping(1...3))
         await everything.viewModel.downloadBatch
-            .applyEditionChoice(.allUploads, remember: false, then: .all).value
+            .applyEditionChoice(.allUploads, remember: false, then: .builtIn(.all)).value
         let preview = try XCTUnwrap(Self.previewSheet(of: everything.viewModel))
         XCTAssertEqual(Set(preview.toQueue.map(\.key)), ["a1", "a2", "a3", "b1", "b2", "b3"])
         await everything.viewModel.downloadBatch.confirmDownloadPreview().value
@@ -51,7 +51,7 @@ extension MediaDetailDownloadBatchTests {
         for number in 21...24 { subject.downloads.set(.downloaded, chapterKey: "b\(number)") }
 
         await subject.viewModel.downloadBatch
-            .applyEditionChoice(Self.choice("A", "B"), remember: false, then: .next5).value
+            .applyEditionChoice(Self.choice("A", "B"), remember: false, then: .builtIn(.next5)).value
 
         XCTAssertEqual(subject.downloads.batchRequests.first?.chapters.map(\.key), ["a25"])
         XCTAssertEqual(subject.messages.messages, [.downloadsQueued(queued: 1, alreadyStored: 4)])
@@ -62,7 +62,7 @@ extension MediaDetailDownloadBatchTests {
         for number in 21...24 { subject.downloads.set(.downloaded, chapterKey: "b\(number)") }
 
         await subject.viewModel.downloadBatch
-            .applyEditionChoice(Self.choice("A"), remember: false, then: .next5).value
+            .applyEditionChoice(Self.choice("A"), remember: false, then: .builtIn(.next5)).value
 
         XCTAssertEqual(
             subject.downloads.batchRequests.first?.chapters.map(\.key),
@@ -78,7 +78,7 @@ extension MediaDetailDownloadBatchTests {
         XCTAssertEqual(Float(rows[0].chapter ?? 0), Float(rows[1].chapter ?? 1))
 
         let all = await makeSubject(chapters: rows)
-        await all.viewModel.downloadBatch.startDownload(.all).value
+        await all.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         let preview = try XCTUnwrap(Self.previewSheet(of: all.viewModel))
         XCTAssertEqual(Set(preview.toQueue.map(\.key)), ["first", "second"])
         await all.viewModel.downloadBatch.confirmDownloadPreview().value
@@ -87,7 +87,7 @@ extension MediaDetailDownloadBatchTests {
         // The legacy number marker reads both, so Unread leaves both out; All still takes them.
         let unread = await makeSubject(chapters: rows)
         unread.progress.readChapterNumbers[Self.positionSeries] = [16]
-        await unread.viewModel.downloadBatch.startDownload(.unread).value
+        await unread.viewModel.downloadBatch.startDownload(.builtIn(.unread)).value
         let skipped = try XCTUnwrap(Self.previewSheet(of: unread.viewModel))
         XCTAssertTrue(skipped.toQueue.isEmpty)
         XCTAssertEqual(skipped.skippedReadCount, 2)
@@ -104,7 +104,7 @@ extension MediaDetailDownloadBatchTests {
             }
         }
         let subject = await makeSubject(chapters: catalog(sharing: false))
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         let before = try XCTUnwrap(Self.previewSheet(of: subject.viewModel))
         XCTAssertEqual(before.toQueue.count, 12)
 
@@ -134,13 +134,13 @@ extension MediaDetailDownloadBatchTests {
             }
         }
         let subject = await makeSubject(chapters: catalog([1, 2, 3]))
-        await subject.viewModel.downloadBatch.startDownload(.next).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
         XCTAssertEqual(subject.downloads.batchRequests.last?.chapters.map(\.key), ["c1"])
 
         // The refreshed response numbers the same chapters the other way round; nothing carries over.
         subject.catalog.chapters = catalog([3, 2, 1])
         await subject.viewModel.refresh()
-        await subject.viewModel.downloadBatch.startDownload(.next).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
         XCTAssertEqual(subject.downloads.batchRequests.last?.chapters.map(\.key), ["c3"])
         XCTAssertEqual(subject.downloads.batchRequests.count, 2)
     }

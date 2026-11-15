@@ -89,7 +89,7 @@ extension MediaDetailDownloadBatchModel {
             return Task {}
         }
         return enqueueBatch(
-            preset: .single,
+            provenance: .single,
             selection: .sourceList,
             chapters: chapters,
             alreadyStored: 0,
