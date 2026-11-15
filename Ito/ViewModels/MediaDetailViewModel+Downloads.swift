@@ -1,7 +1,33 @@
+import Combine
 import Foundation
 import ito_runner
 
 extension MediaDetailViewModel {
+    /// The screen's batch download model, built from the screen's dependencies and route.
+    static func makeDownloadBatch(
+        dependencies: PreparedMediaDetailDependencies,
+        routeContext: MediaDetailRouteContext<M>,
+        snapshots: MediaDetailSnapshotRefresher
+    ) -> MediaDetailDownloadBatchModel {
+        MediaDetailDownloadBatchModel(
+            downloads: dependencies.downloads,
+            progress: dependencies.progress,
+            snapshots: snapshots,
+            inventory: routeContext.inventoryChapters,
+            loadsFromSource: routeContext.loadDetails != nil
+        )
+    }
+
+    /// The identity of the shown series, once per change, so a relink observes the new series.
+    static func seriesIdentities(
+        of media: Published<M>.Publisher, pluginID: String
+    ) -> AnyPublisher<MediaIdentity, Never> {
+        media
+            .map { MediaIdentity(pluginId: pluginID, canonicalMediaId: $0.key, mediaKind: $0.mediaKind) }
+            .removeDuplicates()
+            .eraseToAnyPublisher()
+    }
+
     /// Whether this series shows download controls: offline chapters exist on this build and the series is
     /// a manga or a novel. Anime episodes are never stored.
     var showsDownloadControls: Bool {
