@@ -282,36 +282,36 @@ final class ReaderChapterOrderingTests: XCTestCase {
         in chapters: [Manga.Chapter],
         preferredScanlator: String? = nil
     ) -> Manga.Chapter? {
-        ReaderChapterOrdering.mangaChapter(
+        ReaderChapterOrdering.boundary(
             after: chapter,
             in: chapters,
             preferredScanlator: preferredScanlator ?? chapter.scanlator
-        )
+        ).chapter
     }
 
     private func mangaBefore(
         _ chapter: Manga.Chapter,
         in chapters: [Manga.Chapter]
     ) -> Manga.Chapter? {
-        ReaderChapterOrdering.mangaChapter(
+        ReaderChapterOrdering.boundary(
             before: chapter,
             in: chapters,
             preferredScanlator: chapter.scanlator
-        )
+        ).chapter
     }
 
     private func novelAfter(
         _ chapter: Novel.Chapter,
         in chapters: [Novel.Chapter]
     ) -> Novel.Chapter? {
-        ReaderChapterOrdering.novelChapter(after: chapter, in: chapters)
+        ReaderChapterOrdering.boundary(after: chapter, in: chapters).chapter
     }
 
     private func novelBefore(
         _ chapter: Novel.Chapter,
         in chapters: [Novel.Chapter]
     ) -> Novel.Chapter? {
-        ReaderChapterOrdering.novelChapter(before: chapter, in: chapters)
+        ReaderChapterOrdering.boundary(before: chapter, in: chapters).chapter
     }
 
     private func mangaChapter(

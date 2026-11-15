@@ -1,6 +1,87 @@
 import Foundation
 import ito_runner
 
+/// Source-provided identity, scoped by the surrounding series/source context, never by a number.
+nonisolated struct ReaderContinuationGroup: Equatable, Sendable {
+    let id: String?
+    let name: String?
+
+    init(id: String?, name: String?) {
+        self.id = id
+        self.name = name.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    @MainActor
+    init<C: ChapterDisplayable>(_ chapter: C) {
+        self.init(id: chapter.scanlatorID, name: chapter.scanlator)
+    }
+
+    /// Byte-exact IDs decide when both sides have one. When either side has none, the legacy name
+    /// comparison decides, in both directions: a source that starts reporting IDs does not split a
+    /// group it already named the same.
+    func matches(_ other: Self) -> Bool {
+        if let id, let otherID = other.id {
+            return id.utf8.elementsEqual(otherID.utf8)
+        }
+        return name == other.name
+    }
+}
+
+@MainActor
+protocol ReaderContinuationSettingsReading: AnyObject {
+    var askBeforeSwitchingGroups: Bool { get }
+    var readerContinuationSettingsRevision: UInt64 { get }
+}
+
+@MainActor
+protocol ReaderContinuationSettingsAccessing: ReaderContinuationSettingsReading {
+    func setAskBeforeSwitchingGroups(_ value: Bool) async throws
+}
+
+extension AppSettingsStore: ReaderContinuationSettingsAccessing {}
+
+/// Ephemeral consent for one exact transition. Owning models invalidate it on context changes.
+struct ReaderGroupSwitchConsent<C>: Identifiable {
+    enum Direction: Equatable, Sendable {
+        case next
+        case previous
+    }
+
+    let id = UUID()
+    let chapter: C
+    let originKey: String?
+    let session: UUID
+    let settingsRevision: UInt64
+    let sourceContext: PluginCompletionContext
+    var direction: Direction = .next
+    /// A swipe back past the first page opens the previous chapter at its end.
+    var opensAtEnd = false
+}
+
+extension ReaderGroupSwitchConsent where C: ChapterDisplayable {
+    /// One complete sentence per case, so each translates as a whole.
+    var message: String {
+        let group = ReaderContinuationGroup(chapter).name
+            ?? String(localized: "Unnamed group", comment: "Reader consent: shown in place of the group name when the source supplies none")
+        if let title = chapter.title, !title.isEmpty {
+            return String(
+                localized: "Continue to \(title) from \(group) for this reading only?",
+                comment: "Reader consent alert message. %1$@ is the chapter title and %2$@ the translation group name, both untranslated source content ('Unnamed group' stands in when the source names none). Opening is for this reading only: no saved preference or history link changes."
+            )
+        }
+        if let number = chapter.chapterNumber {
+            return String(
+                localized: "Continue to Chapter \(number.formatted()) from \(group) for this reading only?",
+                comment: "Reader consent alert message for a chapter without a title. %1$@ is the chapter number and %2$@ the translation group name, untranslated source content ('Unnamed group' stands in when the source names none). Opening is for this reading only: no saved preference or history link changes."
+            )
+        }
+        return String(
+            localized: "Continue to an unnamed chapter from \(group) for this reading only?",
+            comment: "Reader consent alert message for a chapter with neither title nor number. %1$@ is the translation group name, untranslated source content ('Unnamed group' stands in when the source names none). Opening is for this reading only: no saved preference or history link changes."
+        )
+    }
+}
+
 nonisolated enum ReaderChapterTitle {
     /// The chapter's title, else "Chapter 12.5" from its number (whole numbers without ".0"),
     /// else "Unknown Chapter".
@@ -20,6 +101,7 @@ nonisolated enum ReaderChapterBoundary<C> {
     case locked(C)
     case otherReader(C)
     case notAvailableOffline(C)
+    case groupConsent(C)
 
     /// The neighbor to open, when the reader can open it.
     var chapter: C? {
@@ -30,7 +112,7 @@ nonisolated enum ReaderChapterBoundary<C> {
     /// The neighbor in reading order, whether or not the reader can open it; nil at the end.
     var candidate: C? {
         switch self {
-        case .chapter(let chapter), .locked(let chapter), .otherReader(let chapter), .notAvailableOffline(let chapter):
+        case .chapter(let chapter), .locked(let chapter), .otherReader(let chapter), .notAvailableOffline(let chapter), .groupConsent(let chapter):
             chapter
         case .end:
             nil
@@ -41,6 +123,21 @@ nonisolated enum ReaderChapterBoundary<C> {
         guard case .end = self else { return false }
         return true
     }
+
+    /// A different group at the same transition is a named consent boundary, not an open chapter.
+    /// Locked, other-reader and offline-unavailable boundaries are never converted: they keep
+    /// stopping the reader where they are.
+    @MainActor
+    func requiringGroupConsent(from current: C, enabled: Bool) -> Self where C: ChapterDisplayable {
+        guard enabled, case .chapter(let candidate) = self,
+              !ReaderContinuationGroup(current).matches(ReaderContinuationGroup(candidate)) else { return self }
+        return .groupConsent(candidate)
+    }
+
+    var needsGroupConsent: Bool {
+        if case .groupConsent = self { return true }
+        return false
+    }
 }
 
 nonisolated extension ReaderChapterBoundary: Equatable where C: Equatable {}
@@ -48,31 +145,13 @@ nonisolated extension ReaderChapterBoundary: Equatable where C: Equatable {}
 nonisolated enum ReaderChapterOrdering {
     static let chapterNumberEpsilon: Float32 = 0.0001
 
-    /// The closest higher-numbered chapter, or the list neighbor for an unnumbered chapter
-    /// (newest first). A known lock on that candidate is a boundary, never skipped.
-    static func mangaChapter(
-        after chapter: Manga.Chapter,
-        in chapters: [Manga.Chapter]?,
-        preferredScanlator: String?
-    ) -> Manga.Chapter? {
-        boundary(after: chapter, in: chapters, preferredScanlator: preferredScanlator).chapter
-    }
-
-    /// The previous chapter, mirroring `mangaChapter(after:)`.
-    static func mangaChapter(
-        before chapter: Manga.Chapter,
-        in chapters: [Manga.Chapter]?,
-        preferredScanlator: String?
-    ) -> Manga.Chapter? {
-        boundary(before: chapter, in: chapters, preferredScanlator: preferredScanlator).chapter
-    }
-
     /// What follows `chapter`: the candidate before the lock check, so a locked one is reported
     /// instead of skipped.
     static func boundary(
         after chapter: Manga.Chapter,
         in chapters: [Manga.Chapter]?,
-        preferredScanlator: String?
+        preferredScanlator: String?,
+        preferredScanlatorID: String? = nil
     ) -> ReaderChapterBoundary<Manga.Chapter> {
         guard let chapters else { return .end }
         guard let currentNumber = chapter.chapterNumber else {
@@ -87,7 +166,8 @@ nonisolated enum ReaderChapterOrdering {
         return gated(preferredMangaSource(
             for: nextNumber,
             in: chapters,
-            preferredScanlator: preferredScanlator
+            preferredScanlator: preferredScanlator,
+            preferredScanlatorID: preferredScanlatorID
         ))
     }
 
@@ -95,7 +175,8 @@ nonisolated enum ReaderChapterOrdering {
     static func boundary(
         before chapter: Manga.Chapter,
         in chapters: [Manga.Chapter]?,
-        preferredScanlator: String?
+        preferredScanlator: String?,
+        preferredScanlatorID: String? = nil
     ) -> ReaderChapterBoundary<Manga.Chapter> {
         guard let chapters else { return .end }
         guard let currentNumber = chapter.chapterNumber else {
@@ -109,7 +190,8 @@ nonisolated enum ReaderChapterOrdering {
         return gated(preferredMangaSource(
             for: previousNumber,
             in: chapters,
-            preferredScanlator: preferredScanlator
+            preferredScanlator: preferredScanlator,
+            preferredScanlatorID: preferredScanlatorID
         ))
     }
 
@@ -123,23 +205,6 @@ nonisolated enum ReaderChapterOrdering {
         guard let index = chapters.firstIndex(where: { chapterKey($0) == key }) else { return nil }
         let neighbor = index + offset
         return chapters.indices.contains(neighbor) ? chapters[neighbor] : nil
-    }
-
-    /// The closest higher-numbered chapter, or the list neighbor for an unnumbered chapter.
-    /// A known lock stops navigation; it never selects a farther chapter instead.
-    static func novelChapter(
-        after chapter: Novel.Chapter,
-        in chapters: [Novel.Chapter]?
-    ) -> Novel.Chapter? {
-        boundary(after: chapter, in: chapters).chapter
-    }
-
-    /// The previous chapter, mirroring `novelChapter(after:)`.
-    static func novelChapter(
-        before chapter: Novel.Chapter,
-        in chapters: [Novel.Chapter]?
-    ) -> Novel.Chapter? {
-        boundary(before: chapter, in: chapters).chapter
     }
 
     /// What follows `chapter`, before the lock check.
@@ -186,13 +251,22 @@ nonisolated enum ReaderChapterOrdering {
         chapters.compactMap { chapter in chapter.chapterNumber.map { (chapter, $0) } }
     }
 
+    /// The source group wins by its byte-exact ID when the reader supplies one (only while the
+    /// continuation setting is on); otherwise by name, as before.
     private static func preferredMangaSource(
         for chapterNumber: Float32,
         in chapters: [Manga.Chapter],
-        preferredScanlator: String?
+        preferredScanlator: String?,
+        preferredScanlatorID: String?
     ) -> Manga.Chapter? {
         let sources = chapters.filter {
             $0.chapterNumber.map { abs($0 - chapterNumber) < chapterNumberEpsilon } ?? false
+        }
+        if let preferredScanlatorID,
+           let match = sources.first(where: {
+               $0.scanlatorID?.utf8.elementsEqual(preferredScanlatorID.utf8) == true
+           }) {
+            return match
         }
         if let match = sources.first(where: {
             $0.scanlator == preferredScanlator
@@ -208,6 +282,18 @@ nonisolated enum ReaderChapterOrdering {
 nonisolated struct ReaderBoundaryNotice: Equatable {
     let text: String
     let systemImage: String
+    /// The notice names a consent the reader asks for when the user taps it.
+    var requestsGroupConsent = false
+
+    private static func groupChoice(isNext: Bool) -> Self {
+        Self(
+            text: isNext
+                ? String(localized: "Next chapter is from another group. Tap to continue", comment: "Reader boundary: the next chapter belongs to a different translation group; tapping asks to open that one upload")
+                : String(localized: "Previous chapter is from another group. Tap to continue", comment: "Reader boundary: the previous chapter belongs to a different translation group; tapping asks to open that one upload"),
+            systemImage: "person.2",
+            requestsGroupConsent: true
+        )
+    }
 
     /// The page reader's notice before or after its chapters; nil when the neighbor opens there or
     /// there is none.
@@ -215,6 +301,8 @@ nonisolated struct ReaderBoundaryNotice: Equatable {
         switch boundary {
         case .chapter, .end:
             return nil
+        case .groupConsent:
+            return groupChoice(isNext: isNext)
         case .locked:
             return locked(isNext: isNext)
         case .otherReader:
@@ -234,6 +322,8 @@ nonisolated struct ReaderBoundaryNotice: Equatable {
         switch boundary {
         case .chapter, .end:
             return nil
+        case .groupConsent:
+            return groupChoice(isNext: true)
         case .locked:
             return locked(isNext: true)
         case .otherReader:

@@ -1,0 +1,14 @@
+{
+  "id": "moe.itoapp.test.reader-consent-fixture",
+  "name": "Reader Consent Fixture",
+  "version": "1.0.0",
+  "min_app_version": "1.5.0",
+  "contentRating": 0,
+  "nsfw": 0,
+  "language": "en",
+  "languages": ["en"],
+  "type": "manga",
+  "description": "Deterministic local reader fixture for UI tests. Makes no network requests.",
+  "archived": false,
+  "archived_reason": ""
+}
