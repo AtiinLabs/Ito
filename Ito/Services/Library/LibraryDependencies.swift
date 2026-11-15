@@ -56,12 +56,20 @@ nonisolated struct LibraryDownloadSummary: Equatable, Sendable {
     /// Every series that holds a copy of any state, or a queue entry. Removing such a series from the Library
     /// leaves something behind to decide about.
     let mediaWithDownloads: Set<MediaIdentity>
+    /// The state of every chapter the inventory or the queue holds, without progress, so it changes only when
+    /// those tables do. It is the same derivation the Downloads screen uses.
+    let chapterStates: [MediaIdentity: [String: ChapterDownloadState]]
 
-    static let empty = Self(savedCounts: [:], mediaWithDownloads: [])
+    static let empty = Self(savedCounts: [:], mediaWithDownloads: [], chapterStates: [:])
 
-    init(savedCounts: [MediaIdentity: Int], mediaWithDownloads: Set<MediaIdentity>) {
+    init(
+        savedCounts: [MediaIdentity: Int],
+        mediaWithDownloads: Set<MediaIdentity>,
+        chapterStates: [MediaIdentity: [String: ChapterDownloadState]]
+    ) {
         self.savedCounts = savedCounts
         self.mediaWithDownloads = mediaWithDownloads
+        self.chapterStates = chapterStates
     }
 
     init(copies: [DownloadedChapterRecord], jobs: [DownloadJobRecord]) {
@@ -75,11 +83,19 @@ nonisolated struct LibraryDownloadSummary: Equatable, Sendable {
         for job in jobs {
             held.insert(MediaIdentity(pluginId: job.pluginId, canonicalMediaId: job.canonicalMediaId, mediaKind: job.mediaKind))
         }
-        self.init(savedCounts: counts, mediaWithDownloads: held)
+        self.init(
+            savedCounts: counts,
+            mediaWithDownloads: held,
+            chapterStates: DownloadCenter.states(copies: copies, jobs: jobs, progress: [:])
+        )
     }
 
     func savedCount(for media: MediaIdentity) -> Int {
         savedCounts[media] ?? 0
+    }
+
+    func chapterStates(for media: MediaIdentity) -> [String: ChapterDownloadState] {
+        self.chapterStates[media] ?? [:]
     }
 }
 
@@ -87,6 +103,9 @@ nonisolated struct LibraryDownloadSummary: Equatable, Sendable {
 protocol LibraryDownloadServing: AnyObject {
     var downloadSummary: LibraryDownloadSummary { get }
     var downloadSummaryPublisher: AnyPublisher<LibraryDownloadSummary, Never> { get }
+    /// Whether the saved-chapter inventory can be read on this build. Without it the Library offers no saved-chapter
+    /// filter, because an empty inventory would read as "no saved chapters".
+    var isInventoryAvailable: Bool { get }
 
     /// Deletes every saved chapter and queue entry of one series and records the deletion as deliberate.
     /// Throws when the downloads could not be deleted.
@@ -95,6 +114,7 @@ protocol LibraryDownloadServing: AnyObject {
 
 extension DownloadCenter: LibraryDownloadServing {
     var downloadSummary: LibraryDownloadSummary { librarySummary }
+    var isInventoryAvailable: Bool { true }
 
     var downloadSummaryPublisher: AnyPublisher<LibraryDownloadSummary, Never> {
         $librarySummary.eraseToAnyPublisher()
@@ -113,6 +133,7 @@ private enum UnavailableLibraryDownloadsError: Error {
 @MainActor
 final class UnavailableLibraryDownloads: LibraryDownloadServing {
     var downloadSummary: LibraryDownloadSummary { .empty }
+    var isInventoryAvailable: Bool { false }
 
     var downloadSummaryPublisher: AnyPublisher<LibraryDownloadSummary, Never> {
         Just(.empty).eraseToAnyPublisher()
@@ -121,6 +142,29 @@ final class UnavailableLibraryDownloads: LibraryDownloadServing {
     func deleteDownloads(of media: MediaIdentity) async throws {
         _ = media
         throw UnavailableLibraryDownloadsError.unavailable
+    }
+}
+
+/// The proof observation: the saved-details and edition-policy rows, read on their own.
+@MainActor
+protocol LibraryOfflineProofServing: AnyObject {
+    var offlineProofSnapshot: LibraryOfflineProofSnapshot { get }
+    var offlineProofSnapshotPublisher: AnyPublisher<LibraryOfflineProofSnapshot, Never> { get }
+}
+
+extension LibraryManager: LibraryOfflineProofServing {
+    var offlineProofSnapshotPublisher: AnyPublisher<LibraryOfflineProofSnapshot, Never> {
+        $offlineProofSnapshot.eraseToAnyPublisher()
+    }
+}
+
+/// Used when the proof observation is not wired: no entire-series claim anywhere.
+@MainActor
+final class UnavailableLibraryOfflineProofs: LibraryOfflineProofServing {
+    var offlineProofSnapshot: LibraryOfflineProofSnapshot { .unavailable }
+
+    var offlineProofSnapshotPublisher: AnyPublisher<LibraryOfflineProofSnapshot, Never> {
+        Just(.unavailable).eraseToAnyPublisher()
     }
 }
 
@@ -485,6 +529,8 @@ struct PreparedLibraryDependencies {
     var coverThumbnails: any LibraryCoverThumbnailServing = UnavailableLibraryCoverThumbnails()
     /// No saved-chapter counts, and nothing to delete, unless the composition root passes the live download center.
     var downloads: any LibraryDownloadServing = UnavailableLibraryDownloads()
+    /// No entire-series proofs unless the composition root passes the live library manager.
+    var offlineProofs: any LibraryOfflineProofServing = UnavailableLibraryOfflineProofs()
 
     static func production(
         libraryManager: LibraryManager,
@@ -509,7 +555,8 @@ struct PreparedLibraryDependencies {
             payloadDecoder: JSONDeferredPluginPayloadDecoder(),
             connectivity: connectivity,
             coverThumbnails: coverThumbnails,
-            downloads: downloads
+            downloads: downloads,
+            offlineProofs: libraryManager
         )
     }
 

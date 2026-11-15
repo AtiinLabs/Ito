@@ -99,4 +99,22 @@ protocol PluginCompletionScopeCapturing {
         media: MediaIdentity,
         mediaKey: String
     ) -> PluginCompletionContext
+
+    /// The current epoch, read-only; see the default implementation.
+    func currentCompletionEpoch(media: MediaIdentity, mediaKey: String) -> String?
+
+    /// The source's epoch, established off the main actor when it was never captured. Resume asks
+    /// once before reading scoped History, never per confirmation.
+    func verifiedCompletionEpoch(media: MediaIdentity, mediaKey: String) async -> String?
+}
+
+extension PluginCompletionScopeCapturing {
+    /// A conformer without a read-only lookup cannot prove a current epoch.
+    func currentCompletionEpoch(media: MediaIdentity, mediaKey: String) -> String? {
+        nil
+    }
+
+    func verifiedCompletionEpoch(media: MediaIdentity, mediaKey: String) async -> String? {
+        currentCompletionEpoch(media: media, mediaKey: mediaKey)
+    }
 }

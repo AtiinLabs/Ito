@@ -306,6 +306,10 @@ nonisolated struct SeriesEditionPreferenceRecord: Codable, Sendable, FetchableRe
     var selection: Data
     var updatedAt: Date
 
+    var media: MediaIdentity {
+        MediaIdentity(pluginId: pluginId, canonicalMediaId: canonicalMediaId, mediaKind: mediaKind)
+    }
+
     /// The stored choice for a series, or nil when none was remembered. Throws `unreadable` when a choice is
     /// stored but this build cannot read it: that is not "no choice", and it is never read as another one.
     static func selection(for media: MediaIdentity, in db: Database) throws -> EditionSelection? {
@@ -314,8 +318,14 @@ nonisolated struct SeriesEditionPreferenceRecord: Codable, Sendable, FetchableRe
             key: ["pluginId": media.pluginId, "mediaKind": media.mediaKind.rawValue, "canonicalMediaId": media.canonicalMediaId]
         )
         guard let record else { return nil }
+        return try decodeSelection(record.selection)
+    }
+
+    /// Decodes stored `EditionSelection` bytes. Every reader goes through here, so the formats each build reads
+    /// and the failure for the rest are the same everywhere. Bytes this build cannot read throw `unreadable`.
+    static func decodeSelection(_ data: Data) throws -> EditionSelection {
         do {
-            return try JSONDecoder().decode(EditionSelection.self, from: record.selection)
+            return try JSONDecoder().decode(EditionSelection.self, from: data)
         } catch {
             throw SeriesEditionPreferenceError.unreadable
         }

@@ -165,8 +165,11 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     /// so its rows come from that payload and never from the list a later load returned.
     func coverage(now: Date = Date()) -> SeriesOfflineCoverage.Result? {
         guard isAvailable, host?.batchIsSaved == true else { return nil }
+        // A remembered choice this build cannot read is not the source list, so it makes no entire-series claim:
+        // the same fail-closed rule the Library's filter applies.
+        let snapshot = remembered == .unreadable ? nil : coverageBasis?.snapshot
         let result = SeriesOfflineCoverage.evaluate(
-            snapshot: coverageBasis?.snapshot,
+            snapshot: snapshot,
             currentPayloadSHA256: coverageBasis?.currentPayloadSHA256,
             selection: rememberedSelection,
             catalog: coverageBasis?.catalog ?? [],

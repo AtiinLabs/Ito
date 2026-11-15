@@ -996,6 +996,7 @@ struct AppPreferenceCatalogTests {
             .init(entry: .novelIsPaging, source: .booleanNSNumber, defaultJSON: "false", accepted: [NSNumber(value: false), NSNumber(value: true)], invalid: boolInvalid),
             .init(entry: .novelPrefetchChapters, source: .booleanNSNumber, defaultJSON: "true", accepted: [NSNumber(value: false), NSNumber(value: true)], invalid: boolInvalid),
             .init(entry: .preloadImageCount, source: .integerNSNumber, defaultJSON: "5", accepted: [0, 3, 5, 10, 15, 20].map(NSNumber.init(value:)), invalid: [NSNumber(value: -1), NSNumber(value: 1), NSNumber(value: 20.5), NSNumber(value: true)]),
+            .init(entry: .askBeforeSwitchingGroups, source: .booleanNSNumber, defaultJSON: "false", accepted: [NSNumber(value: false), NSNumber(value: true)], invalid: boolInvalid),
             .init(entry: .incognitoMode, source: .booleanNSNumber, defaultJSON: "false", accepted: [NSNumber(value: false), NSNumber(value: true)], invalid: boolInvalid),
             .init(entry: .autoSyncTrackersToLocal, source: .booleanNSNumber, defaultJSON: "true", accepted: [NSNumber(value: false), NSNumber(value: true)], invalid: boolInvalid),
             .init(entry: .networkDownloadMode, source: .string, defaultJSON: "\"unmeteredOnly\"", accepted: NetworkDownloadMode.allCases.map(\.rawValue), invalid: ["Unknown", "", NSNumber(value: true)]),
@@ -1023,6 +1024,7 @@ struct AppPreferenceCatalogTests {
         case .novelIsPaging: AppPreferenceKeys.novelIsPaging
         case .novelPrefetchChapters: AppPreferenceKeys.novelPrefetchChapters
         case .preloadImageCount: AppPreferenceKeys.preloadImageCount
+        case .askBeforeSwitchingGroups: AppPreferenceKeys.askBeforeSwitchingGroups
         case .incognitoMode: AppPreferenceKeys.incognitoMode
         case .autoSyncTrackersToLocal: AppPreferenceKeys.autoSyncTrackersToLocal
         case .diskCacheLimitGB: AppPreferenceKeys.diskCacheLimitGB
@@ -1050,6 +1052,7 @@ struct AppPreferenceCatalogTests {
         case .novelIsPaging: try assertRoundTrip(AppPreferenceCatalog.novelIsPaging)
         case .novelPrefetchChapters: try assertRoundTrip(AppPreferenceCatalog.novelPrefetchChapters)
         case .preloadImageCount: try assertRoundTrip(AppPreferenceCatalog.preloadImageCount)
+        case .askBeforeSwitchingGroups: try assertRoundTrip(AppPreferenceCatalog.askBeforeSwitchingGroups)
         case .incognitoMode: try assertRoundTrip(AppPreferenceCatalog.incognitoMode)
         case .autoSyncTrackersToLocal: try assertRoundTrip(AppPreferenceCatalog.autoSyncTrackersToLocal)
         case .diskCacheLimitGB: try assertRoundTrip(AppPreferenceCatalog.diskCacheLimitGB)

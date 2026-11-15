@@ -19,6 +19,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     @Environment(\.sourceCoverRequests) private var coverRequests
 
     @State private var showNavTitle = false
+    @Environment(\.scenePhase) private var scenePhase
 
     init(
         viewModel: MediaDetailViewModel<M>,
@@ -57,6 +58,9 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 if let message {
                     UIAccessibility.post(notification: .announcement, argument: message)
                 }
+            }
+            .onChange(of: scenePhase) { phase in
+                if phase != .active { viewModel.cancelGroupSwitch() }
             }
     }
 
@@ -102,6 +106,17 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 Button("Cancel", role: .cancel) { viewModel.downloadBatch.cancelMeteredPrompt() }
             } message: { _ in
                 Text("This batch may use cellular data or a personal hotspot while the app stays in the foreground. Other downloads and prefetching are not approved.", comment: "Scope of temporary metered download permission")
+            }
+            .alert(
+                String(localized: "Switch groups?", comment: "Reader consent title: open one exact upload from another translation group"),
+                // The buttons decide: a setter that cancelled could run before Continue's action.
+                isPresented: Binding(get: { viewModel.groupSwitchConsent != nil }, set: { _ in }),
+                presenting: viewModel.groupSwitchConsent
+            ) { consent in
+                Button(String(localized: "Open This Upload", comment: "Reader consent alert button: opens the one upload from another translation group, for this reading only")) { viewModel.confirmGroupSwitch(consent.id) }
+                Button("Cancel", role: .cancel) { viewModel.cancelGroupSwitch() }
+            } message: { consent in
+                Text(consent.message)
             }
     }
 
@@ -384,9 +399,9 @@ struct MediaDetailView<M: MediaDisplayable>: View {
         displayedChapters: [M.Chapter]
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let target = viewModel.resumeChapter {
+            if viewModel.resumeChapter != nil {
                 Button {
-                    viewModel.selectChapter(target)
+                    viewModel.resumeReading()
                 } label: {
                     Label(resumeTitle, systemImage: resumeIcon)
                     .font(.subheadline.weight(.semibold))

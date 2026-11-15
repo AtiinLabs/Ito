@@ -57,6 +57,7 @@ private final class ScriptedDownloads: LibraryDownloadServing {
     var downloadSummary: LibraryDownloadSummary { subject.value }
     var downloadSummaryPublisher: AnyPublisher<LibraryDownloadSummary, Never> { subject.eraseToAnyPublisher() }
     func publish(_ summary: LibraryDownloadSummary) { subject.send(summary) }
+    var isInventoryAvailable: Bool { true }
 
     func deleteDownloads(of media: MediaIdentity) async throws {
         log.events.append("downloads:\(media.canonicalMediaId)")
@@ -130,7 +131,29 @@ private func summary(saved: [String: Int] = [:], held: [String] = []) -> Library
     let media = { (id: String) in libraryItem(id).mediaIdentity }
     return LibraryDownloadSummary(
         savedCounts: Dictionary(uniqueKeysWithValues: saved.map { (media($0.key), $0.value) }),
-        mediaWithDownloads: Set((held + Array(saved.keys)).map(media))
+        mediaWithDownloads: Set((held + Array(saved.keys)).map(media)),
+        chapterStates: [:]
+    )
+}
+
+private func inventoryCopy(_ key: String) throws -> DownloadedChapterRecord {
+    DownloadedChapterRecord(
+        pluginId: "plugin.test", mediaKind: .manga, canonicalMediaId: "series-1", chapterKey: key,
+        authorityScope: .publicUnscoped, versionId: UUID().uuidString, state: .verified, damageReason: nil,
+        contentKind: .images, pageCount: 1, byteCount: 1, manifestFormatVersion: 1,
+        manifestSHA256: String(repeating: "a", count: 64),
+        chapterSnapshot: try JSONEncoder().encode(Chapter(key: key, chapter: 1)),
+        seriesTitle: "Series", sourceEpoch: nil, verifiedAt: Date(timeIntervalSince1970: 0)
+    )
+}
+
+private func queuedJob(_ key: String) -> DownloadJobRecord {
+    DownloadJobRecord(
+        id: UUID().uuidString, batchId: "batch", sequence: 0, pluginId: "plugin.test", mediaKind: .manga,
+        canonicalMediaId: "series-1", chapterKey: key, authorityScope: .publicUnscoped, chapterSnapshot: Data(),
+        seriesTitle: "Series", sourceEpoch: nil, state: .queued, waitingReason: nil, failureReason: nil,
+        stagingVersionId: nil, attemptCount: 0, createdAt: Date(timeIntervalSince1970: 0),
+        updatedAt: Date(timeIntervalSince1970: 0)
     )
 }
 
@@ -189,6 +212,19 @@ struct LibraryDownloadIndicatorTests {
         #expect(harness.viewModel.savedCount(for: libraryItem("one")) == 0)
         harness.viewModel.requestRemoval(libraryItem("one"))
         #expect(harness.viewModel.pendingRemoval?.hasDownloads == false)
+    }
+
+    @Test func theInventoryIsOfferedOnlyWhereItCanBeRead() {
+        #expect(!UnavailableLibraryDownloads().isInventoryAvailable)
+    }
+
+    @Test func chapterStatesFollowTheInventoryAndQueueAndAVerifiedCopyWinsOverAJob() throws {
+        let copies = [try inventoryCopy("a1"), try inventoryCopy("a2")]
+        let jobs = [queuedJob("a1"), queuedJob("a3")]
+        let states = LibraryDownloadSummary(copies: copies, jobs: jobs)
+            .chapterStates(for: libraryItem("series-1").mediaIdentity)
+
+        #expect(states == ["a1": .downloaded, "a2": .downloaded, "a3": .queued])
     }
 
     // MARK: Dialog variants

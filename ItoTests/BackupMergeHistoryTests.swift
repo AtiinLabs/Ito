@@ -419,7 +419,7 @@ struct BackupMergeHistoryTests {
         )
         let untouched = makeItem(id: "test.plugin_untouched", title: "Untouched")
         let imported = makeItem(id: importedId, title: "Imported")
-        let localHistory = makeHistory(id: "local-history", itemId: local.id, chapter: "local")
+        let localHistory = makeHistory(id: "local-history", itemId: local.id, chapter: "local", scanlatorID: "original-group-id")
         try await database.dbPool.write { db in
             try category.insert(db)
             try local.insert(db)
@@ -479,6 +479,7 @@ struct BackupMergeHistoryTests {
             #expect(persistedHistory?.libraryItemId == destinationId)
             #expect(persistedHistory?.mediaKey == destinationId)
             #expect(persistedHistory?.pluginId == "replacement.plugin")
+            #expect(persistedHistory?.scanlatorID == nil)
         }
     }
 
@@ -503,7 +504,8 @@ struct BackupMergeHistoryTests {
         let restoredHistory = makeHistory(
             id: "restored-history",
             itemId: "test.plugin_media-restored",
-            chapter: "restored"
+            chapter: "restored",
+            scanlatorID: "source-group-42"
         )
         let oldPreference = AppPreference(key: "old-preference", value: Data([0x01]))
         let restoredPreference = AppPreference(key: "restored-preference", value: Data([0x02]))
@@ -542,6 +544,7 @@ struct BackupMergeHistoryTests {
             #expect(history?.libraryItemId == restoredItem.id)
             #expect(history?.mediaKey == restoredItem.id)
             #expect(try AppPreference.fetchOne(db, key: restoredPreference.key) == restoredPreference)
+            #expect(history?.scanlatorID == "source-group-42")
         }
     }
 
@@ -640,7 +643,8 @@ struct BackupMergeHistoryTests {
         itemId: String,
         chapter: String,
         mediaKind: MediaKind = .manga,
-        readAt: Date = Date(timeIntervalSince1970: 1_700_000_000)
+        readAt: Date = Date(timeIntervalSince1970: 1_700_000_000),
+        scanlatorID: String? = nil
     ) -> ReadingHistoryRecord {
         ReadingHistoryRecord(
             id: id,
@@ -652,6 +656,7 @@ struct BackupMergeHistoryTests {
             mediaKind: mediaKind,
             chapterKey: chapter,
             chapterTitle: chapter,
+            scanlatorID: scanlatorID,
             readAt: readAt
         )
     }

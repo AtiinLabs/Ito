@@ -89,6 +89,9 @@ History filter: every kind of media */
 /* Download menu item: download every chapter, including those already read. */
 "All Chapters" = "All Chapters";
 
+/* Library filter: every series in the Library, whether or not any of its chapters is saved. */
+"All Series" = "All Series";
+
 /* Download menu item: download every unread chapter. */
 "All Unread Chapters" = "All Unread Chapters";
 
@@ -141,6 +144,9 @@ History: kind of media */
 
 /* Require batch consent before using another group. */
 "Ask before switching" = "Ask before switching";
+
+/* Reader setting, off by default: require confirmation before Next, Previous or Resume opens another translation group's upload */
+"Ask before switching groups" = "Ask before switching groups";
 
 "Ask on Discord" = "Ask on Discord";
 
@@ -349,6 +355,15 @@ Downloads queue: cancel one job */
 "Continue Watching?" = "Continue Watching?";
 
 "Continue from %@" = "Continue from %@";
+
+/* Reader consent alert message. %1$@ is the chapter title and %2$@ the translation group name, both untranslated source content ('Unnamed group' stands in when the source names none). Opening is for this reading only: no saved preference or history link changes. */
+"Continue to %@ from %@ for this reading only?" = "Continue to %1$@ from %2$@ for this reading only?";
+
+/* Reader consent alert message for a chapter without a title. %1$@ is the chapter number and %2$@ the translation group name, untranslated source content ('Unnamed group' stands in when the source names none). Opening is for this reading only: no saved preference or history link changes. */
+"Continue to Chapter %@ from %@ for this reading only?" = "Continue to Chapter %1$@ from %2$@ for this reading only?";
+
+/* Reader consent alert message for a chapter with neither title nor number. %1$@ is the translation group name, untranslated source content ('Unnamed group' stands in when the source names none). Opening is for this reading only: no saved preference or history link changes. */
+"Continue to an unnamed chapter from %@ for this reading only?" = "Continue to an unnamed chapter from %@ for this reading only?";
 
 "Cookies, website data and Cloudflare clearance were removed." = "Cookies, website data and Cloudflare clearance were removed.";
 
@@ -585,6 +600,9 @@ Storage settings offline downloads section */
 
 "Enter values between %@ and %@, with minimum no greater than maximum." = "Enter values between %1$@ and %2$@, with minimum no greater than maximum.";
 
+/* Library filter: series whose every chapter is saved on this device, and the source recently confirmed its chapter list is complete. */
+"Entire Series Offline" = "Entire Series Offline";
+
 /* Series details: every chapter of the series is saved on this device, and the source confirmed its chapter list is complete. */
 "Entire series offline" = "Entire series offline";
 
@@ -669,6 +687,9 @@ History: an episode without a title */
 /* History: filter button */
 "Filter" = "Filter";
 
+/* More Options menu: submenu that filters the Library by saved chapters. */
+"Filter Library" = "Filter Library";
+
 "Filtered" = "Filtered";
 
 /* Filter button */
@@ -710,6 +731,9 @@ History: an episode without a title */
 "Group ID %@" = "Group ID %@";
 
 "HTTPS to HTTP redirect downgrades are prohibited." = "HTTPS to HTTP redirect downgrades are prohibited.";
+
+/* Library filter: series with at least one chapter saved on this device. */
+"Has Saved Chapters" = "Has Saved Chapters";
 
 /* Series status: paused */
 "Hiatus" = "Hiatus";
@@ -1053,6 +1077,9 @@ Manga format */
 /* Adjacent chapter prefetch: the following and the preceding chapter are prefetched */
 "Next and Previous" = "Next and Previous";
 
+/* Reader boundary: the next chapter belongs to a different translation group; tapping asks to open that one upload */
+"Next chapter is from another group. Tap to continue" = "Next chapter is from another group. Tap to continue";
+
 /* Reader: shown after the last page when the next chapter needs an unlock */
 "Next chapter is locked" = "Next chapter is locked";
 
@@ -1078,6 +1105,9 @@ Manga format */
 "No Repositories" = "No Repositories";
 
 "No Results" = "No Results";
+
+/* Library filter: series with no chapter saved on this device. Series whose downloads are only queued, damaged or failed count here. */
+"No Saved Chapters" = "No Saved Chapters";
 
 "No Trackers Authenticated" = "No Trackers Authenticated";
 
@@ -1129,6 +1159,12 @@ Downloads manager empty inventory */
 "No results found." = "No results found.";
 
 "No results found. Try again." = "No results found. Try again.";
+
+/* Library: shown when the saved-chapter filter matches no series and the search is empty. */
+"No series match this filter." = "No series match this filter.";
+
+/* Library: shown when the search text and the saved-chapter filter together match no series. */
+"No series match this search and filter." = "No series match this search and filter.";
 
 /* Distinguishes an ID-less source group from a same-label group with an ID. */
 "No source ID" = "No source ID";
@@ -1226,6 +1262,9 @@ Manga format: light novel */
 "Open Series" = "Open Series";
 
 "Open Settings" = "Open Settings";
+
+/* Reader consent alert button: opens the one upload from another translation group, for this reading only */
+"Open This Upload" = "Open This Upload";
 
 /* A source needs user interaction that background work cannot perform. */
 "Open this source to continue in the foreground." = "Open this source to continue in the foreground.";
@@ -1343,6 +1382,9 @@ History: the page a chapter was left on */
 "Previous Chapter" = "Previous Chapter";
 
 "Previous Page" = "Previous Page";
+
+/* Reader boundary: the previous chapter belongs to a different translation group; tapping asks to open that one upload */
+"Previous chapter is from another group. Tap to continue" = "Previous chapter is from another group. Tap to continue";
 
 /* Reader: shown before the first page when the previous chapter needs an unlock */
 "Previous chapter is locked" = "Previous chapter is locked";
@@ -1868,6 +1910,9 @@ Downloads queue: retry a failed or paused job */
 /* Anime season */
 "Summer" = "Summer";
 
+/* Reader consent title: open one exact upload from another translation group */
+"Switch groups?" = "Switch groups?";
+
 "Switch to sectioned layout" = "Switch to sectioned layout";
 
 "Switch to tabbed layout" = "Switch to tabbed layout";
@@ -2292,6 +2337,9 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 
 /* Download mode that avoids cellular and hotspots */
 "Unmetered Only" = "Unmetered Only";
+
+/* Reader consent: shown in place of the group name when the source supplies none */
+"Unnamed group" = "Unnamed group";
 
 "Unread/Unwatched" = "Unread/Unwatched";
 
