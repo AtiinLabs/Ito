@@ -38,6 +38,8 @@ enum AppMessageKind: Equatable {
     case mediaDetailChapterNotDownloaded
     case mediaDetailDownloadRefused
     case mediaDetailDownloadActionFailed
+    /// A download was asked for while another batch was still being queued.
+    case mediaDetailDownloadBatchBusy
     /// A download preset queued chapters; `alreadyStored` of its range were saved or queued before.
     case mediaDetailDownloadsQueued(queued: Int, alreadyStored: Int)
     case mediaDetailNothingToDownload
@@ -332,6 +334,18 @@ extension AppMessageKind {
                 detail: String(
                     localized: "The download could not be changed. Please try again.",
                     comment: "Series details: detail for a download action that did not take effect."
+                )
+            )
+        case .mediaDetailDownloadBatchBusy:
+            return .init(
+                style: .info,
+                title: String(
+                    localized: "Still queuing downloads",
+                    comment: "Series details: a download was tapped while an earlier download request was still being queued, so nothing was queued for the new one."
+                ),
+                detail: String(
+                    localized: "Wait a moment, then download this again.",
+                    comment: "Series details: detail asking the user to repeat a download that was not queued because an earlier request was still being queued."
                 )
             )
         case .mediaDetailDownloadsQueued(let queued, let alreadyStored):

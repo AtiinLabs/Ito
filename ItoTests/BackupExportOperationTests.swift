@@ -76,7 +76,9 @@ struct BackupExportOperationTests {
             let capabilities = try BackupCapabilityRecord.fetchAll(db)
             #expect(capabilities.count == BackupComponent.allCases.count)
             #expect(Set(capabilities.map(\.component)) == Set(BackupComponent.allCases))
-            #expect(capabilities.allSatisfy { $0.representation == .representedNonempty })
+            #expect(capabilities.filter { $0.component != .savedLibraryThumbnails }
+                .allSatisfy { $0.representation == .representedNonempty })
+            #expect(capabilities.first(where: { $0.component == .savedLibraryThumbnails })?.representation == .representedEmpty)
 
             let pluginSecret = Data("opaque-plugin-secret".utf8)
             #expect(

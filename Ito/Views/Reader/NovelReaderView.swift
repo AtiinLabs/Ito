@@ -272,7 +272,7 @@ struct NovelReaderView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
-                } else if !viewModel.prefetchChapters {
+                } else if viewModel.showsManualNextChapter {
                     Button(action: { viewModel.loadNextChapter(trigger: .reader) }) {
                         VStack(spacing: 4) {
                             Text("Next Chapter")

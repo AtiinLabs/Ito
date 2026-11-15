@@ -349,6 +349,11 @@ nonisolated struct BackupMergeOperation: Sendable {
             for preference in importedBackup.preferences {
                 try preference.save(db)
             }
+            // A backup made before the network preferences existed carries none; derive them from the
+            // restored image preload rather than leaving a gap for a default to fill.
+            if try AppPreference.fetchCount(db) > 0 {
+                try NetworkPreferenceMigration.insertMissing(in: db)
+            }
 
             let result = BackupMergeResult(
                 insertedItemCount: insertedItemCount,

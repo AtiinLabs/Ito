@@ -161,7 +161,7 @@ struct PluginDirectoryGateTests {
         try makeTestPluginArchiveData(id: "kept", version: "1.0").write(to: directory.appendingPathComponent("kept.ito"))
         try makeTestPluginArchiveData(id: "gone", version: "1.0").write(to: directory.appendingPathComponent("gone.ito"))
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: directory,
             packageReader: { url in
                 // Another party removes the file after the scan has listed it and before it is read.
@@ -191,7 +191,7 @@ struct PluginDirectoryGateTests {
         try makeTestPluginArchiveData(id: "restored", version: "1.0")
             .write(to: directory.appendingPathComponent("restored.ito"))
         let manager = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool),
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
             pluginsDirectory: directory
         )
 
@@ -217,7 +217,7 @@ struct PluginDirectoryGateTests {
         try makeTestPluginArchiveData(id: "archived", version: "1.0", archived: true).write(to: pluginURL)
         let hold = ScanHold()
         let progress = DeletionProgress()
-        let store = PluginSettingsStore(dbPool: database.dbPool)
+        let store = PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         let manager = PluginManager(
             pluginSettingsStore: store,
             pluginsDirectory: directory,

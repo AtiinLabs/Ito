@@ -53,7 +53,7 @@ final class HistoryScanlatorIdentityMigrationTests: XCTestCase {
     func testRecordedGroupReturnsExactSeriesAndChapterIdentityOnly() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let settings = AppSettingsStore(dbPool: database.dbPool)
+        let settings = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         try await settings.reload()
         let library = LibraryManager(dbPool: database.dbPool)
         let history = HistoryManager(dbPool: database.dbPool, libraryManager: library)
@@ -96,7 +96,7 @@ final class HistoryScanlatorIdentityMigrationTests: XCTestCase {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let library = LibraryManager(dbPool: database.dbPool)
-        let settings = AppSettingsStore(dbPool: database.dbPool)
+        let settings = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         try await settings.reload()
         let history = HistoryManager(dbPool: database.dbPool, libraryManager: library)
         history.configure(settingsStore: settings)

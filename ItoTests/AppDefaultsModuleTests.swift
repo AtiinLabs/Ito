@@ -9,10 +9,8 @@ struct AppDefaultsModuleTests {
     @Test func moduleAndAlreadyObservingStoreShareSynchronousRows() throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let store = PluginSettingsStore(
-            dbPool: database.dbPool,
-            domainFactory: { EmptyPluginDomain(name: $0) }
-        )
+        let store = PluginSettingsStore(dbPool: database.dbPool,
+        domainFactory: { EmptyPluginDomain(name: $0) }, networkPolicy: NetworkPolicyCenter())
         let module = AppDefaultsModule(pluginId: "plugin", store: store)
         var observedRevisions: [Int] = []
         let observation = store.revisionPublisher.dropFirst().sink {
@@ -33,10 +31,8 @@ struct AppDefaultsModuleTests {
     @Test func aSettingTheUserNeverSetReadsAsItsSchemaDefault() throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let store = PluginSettingsStore(
-            dbPool: database.dbPool,
-            domainFactory: { EmptyPluginDomain(name: $0) }
-        )
+        let store = PluginSettingsStore(dbPool: database.dbPool,
+        domainFactory: { EmptyPluginDomain(name: $0) }, networkPolicy: NetworkPolicyCenter())
         let module = AppDefaultsModule(pluginId: "plugin", store: store)
         module.useSchemaDefaults(["mode": "reader"])
 
@@ -63,7 +59,7 @@ struct AppDefaultsModuleTests {
     @Test func aLoadedPluginGetsItsSchemaDefaultsAndAFailedReadLeavesItUsable() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let store = PluginSettingsStore(dbPool: database.dbPool, domainFactory: { EmptyPluginDomain(name: $0) })
+        let store = PluginSettingsStore(dbPool: database.dbPool, domainFactory: { EmptyPluginDomain(name: $0) }, networkPolicy: NetworkPolicyCenter())
         let schema = try pr7bSettingsSchema(settings: [
             .text(id: "server", name: "Server", summary: nil, defaultValue: "https://example.com")
         ])
@@ -83,7 +79,7 @@ struct AppDefaultsModuleTests {
     @Test func switchingToARichFormClearsInjectedDefaultsWithoutChangingSavedValues() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let store = PluginSettingsStore(dbPool: database.dbPool, domainFactory: { EmptyPluginDomain(name: $0) })
+        let store = PluginSettingsStore(dbPool: database.dbPool, domainFactory: { EmptyPluginDomain(name: $0) }, networkPolicy: NetworkPolicyCenter())
         let defaults = AppDefaultsModule(pluginId: "plugin", store: store)
         defaults.useSchemaDefaults(["unset": "old default", "saved": "old default"])
         defaults.set(key: "saved", value: "user choice")
@@ -100,7 +96,7 @@ struct AppDefaultsModuleTests {
     @Test func aPluginThatCrashesDescribingItsSettingsIsNotUsed() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let store = PluginSettingsStore(dbPool: database.dbPool, domainFactory: { EmptyPluginDomain(name: $0) })
+        let store = PluginSettingsStore(dbPool: database.dbPool, domainFactory: { EmptyPluginDomain(name: $0) }, networkPolicy: NetworkPolicyCenter())
         let defaults = AppDefaultsModule(pluginId: "plugin", store: store)
         let crashing: () async throws -> SettingsSurface? = { throw ItoError.wasmTrap("unreachable") }
         let cancelled: () async throws -> SettingsSurface? = { throw CancellationError() }
@@ -115,11 +111,9 @@ struct AppDefaultsModuleTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let faults = ModuleOperationFault()
-        let store = PluginSettingsStore(
-            dbPool: database.dbPool,
-            domainFactory: { EmptyPluginDomain(name: $0) },
-            operationFault: faults.hit
-        )
+        let store = PluginSettingsStore(dbPool: database.dbPool,
+        domainFactory: { EmptyPluginDomain(name: $0) },
+        operationFault: faults.hit, networkPolicy: NetworkPolicyCenter())
         let module = AppDefaultsModule(pluginId: "plugin", store: store)
         module.set(key: "key", value: "committed")
         faults.failNext("set")
@@ -134,10 +128,8 @@ struct AppDefaultsModuleTests {
     @Test func moduleRemoveIsSynchronous() throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let store = PluginSettingsStore(
-            dbPool: database.dbPool,
-            domainFactory: { EmptyPluginDomain(name: $0) }
-        )
+        let store = PluginSettingsStore(dbPool: database.dbPool,
+        domainFactory: { EmptyPluginDomain(name: $0) }, networkPolicy: NetworkPolicyCenter())
         let module = AppDefaultsModule(pluginId: "plugin", store: store)
         module.set(key: "key", value: "value")
 

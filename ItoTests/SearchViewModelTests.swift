@@ -685,7 +685,7 @@ private extension PluginSearchResult {
             subtitle: nil,
             destination: .manga(
                 pluginID: "plugin.manga",
-                context: ItoRunnerSearchContext(runner: runner, pluginID: "plugin.test", contexts: PluginNetworkContexts()),
+                context: ItoRunnerSearchContext(runner: runner, pluginID: "plugin.test", contexts: PluginNetworkContexts(policy: NetworkPolicyCenter())),
                 media: Manga(key: id, title: title ?? id)
             )
         )

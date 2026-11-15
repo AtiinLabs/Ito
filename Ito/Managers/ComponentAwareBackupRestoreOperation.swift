@@ -240,6 +240,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         try restorePluginIdentity(plan, db: db, outcomes: &outcomes)
         try restorePluginSettings(plan, db: db, outcomes: &outcomes)
         try restoreUnscopedMediaState(plan, db: db, outcomes: &outcomes)
+        try restoreSavedThumbnails(plan, db: db, outcomes: &outcomes)
+
         try restoreArchives(plan, db: db, outcomes: &outcomes)
 
         let report = try makeReport(plan: plan, outcomes: outcomes)
@@ -382,6 +384,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         }
         if backup.metadata != nil,
            backup.representation(of: .scalarAppPreferences) == .representedNonempty {
+            // A backup made before an optional preference existed is still complete without it; restore
+            // derives that preference instead of rejecting the backup.
             guard AppPreferenceCatalogEntry.isCompleteBackupKeySet(preferenceKeys),
                   Set(backup.preferences.map(\.key)) == preferenceKeys else {
                 throw rejection(
@@ -429,6 +433,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             !backup.pluginSettings.isEmpty
         case .legacyUnscopedMediaState:
             !backup.legacyUnscopedMediaState.isEmpty
+        case .savedLibraryThumbnails:
+            !backup.savedLibraryThumbnails.isEmpty
         case .legacyStateArchive:
             !backup.legacyStateArchives.isEmpty
         }
@@ -445,6 +451,18 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             component: .libraryCore,
             code: "duplicateItemId"
         )
+        let itemsById = Dictionary(uniqueKeysWithValues: backup.items.map { ($0.id, $0) })
+        var thumbnailBudget = LibraryCoverThumbnailRecord.maximumPortableAggregateByteCount
+        var thumbnailItems = Set<String>()
+        for thumbnail in backup.savedLibraryThumbnails {
+            guard thumbnail.imageData.count <= thumbnailBudget,
+                  thumbnailItems.insert(thumbnail.libraryItemId).inserted,
+                  thumbnail.isPortable(coverUrl: itemsById[thumbnail.libraryItemId]?.coverUrl)
+            else {
+                throw rejection(.invalidComponentData(component: .savedLibraryThumbnails, code: "invalidThumbnail"))
+            }
+            thumbnailBudget -= thumbnail.imageData.count
+        }
         try requireUnique(
             backup.links.map { "\($0.itemId)\u{1F}\($0.categoryId)" },
             component: .libraryCore,
@@ -1326,6 +1344,53 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         try AppDatabase.ensureSystemCategory(in: db)
     }
 
+    /// Puts each saved cover thumbnail back on its restored Library item. A thumbnail lands only on the item its
+    /// backup row was remapped to, and only while that item's cover is still the one it was made for. When a
+    /// merge keeps the local series, a local thumbnail wins; one is only added where the series has none.
+    private func restoreSavedThumbnails(
+        _ plan: RestorePlan,
+        db: Database,
+        outcomes: inout [BackupComponent: MutableOutcome]
+    ) throws {
+        guard plan.represented.contains(.savedLibraryThumbnails) else { return }
+        if plan.mode == .wipe {
+            outcomes[.savedLibraryThumbnails]?.replaced += try LibraryCoverThumbnailRecord.deleteAll(db)
+        }
+        let dispositionsByTarget = Dictionary(
+            plan.library.dispositions.map { ($0.targetId, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for thumbnail in plan.backup.savedLibraryThumbnails {
+            guard let targetId = plan.library.targetIdByImportedId[thumbnail.libraryItemId],
+                  let item = try LibraryItem.fetchOne(db, key: targetId),
+                  let coverUrl = item.coverUrl,
+                  LibraryCoverThumbnailStore.coverHash(coverUrl) == thumbnail.coverURLSHA256
+            else {
+                outcomes[.savedLibraryThumbnails]?.skipped += 1
+                continue
+            }
+            var restored = thumbnail
+            restored.libraryItemId = targetId
+            let existing = try LibraryCoverThumbnailRecord.fetchOne(db, key: targetId)
+            let keepsLocal = plan.mode == .merge
+                && dispositionsByTarget[targetId].map {
+                    $0.isPreexisting && !keepsBackup(plan.resolvedConflicts[targetId])
+                } == true
+            switch existing {
+            case .some(let existing) where existing == restored:
+                outcomes[.savedLibraryThumbnails]?.skipped += 1
+            case .some(let existing) where keepsLocal && existing.isPortable(coverUrl: item.coverUrl):
+                outcomes[.savedLibraryThumbnails]?.preservedLocal += 1
+            case .some:
+                try restored.update(db)
+                outcomes[.savedLibraryThumbnails]?.replaced += 1
+            case .none:
+                try restored.insert(db)
+                outcomes[.savedLibraryThumbnails]?.inserted += 1
+            }
+        }
+    }
+
     private func restoreHistory(
         _ plan: RestorePlan,
         db: Database,
@@ -1466,12 +1531,19 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                 outcomes[.scalarAppPreferences]?.inserted += 1
             }
         }
+        // A backup made before the network preferences existed carries none. Derive them from the restored
+        // image preload in this same transaction, so the stored catalog is never left incomplete and a default
+        // never takes the place of a derived value.
+        // Represented-empty wipe restores remain empty; there is no legacy configuration to migrate.
+        if try AppPreference.fetchCount(db) > 0 {
+            try NetworkPreferenceMigration.insertMissing(in: db)
+        }
         // A wipe leaves no local value to keep, and the catalog must stay complete for the next export:
-        // an entry an older backup never carried gets its canonical default, as launch would write it.
+        // any other optional entry an older backup never carried gets its canonical default, as launch
+        // would write it.
         if plan.mode == .wipe, plan.backup.metadata != nil, !plan.backup.preferences.isEmpty {
-            let carried = Set(plan.backup.preferences.map(\.key))
-            for entry in AppPreferenceCatalogEntry.allCases
-            where !entry.isRequiredInBackups && !carried.contains(entry.rawValue) {
+            for entry in AppPreferenceCatalogEntry.allCases where entry.isOptionalInBackupCatalog {
+                guard try AppPreference.fetchOne(db, key: entry.rawValue) == nil else { continue }
                 try AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON).insert(db)
             }
         }

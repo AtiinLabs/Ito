@@ -35,6 +35,8 @@ final class MangaPageLoaderFake: MangaPageLoading {
     private(set) var requestedEntries: [MediaEntry] = []
     private var pending: [Pending] = []
     private var pendingWaiters: [(String, Int, CheckedContinuation<Void, Never>)] = []
+    private var completedRequestCount = 0
+    private var completionWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
     /// The operation of each page request, in order.
     private(set) var operations: [PluginNetworkOperation] = []
     func enqueue(_ response: Response, for chapterKey: String) {
@@ -45,6 +47,12 @@ final class MangaPageLoaderFake: MangaPageLoading {
         operations.append(operation)
         requestedEntries.append(entry)
         requestedChapterKeys.append(chapter.key)
+        defer {
+            completedRequestCount += 1
+            let satisfied = completionWaiters.filter { completedRequestCount >= $0.0 }
+            completionWaiters.removeAll { completedRequestCount >= $0.0 }
+            satisfied.forEach { $0.1.resume() }
+        }
         let response = responses[chapter.key]?.isEmpty == false
             ? responses[chapter.key]?.removeFirst()
             : .pages([])
@@ -79,6 +87,14 @@ final class MangaPageLoaderFake: MangaPageLoading {
 
     func pendingCount(for chapterKey: String) -> Int {
         pending.filter { $0.chapterKey == chapterKey }.count
+    }
+
+    /// Waits until the loader call has returned, including a resumed suspended call.
+    func waitForCompletedCallCount(_ count: Int) async {
+        guard completedRequestCount < count else { return }
+        await withCheckedContinuation { continuation in
+            completionWaiters.append((count, continuation))
+        }
     }
 
     func resolveFirst(
@@ -244,6 +260,21 @@ final class MangaReaderSettingsFake: MangaReaderSettingsAccessing {
         askBeforeSwitchingGroups = value
     }
     var mangaReaderPreloadImageCount: Int
+    /// Deliberately has no change publisher: tests revoke before the queued UI invalidation can run.
+    var policyPath = NetworkPathSnapshot(status: .satisfied) {
+        didSet { pathGeneration += 1 }
+    }
+    private var pathGeneration: UInt64 = 0
+    var mangaReaderPrefetchEpoch: NetworkPrefetchEpoch {
+        .init(speculativeRevision: UInt64(mangaReaderPreloadImageCount), pathGeneration: pathGeneration)
+    }
+    private var effective: NetworkEffectiveProjection {
+        var configuration = NetworkPolicyConfiguration.defaults
+        configuration.preloadImageCount = mangaReaderPreloadImageCount
+        return NetworkPolicy.projection(configuration: configuration, path: policyPath)
+    }
+    var mangaReaderEffectivePreloadImageCount: Int { effective.imagePreloadCount }
+    var mangaReaderAdjacentPrefetchCount: Int { effective.adjacentChapterPrefetch }
     var error: (any Error)?
     private(set) var writtenValues: [Int] = []
 

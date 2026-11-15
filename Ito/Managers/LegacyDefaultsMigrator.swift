@@ -943,6 +943,9 @@ public final class LegacyDefaultsMigrator: @unchecked Sendable {
 
     private func materializeMissingScalarDefaults() throws {
         try dbPool.write { db in
+            // The network preferences are derived from the adopted values first, in this same transaction, so
+            // the generic default below never takes the place of a value derived from a stored preload of zero.
+            try NetworkPreferenceMigration.insertMissing(in: db)
             for entry in AppPreferenceCatalogEntry.allCases {
                 if try AppPreference.fetchOne(db, key: entry.rawValue) == nil {
                     try db.execute(
@@ -1235,7 +1238,7 @@ private enum StandardSource: Equatable {
     static let orderedSources: [Self] = [
         .library, .libraryBackup, .history, .readKeys, .readNumbers, .lastRead,
         .multiTrackerMappings, .legacyTrackerMappings, .badges, .repositories, .aliases
-    ] + AppPreferenceCatalogEntry.allCases.map(Self.scalar)
+    ] + AppPreferenceCatalogEntry.allCases.filter(\.hasLegacyDefaultsSource).map(Self.scalar)
 
     var key: String {
         switch self {

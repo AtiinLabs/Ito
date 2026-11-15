@@ -342,6 +342,65 @@ struct UpdateRunTests {
         #expect(manager.totalBadgeCount == 0)
     }
 
+    @Test func aLowDataPathRefusesAutomaticChecks() async throws {
+        let source = FakeLibraryUpdateSource(installedPluginIDs: ["p"])
+        let path = ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied, isConstrained: true))
+        let (database, manager, _) = try await makeObservedManager(
+            items: [Self.item("a", plugin: "p")], source: source, clock: TestClock(start), path: path, wifiOnly: false
+        )
+        defer { database.cleanup() }
+
+        let updated = await manager.checkForUpdatesInBackground()
+
+        #expect(updated.isEmpty)
+        #expect(source.checkedItemIDs.isEmpty)
+        #expect(!manager.isRefreshing)
+    }
+
+    @Test func anUnreportedPathIsAwaitedBeforeAutomaticChecksDecide() async throws {
+        let source = FakeLibraryUpdateSource(installedPluginIDs: ["p"])
+        let path = ManualNetworkPathObserver(initial: .unknown)
+        let (database, manager, _) = try await makeObservedManager(
+            items: [Self.item("a", plugin: "p")], source: source, clock: TestClock(start), path: path, wifiOnly: true
+        )
+        defer { database.cleanup() }
+
+        let run = Task { await manager.checkForUpdatesInBackground() }
+        path.set(NetworkPathSnapshot(status: .satisfied))
+        _ = await run.value
+
+        #expect(source.checkedItemIDs == ["a"])
+    }
+
+    @Test func wifiOnlyRefusesAnExpensivePathForAutomaticChecks() async throws {
+        let source = FakeLibraryUpdateSource(installedPluginIDs: ["p"])
+        let path = ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied, isExpensive: true))
+        let (database, manager, _) = try await makeObservedManager(
+            items: [Self.item("a", plugin: "p")], source: source, clock: TestClock(start), path: path, wifiOnly: true
+        )
+        defer { database.cleanup() }
+
+        _ = await manager.checkForUpdatesInBackground()
+
+        #expect(source.checkedItemIDs.isEmpty)
+    }
+
+    @Test func theWifiOnlyConditionIsReadAgainBeforeEachSeries() async throws {
+        let source = FakeLibraryUpdateSource(installedPluginIDs: ["p"])
+        let path = ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied))
+        let (database, manager, _) = try await makeObservedManager(
+            items: [Self.item("a", plugin: "p"), Self.item("b", plugin: "p")],
+            source: source, clock: TestClock(start), path: path, wifiOnly: true
+        )
+        defer { database.cleanup() }
+        // The path turns expensive while the first series is being checked.
+        source.onCheck = { path.set(NetworkPathSnapshot(status: .satisfied, isExpensive: true)) }
+
+        _ = await manager.checkForUpdatesInBackground()
+
+        #expect(source.checkedItemIDs == ["a"])
+    }
+
     // MARK: Helpers
 
     private func makeManager(
@@ -359,7 +418,7 @@ struct UpdateRunTests {
                 try item.insert(db)
             }
         }
-        let settings = AppSettingsStore(dbPool: database.dbPool)
+        let settings = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         try await settings.reload()
         try await settings.set(skipCompleted, for: AppPreferenceCatalog.skipCompleted)
         try await settings.set(wifiOnly, for: AppPreferenceCatalog.wifiOnlyUpdates)
@@ -373,6 +432,34 @@ struct UpdateRunTests {
         if configureSettings {
             manager.configure(settingsStore: settings)
         }
+        return (database, manager, settings)
+    }
+
+    /// A store whose policy observes `path`, so automatic checks read the same path the policy does.
+    private func makeObservedManager(
+        items: [LibraryItem],
+        source: FakeLibraryUpdateSource,
+        clock: TestClock,
+        path: ManualNetworkPathObserver,
+        wifiOnly: Bool
+    ) async throws -> (TestDatabase, UpdateManager, AppSettingsStore) {
+        let database = try TestDatabase()
+        try await database.dbPool.write { db in
+            for item in items {
+                try item.insert(db)
+            }
+        }
+        let settings = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter(path: path))
+        try await settings.reload()
+        try await settings.set(wifiOnly, for: AppPreferenceCatalog.wifiOnlyUpdates)
+        let manager = UpdateManager(
+            dbPool: database.dbPool,
+            updateSource: source,
+            networkConditions: FakeNetworkConditions(isUnmetered: true),
+            sourcePacingNanoseconds: 0,
+            now: { clock.date }
+        )
+        manager.configure(settingsStore: settings)
         return (database, manager, settings)
     }
 

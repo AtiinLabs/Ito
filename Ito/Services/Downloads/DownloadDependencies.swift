@@ -78,6 +78,8 @@ struct DownloadStack {
             store: store,
             coordinator: coordinator,
             progress: progress,
+            contexts: pluginSettings.networkContexts,
+            observedPath: { path.current },
             captureEpoch: { pluginID in try completion.captureScopeEpoch(pluginID: pluginID) }
         )
         center.startObserving(scheduling: DelayedMainActorValueObservationScheduler.mainActor)

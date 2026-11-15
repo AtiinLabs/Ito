@@ -253,7 +253,7 @@ struct DownloadsManagerRaceTests {
         let media = TestDownloadsOverview.media("a")
         service.summaries = [OfflineInventorySummary(media: media, state: .verified, count: 1, byteCount: 20)]
         service.failedSeries = [media]
-        let model = StorageSettingsViewModel(settingsStore: AppSettingsStore(dbPool: database.dbPool),
+        let model = StorageSettingsViewModel(settingsStore: AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
                                              storageAccess: TestSettingsStorageAccess(), downloads: service)
         let old = Task { await model.refreshDownloadsUsage() }
         await service.inventoryGate.arrived()
@@ -277,7 +277,7 @@ struct DownloadsManagerRaceTests {
         service.gateInventory = true
         service.summaries = [OfflineInventorySummary(media: TestDownloadsOverview.media("a"),
                                                     state: .verified, count: 1, byteCount: 30)]
-        let model = StorageSettingsViewModel(settingsStore: AppSettingsStore(dbPool: database.dbPool),
+        let model = StorageSettingsViewModel(settingsStore: AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
                                              storageAccess: TestSettingsStorageAccess(), downloads: service)
         let old = Task { await model.refreshDownloadsUsage() }
         await service.inventoryGate.arrived()
@@ -296,7 +296,7 @@ struct DownloadsManagerRaceTests {
         let media = TestDownloadsOverview.media("a")
         service.summaries = [OfflineInventorySummary(media: media, state: .verified, count: 1, byteCount: 20)]
         service.failedSeries = [media]
-        let model = StorageSettingsViewModel(settingsStore: AppSettingsStore(dbPool: database.dbPool),
+        let model = StorageSettingsViewModel(settingsStore: AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
                                              storageAccess: TestSettingsStorageAccess(), downloads: service)
         await model.clearDownloads()
         let outcome = try #require(model.downloadsMessage)
@@ -324,7 +324,7 @@ struct DownloadsManagerRaceTests {
         service.gateInventory = true
         let media = TestDownloadsOverview.media("a")
         service.summaries = [OfflineInventorySummary(media: media, state: .verified, count: 1, byteCount: 20)]
-        let model = StorageSettingsViewModel(settingsStore: AppSettingsStore(dbPool: database.dbPool),
+        let model = StorageSettingsViewModel(settingsStore: AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter()),
                                              storageAccess: TestSettingsStorageAccess(), downloads: service)
         let clear = Task { await model.clearDownloads() }
         await service.inventoryGate.arrived()

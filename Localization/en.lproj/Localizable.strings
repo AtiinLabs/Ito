@@ -76,12 +76,21 @@
 
 "Adds this series to the list" = "Adds this series to the list";
 
+/* Number of neighbor manga chapter manifests to prefetch */
+"Adjacent Chapters" = "Adjacent Chapters";
+
+/* Explains effective restriction without changing configured adjacent amount */
+"Adjacent prefetch is off while Image Preload is off." = "Adjacent prefetch is off while Image Preload is off.";
+
 /* Filter chip: show every list
 History filter: every kind of media */
 "All" = "All";
 
 /* Download menu item: download every chapter, including those already read. */
 "All Chapters" = "All Chapters";
+
+/* Library filter: every series in the Library, whether or not any of its chapters is saved. */
+"All Series" = "All Series";
 
 /* Download menu item: download every unread chapter. */
 "All Unread Chapters" = "All Unread Chapters";
@@ -92,6 +101,9 @@ History filter: every kind of media */
 "All sources resolved" = "All sources resolved";
 
 "All-Time Popular" = "All-Time Popular";
+
+/* Download mode permitting cellular and hotspots */
+"Allow Metered Networks" = "Allow Metered Networks";
 
 "Already added" = "Already added";
 
@@ -138,6 +150,9 @@ History: kind of media */
 
 "Ask on Discord" = "Ask on Discord";
 
+/* Download mode requiring batch confirmation on cellular */
+"Ask on Metered Networks" = "Ask on Metered Networks";
+
 /* Audio track button when no track is selected */
 "Audio" = "Audio";
 
@@ -159,6 +174,9 @@ History: kind of media */
 "Automatically fetch and append the next chapter as you approach the end of the current one." = "Automatically fetch and append the next chapter as you approach the end of the current one.";
 
 "Available Plugins" = "Available Plugins";
+
+/* Effective network policy status */
+"Available on this network" = "Available on this network";
 
 "Back" = "Back";
 
@@ -492,6 +510,9 @@ Confirm permanent deletion of selected downloads */
 /* Chapter menu: save this chapter for offline reading */
 "Download" = "Download";
 
+/* Configured bulk download network mode */
+"Download Network" = "Download Network";
+
 /* Advanced action: download every exact upload, including multiple translations of one chapter. */
 "Download all editions" = "Download all editions";
 
@@ -585,6 +606,9 @@ Storage settings offline downloads section */
 
 "Enter values between %@ and %@, with minimum no greater than maximum." = "Enter values between %1$@ and %2$@, with minimum no greater than maximum.";
 
+/* Library filter: series whose every chapter is saved on this device, and the source recently confirmed its chapter list is complete. */
+"Entire Series Offline" = "Entire Series Offline";
+
 /* Series details: every chapter of the series is saved on this device, and the source confirmed its chapter list is complete. */
 "Entire series offline" = "Entire series offline";
 
@@ -669,6 +693,9 @@ History: an episode without a title */
 /* History: filter button */
 "Filter" = "Filter";
 
+/* More Options menu: submenu that filters the Library by saved chapters. */
+"Filter Library" = "Filter Library";
+
 "Filtered" = "Filtered";
 
 /* Filter button */
@@ -712,6 +739,9 @@ Downloaded versions sheet: the source's identifier of a translation group. The p
 
 "HTTPS to HTTP redirect downgrades are prohibited." = "HTTPS to HTTP redirect downgrades are prohibited.";
 
+/* Library filter: series with at least one chapter saved on this device. */
+"Has Saved Chapters" = "Has Saved Chapters";
+
 /* Series status: paused */
 "Hiatus" = "Hiatus";
 
@@ -743,6 +773,9 @@ Downloaded versions sheet: the source's identifier of a translation group. The p
 "Illustration" = "Illustration";
 
 "Image & Network Cache" = "Image & Network Cache";
+
+/* Configured number of speculative reader images */
+"Image Preload" = "Image Preload";
 
 "Import" = "Import";
 
@@ -1040,10 +1073,16 @@ Manga format */
 
 "Next Chapter" = "Next Chapter";
 
+/* Adjacent chapter prefetch picker value: only the following chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch. */
+"Next Chapter Only" = "Next Chapter Only";
+
 "Next Page" = "Next Page";
 
 /* Download menu item: download the next unread chapter. */
 "Next Unread Chapter" = "Next Unread Chapter";
+
+/* Adjacent chapter prefetch: the following and the preceding chapter are prefetched */
+"Next and Previous" = "Next and Previous";
 
 /* Reader boundary: the next chapter belongs to a different translation group; tapping asks to open that one upload */
 "Next chapter is from another group. Tap to continue" = "Next chapter is from another group. Tap to continue";
@@ -1060,6 +1099,9 @@ Manga format */
 /* Reader: the next chapter is text; go back to the series to open it */
 "Next chapter opens in the text reader" = "Next chapter opens in the text reader";
 
+/* Adjacent chapter prefetch picker value: no neighbouring chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch. */
+"No Adjacent Chapters" = "No Adjacent Chapters";
+
 "No History" = "No History";
 
 /* Source match: no match found */
@@ -1070,6 +1112,9 @@ Manga format */
 "No Repositories" = "No Repositories";
 
 "No Results" = "No Results";
+
+/* Library filter: series with no chapter saved on this device. Series whose downloads are only queued, damaged or failed count here. */
+"No Saved Chapters" = "No Saved Chapters";
 
 "No Trackers Authenticated" = "No Trackers Authenticated";
 
@@ -1122,6 +1167,12 @@ Scanlator choice: the chapters whose source names no scanlator. */
 "No results found." = "No results found.";
 
 "No results found. Try again." = "No results found. Try again.";
+
+/* Library: shown when the saved-chapter filter matches no series and the search is empty. */
+"No series match this filter." = "No series match this filter.";
+
+/* Library: shown when the search text and the saved-chapter filter together match no series. */
+"No series match this search and filter." = "No series match this search and filter.";
 
 /* Distinguishes an ID-less source group from a same-label group with an ID. */
 "No source ID" = "No source ID";
@@ -1271,6 +1322,9 @@ History: the page a chapter was left on */
 /* Chapter download status: the queue came from a restored backup. Retry to download again. */
 "Paused after a restore" = "Paused after a restore";
 
+/* Effective network policy refusal */
+"Paused by Low Data Mode" = "Paused by Low Data Mode";
+
 /* Chapter download status: downloads run only while the app is open */
 "Paused in the background" = "Paused in the background";
 
@@ -1320,6 +1374,9 @@ History: the page a chapter was left on */
 /* Series details: the group chosen for this series has no chapters in the source's current list, so nothing was queued. Does not claim the group stopped publishing. */
 "Preferred group not listed" = "Preferred group not listed";
 
+/* Configured speculative novel chapter loading */
+"Prefetch Novel Chapters" = "Prefetch Novel Chapters";
+
 "Preload Images" = "Preload Images";
 
 "Preloading" = "Preloading";
@@ -1350,6 +1407,9 @@ History: the page a chapter was left on */
 
 "Progress" = "Progress";
 
+/* Queues downloads without cellular permission */
+"Queue and Wait for Wi-Fi" = "Queue and Wait for Wi-Fi";
+
 /* Chapter download status: waiting for its turn */
 "Queued" = "Queued";
 
@@ -1373,6 +1433,9 @@ History: the page a chapter was left on */
 "Read with Plugins" = "Read with Plugins";
 
 "Read/Watched" = "Read/Watched";
+
+/* Network settings section for speculative reader work */
+"Reader Prefetch" = "Reader Prefetch";
 
 "Reader Settings" = "Reader Settings";
 
@@ -1486,11 +1549,20 @@ History: the page a chapter was left on */
 
 "Requires a newer Ito" = "Requires a newer Ito";
 
+/* Metered download consent is batch-scoped */
+"Requires confirmation for each batch" = "Requires confirmation for each batch";
+
 "Requires v%@" = "Requires v%@";
 
 "Reset" = "Reset";
 
 "Reset Filters" = "Reset Filters";
+
+/* Resets only five network and reader prefetch preferences */
+"Reset Network and Prefetch Settings" = "Reset Network and Prefetch Settings";
+
+/* Confirmation of scoped settings reset */
+"Reset Network and Prefetch Settings?" = "Reset Network and Prefetch Settings?";
 
 "Resolve Conflicting Data" = "Resolve Conflicting Data";
 
@@ -1507,6 +1579,9 @@ History: the page a chapter was left on */
 "Restore from Backup" = "Restore from Backup";
 
 "Restore report was already acknowledged." = "Restore report was already acknowledged.";
+
+/* Exact scope of network settings reset */
+"Restores network and prefetch defaults only. Credentials, cookies, site data and reading state are kept." = "Restores network and prefetch defaults only. Credentials, cookies, site data and reading state are kept.";
 
 "Resume" = "Resume";
 
@@ -1567,6 +1642,9 @@ Downloads queue: retry a failed or paused job */
 
 /* Downloaded versions sheet: offline storage is not available */
 "Saved copies aren't available on this device." = "Saved copies aren't available on this device.";
+
+/* Backup restore report: the component containing bounded cover images saved with library items. */
+"Saved cover thumbnails" = "Saved cover thumbnails";
 
 "Saved credentials are currently unavailable." = "Saved credentials are currently unavailable.";
 
@@ -1828,6 +1906,9 @@ Downloads queue: retry a failed or paused job */
 "Status" = "Status";
 
 "Still in library" = "Still in library";
+
+/* Series details: a download was tapped while an earlier download request was still being queued, so nothing was queued for the new one. */
+"Still queuing downloads" = "Still queuing downloads";
 
 "Stop Tracking" = "Stop Tracking";
 
@@ -2096,6 +2177,9 @@ Reading font: the system font */
 
 "This action is unsupported by the source." = "This action is unsupported by the source.";
 
+/* Scope of temporary metered download permission */
+"This batch may use cellular data or a personal hotspot while the app stays in the foreground. Other downloads and prefetching are not approved." = "This batch may use cellular data or a personal hotspot while the app stays in the foreground. Other downloads and prefetching are not approved.";
+
 /* Series details: the chapter is locked, or its source can't be saved for offline reading. */
 "This chapter can't be downloaded." = "This chapter can't be downloaded.";
 
@@ -2277,6 +2361,9 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 
 "Unmatched Sources" = "Unmatched Sources";
 
+/* Download mode that avoids cellular and hotspots */
+"Unmetered Only" = "Unmetered Only";
+
 /* Downloaded versions sheet: the source gave this upload a group identifier but no name
 Reader consent: shown in place of the group name when the source supplies none */
 "Unnamed group" = "Unnamed group";
@@ -2317,6 +2404,12 @@ Reader consent: shown in place of the group name when the source supplies none *
 /* Downloaded versions sheet: the source's exact key for one upload. The placeholder is that key, shown as the source wrote it. */
 "Upload %@" = "Upload %@";
 
+/* Grants cellular permission only to this exact download batch */
+"Use Metered Data for This Batch" = "Use Metered Data for This Batch";
+
+/* Confirmation for one download batch on cellular or a hotspot */
+"Use Metered Data?" = "Use Metered Data?";
+
 /* Button on the scanlator sheet: apply the choice and continue with the download. */
 "Use Selection" = "Use Selection";
 
@@ -2350,11 +2443,21 @@ Reader consent: shown in place of the group name when the source supplies none *
 /* History: volume and chapter title */
 "Vol. %@ · %@" = "Vol. %1$@ · %2$@";
 
+/* Series details: detail asking the user to repeat a download that was not queued because an earlier request was still being queued. */
+"Wait a moment, then download this again." = "Wait a moment, then download this again.";
+
 /* Chapter download status: downloads do not use cellular or other metered networks */
 "Waiting for Wi-Fi" = "Waiting for Wi-Fi";
 
-/* Chapter download status */
+/* Chapter download status
+Effective network policy refusal */
 "Waiting for a connection" = "Waiting for a connection";
+
+/* No path observation yet */
+"Waiting for a network reading" = "Waiting for a network reading";
+
+/* Effective network policy refusal */
+"Waiting for an unmetered network" = "Waiting for an unmetered network";
 
 /* Chapter download status */
 "Waiting for free storage" = "Waiting for free storage";

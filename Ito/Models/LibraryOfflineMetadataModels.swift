@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import ImageIO
 import ito_runner
 
 /// Which chapters a source's catalog covers. The cases and their order match the runner's catalog scope, so
@@ -135,22 +136,46 @@ extension LibrarySnapshotStateRecord {
 }
 
 /// A durable cover kept with a Library item, captured from the cover the Library card already displayed.
-nonisolated struct LibraryCoverThumbnailRecord: Codable, Equatable, Sendable, FetchableRecord, PersistableRecord {
-    static let databaseTableName = "libraryCoverThumbnail"
+public nonisolated struct LibraryCoverThumbnailRecord: Codable, Equatable, Sendable, FetchableRecord, PersistableRecord {
+    public static let databaseTableName = "libraryCoverThumbnail"
 
     /// The largest encoded thumbnail the table accepts.
-    static let maximumByteCount = 262_144
+    public static let maximumByteCount = 262_144
     /// The largest pixel size the table accepts.
-    static let maximumPixelWidth = 1024
-    static let maximumPixelHeight = 1536
+    public static let maximumPixelWidth = 1024
+    public static let maximumPixelHeight = 1536
+    /// The most thumbnail bytes one backup carries. Thumbnails past it stay behind and are made again from
+    /// their cover address, so a large Library never makes a backup fail.
+    public static let maximumPortableAggregateByteCount = 16 * 1_024 * 1_024
 
-    var libraryItemId: String
+    public var libraryItemId: String
     /// SHA-256 hex digest of the cover address the image was displayed for.
-    var coverURLSHA256: String
-    var imageData: Data
-    var pixelWidth: Int
-    var pixelHeight: Int
-    var storedAt: Date
+    public var coverURLSHA256: String
+    public var imageData: Data
+    public var pixelWidth: Int
+    public var pixelHeight: Int
+    public var storedAt: Date
+
+    /// Whether this is a well-formed JPEG within the table's limits, made for the cover address `coverUrl` of
+    /// the item it belongs to. Only such thumbnails leave an installation in a backup or enter one from it.
+    func isPortable(coverUrl: String?) -> Bool {
+        guard let coverUrl,
+              coverURLSHA256 == LibraryCoverThumbnailStore.coverHash(coverUrl),
+              (1...Self.maximumByteCount).contains(imageData.count),
+              (1...Self.maximumPixelWidth).contains(pixelWidth),
+              (1...Self.maximumPixelHeight).contains(pixelHeight),
+              let source = CGImageSourceCreateWithData(imageData as CFData, nil),
+              CGImageSourceGetType(source) == "public.jpeg" as CFString,
+              CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete,
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              properties[kCGImagePropertyPixelWidth] as? Int == pixelWidth,
+              properties[kCGImagePropertyPixelHeight] as? Int == pixelHeight,
+              let decoded = CGImageSourceCreateImageAtIndex(
+                source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+              )
+        else { return false }
+        return decoded.width == pixelWidth && decoded.height == pixelHeight
+    }
 }
 
 /// Names the saved details a detail load started from. A refresh may replace them only while they are still
@@ -169,4 +194,24 @@ nonisolated enum LibrarySnapshotReplaceOutcome: Equatable, Sendable {
     case stale
     /// The refreshed list has no chapters, so it is not evidence about the series and nothing is saved.
     case rejectedIncomplete
+}
+
+/// What the Library needs from the two small proof tables to judge "entire series offline". It is read in an
+/// observation of its own, so a refresh that changes only its time, or a policy change, never refetches a payload.
+nonisolated struct LibraryOfflineProofSnapshot: Equatable, Sendable {
+    enum Availability: Equatable, Sendable {
+        case loading
+        case available
+        case unavailable
+    }
+
+    let availability: Availability
+    /// The freshness record of each saved series, one per series.
+    let states: [MediaIdentity: LibrarySnapshotStateRecord]
+    /// The raw remembered edition choice of each series. A choice is judged by its reader, never here, so
+    /// bytes this build cannot read stay bytes and fail closed there.
+    let preferences: [MediaIdentity: Data]
+
+    static let loading = LibraryOfflineProofSnapshot(availability: .loading, states: [:], preferences: [:])
+    static let unavailable = LibraryOfflineProofSnapshot(availability: .unavailable, states: [:], preferences: [:])
 }

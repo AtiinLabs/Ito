@@ -616,7 +616,7 @@ final class LibraryViewModelTests: XCTestCase {
     }
 }
 
-private struct LibrarySubject {
+struct LibrarySubject {
     let viewModel: LibraryViewModel
     let library: FakeLibraryRoot
     let layout: FakeLibraryLayout
@@ -633,7 +633,7 @@ private enum TestFailure: Error {
 }
 
 @MainActor
-private final class FakeLibraryRoot: LibraryRootServing {
+final class FakeLibraryRoot: LibraryRootServing {
     struct RemoveRequest: Equatable {
         let itemID: String
         let pluginID: String
@@ -670,7 +670,7 @@ private final class FakeLibraryRoot: LibraryRootServing {
 }
 
 @MainActor
-private final class FakeLibraryLayout: LibraryLayoutPersisting {
+final class FakeLibraryLayout: LibraryLayoutPersisting {
     private let subject: CurrentValueSubject<Int, Never>
     private(set) var requests: [Int] = []
     private var continuations: [CheckedContinuation<Void, Error>] = []
@@ -703,7 +703,7 @@ private final class FakeLibraryLayout: LibraryLayoutPersisting {
 }
 
 @MainActor
-private final class FakeLibraryUpdates: LibraryUpdateServing {
+final class FakeLibraryUpdates: LibraryUpdateServing {
     private let subject = CurrentValueSubject<LibraryUpdateSnapshot, Never>(
         LibraryUpdateSnapshot(isRefreshing: false, current: 0, total: 0, badgeCounts: [:])
     )
@@ -754,7 +754,7 @@ private final class FakeLibraryUpdates: LibraryUpdateServing {
 }
 
 @MainActor
-private final class FakeLibraryExport: LibraryExportServing {
+final class FakeLibraryExport: LibraryExportServing {
     private(set) var requests = 0
     private var continuations: [CheckedContinuation<LibraryExportArtifact, Error>] = []
 
@@ -771,7 +771,7 @@ private final class FakeLibraryExport: LibraryExportServing {
 }
 
 @MainActor
-private final class FakeLibraryDiscord: LibraryDiscordPresenting {
+final class FakeLibraryDiscord: LibraryDiscordPresenting {
     private(set) var calls: [String?] = []
 
     func presentLibrary(categoryName: String?) {
@@ -780,7 +780,7 @@ private final class FakeLibraryDiscord: LibraryDiscordPresenting {
 }
 
 @MainActor
-private final class FakeLibraryPlugins: LibraryPluginServing {
+final class FakeLibraryPlugins: LibraryPluginServing {
     private let subject = CurrentValueSubject<LibraryPluginSnapshot, Never>(
         LibraryPluginSnapshot(publicationRevision: 0, plugins: [:])
     )
@@ -801,7 +801,7 @@ private final class FakeLibraryPlugins: LibraryPluginServing {
 }
 
 @MainActor
-private final class FakeDeferredInstaller: DeferredPluginInstalling {
+final class FakeDeferredInstaller: DeferredPluginInstalling {
     func findPackage(forExactPluginID pluginID: String) async throws
         -> DeferredPluginPackageCandidate? {
         _ = pluginID
@@ -814,7 +814,7 @@ private final class FakeDeferredInstaller: DeferredPluginInstalling {
 }
 
 @MainActor
-private final class FakeDeferredDecoder: DeferredPluginPayloadDecoding {
+final class FakeDeferredDecoder: DeferredPluginPayloadDecoding {
     func decode(_ item: Ito.LibraryItem) async throws -> DeferredPluginMedia {
         _ = item
         throw TestFailure.expected
@@ -822,7 +822,7 @@ private final class FakeDeferredDecoder: DeferredPluginPayloadDecoding {
 }
 
 @MainActor
-private final class FakeLibraryMessages: LibraryMessagePresenting {
+final class FakeLibraryMessages: LibraryMessagePresenting {
     private(set) var messages: [LibraryMessage] = []
 
     func present(_ message: LibraryMessage) {

@@ -61,7 +61,7 @@ final class MangaReaderDependencyBoundaryTests: XCTestCase {
         )
         let factory = MediaDetailReaderViewFactory(
             mangaReaderDependencies: dependencies,
-            networkContexts: PluginNetworkContexts()
+            networkContexts: PluginNetworkContexts(policy: NetworkPolicyCenter())
         )
         let runner = ItoRunner()
 
@@ -131,10 +131,10 @@ final class MangaReaderDependencyBoundaryTests: XCTestCase {
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: defaults
         )
-        let settings = AppSettingsStore(dbPool: database.dbPool)
+        let settings = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         let discord = DiscordRPCManager(libraryManager: library)
         let plugin = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool)
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         )
         let logger = PresentationEventCaptureSpy()
 
