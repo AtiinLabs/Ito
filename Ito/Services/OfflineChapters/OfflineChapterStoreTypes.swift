@@ -137,6 +137,7 @@ nonisolated struct OfflineReconcileDetails: Equatable, Sendable {
     var removedTrashItems = 0
     var reclaimedVersions = 0
     var removedOrphanBatches = 0
+    var removedOwnerlessJobs = 0
 }
 
 /// What a garbage-collection pass removed.

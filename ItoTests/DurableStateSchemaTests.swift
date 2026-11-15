@@ -126,6 +126,54 @@ struct DurableStateSchemaTests {
                 primaryKey: ["jobId"],
                 nullable: ["expectedRevision", "targetRevision"]
             ),
+            "downloadJobOwner": .init(
+                columns: [
+                    "jobId", "ownerKind", "manualRequestId", "subscriptionId", "subscriptionIncarnation", "eventId",
+                    "attachedAt"
+                ],
+                primaryKey: [],
+                nullable: ["manualRequestId", "subscriptionId", "subscriptionIncarnation", "eventId"]
+            ),
+            "seriesSubscription": .init(
+                columns: [
+                    "id", "pluginId", "mediaKind", "canonicalMediaId", "state", "pauseReason", "mode", "windowSize",
+                    "perRunPositionCap", "selection", "replacementRule", "incarnation", "configGeneration",
+                    "nextCheckTicket", "lastAttemptAt", "lastAttemptOutcome", "lastSuccessAt", "createdAt", "updatedAt"
+                ],
+                primaryKey: ["id"],
+                nullable: ["pauseReason", "windowSize", "lastAttemptAt", "lastAttemptOutcome", "lastSuccessAt"]
+            ),
+            "subscriptionBaseline": .init(
+                columns: [
+                    "subscriptionId", "incarnation", "revision", "acceptedTicket", "scopeGeneration", "acquisition",
+                    "sourceEpoch", "pluginVersion", "chapterABI", "catalogScope", "catalogDigest", "rowCount",
+                    "orderConfidence", "highWaterKind", "highWaterValue", "maxDateUpdated", "tombstonesTruncated",
+                    "entrySnapshot", "acceptedAt"
+                ],
+                primaryKey: ["subscriptionId"],
+                nullable: ["highWaterKind", "highWaterValue", "maxDateUpdated"]
+            ),
+            "subscriptionSeenKey": .init(
+                columns: [
+                    "subscriptionId", "chapterKey", "positionKind", "positionValue", "lastRevision",
+                    "presentInAccepted", "acceptedRank", "firstSeenScopeGeneration", "firstSeenAt"
+                ],
+                primaryKey: ["subscriptionId", "chapterKey"],
+                nullable: ["lastRevision", "acceptedRank"]
+            ),
+            "subscriptionEvent": .init(
+                columns: [
+                    "id", "subscriptionId", "incarnation", "kind", "identityKind", "identityValue", "qualifier",
+                    "decision", "pendingReason", "reviewReason", "candidateKeys", "candidateRevision", "approvedKeys",
+                    "decidedKeys", "previousRevision", "targetRevision", "ordinal", "observedCatalogDigest",
+                    "configGeneration", "scopeGeneration", "createdAt", "decidedAt"
+                ],
+                primaryKey: ["id"],
+                nullable: [
+                    "qualifier", "pendingReason", "reviewReason", "approvedKeys", "decidedKeys", "previousRevision",
+                    "targetRevision", "decidedAt"
+                ]
+            ),
             "downloadBatch": .init(
                 columns: [
                     "id", "pluginId", "mediaKind", "canonicalMediaId", "preset", "windowKind", "positionCount",
@@ -1017,6 +1065,8 @@ struct AppPreferenceCatalogTests {
             .init(entry: .autoSyncTrackersToLocal, source: .booleanNSNumber, defaultJSON: "true", accepted: [NSNumber(value: false), NSNumber(value: true)], invalid: boolInvalid),
             .init(entry: .networkDownloadMode, source: .string, defaultJSON: "\"unmeteredOnly\"", accepted: NetworkDownloadMode.allCases.map(\.rawValue), invalid: ["Unknown", "", NSNumber(value: true)]),
             .init(entry: .adjacentChapterPrefetchCount, source: .integerNSNumber, defaultJSON: "2", accepted: [0, 1, 2].map(NSNumber.init(value:)), invalid: [NSNumber(value: -1), NSNumber(value: 3), NSNumber(value: 0.5), NSNumber(value: true)]),
+            .init(entry: .automaticDownloadQueueLimit, source: .integerNSNumber, defaultJSON: "100", accepted: [10, 100, 500].map(NSNumber.init(value:)), invalid: [NSNumber(value: 9), NSNumber(value: 501), NSNumber(value: 0), NSNumber(value: -1), NSNumber(value: 10.5), NSNumber(value: true)]),
+            .init(entry: .automaticDownloadQuotaGiB, source: .integerNSNumber, defaultJSON: "5", accepted: [1, 5, 200].map(NSNumber.init(value:)), invalid: [NSNumber(value: 0), NSNumber(value: 201), NSNumber(value: -1), NSNumber(value: 2.5), NSNumber(value: true)]),
             .init(entry: .diskCacheLimitGB, source: .numericNSNumber, defaultJSON: "10", accepted: [NSNumber(value: 1), NSNumber(value: 50)], invalid: numericInvalid + [NSNumber(value: 0), NSNumber(value: 2.5), NSNumber(value: 51)])
         ]
     }
@@ -1046,6 +1096,8 @@ struct AppPreferenceCatalogTests {
         case .diskCacheLimitGB: AppPreferenceKeys.diskCacheLimitGB
         case .networkDownloadMode: AppPreferenceKeys.networkDownloadMode
         case .adjacentChapterPrefetchCount: AppPreferenceKeys.adjacentChapterPrefetchCount
+        case .automaticDownloadQueueLimit: AppPreferenceKeys.automaticDownloadQueueLimit
+        case .automaticDownloadQuotaGiB: AppPreferenceKeys.automaticDownloadQuotaGiB
         }
     }
 
@@ -1074,6 +1126,8 @@ struct AppPreferenceCatalogTests {
         case .diskCacheLimitGB: try assertRoundTrip(AppPreferenceCatalog.diskCacheLimitGB)
         case .networkDownloadMode: try assertRoundTrip(AppPreferenceCatalog.networkDownloadMode)
         case .adjacentChapterPrefetchCount: try assertRoundTrip(AppPreferenceCatalog.adjacentChapterPrefetchCount)
+        case .automaticDownloadQueueLimit: try assertRoundTrip(AppPreferenceCatalog.automaticDownloadQueueLimit)
+        case .automaticDownloadQuotaGiB: try assertRoundTrip(AppPreferenceCatalog.automaticDownloadQuotaGiB)
         }
     }
 

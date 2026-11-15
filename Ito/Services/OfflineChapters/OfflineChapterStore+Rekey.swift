@@ -47,7 +47,12 @@ extension OfflineChapterStore {
     /// Call `preflightRekey` first. Moving a series onto its own identity changes nothing. Returns the ids
     /// of the deleted jobs.
     @discardableResult
-    nonisolated static func rekeyMedia(in db: Database, from: MediaIdentity, to: MediaIdentity) throws -> [String] {
+    nonisolated static func rekeyMedia(
+        in db: Database,
+        from: MediaIdentity,
+        to: MediaIdentity,
+        now: Date = Date()
+    ) throws -> [String] {
         guard from != to else { return [] }
         let fromArguments: StatementArguments = [from.pluginId, from.mediaKind.rawValue, from.canonicalMediaId]
         let encoder = JSONEncoder()
@@ -125,6 +130,9 @@ extension OfflineChapterStore {
         for batchID in batchIDs {
             try deleteBatchIfOrphaned(batchID, in: db)
         }
+        // The series' automatic rule follows the same rule as its remembered choice: inside one plugin it moves, paused
+        // and without its evidence, and otherwise it is released. Its jobs are already gone with the rest.
+        try rekeySubscription(from: from, to: to, now: now, in: db)
 
         try db.execute(
             sql: "DELETE FROM librarySnapshotState WHERE pluginId = ? AND mediaKind = ? AND canonicalMediaId = ?",

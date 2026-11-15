@@ -23,10 +23,19 @@ final class FakeLibraryUpdateSource: LibraryUpdateSource {
     }
 
     private(set) var operations: [PluginNetworkOperation] = []
+    /// The scope each check was asked to freeze, in order; nil for a check without a subscription ticket.
+    private(set) var frozenScopes: [String?] = []
+    /// The catalog a check returns for an item, as a real source's answer would carry it.
+    var catalogs: [String: Result<CatalogObservation, SubscriptionCheckOutcome>] = [:]
 
-    func fetchUpdate(for item: LibraryItem, operation: PluginNetworkOperation) async throws -> UpdateManager.SuccessfulUpdate {
+    func fetchUpdate(
+        for item: LibraryItem,
+        operation: PluginNetworkOperation,
+        frozenScope: String?
+    ) async throws -> UpdateManager.SuccessfulUpdate {
         checkedItemIDs.append(item.id)
         operations.append(operation)
+        frozenScopes.append(frozenScope)
         onCheck?()
         await gate?.enter()
         if cancelledItemIDs.contains(item.id) { throw CancellationError() }
@@ -36,7 +45,8 @@ final class FakeLibraryUpdateSource: LibraryUpdateSource {
         }
         return UpdateManager.SuccessfulUpdate(
             freshCount: freshCounts[item.id] ?? item.knownChapterCount ?? 0,
-            status: nil
+            status: nil,
+            catalog: frozenScope == nil ? nil : catalogs[item.id]
         )
     }
 }

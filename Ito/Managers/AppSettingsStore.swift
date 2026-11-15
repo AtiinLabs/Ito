@@ -73,6 +73,8 @@ public final class AppSettingsStore: ObservableObject {
     @Published public private(set) var diskCacheLimitGB = AppPreferenceCatalog.diskCacheLimitGB.defaultValue
     @Published public private(set) var networkDownloadMode = AppPreferenceCatalog.networkDownloadMode.defaultValue
     @Published public private(set) var adjacentChapterPrefetchCount = AppPreferenceCatalog.adjacentChapterPrefetchCount.defaultValue
+    @Published public private(set) var automaticDownloadQueueLimit = AppPreferenceCatalog.automaticDownloadQueueLimit.defaultValue
+    @Published public private(set) var automaticDownloadQuotaGiB = AppPreferenceCatalog.automaticDownloadQuotaGiB.defaultValue
     @Published public private(set) var loadIssues: [AppSettingsLoadIssue] = []
 
     private let persistence: any AppSettingsPersistence
@@ -227,10 +229,17 @@ public final class AppSettingsStore: ObservableObject {
         diskCacheLimitGB = snapshot.diskCacheLimitGB
         networkDownloadMode = snapshot.networkDownloadMode
         adjacentChapterPrefetchCount = snapshot.adjacentChapterPrefetchCount
+        automaticDownloadQueueLimit = snapshot.automaticDownloadQueueLimit
+        automaticDownloadQuotaGiB = snapshot.automaticDownloadQuotaGiB
         loadIssues = issues
         // The configuration is published only here, after persistence acknowledged it, so the live policy
         // revision never runs ahead of what is stored.
         networkPolicy.apply(snapshot.networkConfiguration)
+    }
+
+    /// The limits automatic downloads run under, from the two configured scalars.
+    var automaticDownloadLimits: AutomaticDownloadLimits {
+        AutomaticDownloadLimits(queueLimit: automaticDownloadQueueLimit, quotaGiB: automaticDownloadQuotaGiB)
     }
 
     public func setAskBeforeSwitchingGroups(_ value: Bool) async throws {
@@ -266,6 +275,8 @@ private struct AppSettingsSnapshot: Sendable {
     let diskCacheLimitGB: Double
     let networkDownloadMode: NetworkDownloadMode
     let adjacentChapterPrefetchCount: AdjacentChapterPrefetchPreference
+    let automaticDownloadQueueLimit: Int
+    let automaticDownloadQuotaGiB: Int
 
     var networkConfiguration: NetworkPolicyConfiguration {
         NetworkPolicyConfiguration(
@@ -321,7 +332,9 @@ private struct AppSettingsSnapshot: Sendable {
                 autoSyncTrackersToLocal: value(AppPreferenceCatalog.autoSyncTrackersToLocal),
                 diskCacheLimitGB: value(AppPreferenceCatalog.diskCacheLimitGB),
                 networkDownloadMode: value(AppPreferenceCatalog.networkDownloadMode),
-                adjacentChapterPrefetchCount: value(AppPreferenceCatalog.adjacentChapterPrefetchCount)
+                adjacentChapterPrefetchCount: value(AppPreferenceCatalog.adjacentChapterPrefetchCount),
+                automaticDownloadQueueLimit: value(AppPreferenceCatalog.automaticDownloadQueueLimit),
+                automaticDownloadQuotaGiB: value(AppPreferenceCatalog.automaticDownloadQuotaGiB)
             ),
             repairs,
             issues

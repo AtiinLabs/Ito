@@ -37,14 +37,18 @@ struct DownloadStack {
     /// The one writer of custom download presets, observed from the same database as the queue.
     let presets: DownloadPresetStore
 
-    /// - Parameter predecessor: what the worker of a replaced runtime is still finishing.
+    /// - Parameters:
+    ///   - predecessor: what the worker of a replaced runtime is still finishing.
+    ///   - automaticLimits: the queue and disk limits of automatic downloads, read when they are applied; the
+    ///     composition root passes the configured values.
     init(
         store: OfflineChapterStore,
         dbPool: DatabasePool,
         pluginManager: PluginManager,
         pluginSettings: PluginSettingsStore,
         path: any NetworkPathObserving,
-        predecessor: Task<Void, Never>?
+        predecessor: Task<Void, Never>?,
+        automaticLimits: @escaping @Sendable () -> AutomaticDownloadLimits = { .standard }
     ) {
         let progress = DownloadProgressBoard()
         let completion = pluginSettings.completionStore
@@ -73,7 +77,8 @@ struct DownloadStack {
             fetcher: URLSessionAssetFetcher(trust: trust, userAgent: CloudflareManager.defaultUserAgent),
             contexts: pluginSettings.networkContexts,
             progress: progress,
-            predecessor: predecessor
+            predecessor: predecessor,
+            automaticLimits: automaticLimits
         )
         let center = DownloadCenter(
             dbPool: dbPool,
@@ -82,7 +87,8 @@ struct DownloadStack {
             progress: progress,
             contexts: pluginSettings.networkContexts,
             observedPath: { path.current },
-            captureEpoch: { pluginID in try completion.captureScopeEpoch(pluginID: pluginID) }
+            captureEpoch: { pluginID in try completion.captureScopeEpoch(pluginID: pluginID) },
+            automaticLimits: automaticLimits
         )
         center.startObserving(scheduling: DelayedMainActorValueObservationScheduler.mainActor)
         self.store = store

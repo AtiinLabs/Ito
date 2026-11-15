@@ -48,14 +48,19 @@ nonisolated public struct BackupExportOperation: Sendable {
         PluginCompletionScope.outboxTableName,
         PluginCompletionScope.tableName,
         DownloadedChapterRecord.databaseTableName,
-        // Jobs reference their batch, so they are cleared first.
+        // Jobs reference their batch and their owners, and owners reference the subscription: children go first.
         DownloadReplacementIntent.databaseTableName,
+        DownloadJobOwnerRecord.databaseTableName,
         DownloadJobRecord.databaseTableName,
         DownloadBatchRecord.databaseTableName,
         DownloadSuppressionRecord.databaseTableName,
         DownloadStoreRecord.databaseTableName,
         LibrarySnapshotStateRecord.databaseTableName,
-        SeriesEditionPreferenceRecord.databaseTableName
+        SeriesEditionPreferenceRecord.databaseTableName,
+        SubscriptionEventRecord.databaseTableName,
+        SubscriptionSeenKeyRecord.databaseTableName,
+        SubscriptionBaselineRecord.databaseTableName,
+        SeriesSubscriptionRecord.databaseTableName
     ]
 
     static let excludedTableReasons: [String: String] = [
@@ -98,8 +103,17 @@ nonisolated public struct BackupExportOperation: Sendable {
         LibrarySnapshotStateRecord.databaseTableName:
             "Installation-local freshness of saved series details; a restored payload has unknown age.",
         SeriesEditionPreferenceRecord.databaseTableName:
-            "Installation-local scanlator choices for downloads; joins backups with automatic download rules."
+            "Installation-local scanlator choices for downloads; joins backups with automatic download rules.",
+        DownloadJobOwnerRecord.databaseTableName:
+            "Installation-local record of who asked for each queued download; never replayed from a backup.",
+        SeriesSubscriptionRecord.databaseTableName: Self.automaticDownloadRuleReason,
+        SubscriptionBaselineRecord.databaseTableName: Self.automaticDownloadRuleReason,
+        SubscriptionSeenKeyRecord.databaseTableName: Self.automaticDownloadRuleReason,
+        SubscriptionEventRecord.databaseTableName: Self.automaticDownloadRuleReason
     ]
+
+    private static let automaticDownloadRuleReason =
+        "Installation-local automatic download rules and catalog evidence; restored rules start paused (S6b capability)."
 
     static let durableTablesByComponent: [BackupComponent: [String]] = [
         .libraryCore: [

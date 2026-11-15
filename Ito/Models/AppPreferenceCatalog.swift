@@ -125,6 +125,8 @@ nonisolated public enum AppPreferenceKeys {
     public static let diskCacheLimitGB = "Ito.DiskCacheLimitGB"
     public static let networkDownloadMode = "Ito.NetworkDownloadMode"
     public static let adjacentChapterPrefetchCount = "Ito.AdjacentChapterPrefetchCount"
+    public static let automaticDownloadQueueLimit = "Ito.AutomaticDownloadQueueLimit"
+    public static let automaticDownloadQuotaGiB = "Ito.AutomaticDownloadQuotaGiB"
 }
 
 nonisolated public enum AppPreferenceCatalog {
@@ -156,6 +158,15 @@ nonisolated public enum AppPreferenceCatalog {
     }
     public static let networkDownloadMode = AppPreferenceKey<NetworkDownloadMode>(name: AppPreferenceKeys.networkDownloadMode, defaultValue: .unmeteredOnly) { _ in true }
     public static let adjacentChapterPrefetchCount = AppPreferenceKey<AdjacentChapterPrefetchPreference>(name: AppPreferenceKeys.adjacentChapterPrefetchCount, defaultValue: .two) { _ in true }
+
+    /// The most jobs, of every owner, the queue may hold before automatic downloads wait. Not the disk cache limit.
+    public static let automaticDownloadQueueLimit = AppPreferenceKey<Int>(name: AppPreferenceKeys.automaticDownloadQueueLimit, defaultValue: 100) {
+        (10...500).contains($0)
+    }
+    /// The disk space, in GiB, automatic downloads may fill, counting stored copies and an estimate for queued jobs.
+    public static let automaticDownloadQuotaGiB = AppPreferenceKey<Int>(name: AppPreferenceKeys.automaticDownloadQuotaGiB, defaultValue: 5) {
+        (1...200).contains($0)
+    }
 
     private static func boolean(_ name: String, defaultValue: Bool) -> AppPreferenceKey<Bool> {
         AppPreferenceKey(name: name, defaultValue: defaultValue) { _ in true }
@@ -193,6 +204,8 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
     case diskCacheLimitGB = "Ito.DiskCacheLimitGB"
     case networkDownloadMode = "Ito.NetworkDownloadMode"
     case adjacentChapterPrefetchCount = "Ito.AdjacentChapterPrefetchCount"
+    case automaticDownloadQueueLimit = "Ito.AutomaticDownloadQueueLimit"
+    case automaticDownloadQuotaGiB = "Ito.AutomaticDownloadQuotaGiB"
 
     public var acceptedSource: LegacyPreferenceSourceType {
         switch self {
@@ -201,7 +214,8 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
              .novelIsPaging, .novelPrefetchChapters, .incognitoMode,
              .autoSyncTrackersToLocal, .askBeforeSwitchingGroups:
             return .booleanNSNumber
-        case .libraryLayoutStyle, .updateInterval, .preloadImageCount, .adjacentChapterPrefetchCount:
+        case .libraryLayoutStyle, .updateInterval, .preloadImageCount, .adjacentChapterPrefetchCount,
+             .automaticDownloadQueueLimit, .automaticDownloadQuotaGiB:
             return .integerNSNumber
         case .novelFontSize, .novelLineSpacing, .diskCacheLimitGB:
             return .numericNSNumber
@@ -226,6 +240,8 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
         case .preloadImageCount: encode(5)
         case .networkDownloadMode: encode(NetworkDownloadMode.unmeteredOnly.rawValue)
         case .adjacentChapterPrefetchCount: encode(AdjacentChapterPrefetchPreference.two.rawValue)
+        case .automaticDownloadQueueLimit: encode(AppPreferenceCatalog.automaticDownloadQueueLimit.defaultValue)
+        case .automaticDownloadQuotaGiB: encode(AppPreferenceCatalog.automaticDownloadQuotaGiB.defaultValue)
         case .diskCacheLimitGB: encode(10.0)
         }
     }
@@ -236,7 +252,8 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
     /// GRDB never had a legacy source, so the migrator does not look for them.
     public var hasLegacyDefaultsSource: Bool {
         switch self {
-        case .networkDownloadMode, .adjacentChapterPrefetchCount, .askBeforeSwitchingGroups: false
+        case .networkDownloadMode, .adjacentChapterPrefetchCount, .askBeforeSwitchingGroups,
+             .automaticDownloadQueueLimit, .automaticDownloadQuotaGiB: false
         default: true
         }
     }
@@ -245,7 +262,8 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
     /// Restore derives or defaults an absent optional preference instead of rejecting the backup.
     public var isOptionalInBackupCatalog: Bool {
         switch self {
-        case .networkDownloadMode, .adjacentChapterPrefetchCount, .askBeforeSwitchingGroups: true
+        case .networkDownloadMode, .adjacentChapterPrefetchCount, .askBeforeSwitchingGroups,
+             .automaticDownloadQueueLimit, .automaticDownloadQuotaGiB: true
         default: false
         }
     }
@@ -330,6 +348,10 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
             return (value as? String).map { NetworkDownloadMode(rawValue: $0) != nil } ?? false
         case .adjacentChapterPrefetchCount:
             return (value as? Int).map { AdjacentChapterPrefetchPreference(rawValue: $0) != nil } ?? false
+        case .automaticDownloadQueueLimit:
+            return (value as? Int).map { AppPreferenceCatalog.automaticDownloadQueueLimit.isValid($0) } ?? false
+        case .automaticDownloadQuotaGiB:
+            return (value as? Int).map { AppPreferenceCatalog.automaticDownloadQuotaGiB.isValid($0) } ?? false
         }
     }
 

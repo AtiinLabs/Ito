@@ -47,7 +47,10 @@ nonisolated final class OnceFlag: @unchecked Sendable {
 protocol LibraryUpdateSource: AnyObject {
     /// The sources that can be checked now.
     var installedPluginIDs: Set<String> { get }
-    func fetchUpdate(for item: LibraryItem, operation: PluginNetworkOperation) async throws -> UpdateManager.SuccessfulUpdate
+    /// - Parameter frozenScope: the source epoch the check captured. The request is made under it, so a later change
+    ///   of the source's settings or account cannot be mistaken for the one the catalog was read under. Nil reads
+    ///   the live scope and returns no catalog observation.
+    func fetchUpdate(for item: LibraryItem, operation: PluginNetworkOperation, frozenScope: String?) async throws -> UpdateManager.SuccessfulUpdate
     func pendingTrust(for pluginID: String) -> PendingTrust?
     func clearPendingTrust(for pluginID: String)
 }
@@ -70,10 +73,18 @@ final class PluginLibraryUpdateSource: LibraryUpdateSource {
         Set(pluginManager.installedPlugins.keys)
     }
 
-    func fetchUpdate(for item: LibraryItem, operation: PluginNetworkOperation) async throws -> UpdateManager.SuccessfulUpdate {
+    func fetchUpdate(
+        for item: LibraryItem,
+        operation: PluginNetworkOperation,
+        frozenScope: String?
+    ) async throws -> UpdateManager.SuccessfulUpdate {
         clearPendingTrust(for: item.pluginId)
         let runner = try await pluginManager.getRunner(for: item.pluginId)
-        let context = pluginManager.pluginSettingsStore.networkContexts.context(pluginID: item.pluginId, operation)
+        // Read with the runner, with no suspension in between: both describe the one installed copy that answers.
+        let pluginVersion = pluginManager.installedPlugins[item.pluginId]?.info.version
+        let context = pluginManager.pluginSettingsStore.networkContexts.context(
+            pluginID: item.pluginId, operation, frozenScope: frozenScope
+        )
         return try await pluginCall {
             let stored: MediaEntry
             switch item.effectiveType {
@@ -82,11 +93,13 @@ final class PluginLibraryUpdateSource: LibraryUpdateSource {
             case .novel: stored = .novel(try JSONDecoder().decode(Novel.self, from: item.rawPayload))
             }
             // Details are only needed where the update keeps them (manga and novels show status).
-            switch try await runner.getMediaUpdate(stored, needsDetails: item.effectiveType != .anime, context: context) {
+            let updated = try await runner.getMediaUpdate(stored, needsDetails: item.effectiveType != .anime, context: context)
+            switch updated {
             case .manga(let manga):
                 return UpdateManager.SuccessfulUpdate(
                     freshCount: manga.chapters?.distinctChapterCount ?? 0,
-                    status: String(describing: manga.status)
+                    status: String(describing: manga.status),
+                    catalog: Self.observation(of: updated, for: item, pluginVersion: pluginVersion, frozenScope: frozenScope)
                 )
             case .anime(let anime):
                 return UpdateManager.SuccessfulUpdate(
@@ -96,10 +109,26 @@ final class PluginLibraryUpdateSource: LibraryUpdateSource {
             case .novel(let novel):
                 return UpdateManager.SuccessfulUpdate(
                     freshCount: novel.chapters?.distinctChapterCount ?? 0,
-                    status: String(describing: novel.status)
+                    status: String(describing: novel.status),
+                    catalog: Self.observation(of: updated, for: item, pluginVersion: pluginVersion, frozenScope: frozenScope)
                 )
             }
         }
+    }
+
+    /// The catalog of the answer as an observation, only for a check that froze a scope. It is built from the entry
+    /// the source returned and is never fetched again.
+    private static func observation(
+        of entry: MediaEntry,
+        for item: LibraryItem,
+        pluginVersion: String?,
+        frozenScope: String?
+    ) -> Result<CatalogObservation, SubscriptionCheckOutcome>? {
+        guard let frozenScope else { return nil }
+        guard let pluginVersion else { return .failure(.unknownScope) }
+        return CatalogObservation.make(
+            media: item.mediaIdentity, entry: entry, pluginVersion: pluginVersion, sourceEpoch: frozenScope
+        )
     }
 
     func pendingTrust(for pluginID: String) -> PendingTrust? {
@@ -153,6 +182,9 @@ public class UpdateManager: ObservableObject {
     private let sourcePacingNanoseconds: UInt64
     private let now: () -> Date
     private var settingsStore: AppSettingsStore?
+    /// Receives each manga or novel catalog this manager reads for a subscribed series. It never infers an event from
+    /// a count: the badge and the count stay this manager's own.
+    private var subscriptionSink: (any SubscriptionCatalogSink)?
     /// No new series are started after this, so a background run ends inside its time.
     private var runDeadline: Date?
 
@@ -177,6 +209,10 @@ public class UpdateManager: ObservableObject {
 
     func configure(settingsStore: AppSettingsStore) {
         self.settingsStore = settingsStore
+    }
+
+    func configure(subscriptionSink: any SubscriptionCatalogSink) {
+        self.subscriptionSink = subscriptionSink
     }
 
     // MARK: - Core Refresh Flow
@@ -372,14 +408,40 @@ public class UpdateManager: ObservableObject {
     private func checkSingleItem(_ item: LibraryItem, operation: PluginNetworkOperation) async -> Int? {
         guard let updateSource else { return nil }
         AppLogger.update.debug("🔄 [UpdateManager] Checking a library series.")
-        return await processUpdate(for: item, checkedAt: now()) {
-            try await updateSource.fetchUpdate(for: item, operation: operation)
+        // A subscribed manga or novel gets a check ticket before the fetch, so the one answer is also its catalog.
+        let sink = item.effectiveType == .anime ? nil : subscriptionSink
+        let ticket = await sink?.begin(media: item.mediaIdentity)
+        var observation: Result<CatalogObservation, SubscriptionCheckOutcome>?
+        var fetched = false
+        var cancelled = false
+        let delta = await processUpdate(for: item, checkedAt: now()) {
+            do {
+                let update = try await updateSource.fetchUpdate(for: item, operation: operation, frozenScope: ticket?.sourceEpoch)
+                fetched = true
+                observation = update.catalog
+                return update
+            } catch is CancellationError {
+                cancelled = true
+                throw CancellationError()
+            }
         }
+        // The ledger commits in its own transaction, after the badge and count write above.
+        if let sink, let ticket {
+            switch observation {
+            case .success(let catalog)?: await sink.commit(ticket, catalog)
+            case .failure(let outcome)?: await sink.fail(ticket, outcome)
+            case nil: if !fetched, !cancelled, !Task.isCancelled { await sink.fail(ticket, .fetchFailed) }
+            }
+        }
+        return delta
     }
 
     internal struct SuccessfulUpdate: Sendable {
         let freshCount: Int
         let status: String?
+        /// The chapter catalog of a manga or novel answer: set when the check froze a source scope for a subscription.
+        /// A failure names why the answer is not an observation (oversized, unsupported kind).
+        var catalog: Result<CatalogObservation, SubscriptionCheckOutcome>?
     }
 
     /// Persists a fetched update and derives badge state only from committed database state. New
