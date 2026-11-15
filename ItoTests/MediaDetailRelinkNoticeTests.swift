@@ -32,7 +32,8 @@ final class MediaDetailRelinkNoticeTests: XCTestCase {
                         entry: .manga(parent),
                         chapter: selected
                     )
-                }
+                },
+                makeDownloadedAlternativeDestination: { _, _, _ in throw UnexpectedDownloadedAlternativeOpening() }
             ),
             dependencies: PreparedMediaDetailDependencies(
                 library: MediaDetailLibraryFake(
@@ -48,7 +49,8 @@ final class MediaDetailRelinkNoticeTests: XCTestCase {
                 baseline: MediaDetailBaselineFake(),
                 settings: MediaDetailSettingsFake(),
                 pluginMetadata: MediaDetailPluginMetadataFake(),
-                discord: MediaDetailDiscordFake()
+                discord: MediaDetailDiscordFake(),
+                downloads: UnavailableMediaDetailDownloads()
             ),
             messagePresenter: MediaDetailMessageSpy(),
             presentationLogger: PresentationEventCaptureSpy()

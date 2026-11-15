@@ -206,6 +206,15 @@ struct MediaDetailViewFactory {
                     pluginID: pluginID
                 )
             },
+            makeDownloadedAlternativeDestination: { media, candidate, lease in
+                try .downloadedAlternative(
+                    candidate,
+                    lease: lease,
+                    of: .manga(media),
+                    remote: runner,
+                    pluginID: pluginID
+                )
+            },
             isChapterAvailableOffline: offlineChapterAvailability(
                 pluginID: pluginID,
                 mediaKind: .manga,
@@ -244,6 +253,10 @@ struct MediaDetailViewFactory {
                     media: media,
                     episode: episode
                 )
+            },
+            makeDownloadedAlternativeDestination: { _, _, _ in
+                // An episode has no chapter reader, and the screen never offers this action.
+                throw DownloadedAlternativeError.unsupportedMediaKind
             }
         )
         return makeView(media: media, pluginID: pluginID, context: context, openIntent: openIntent)
@@ -265,6 +278,15 @@ struct MediaDetailViewFactory {
                     chapter,
                     of: .novel(media),
                     content: ReaderContentSource(remote: runner),
+                    pluginID: pluginID
+                )
+            },
+            makeDownloadedAlternativeDestination: { media, candidate, lease in
+                try .downloadedAlternative(
+                    candidate,
+                    lease: lease,
+                    of: .novel(media),
+                    remote: runner,
                     pluginID: pluginID
                 )
             },

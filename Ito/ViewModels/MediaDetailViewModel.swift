@@ -3,10 +3,6 @@ import Foundation
 import UIKit
 import ito_runner
 
-private enum MediaDetailViewModelError: Error {
-    case unsupportedMediaType
-}
-
 @MainActor
 final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     enum DetailLoadState: Equatable {
@@ -40,7 +36,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     @Published private(set) var media: M {
-        didSet { cancelGroupSwitch(); downloadBatch.mediaDidChange() }
+        didSet { cancelGroupSwitch(); downloadedAlternatives.cancel(); downloadBatch.mediaDidChange() }
     }
     @Published private(set) var detailLoadState: DetailLoadState = .idle
     @Published var sortOrder: ChapterSortOrder = .descending
@@ -83,6 +79,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     let downloads: any MediaDetailDownloadServing
     /// The presets, scanlator choice, preview and saved-only rows of the download controls.
     let downloadBatch: MediaDetailDownloadBatchModel
+    /// The choice among saved uploads of one chapter's reading position. Its state shows in the download sheet.
+    let downloadedAlternatives: DownloadedAlternativeSelector<M>
     let snapshots: MediaDetailSnapshotRefresher
     private let presentationLogger: any PresentationEventLogging
 
@@ -145,6 +143,10 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             loadsFromSource: routeContext.loadDetails != nil
         )
         self.presentationLogger = presentationLogger
+        downloadedAlternatives = DownloadedAlternativeSelector(
+            downloads: dependencies.downloads,
+            makeDestination: routeContext.makeDownloadedAlternativeDestination
+        )
         pendingOpenIntent = openIntent
 
         let identity = MediaIdentity(pluginId: pluginID, canonicalMediaId: media.key, mediaKind: media.mediaKind)
@@ -161,6 +163,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         downloadBatch.objectWillChange
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        wireDownloadedAlternatives().store(in: &cancellables)
         dependencies.library.statePublisher
             .sink { [weak self] state in
                 self?.applyLibraryState(state)
@@ -434,6 +437,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
 
     func selectChapter(_ chapter: M.Chapter) {
         cancelGroupSwitch()
+        downloadedAlternatives.cancel()
         // A row or Resume action can retain a chapter value from before a metadata refresh.
         let current = media.chapterList?.first { $0.key == chapter.key } ?? chapter
         guard !current.isPaywalled else { return }
@@ -453,6 +457,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     /// opening reads the downloaded copy again, and a locked chapter or a series without a source never
     /// gets here.
     func readOnlineThisTime(_ chapter: M.Chapter) {
+        downloadedAlternatives.cancel()
         let current = media.chapterList?.first { $0.key == chapter.key } ?? chapter
         guard !current.isPaywalled, detailLoadState != .savedOnly else { return }
         readerDestination = routeContext.makeReaderDestination(media, current)
@@ -484,6 +489,11 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
 
     func dismissReader() {
         readerDestination = nil
+    }
+
+    /// Opens a reader prepared elsewhere on this screen, such as the chosen saved copy's.
+    func publishPreparedReader(_ destination: MediaDetailReaderDestination) {
+        readerDestination = destination
     }
 
     func openRelink() {
@@ -620,6 +630,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         purpose: NetworkOperationContext.Purpose
     ) -> Task<Void, Never> {
         cancelGroupSwitch()
+        downloadedAlternatives.cancel()
         detailTask?.cancel()
         let operationID = UUID()
         let requestedMedia = media
@@ -806,17 +817,6 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         }
     }
 
-    private func save(_ sourceMedia: M) async throws -> String {
-        if let manga = sourceMedia as? Manga {
-            return try await dependencies.library.saveManga(manga, pluginID: pluginID)
-        } else if let anime = sourceMedia as? Anime {
-            return try await dependencies.library.saveAnime(anime, pluginID: pluginID)
-        } else if let novel = sourceMedia as? Novel {
-            return try await dependencies.library.saveNovel(novel, pluginID: pluginID)
-        }
-        throw MediaDetailViewModelError.unsupportedMediaType
-    }
-
     private func refreshIdentityServicesAfterRelink() async {
         try? await dependencies.library.refresh()
         try? await dependencies.progress.refresh()
@@ -843,26 +843,6 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         let state = dependencies.tracker.state(for: mediaIdentity, isAnime: media is Anime)
         isTrackingAvailable = state.isAvailable
         isTracked = state.isTracked
-    }
-
-    private func publishDiscordActivity() {
-        let trackerState = dependencies.tracker.state(for: mediaIdentity, isAnime: media is Anime)
-        let detailsURL = trackerState.anilistID.map {
-            "https://anilist.co/\(media is Anime ? "anime" : "manga")/\($0)"
-        }
-        let pluginName = dependencies.pluginMetadata.displayName(for: pluginID)
-            ?? String(localized: "Unknown Plugin")
-        dependencies.discord.present(
-            MediaDetailDiscordActivity(
-                details: media.title,
-                state: String(localized: "Viewing Details", comment: "Discord status"),
-                activityType: 3,
-                detailsURL: detailsURL,
-                largeImageText: String(localized: "Browsing at \(pluginName)", comment: "Discord status: source name"),
-                imageURL: media.cover,
-                resetTimer: true
-            )
-        )
     }
 
     private func publishTheme(
@@ -998,6 +978,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     }
 
     private func invalidateOperationsForIdentityTransition() {
+        downloadedAlternatives.cancel()
         // A series relinked to another source does not open the chapter asked for the old one.
         pendingOpenIntent = nil
         detailOperationID = nil
@@ -1026,11 +1007,12 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         downloadBatch.reset()
     }
 
-    private var mayPresentUserOutput: Bool {
+    var mayPresentUserOutput: Bool {
         !hasStarted || isAppeared
     }
 
     private func cancelSupersedableOperations() {
+        downloadedAlternatives.cancel()
         detailOperationID = nil
         themeOperationID = nil
         relinkSearchOperationID = nil

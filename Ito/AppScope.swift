@@ -167,7 +167,8 @@ struct PreparedApplicationDependencies {
                 settingsStore: settingsStore,
                 pluginManager: pluginManager,
                 discordRPCManager: discordRPCManager,
-                downloads: downloads?.center,
+                downloads: downloads.map { $0.center as any MediaDetailDownloadServing }
+                    ?? UnavailableMediaDetailDownloads(),
                 connectivity: connectivity ?? UnavailableConnectivity(),
                 historyManager: historyManager
             ),

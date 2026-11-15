@@ -18,6 +18,8 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     private let categoryHistoryViewFactory: CategoryHistoryViewFactory
 
     @State private var showNavTitle = false
+    /// The saved-copy presentation the download sheet actually displayed, so its dismissal reports that one.
+    @State private var displayedAlternativeID: UUID?
     @Environment(\.scenePhase) private var scenePhase
 
     init(
@@ -58,7 +60,10 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 }
             }
             .onChange(of: scenePhase) { phase in
-                if phase != .active { viewModel.cancelGroupSwitch() }
+                if phase != .active {
+                    viewModel.cancelGroupSwitch()
+                    viewModel.cancelDownloadedAlternatives()
+                }
             }
     }
 
@@ -76,7 +81,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             .sheet(item: relinkPresentationBinding) { _ in
                 relinkSearchSheet
             }
-            .sheet(item: downloadSheetBinding) { sheet in
+            .sheet(item: downloadSheetBinding, onDismiss: downloadSheetDidDismiss) { sheet in
                 downloadSheetContent(sheet)
             }
             .alert(
@@ -191,9 +196,17 @@ struct MediaDetailView<M: MediaDisplayable>: View {
 
     private var downloadSheetBinding: Binding<DownloadSheet?> {
         Binding(
-            get: { viewModel.downloadBatch.sheet },
-            set: { if $0 == nil { viewModel.downloadBatch.dismissDownloadSheet() } }
+            get: { viewModel.downloadSheet },
+            set: { if $0 == nil { viewModel.dismissDownloadSheet() } }
         )
+    }
+
+    /// The download sheet has finished closing. A saved-copy hand-off opens its reader now, never in the same
+    /// callback that closed the sheet; the presentation reported is the one the sheet displayed.
+    private func downloadSheetDidDismiss() {
+        guard let id = displayedAlternativeID else { return }
+        displayedAlternativeID = nil
+        viewModel.downloadedAlternativeSheetDidDismiss(presentationID: id)
     }
 
     /// The one download sheet: the scanlator chooser, then the preview, in the same presentation.
@@ -220,6 +233,26 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 onCancel: viewModel.downloadBatch.dismissDownloadSheet,
                 onEditFallback: { viewModel.downloadBatch.editFallbackOrder(previewID: preview.id) }
             )
+        case .downloadedAlternatives(let id):
+            downloadedAlternativeContent(id: id)
+        }
+    }
+
+    /// The saved-copy chooser, only while the model's state is the presentation this sheet was asked for. A
+    /// marker without its state is stale and is cancelled instead of shown.
+    @ViewBuilder
+    private func downloadedAlternativeContent(id: UUID) -> some View {
+        if viewModel.downloadedAlternativeState.context?.id == id {
+            DownloadedAlternativeSheet(
+                state: viewModel.downloadedAlternativeState,
+                onSelect: { viewModel.selectDownloadedAlternative($0, presentationID: $1) },
+                onConfirm: { viewModel.confirmDownloadedAlternative(presentationID: $0) },
+                onCancel: viewModel.cancelDownloadedAlternatives
+            )
+            .onAppear { displayedAlternativeID = id }
+            .onChange(of: id) { displayedAlternativeID = $0 }
+        } else {
+            Color.clear.onAppear { viewModel.cancelDownloadedAlternatives() }
         }
     }
 
@@ -443,8 +476,8 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 if viewModel.showsBatchDownloadControls {
                     DownloadPresetMenu(
                         isEnabled: !viewModel.downloadBatch.isEnqueuing,
-                        onSelect: { viewModel.downloadBatch.startDownload($0) },
-                        onChooseScanlators: { viewModel.downloadBatch.openEditionChooser() }
+                        onSelect: { viewModel.startDownload($0) },
+                        onChooseScanlators: { viewModel.openEditionChooser() }
                     )
                     .padding(.trailing, 8)
                 }

@@ -689,6 +689,15 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         isApplyingChoice = false
     }
 
+    /// The screen is taking the download sheet for choosing a saved copy. A preset or chooser still waiting on
+    /// a read must not present into it afterwards, so the scope generation moves on before the sheet and the
+    /// choice are released. The catalog, coverage, summary and remembered choice stay as they are, and a batch
+    /// already submitted finishes normally.
+    func relinquishPresentationForLocalReading() {
+        scopeGeneration &+= 1
+        dismissDownloadSheet()
+    }
+
     /// Editing fallback is a separate deliberate save, not promotion of checked exact uploads.
     func editFallbackOrder(previewID: UUID) {
         guard case .preview(let preview)? = sheet, preview.id == previewID,

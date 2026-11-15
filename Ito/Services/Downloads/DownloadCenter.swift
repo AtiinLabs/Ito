@@ -233,6 +233,32 @@ final class DownloadCenter: ObservableObject {
         return try captureEpoch(pluginID)
     }
 
+    /// The stored uploads of the anchor's logical unit, read from the store's inventory. Reads only: nothing is
+    /// queued, and no preference, plugin or network is touched.
+    func downloadedAlternatives(
+        for anchor: OfflineChapterAlternativeAnchor
+    ) async throws -> DownloadedChapterAlternatives {
+        try await store.downloadedAlternatives(for: anchor)
+    }
+
+    /// The source's epoch as stored, nil when it has none. Unlike `editionPreferenceEpoch` it never captures
+    /// one, and a read that fails throws rather than reading as an absent epoch.
+    func downloadedAlternativeEpoch(for pluginID: String) throws -> String? {
+        do {
+            return try dbPool.read { db in try PluginCompletionScope.current(pluginID: pluginID, in: db) }
+        } catch {
+            throw DownloadedAlternativeError.inventoryUnavailable
+        }
+    }
+
+    /// Leases exactly the listed copy, or fails; see `OfflineChapterStore.openDownloadedAlternative`.
+    func openDownloadedAlternative(
+        _ candidate: DownloadedChapterAlternative,
+        sourceEpoch: String?
+    ) async throws -> OfflineChapterLease {
+        try await store.openDownloadedAlternative(candidate, sourceEpoch: sourceEpoch)
+    }
+
     /// Remembers the scanlators chosen for a series, replacing an earlier choice. Throws when it could not
     /// be written, when the series is no longer saved, or when `sourceEpoch` is no longer the source's.
     func setEditionPreference(

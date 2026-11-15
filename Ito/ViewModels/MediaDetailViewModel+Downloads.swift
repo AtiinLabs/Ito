@@ -17,8 +17,14 @@ extension MediaDetailViewModel {
     /// What the chapter's menu offers. Download needs a saved series whose source can fetch it, so a
     /// locked chapter and a saved-only series offer none. Reading a downloaded chapter online this time
     /// needs the same source and an unlocked chapter. A Retry is offered only where an event cannot
-    /// clear the wait.
+    /// clear the wait. Choosing a downloaded version needs neither a saved series, a copy of this chapter nor a
+    /// network: it is offered for any row whose source named its reading position.
     func downloadActions(for chapter: M.Chapter) -> [ChapterDownloadAction] {
+        let actions = rowDownloadActions(for: chapter)
+        return offersDownloadedAlternatives(for: chapter) ? actions + [.chooseDownloadedAlternative] : actions
+    }
+
+    private func rowDownloadActions(for chapter: M.Chapter) -> [ChapterDownloadAction] {
         guard showsDownloadControls else { return [] }
         switch downloadState(for: chapter) {
         case nil:
@@ -89,6 +95,8 @@ extension MediaDetailViewModel {
                 readOnlineThisTime(current)
             }
             return Task {}
+        case .chooseDownloadedAlternative:
+            return showDownloadedAlternatives(for: chapter)
         case .cancel, .retry, .delete:
             return Task { [weak self] in
                 do {
@@ -96,7 +104,7 @@ extension MediaDetailViewModel {
                     case .cancel: try await downloads.cancel(edition)
                     case .retry: try await downloads.retry(edition)
                     case .delete: try await downloads.delete(edition)
-                    case .download, .readOnlineThisTime: break
+                    case .download, .readOnlineThisTime, .chooseDownloadedAlternative: break
                     }
                 } catch {
                     self?.presentDownloadMessage(.downloadActionFailed)

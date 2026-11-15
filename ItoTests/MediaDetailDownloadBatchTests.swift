@@ -1040,16 +1040,17 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
                     entry: .manga(Manga(key: "unused", title: "Unused")),
                     chapter: Chapter(key: "unused", chapter: 1)
                 )
-            }
+            },
+            makeDownloadedAlternativeDestination: { _, _, _ in throw UnexpectedDownloadedAlternativeOpening() }
         )
-        var dependencies = Self.dependencies(
+        let dependencies = Self.dependencies(
             library: MediaDetailLibraryFake(state: MediaDetailLibraryState(
                 records: [MediaDetailLibraryRecord(itemID: "anime-1", pluginID: Self.pluginID, mediaKind: .anime)],
                 hasCustomCategories: false
             )),
-            progress: MediaDetailProgressFake()
+            progress: MediaDetailProgressFake(),
+            downloads: MediaDetailDownloadsFake()
         )
-        dependencies.downloads = MediaDetailDownloadsFake()
         let viewModel = MediaDetailViewModel(
             media: anime,
             pluginID: Self.pluginID,
@@ -1187,7 +1188,8 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
     private static func dependencies(
         library: MediaDetailLibraryFake,
         progress: MediaDetailProgressFake,
-        relink: MediaDetailRelinkFake = MediaDetailRelinkFake()
+        relink: MediaDetailRelinkFake = MediaDetailRelinkFake(),
+        downloads: any MediaDetailDownloadServing
     ) -> PreparedMediaDetailDependencies {
         PreparedMediaDetailDependencies(
             library: library,
@@ -1198,7 +1200,8 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
             baseline: MediaDetailBaselineFake(),
             settings: MediaDetailSettingsFake(alwaysShowCategoryPicker: false, autoSyncTrackersToLocal: true),
             pluginMetadata: MediaDetailPluginMetadataFake(),
-            discord: MediaDetailDiscordFake()
+            discord: MediaDetailDiscordFake(),
+            downloads: downloads
         )
     }
 
@@ -1246,11 +1249,13 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
                     chapter: chapter
                 )
             },
+            makeDownloadedAlternativeDestination: { _, _, _ in throw UnexpectedDownloadedAlternativeOpening() },
             inventoryChapters: inventory.map { box in { box.read($0) } }
         )
         let relink = MediaDetailRelinkFake()
-        var dependencies = Self.dependencies(library: library, progress: progress, relink: relink)
-        dependencies.downloads = downloadService ?? downloads
+        var dependencies = Self.dependencies(
+            library: library, progress: progress, relink: relink, downloads: downloadService ?? downloads
+        )
         dependencies.connectivity = connectivity
         let viewModel = MediaDetailViewModel(
             media: Manga(key: "series-1", title: "Series", chapters: chapters),

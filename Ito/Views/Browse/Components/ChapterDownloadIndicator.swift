@@ -160,6 +160,11 @@ extension ChapterDownloadAction {
             return Text("Retry Download", comment: "Chapter menu")
         case .readOnlineThisTime:
             return Text("Read Online This Time", comment: "Chapter menu: open this downloaded chapter from its source once, without changing the saved copy")
+        case .chooseDownloadedAlternative:
+            return Text(
+                "Choose Downloaded Version…",
+                comment: "Chapter menu: list the saved uploads of this chapter's reading position and open one of them, for this reading only"
+            )
         case .delete:
             return Text("Delete Download", comment: "Chapter menu: remove the saved copy of this chapter")
         }
@@ -171,6 +176,7 @@ extension ChapterDownloadAction {
         case .cancel: return "xmark.circle"
         case .retry: return "arrow.clockwise"
         case .readOnlineThisTime: return "globe"
+        case .chooseDownloadedAlternative: return "square.stack.3d.up"
         case .delete: return "trash"
         }
     }

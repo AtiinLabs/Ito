@@ -261,6 +261,9 @@ Downloads queue: cancel one job */
 /* Country of origin */
 "China" = "China";
 
+/* Chapter menu: list the saved uploads of this chapter's reading position and open one of them, for this reading only */
+"Choose Downloaded Version…" = "Choose Downloaded Version…";
+
 "Choose List on Save" = "Choose List on Save";
 
 "Choose a library status before adding this series to MangaBaka." = "Choose a library status before adding this series to MangaBaka.";
@@ -511,6 +514,9 @@ Downloads manager stored inventory section */
 /* Storage settings: offline chapters disk usage */
 "Downloaded Chapters" = "Downloaded Chapters";
 
+/* Title of the sheet that lists the saved copies of a chapter's reading position */
+"Downloaded Versions" = "Downloaded Versions";
+
 /* Chapter download status */
 "Downloading" = "Downloading";
 
@@ -700,7 +706,8 @@ History: an episode without a title */
 
 "Go to Settings > Trackers and sign in to AniList, MyAnimeList or MangaBaka before tracking." = "Go to Settings > Trackers and sign in to AniList, MyAnimeList or MangaBaka before tracking.";
 
-/* Accessibility label for the untranslated source-provided group ID. */
+/* Accessibility label for the untranslated source-provided group ID.
+Downloaded versions sheet: the source's identifier of a translation group. The placeholder is that identifier, shown as the source wrote it. */
 "Group ID %@" = "Group ID %@";
 
 "HTTPS to HTTP redirect downgrades are prohibited." = "HTTPS to HTTP redirect downgrades are prohibited.";
@@ -922,6 +929,9 @@ History: an episode without a title */
 
 "Logout failed. Please try again." = "Logout failed. Please try again.";
 
+/* Downloaded versions sheet: reading the list of saved copies */
+"Looking for saved copies…" = "Looking for saved copies…";
+
 "Low Match" = "Low Match";
 
 "Low to High" = "Low to High";
@@ -1080,7 +1090,8 @@ Manga format */
 Downloads manager empty inventory */
 "No downloaded chapters" = "No downloaded chapters";
 
-/* Scanlator choice: the chapters whose source names no scanlator. */
+/* Downloaded versions sheet: the source named no translation group for this upload
+Scanlator choice: the chapters whose source names no scanlator. */
 "No group listed" = "No group listed";
 
 "No items in %@." = "No items in %@.";
@@ -1096,6 +1107,9 @@ Downloads manager empty inventory */
 "No options available" = "No options available";
 
 "No options found." = "No options found.";
+
+/* Downloaded versions sheet: no saved upload shares this chapter's reading position */
+"No other saved copy of this chapter is on this device." = "No other saved copy of this chapter is on this device.";
 
 "No packages match your search." = "No packages match your search.";
 
@@ -1206,8 +1220,14 @@ Manga format: light novel */
 
 "Open Settings" = "Open Settings";
 
+/* Button in the downloaded versions sheet: reads the selected saved copy, for this reading only */
+"Open This Saved Copy" = "Open This Saved Copy";
+
 /* Reader consent alert button: opens the one upload from another translation group, for this reading only */
 "Open This Upload" = "Open This Upload";
+
+/* Downloaded versions sheet: the chosen saved copy is being opened */
+"Opening the saved copy…" = "Opening the saved copy…";
 
 /* History: accessibility hint of a series row */
 "Opens the series" = "Opens the series";
@@ -1535,6 +1555,18 @@ Downloads queue: retry a failed or paused job */
 "Saved" = "Saved";
 
 "Saved Source • %@ • Confirmed" = "Saved Source • %@ • Confirmed";
+
+/* Downloaded versions sheet: this copy is saved as page images */
+"Saved as images" = "Saved as images";
+
+/* Downloaded versions sheet: this copy is saved with both page images and text */
+"Saved as images and text" = "Saved as images and text";
+
+/* Downloaded versions sheet: this copy is saved as text */
+"Saved as text" = "Saved as text";
+
+/* Downloaded versions sheet: offline storage is not available */
+"Saved copies aren't available on this device." = "Saved copies aren't available on this device.";
 
 "Saved credentials are currently unavailable." = "Saved credentials are currently unavailable.";
 
@@ -1979,6 +2011,12 @@ Reading font: the system font */
 
 "The repository package identifier is invalid." = "The repository package identifier is invalid.";
 
+/* Downloaded versions sheet: reading the list of saved copies failed */
+"The saved copies couldn't be read. Close this and try again." = "The saved copies couldn't be read. Close this and try again.";
+
+/* Downloaded versions sheet: the listed copy is no longer the one that is stored */
+"The saved copies of this chapter changed. Close this and choose again." = "The saved copies of this chapter changed. Close this and choose again.";
+
 "The saved item and extension types do not match." = "The saved item and extension types do not match.";
 
 "The saved media data is invalid or incompatible." = "The saved media data is invalid or incompatible.";
@@ -2088,6 +2126,9 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 
 "This item may have been imported with an incompatible content key. Search this source to link it to the correct entry." = "This item may have been imported with an incompatible content key. Search this source to link it to the correct entry.";
 
+/* Downloaded versions sheet: the series cannot have saved chapter copies */
+"This kind of series has no saved chapters to choose from." = "This kind of series has no saved chapters to choose from.";
+
 "This page has no valid image address" = "This page has no valid image address";
 
 "This permanently deletes your current library before restoring the backup. This action cannot be undone." = "This permanently deletes your current library before restoring the backup. This action cannot be undone.";
@@ -2105,6 +2146,12 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 "This repository and all its associated data will be removed." = "This repository and all its associated data will be removed.";
 
 "This repository is already in your list." = "This repository is already in your list.";
+
+/* Reader failure after integrity verification fails for a specifically chosen downloaded alternative. */
+"This saved copy is damaged and can't be read." = "This saved copy is damaged and can't be read.";
+
+/* Reader failure after choosing a specific downloaded alternative that became unavailable. */
+"This saved copy is no longer available." = "This saved copy is no longer available.";
 
 "This series is no longer available on MangaBaka. Stop tracking it and link it again." = "This series is no longer available on MangaBaka. Stop tracking it and link it again.";
 
@@ -2126,6 +2173,9 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 
 /* Error shown on a source's screen when its installed file is damaged, or is built in a form this version of Ito can't run. The user cannot pick another file here, and the message names neither Ito nor the source as the side to update. */
 "This source's file is damaged or can't be run by this version of Ito." = "This source's file is damaged or can't be run by this version of Ito.";
+
+/* Downloaded versions sheet: the source's configuration changed after the list was read */
+"This source's settings changed. Close this and choose again." = "This source's settings changed. Close this and choose again.";
 
 "This tracker does not support manual scoring." = "This tracker does not support manual scoring.";
 
@@ -2227,7 +2277,8 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 
 "Unmatched Sources" = "Unmatched Sources";
 
-/* Reader consent: shown in place of the group name when the source supplies none */
+/* Downloaded versions sheet: the source gave this upload a group identifier but no name
+Reader consent: shown in place of the group name when the source supplies none */
 "Unnamed group" = "Unnamed group";
 
 "Unread/Unwatched" = "Unread/Unwatched";
@@ -2262,6 +2313,9 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 "Updates Available" = "Updates Available";
 
 "Updating queued progress…" = "Updating queued progress…";
+
+/* Downloaded versions sheet: the source's exact key for one upload. The placeholder is that key, shown as the source wrote it. */
+"Upload %@" = "Upload %@";
 
 /* Button on the scanlator sheet: apply the choice and continue with the download. */
 "Use Selection" = "Use Selection";

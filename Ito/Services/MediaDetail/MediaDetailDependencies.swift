@@ -414,8 +414,8 @@ struct PreparedMediaDetailDependencies {
     let settings: any MediaDetailSettingsReading
     let pluginMetadata: any MediaDetailPluginMetadataProviding
     let discord: any MediaDetailDiscordPresenting
-    /// Unavailable unless the composition root passes the live download center.
-    var downloads: any MediaDetailDownloadServing = UnavailableMediaDetailDownloads()
+    /// The live download center where offline chapters are composed, otherwise an explicit unavailable seam.
+    let downloads: any MediaDetailDownloadServing
     /// Never offline unless the composition root passes the live observer.
     var connectivity: any ConnectivityServing = UnavailableConnectivity()
     var history: (any MediaDetailHistoryReading)?
@@ -430,7 +430,7 @@ struct PreparedMediaDetailDependencies {
         settingsStore: AppSettingsStore,
         pluginManager: PluginManager,
         discordRPCManager: DiscordRPCManager,
-        downloads: (any MediaDetailDownloadServing)?,
+        downloads: any MediaDetailDownloadServing,
         connectivity: any ConnectivityServing = UnavailableConnectivity(),
         historyManager: HistoryManager? = nil
     ) -> Self {
@@ -446,7 +446,7 @@ struct PreparedMediaDetailDependencies {
             settings: settingsStore,
             pluginMetadata: pluginManager,
             discord: discordRPCManager,
-            downloads: downloads ?? UnavailableMediaDetailDownloads(),
+            downloads: downloads,
             connectivity: connectivity,
             history: historyManager
         )

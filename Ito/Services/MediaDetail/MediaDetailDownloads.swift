@@ -34,6 +34,18 @@ protocol MediaDetailDownloadServing: AnyObject {
     func availableCapacity() async -> Int64?
     /// The bytes this series' stored copies occupy; nil when they cannot be read.
     func storedByteCount(for media: MediaIdentity) async -> Int64?
+    /// The stored uploads that are other copies of the anchor's logical unit. Reads only: nothing is queued,
+    /// and no preference, plugin or network is touched. Throws when the inventory cannot be read.
+    func downloadedAlternatives(
+        for anchor: OfflineChapterAlternativeAnchor
+    ) async throws -> DownloadedChapterAlternatives
+    /// The source's epoch as it is stored, nil when it has none. Never captures one; throws when it cannot be read.
+    func downloadedAlternativeEpoch(for pluginID: String) throws -> String?
+    /// Leases exactly the listed copy under the same source epoch, or throws; it never opens another copy.
+    func openDownloadedAlternative(
+        _ candidate: DownloadedChapterAlternative,
+        sourceEpoch: String?
+    ) async throws -> OfflineChapterLease
 }
 
 extension DownloadCenter: MediaDetailDownloadServing {
@@ -124,6 +136,23 @@ final class UnavailableMediaDetailDownloads: MediaDetailDownloadServing {
     func storedByteCount(for media: MediaIdentity) async -> Int64? {
         nil
     }
+
+    func downloadedAlternatives(
+        for anchor: OfflineChapterAlternativeAnchor
+    ) async throws -> DownloadedChapterAlternatives {
+        throw DownloadedAlternativeError.unavailable
+    }
+
+    func downloadedAlternativeEpoch(for pluginID: String) throws -> String? {
+        throw DownloadedAlternativeError.unavailable
+    }
+
+    func openDownloadedAlternative(
+        _ candidate: DownloadedChapterAlternative,
+        sourceEpoch: String?
+    ) async throws -> OfflineChapterLease {
+        throw DownloadedAlternativeError.unavailable
+    }
 }
 
 /// What the detail screen offers for one chapter's download.
@@ -133,6 +162,8 @@ enum ChapterDownloadAction: Hashable, Identifiable {
     case retry
     /// Opens a downloaded chapter from its source for this reading only.
     case readOnlineThisTime
+    /// Chooses among the saved uploads of this chapter's reading position and opens one, for this reading only.
+    case chooseDownloadedAlternative
     case delete
 
     var id: Self { self }

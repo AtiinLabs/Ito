@@ -1005,9 +1005,6 @@
     "Are you sure you want to reject this match?" : {
 
     },
-    "Ask before switching groups" : {
-      "comment" : "Reader setting, off by default: require confirmation before Next, Previous or Resume opens another translation group's upload"
-    },
     "Ask before switching" : {
       "comment" : "Require batch consent before using another group.",
       "localizations" : {
@@ -1018,6 +1015,9 @@
           }
         }
       }
+    },
+    "Ask before switching groups" : {
+      "comment" : "Reader setting, off by default: require confirmation before Next, Previous or Resume opens another translation group's upload"
     },
     "Ask on Discord" : {
 
@@ -1216,6 +1216,9 @@
     },
     "China" : {
       "comment" : "Country of origin"
+    },
+    "Choose Downloaded Version…" : {
+      "comment" : "Chapter menu: list the saved uploads of this chapter's reading position and open one of them, for this reading only"
     },
     "Choose List on Save" : {
 
@@ -1660,6 +1663,9 @@
     "Downloaded Chapters" : {
       "comment" : "Storage settings: offline chapters disk usage"
     },
+    "Downloaded Versions" : {
+      "comment" : "Title of the sheet that lists the saved copies of a chapter's reading position"
+    },
     "Downloading" : {
       "comment" : "Chapter download status"
     },
@@ -1988,7 +1994,7 @@
 
     },
     "Group ID %@" : {
-      "comment" : "Accessibility label for the untranslated source-provided group ID."
+      "comment" : "Accessibility label for the untranslated source-provided group ID.\nDownloaded versions sheet: the source's identifier of a translation group. The placeholder is that identifier, shown as the source wrote it."
     },
     "HTTPS to HTTP redirect downgrades are prohibited." : {
 
@@ -2324,6 +2330,9 @@
     "Logout failed. Please try again." : {
 
     },
+    "Looking for saved copies…" : {
+      "comment" : "Downloaded versions sheet: reading the list of saved copies"
+    },
     "Low Match" : {
 
     },
@@ -2534,7 +2543,7 @@
       "comment" : "Downloaded series is empty after deletion\nDownloads manager empty inventory"
     },
     "No group listed" : {
-      "comment" : "Scanlator choice: the chapters whose source names no scanlator."
+      "comment" : "Downloaded versions sheet: the source named no translation group for this upload\nScanlator choice: the chapters whose source names no scanlator."
     },
     "No items in %@." : {
 
@@ -2556,6 +2565,9 @@
     },
     "No options found." : {
 
+    },
+    "No other saved copy of this chapter is on this device." : {
+      "comment" : "Downloaded versions sheet: no saved upload shares this chapter's reading position"
     },
     "No packages match your search." : {
 
@@ -2703,8 +2715,14 @@
     "Open Settings" : {
 
     },
+    "Open This Saved Copy" : {
+      "comment" : "Button in the downloaded versions sheet: reads the selected saved copy, for this reading only"
+    },
     "Open This Upload" : {
       "comment" : "Reader consent alert button: opens the one upload from another translation group, for this reading only"
+    },
+    "Opening the saved copy…" : {
+      "comment" : "Downloaded versions sheet: the chosen saved copy is being opened"
     },
     "Opens the series" : {
       "comment" : "History: accessibility hint of a series row"
@@ -3192,6 +3210,15 @@
     "Saved Source • %@ • Confirmed" : {
 
     },
+    "Saved as images" : {
+      "comment" : "Downloaded versions sheet: this copy is saved as page images"
+    },
+    "Saved as images and text" : {
+      "comment" : "Downloaded versions sheet: this copy is saved with both page images and text"
+    },
+    "Saved as text" : {
+      "comment" : "Downloaded versions sheet: this copy is saved as text"
+    },
     "Saved chapters of %lld series are deleted, and their queued downloads are cancelled." : {
       "comment" : "Confirm deleting selected downloaded series. The count is the number of selected series; deletion also cancels their queued downloads.",
       "localizations" : {
@@ -3214,6 +3241,9 @@
           }
         }
       }
+    },
+    "Saved copies aren't available on this device." : {
+      "comment" : "Downloaded versions sheet: offline storage is not available"
     },
     "Saved credentials are currently unavailable." : {
 
@@ -3863,6 +3893,12 @@
     "The repository package identifier is invalid." : {
 
     },
+    "The saved copies couldn't be read. Close this and try again." : {
+      "comment" : "Downloaded versions sheet: reading the list of saved copies failed"
+    },
+    "The saved copies of this chapter changed. Close this and choose again." : {
+      "comment" : "Downloaded versions sheet: the listed copy is no longer the one that is stored"
+    },
     "The saved item and extension types do not match." : {
 
     },
@@ -3938,11 +3974,11 @@
     "The source's web page failed: %@" : {
 
     },
-    "The source, chapter list or edition choice changed. Review again." : {
-      "comment" : "Series details: detail when a draft was invalidated before confirmation because the source, chapter list or edition policy changed; no changed plan was submitted automatically."
-    },
     "The source's web page took too long to respond. Try again." : {
       "comment" : "Error: a web page the source loaded did not respond in time"
+    },
+    "The source, chapter list or edition choice changed. Review again." : {
+      "comment" : "Series details: detail when a draft was invalidated before confirmation because the source, chapter list or edition policy changed; no changed plan was submitted automatically."
     },
     "The specified HTTP header is prohibited." : {
 
@@ -4013,6 +4049,9 @@
     "This item may have been imported with an incompatible content key. Search this source to link it to the correct entry." : {
 
     },
+    "This kind of series has no saved chapters to choose from." : {
+      "comment" : "Downloaded versions sheet: the series cannot have saved chapter copies"
+    },
     "This page has no valid image address" : {
 
     },
@@ -4040,6 +4079,12 @@
     "This repository is already in your list." : {
 
     },
+    "This saved copy is damaged and can't be read." : {
+      "comment" : "Reader failure after integrity verification fails for a specifically chosen downloaded alternative."
+    },
+    "This saved copy is no longer available." : {
+      "comment" : "Reader failure after choosing a specific downloaded alternative that became unavailable."
+    },
     "This series is no longer available on MangaBaka. Stop tracking it and link it again." : {
 
     },
@@ -4066,6 +4111,9 @@
     },
     "This source's file is damaged or can't be run by this version of Ito." : {
       "comment" : "Error shown on a source's screen when its installed file is damaged, or is built in a form this version of Ito can't run. The user cannot pick another file here, and the message names neither Ito nor the source as the side to update."
+    },
+    "This source's settings changed. Close this and choose again." : {
+      "comment" : "Downloaded versions sheet: the source's configuration changed after the list was read"
     },
     "This tracker does not support manual scoring." : {
 
@@ -4241,7 +4289,7 @@
 
     },
     "Unnamed group" : {
-      "comment" : "Reader consent: shown in place of the group name when the source supplies none"
+      "comment" : "Downloaded versions sheet: the source gave this upload a group identifier but no name\nReader consent: shown in place of the group name when the source supplies none"
     },
     "Unread/Unwatched" : {
 
@@ -4287,6 +4335,9 @@
     },
     "Updating queued progress…" : {
 
+    },
+    "Upload %@" : {
+      "comment" : "Downloaded versions sheet: the source's exact key for one upload. The placeholder is that key, shown as the source wrote it."
     },
     "Use %lld selected alternatives this time" : {
       "comment" : "Confirm exact alternatives ticked in the preview for this batch only; does not remember fallback permission. The placeholder is the number ticked and needs plural forms.",

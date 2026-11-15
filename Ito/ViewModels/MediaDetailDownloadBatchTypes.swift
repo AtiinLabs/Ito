@@ -95,6 +95,9 @@ struct DownloadPreview: Identifiable, Equatable {
 enum DownloadSheet: Identifiable, Equatable {
     case chooser(EditionChooserPresentation)
     case preview(DownloadPreview)
+    /// Choosing among saved copies of one chapter's reading position. A marker only: the candidates and their
+    /// state belong to the series screen's selector, not to the batch model.
+    case downloadedAlternatives(id: UUID)
 
     var id: String { "download" }
 }

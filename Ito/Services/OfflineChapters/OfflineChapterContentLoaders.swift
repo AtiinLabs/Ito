@@ -8,11 +8,29 @@ nonisolated enum ReaderContentPreference: Equatable, Sendable {
     case localFirst
     /// The installed source reads this chapter even if a copy exists. Its neighbors stay local-first.
     case remoteThisTime(chapterKey: String)
+    /// One explicitly selected, already leased saved copy. This chapter can never use the source.
+    case localOnly(chapterKey: String, lease: OfflineChapterLease)
 
     var initialRemoteKeys: Set<String> {
-        switch self {
-        case .localFirst: []
-        case .remoteThisTime(let chapterKey): [chapterKey]
+        if case .remoteThisTime(let chapterKey) = self { return [chapterKey] }
+        return []
+    }
+
+    var localOnlySeed: (chapterKey: String, lease: OfflineChapterLease)? {
+        if case .localOnly(let chapterKey, let lease) = self { return (chapterKey, lease) }
+        return nil
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        switch (lhs, rhs) {
+        case (.localFirst, .localFirst):
+            true
+        case (.remoteThisTime(let lhsKey), .remoteThisTime(let rhsKey)):
+            lhsKey == rhsKey
+        case (.localOnly(let lhsKey, let lhsLease), .localOnly(let rhsKey, let rhsLease)):
+            lhsKey == rhsKey && lhsLease === rhsLease
+        default:
+            false
         }
     }
 }
@@ -43,24 +61,42 @@ final class OfflineChapterSourceResolver {
     private let hasRemote: Bool
     /// Chapters that read from the source whatever is stored, until the user asks for the copy.
     private var remoteKeys: Set<String>
+    /// A user-confirmed saved version for one exact chapter.
+    private let localOnlySeed: (chapterKey: String, lease: OfflineChapterLease)?
     private var pins: [String: Source] = [:]
 
     init(
         pluginID: String,
         local: any OfflineChapterReading,
         hasRemote: Bool,
-        initialRemoteKeys: Set<String> = []
+        preference: ReaderContentPreference = .localFirst
     ) {
         self.pluginID = pluginID
         self.local = local
         self.hasRemote = hasRemote
-        remoteKeys = initialRemoteKeys
+        remoteKeys = preference.initialRemoteKeys
+        localOnlySeed = preference.localOnlySeed
     }
 
     /// A verified copy with the exact chapter key wins and involves no plugin or network call, unless the
     /// chapter was chosen to read online this time. Otherwise the installed source reads the chapter. With
-    /// neither, the chapter is not downloaded.
+    /// neither, the chapter is not downloaded. The one explicitly selected saved copy is validated against
+    /// this plugin, series and chapter and then read from its own lease only: it never asks the inventory
+    /// or a source, and a seed that does not match fails instead of falling back.
     func source(for entry: MediaEntry, chapter: Chapter) async throws -> Source {
+        if let seed = localOnlySeed {
+            if isSelectedLocalOnly(chapter.key) {
+                try validateSelected(seed.lease, for: chapter)
+                let edition = seed.lease.edition
+                guard entry.kind == edition.mediaKind,
+                      entry.key.utf8.elementsEqual(edition.canonicalMediaId.utf8) else {
+                    throw OfflineReadError.localCopyUnavailable
+                }
+                return pin(.local(seed.lease), for: chapter.key)
+            }
+            // A key that differs from the selected one only by Unicode equivalence is still not the selection.
+            if seed.chapterKey == chapter.key { throw OfflineReadError.localCopyUnavailable }
+        }
         if let pinned = pins[chapter.key] {
             return pinned
         }
@@ -109,9 +145,18 @@ final class OfflineChapterSourceResolver {
     /// Reads the pages of a leased copy. Text is read and verified off the main actor; images stay on
     /// disk and are fetched through their locator by the offline image pipeline. A copy that turns out
     /// damaged or missing on disk is unpinned when a source can read the chapter instead, and the
-    /// result is nil so the caller reads from the source.
+    /// result is nil so the caller reads from the source. The one explicitly selected copy never is: it
+    /// fails locally and is never nil.
     func localPages(_ lease: OfflineChapterLease, chapter: Chapter) async throws -> [Page]? {
         let reader = local
+        if isSelectedLocalOnly(chapter.key) {
+            // Only the lease `source(for:chapter:)` validated and pinned is read; anything else fails closed.
+            guard case .local(let pinned)? = pins[chapter.key], pinned === lease else {
+                throw OfflineReadError.localCopyUnavailable
+            }
+            try validateSelected(lease, for: chapter)
+            return try await selectedPages(of: lease)
+        }
         do {
             return try await Task.detached(priority: .utility) {
                 try OfflineChapterPages.make(from: lease, reader: reader)
@@ -119,6 +164,47 @@ final class OfflineChapterSourceResolver {
         } catch let error as OfflineStoreError where hasRemote && error.isUnreadableCopy {
             pins[chapter.key] = .remote
             return nil
+        }
+    }
+
+    /// The selected copy's pages. Cancellation reaches the verifying task and nothing is published after
+    /// it; the lease stays held by that task until its verification has finished.
+    private func selectedPages(of lease: OfflineChapterLease) async throws -> [Page] {
+        try Task.checkCancellation()
+        let reader = local
+        let task = Task.detached(priority: .utility) {
+            try OfflineChapterPages.make(from: lease, reader: reader)
+        }
+        do {
+            let pages = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+            try Task.checkCancellation()
+            return pages
+        } catch {
+            throw OfflineReadError.selectedCopy(from: error)
+        }
+    }
+
+    /// Whether this exact chapter key is the one selected saved copy. Keys compare as bytes.
+    private func isSelectedLocalOnly(_ chapterKey: String) -> Bool {
+        localOnlySeed.map { $0.chapterKey.utf8.elementsEqual(chapterKey.utf8) } ?? false
+    }
+
+    /// The seed's lease must be this chapter's own live lease, in the directory the offline pipeline reads
+    /// and under a manifest of the same version and chapter. Anything else fails closed: it never falls
+    /// into ordinary discovery and never reaches a source.
+    private func validateSelected(_ lease: OfflineChapterLease, for chapter: Chapter) throws {
+        guard let seed = localOnlySeed, lease === seed.lease else { throw OfflineReadError.localCopyUnavailable }
+        let edition = lease.edition
+        let manifest = lease.manifest
+        guard edition.pluginId.utf8.elementsEqual(pluginID.utf8),
+              edition.chapterKey.utf8.elementsEqual(chapter.key.utf8),
+              manifest.identity.chapterKey.utf8.elementsEqual(chapter.key.utf8),
+              manifest.identity.mediaKind == edition.mediaKind,
+              manifest.identity.authorityScope == edition.authorityScope,
+              manifest.versionId == lease.versionId,
+              let firstPage = manifest.pages.first,
+              local.leases.resolvePage(token: lease.token, fileName: firstPage.file) != nil else {
+            throw OfflineReadError.localCopyUnavailable
         }
     }
 
@@ -182,7 +268,7 @@ final class ResolvingMangaPageLoader: MangaPageLoading, DownloadedCopyReopening 
             pluginID: pluginID,
             local: local,
             hasRemote: remote != nil,
-            initialRemoteKeys: preference.initialRemoteKeys
+            preference: preference
         )
     }
 
@@ -226,7 +312,7 @@ final class ResolvingNovelChapterLoader: NovelChapterLoading, DownloadedCopyReop
             pluginID: pluginID,
             local: local,
             hasRemote: remote != nil,
-            initialRemoteKeys: preference.initialRemoteKeys
+            preference: preference
         )
     }
 

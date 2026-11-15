@@ -166,3 +166,18 @@ Another open screen for the same series may hold an older copy of the policy. A 
 carries the policy it was planned under, and the store refuses it in the write transaction when the
 stored policy differs, so verify the second screen cannot queue another group after the first
 narrows to Strict.
+
+## Downloaded-alternative checks
+
+Before releasing changes to the chapter menu's "Choose Downloaded Version…", verify that it opens exactly
+one saved copy the user selected, for this reading only. The list holds only verified copies of the same
+source-supplied logical unit under the same metadata origin; number, title and group never match, and an
+upload that is no longer in the catalog is still listed. Several choices start unselected and a single one
+still needs confirmation.
+
+Confirm that choosing, cancelling, a failed lookup and a failed lease write no progress, History,
+tracker, preference or queue state, and call no plugin. A deleted, replaced, retagged or damaged copy, a
+locked device and a rotated source epoch fail instead of opening another copy, and the opened chapter
+never reads from the source, including on retry. The reader opens only after the sheet has closed; a
+dismissal that is stale, cancelled or from another presentation opens nothing and leaves no lease.
+Ordinary local-first reading, Read Online This Time and the source fallback for a damaged copy are unchanged.
