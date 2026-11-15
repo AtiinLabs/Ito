@@ -2,6 +2,22 @@ import Foundation
 import ito_runner
 
 extension MediaDetailViewModel {
+    /// The screen's batch download model, built from the screen's dependencies and route.
+    static func makeDownloadBatch(
+        dependencies: PreparedMediaDetailDependencies,
+        routeContext: MediaDetailRouteContext<M>,
+        snapshots: MediaDetailSnapshotRefresher
+    ) -> MediaDetailDownloadBatchModel {
+        MediaDetailDownloadBatchModel(
+            downloads: dependencies.downloads,
+            progress: dependencies.progress,
+            snapshots: snapshots,
+            inventory: routeContext.inventoryChapters,
+            loadsFromSource: routeContext.loadDetails != nil,
+            enumerateEditions: routeContext.enumerateEditions
+        )
+    }
+
     /// Whether this series shows download controls: offline chapters exist on this build and the series is
     /// a manga or a novel. Anime episodes are never stored.
     var showsDownloadControls: Bool {
