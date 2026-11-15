@@ -21,6 +21,8 @@ extension OfflineChapterStore {
         guard request.mediaKind == .manga || request.mediaKind == .novel else {
             return .refused(.unsupportedKind)
         }
+        // Provenance that the v26 CHECKs would refuse is never written, so the batch and its jobs stay together.
+        guard request.provenance.isConsistent else { return .refused(.unavailable) }
         // A single locked chapter keeps its refusal whatever else is missing, as a lone enqueue always did.
         if request.chapters.count == 1, request.chapters[0].paywalled == true {
             return DownloadBatchOutcome(refusedLocked: 1)
@@ -102,11 +104,14 @@ extension OfflineChapterStore {
                 pluginId: request.pluginId,
                 mediaKind: request.mediaKind,
                 canonicalMediaId: request.canonicalMediaId,
-                preset: request.preset,
+                preset: request.provenance.preset,
                 selection: request.selection,
                 catalogDigest: request.catalogDigest,
                 entrySnapshot: entrySnapshot,
-                createdAt: now
+                createdAt: now,
+                windowKind: request.provenance.windowKind,
+                positionCount: request.provenance.positionCount,
+                customPresetId: request.provenance.customPresetId
             ).insert(db)
             for index in pending {
                 let chapter = request.chapters[index]

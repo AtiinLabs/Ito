@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import ito_runner
 
@@ -15,7 +16,7 @@ struct ScanlatorOption: Identifiable, Hashable, Sendable {
     }
 }
 
-/// What the scanlator chooser shows. `preset` is the download that asked for the choice, if one did.
+/// What the scanlator chooser shows. `action` is the download that asked for the choice, if one did.
 struct EditionChooserPresentation: Equatable {
     let id = UUID()
     let identity: MediaIdentity
@@ -30,7 +31,7 @@ struct EditionChooserPresentation: Equatable {
     /// Whether the choice may be left unremembered. Without a download behind it, the choice has nothing else to
     /// apply to, so it is always remembered and the toggle is not shown.
     let offersRemember: Bool
-    let preset: DownloadPreset?
+    let action: DownloadAction?
     /// Why the stored choice is not shown, when it is not.
     let storedChoiceProblem: StoredChoiceProblem?
 }
@@ -57,11 +58,12 @@ struct DownloadPreviewRow: Identifiable, Equatable, Sendable {
     var id: String { key }
 }
 
-/// What a preset would do, shown before anything is queued. It holds exact catalog keys: the chapters
+/// What a download action would do, shown before anything is queued. It holds exact catalog keys: the chapters
 /// themselves are read from the list at confirm, and only while the list is still the one this was made from.
 struct DownloadPreview: Identifiable, Equatable {
     let id: UUID
-    let preset: DownloadPreset
+    /// The action as it was chosen. A custom preset edited or deleted meanwhile does not change it.
+    let action: DownloadAction
     let selection: EditionSelection
     let identity: MediaIdentity
     let scopeGeneration: Int
@@ -70,11 +72,11 @@ struct DownloadPreview: Identifiable, Equatable {
     var sourceEpoch = ""
     var policy: RememberedEditionChoice = .unknown
     let toQueue: [DownloadPreviewRow]
-    /// Positions already saved or queued; they count toward the preset's N.
+    /// Positions already saved or queued; they count toward the action's N.
     let satisfied: [DownloadPreviewRow]
     let damaged: [DownloadPreviewRow]
     let locked: [DownloadPreviewRow]
-    /// Other uploads inside the preset's range, from any group: extra uploads of chosen positions and rows the
+    /// Other uploads inside the action's range, from any group: extra uploads of chosen positions and rows the
     /// selection does not supply. Never queued unless the user ticks them.
     let alternatives: [DownloadPreviewRow]
     let skippedReadCount: Int
@@ -90,9 +92,18 @@ struct DownloadPreview: Identifiable, Equatable {
     var storedCount: Int { savedCount + queuedCount }
 }
 
+/// The count prompt of "Download More…". It is shown in the download sheet, and it has no count yet.
+struct DownloadMorePrompt: Identifiable, Equatable {
+    let id: UUID
+    let identity: MediaIdentity
+    /// The first value the prompt offers. It is not remembered between uses.
+    let initialCount = 10
+}
+
 /// The one sheet the download controls present. Its content changes in place, so a choice followed by a
 /// preview is one presentation, not a sheet dismissed and shown again.
 enum DownloadSheet: Identifiable, Equatable {
+    case moreCount(DownloadMorePrompt)
     case chooser(EditionChooserPresentation)
     case preview(DownloadPreview)
 
@@ -111,8 +122,58 @@ enum RememberedEditionChoice: Equatable {
     case unreadable
 }
 
+/// What a download action selects, frozen when it is chosen. A custom preset is copied at the tap, so editing or
+/// deleting the definition afterwards changes neither the plan nor the recorded provenance.
+nonisolated enum DownloadAction: Hashable, Sendable {
+    case builtIn(DownloadPreset)
+    /// "Download More…", with the count the user entered.
+    case more(DownloadPositionCount)
+    case custom(CustomDownloadPreset)
+
+    var window: DownloadWindow {
+        switch self {
+        case .builtIn(let preset):
+            preset.window
+        case .more(let count):
+            .more(count)
+        case .custom(let preset):
+            switch preset.rule {
+            case .next(let count): .next(count)
+            case .more(let count): .more(count)
+            }
+        }
+    }
+
+    /// What the batch row records about this request. Consistent by construction (`isConsistent` is true).
+    var provenance: DownloadBatchProvenance {
+        switch self {
+        case .builtIn(let preset):
+            DownloadBatchProvenance(
+                preset: DownloadBatchPreset(preset),
+                windowKind: nil,
+                positionCount: nil,
+                customPresetId: nil
+            )
+        case .more(let count):
+            DownloadBatchProvenance(
+                preset: .more,
+                windowKind: .more,
+                positionCount: count.value,
+                customPresetId: nil
+            )
+        case .custom(let preset):
+            DownloadBatchProvenance(
+                preset: .custom,
+                windowKind: preset.rule.windowKind,
+                positionCount: preset.rule.positionCount.value,
+                customPresetId: preset.id.uuidString
+            )
+        }
+    }
+}
+
 nonisolated extension DownloadBatchPreset {
-    /// The preset a stored batch records for a menu preset.
+    /// The preset a stored batch records for a built-in menu preset.
     init(_ preset: DownloadPreset) {
         switch preset {
         case .next: self = .next
@@ -121,5 +182,20 @@ nonisolated extension DownloadBatchPreset {
         case .unread: self = .unread
         case .all: self = .all
         }
+    }
+}
+
+/// The saved custom presets the series screen offers. The store is the authority; this only reads it.
+@MainActor
+protocol DownloadPresetProviding: AnyObject {
+    /// The presets in order. Emits an empty list while loading and when the store is unreadable.
+    var presetsPublisher: AnyPublisher<[CustomDownloadPreset], Never> { get }
+}
+
+/// The provider when no offline store is composed: there are no custom presets.
+@MainActor
+final class NoDownloadPresets: DownloadPresetProviding {
+    var presetsPublisher: AnyPublisher<[CustomDownloadPreset], Never> {
+        Just([]).eraseToAnyPublisher()
     }
 }

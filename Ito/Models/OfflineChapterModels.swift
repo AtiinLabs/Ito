@@ -249,7 +249,8 @@ nonisolated struct DownloadStoreRecord: Codable, Sendable, FetchableRecord, Pers
     var createdAt: Date
 }
 
-/// What the user asked for when the batch was queued. `single` is one chapter chosen on its own.
+/// What the user asked for when the batch was queued. `single` is one chapter chosen on its own; `more` is
+/// "Download N More…"; `custom` is a saved custom preset (its id is on the batch).
 nonisolated enum DownloadBatchPreset: String, Codable, CaseIterable, Sendable {
     case single
     case next
@@ -257,6 +258,44 @@ nonisolated enum DownloadBatchPreset: String, Codable, CaseIterable, Sendable {
     case next10
     case unread
     case all
+    case custom
+    case more
+}
+
+/// The window a custom or ad hoc count asked for. Stored with the batch as provenance.
+nonisolated enum DownloadWindowKind: String, Codable, CaseIterable, Sendable {
+    case next
+    case more
+}
+
+/// The provenance a batch records about its request. Its fields mirror the v26 CHECK constraints, so
+/// `isConsistent` is checked before any write and the database is the backstop.
+nonisolated struct DownloadBatchProvenance: Equatable, Sendable {
+    let preset: DownloadBatchPreset
+    let windowKind: DownloadWindowKind?
+    let positionCount: Int?
+    let customPresetId: String?
+
+    /// A chapter queued on its own: every optional field is nil.
+    static let single = builtIn(.single)
+
+    /// A request for a built-in preset, which has no window, count or custom definition.
+    static func builtIn(_ preset: DownloadBatchPreset) -> DownloadBatchProvenance {
+        DownloadBatchProvenance(preset: preset, windowKind: nil, positionCount: nil, customPresetId: nil)
+    }
+
+    var isConsistent: Bool {
+        let countIsValid = positionCount.map { DownloadPositionCount($0) != nil } ?? false
+        let presetIdIsValid = customPresetId.map { $0.count == 36 } ?? false
+        switch preset {
+        case .single, .next, .next5, .next10, .unread, .all:
+            return windowKind == nil && positionCount == nil && customPresetId == nil
+        case .more:
+            return windowKind == .more && countIsValid && customPresetId == nil
+        case .custom:
+            return windowKind != nil && countIsValid && presetIdIsValid
+        }
+    }
 }
 
 /// The frozen request behind one or more jobs: the series snapshot, the preset, the edition selection
@@ -281,6 +320,21 @@ nonisolated struct DownloadBatchRecord: Codable, Sendable, FetchableRecord, Pers
     /// JSON `MediaEntry` frozen at enqueue.
     var entrySnapshot: Data
     var createdAt: Date
+    /// Provenance of a window request (v26). Nil for every built-in and single batch.
+    var windowKind: DownloadWindowKind?
+    var positionCount: Int?
+    /// The custom preset the batch was queued from, as its canonical id. Batches are immutable provenance and
+    /// keep this even after the definition is deleted, so it has no foreign key.
+    var customPresetId: String?
+
+    var provenance: DownloadBatchProvenance {
+        DownloadBatchProvenance(
+            preset: preset,
+            windowKind: windowKind,
+            positionCount: positionCount,
+            customPresetId: customPresetId
+        )
+    }
 }
 
 /// A job together with the series snapshot of its batch: everything an attempt needs.
@@ -369,7 +423,8 @@ nonisolated struct DownloadBatchRequest: Sendable {
     let canonicalMediaId: String
     let entry: MediaEntry
     let seriesTitle: String
-    let preset: DownloadBatchPreset
+    /// What the request asked for, mirrored into the batch row. Must be consistent (`isConsistent`).
+    let provenance: DownloadBatchProvenance
     /// Versioned `EditionSelection` JSON, encoded by the caller. It must be a JSON object.
     let selection: Data
     /// SHA-256 hex digest (64 characters) of the chapter list the plan was made from, if any.

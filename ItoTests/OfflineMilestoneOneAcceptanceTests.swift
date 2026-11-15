@@ -134,7 +134,7 @@ struct OfflineMilestoneOneAcceptanceTests {
             canonicalMediaId: saved.key,
             entry: .manga(saved),
             seriesTitle: saved.title,
-            preset: .next5,
+            provenance: .builtIn(.next5),
             selection: DownloadBatchRecord.sourceListSelection,
             catalogDigest: String(repeating: "c", count: 64),
             chapters: [listed]
@@ -303,7 +303,7 @@ struct OfflineMilestoneOneAcceptanceTests {
             canonicalMediaId: "series-1",
             entry: .manga(manga),
             seriesTitle: manga.title,
-            preset: .next5,
+            provenance: .builtIn(.next5),
             selection: DownloadBatchRecord.sourceListSelection,
             catalogDigest: String(repeating: "c", count: 64),
             chapters: keys.map { OfflineStoreFixture.chapter($0) }

@@ -110,6 +110,95 @@ struct OfflineChapterStoreBatchTests {
         #expect(try await fixture.rowCount("downloadBatch") == 0)
         #expect(try await fixture.rowCount("downloadJob") == 0)
     }
+    @Test func aCommitTimeDuplicateShrinksTheActualBatchWithoutToppingUp() async throws {
+        let fixture = try OfflineStoreFixture()
+        let store = fixture.makeStore()
+        _ = await store.reconcile()
+        // Freeze the reviewed exact keys first. Another enqueue wins one of them before this commit.
+        let reviewed = OfflineStoreFixture.batchRequest(chapterKeys: ["already-queued", "requested"])
+        _ = try await fixture.enqueue(store, chapterKey: "already-queued")
+
+        let outcome = try await store.enqueueBatch(
+            reviewed,
+            sourceEpoch: OfflineStoreFixture.epoch
+        )
+
+        #expect(outcome.queued == 1)
+        #expect(outcome.alreadyQueued == 1)
+        #expect(Set(try await store.jobs().map(\.chapterKey)) == ["already-queued", "requested"])
+        #expect(try await fixture.rowCount("downloadBatch") == 2)
+    }
+
+    @Test func customAndMoreProvenanceIsPersistedAndSinglePathHasNilProvenance() async throws {
+        let fixture = try OfflineStoreFixture()
+        let store = fixture.makeStore()
+        _ = await store.reconcile()
+        let customID = UUID().uuidString
+        let customRequest = DownloadBatchRequest(
+            pluginId: "plugin.test",
+            mediaKind: .manga,
+            canonicalMediaId: "series-1",
+            entry: .manga(Manga(key: "series-1", title: "Series")),
+            seriesTitle: "Series",
+            provenance: DownloadBatchProvenance(
+                preset: .custom, windowKind: .more, positionCount: 3, customPresetId: customID
+            ),
+            selection: DownloadBatchRecord.sourceListSelection,
+            catalogDigest: nil,
+            chapters: [OfflineStoreFixture.chapter("custom")]
+        )
+        let customOutcome = try await store.enqueueBatch(customRequest, sourceEpoch: OfflineStoreFixture.epoch)
+        let customBatch = try #require(try await fixture.database.dbPool.read { db in
+            try DownloadBatchRecord.fetchOne(db, key: customOutcome.batchId!)
+        })
+        #expect(customBatch.preset == .custom)
+        #expect(customBatch.windowKind == .more)
+        #expect(customBatch.positionCount == 3)
+        #expect(customBatch.customPresetId == customID)
+
+        let moreProvenance = DownloadBatchProvenance(
+            preset: .more, windowKind: .more, positionCount: 2, customPresetId: nil
+        )
+        let moreOutcome = try await store.enqueueBatch(
+            DownloadBatchRequest(
+                pluginId: customRequest.pluginId,
+                mediaKind: customRequest.mediaKind,
+                canonicalMediaId: customRequest.canonicalMediaId,
+                entry: customRequest.entry,
+                seriesTitle: customRequest.seriesTitle,
+                provenance: moreProvenance,
+                selection: customRequest.selection,
+                catalogDigest: nil,
+                chapters: [OfflineStoreFixture.chapter("more")]
+            ),
+            sourceEpoch: OfflineStoreFixture.epoch
+        )
+        let moreID = try #require(moreOutcome.batchId)
+        let moreBatch = try #require(try await fixture.database.dbPool.read { db in
+            try DownloadBatchRecord.fetchOne(db, key: moreID)
+        })
+        #expect(moreBatch.provenance == moreProvenance)
+
+        let singleOutcome = try await store.enqueue(
+            DownloadEnqueueRequest(
+                pluginId: "plugin.test",
+                mediaKind: .manga,
+                canonicalMediaId: "series-1",
+                entry: .manga(Manga(key: "series-1", title: "Series")),
+                chapter: OfflineStoreFixture.chapter("single"),
+                seriesTitle: "Series",
+                sourceEpoch: OfflineStoreFixture.epoch
+            )
+        )
+        #expect(singleOutcome == .queued)
+        let single = try #require(try await fixture.database.dbPool.read { db in
+            try DownloadBatchRecord.filter(Column("preset") == "single").fetchOne(db)
+        })
+        #expect(single.provenance == .single)
+        #expect(single.windowKind == nil)
+        #expect(single.positionCount == nil)
+        #expect(single.customPresetId == nil)
+    }
 
     @Test func aFailureInTheMiddleOfTheBatchInsertsNoJobAndNoBatch() async throws {
         let fixture = try OfflineStoreFixture()
@@ -383,7 +472,7 @@ struct OfflineChapterStoreBatchTests {
             canonicalMediaId: "series-9",
             entry: .manga(Manga(key: "series-9", title: "Other")),
             seriesTitle: "Other",
-            preset: .single,
+            provenance: .single,
             selection: DownloadBatchRecord.sourceListSelection,
             catalogDigest: nil,
             chapters: [OfflineStoreFixture.chapter("foreign")]

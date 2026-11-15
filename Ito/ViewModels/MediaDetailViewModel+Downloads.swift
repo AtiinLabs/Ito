@@ -14,7 +14,8 @@ extension MediaDetailViewModel {
             progress: dependencies.progress,
             snapshots: snapshots,
             inventory: routeContext.inventoryChapters,
-            loadsFromSource: routeContext.loadDetails != nil
+            loadsFromSource: routeContext.loadDetails != nil,
+            presets: dependencies.downloadPresets
         )
     }
 

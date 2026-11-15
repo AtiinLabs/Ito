@@ -43,6 +43,7 @@ enum AppMessageKind: Equatable {
     case mediaDetailDownloadBatchBusy
     /// A download preset queued chapters; `alreadyStored` of its range were saved or queued before.
     case mediaDetailDownloadsQueued(queued: Int, alreadyStored: Int)
+    case mediaDetailDownloadsQueuedMore(requested: Int, queued: Int, storedMeanwhile: Int)
     case mediaDetailNothingToDownload
     case mediaDetailEditionChoiceNotRemembered
     case mediaDetailEditionChoiceNotSaved
@@ -372,6 +373,26 @@ extension AppMessageKind {
                     ? String(
                         localized: "\(alreadyStored) already saved or queued",
                         comment: "Series details: how many chapters of a download preset's range were already saved or queued. The placeholder is a number, which needs plural forms."
+                    )
+                    : nil
+            )
+        case .mediaDetailDownloadsQueuedMore(let requested, let queued, let storedMeanwhile):
+            let requestedCount = requested.formatted(.number)
+            return .init(
+                style: .success,
+                title: queued < requested
+                    ? String(
+                        localized: "Queued \(queued) of \(requestedCount) chapters",
+                        comment: "Series details: Download More queued fewer chapters than requested. The first placeholder is the queued count and controls plural forms; the second is the locale-formatted requested total."
+                    )
+                    : String(
+                        localized: "Queued \(queued) chapters",
+                        comment: "Series details: a download queued chapters. The placeholder is the number of chapters, which needs plural forms."
+                    ),
+                detail: storedMeanwhile > 0
+                    ? String(
+                        localized: "\(storedMeanwhile) saved or queued in the meantime",
+                        comment: "Series details: chapters of a Download More request became saved or queued before it was committed. The placeholder is a number, which needs plural forms."
                     )
                     : nil
             )

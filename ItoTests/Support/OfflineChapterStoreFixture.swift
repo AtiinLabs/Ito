@@ -115,7 +115,7 @@ final class OfflineStoreFixture {
             canonicalMediaId: canonicalMediaId,
             entry: .manga(Manga(key: canonicalMediaId, title: "Series One")),
             seriesTitle: "Series One",
-            preset: preset,
+            provenance: .builtIn(preset),
             selection: selection,
             catalogDigest: catalogDigest,
             chapters: chapterKeys.map { chapter($0, paywalled: lockedKeys.contains($0) ? true : nil) }

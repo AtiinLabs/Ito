@@ -64,7 +64,7 @@ struct DownloadPresetResolverTests {
         }
         return DownloadPresetResolver.plan(
             rows: rows,
-            preset: preset,
+            window: preset.window,
             selection: selection,
             anchorKey: anchor,
             largeBatchThreshold: threshold
@@ -77,6 +77,25 @@ struct DownloadPresetResolverTests {
         numbers.map { "\(prefix)\($0)" }
     }
 
+    @Test func moreWithoutAnAnchorSkipsReadAndSavedChaptersFromTheBeginning() {
+        let catalog = listed(rows(nil, 1...10))
+        let result = DownloadPresetResolver.plan(
+            rows: catalog.map {
+                DownloadPlanRow(
+                    facts: ChapterFacts($0),
+                    isRead: ["c1", "c3"].contains($0.key),
+                    stored: $0.key == "c2" ? .verified : .none
+                )
+            },
+            window: .more(.builtIn(3)),
+            selection: .sourceList,
+            anchorKey: nil
+        ).map { catalog[$0] }
+        #expect(keys(result.toQueue) == ["c4", "c5", "c6"])
+        #expect(keys(result.satisfied) == ["c2"])
+        #expect(result.issues.contains(.noReadingAnchor))
+        #expect(result.requiresPreview)
+    }
     // MARK: Contract examples
 
     @Test func nextFiveQueuesOnlyTheMissingPositionOfTwentyOneToTwentyFive() {

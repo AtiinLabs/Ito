@@ -142,6 +142,17 @@
         }
       }
     },
+    "%@, %@" : {
+      "comment" : "Accessibility label of a custom download preset: the user's name for it, then what it downloads.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
     "%@, maximum" : {
 
     },
@@ -225,6 +236,29 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld Hours"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld More Chapters" : {
+      "comment" : "Custom download preset summary: download N more chapters that are not saved or queued yet. The placeholder is the number of chapters, which needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld More Chapter"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld More Chapters"
                 }
               }
             }
@@ -764,6 +798,29 @@
         }
       }
     },
+    "%lld saved or queued in the meantime" : {
+      "comment" : "Series details: chapters of a Download More request became saved or queued before it was committed. The placeholder is a number, which needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld saved or queued in the meantime"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld saved or queued in the meantime"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld selected positions need another edition or will be skipped." : {
       "comment" : "Aggregate unresolved download positions; count needs plural forms. Does not claim source deletion.",
       "localizations" : {
@@ -913,8 +970,14 @@
     "Add" : {
 
     },
+    "Add Preset" : {
+      "comment" : "Download presets settings: add a custom preset."
+    },
     "Add Repository" : {
 
+    },
+    "Add a preset to download a set number of chapters from a series' download menu." : {
+      "comment" : "Download presets settings empty state: what a preset is for."
     },
     "Add a repository URL to discover and install plugins." : {
 
@@ -957,6 +1020,9 @@
     },
     "All-Time Popular" : {
 
+    },
+    "Already Saved or Queued" : {
+      "comment" : "Download preview section header for Download More: chapters already stored, which are not counted."
     },
     "Allow Metered Networks" : {
       "comment" : "Download mode permitting cellular and hotspots"
@@ -1188,7 +1254,7 @@
 
     },
     "Chapters" : {
-
+      "comment" : "Download More prompt: section header for the number of chapters.\nDownload More prompt: the field for the number of chapters.\nDownload preset editor: the count field."
     },
     "Chapters marked read are skipped, including other editions with the same chapter number." : {
       "comment" : "Compatibility key-or-number read markers, not offline coverage.",
@@ -1340,7 +1406,7 @@
 
     },
     "Continue" : {
-      "comment" : "History: resume reading or watching a series"
+      "comment" : "Download More prompt: continue to the preview with the entered count.\nHistory: resume reading or watching a series"
     },
     "Continue %@" : {
       "comment" : "History: resume button, with the series title"
@@ -1411,6 +1477,9 @@
     "Couldn't Load Saved Item" : {
 
     },
+    "Couldn't load download presets." : {
+      "comment" : "Download presets settings: the stored presets cannot be read, so none are shown."
+    },
     "Couldn't load popular titles: %@" : {
 
     },
@@ -1440,6 +1509,9 @@
     },
     "Couldn't read the saved scanlator choice" : {
       "comment" : "Series details: reading the scanlators remembered for this series failed this time. The choice itself may be fine."
+    },
+    "Couldn't save the preset. Try again." : {
+      "comment" : "Download presets settings: a preset could not be saved, reordered or deleted. The draft is kept."
     },
     "Couldn't update the download" : {
       "comment" : "Series details: a Download, Cancel, Retry or Delete Download action did not take effect."
@@ -1540,6 +1612,9 @@
         }
       }
     },
+    "Delete All Presets" : {
+      "comment" : "Confirmation button: delete every custom download preset.\nConfirmation title: delete every custom download preset.\nDownload presets settings: remove every stored custom preset after the presets cannot be read."
+    },
     "Delete Download" : {
       "comment" : "Chapter menu: remove the saved copy of this chapter"
     },
@@ -1583,6 +1658,9 @@
           }
         }
       }
+    },
+    "Deleting presets doesn't remove downloaded chapters." : {
+      "comment" : "Download presets settings footer: deleting presets never removes downloaded chapters."
     },
     "Deletion couldn't be completed for: %@. Check the list; some downloads may already have been removed." : {
       "comment" : "Downloads manager deletion failed or its cleanup failed after removing inventory. Never claims rollback."
@@ -1655,6 +1733,15 @@
         }
       }
     },
+    "Download More" : {
+      "comment" : "Download More prompt: title of the count prompt."
+    },
+    "Download More…" : {
+      "comment" : "Download menu item: ask for a count and download that many missing chapters after the last read one."
+    },
+    "Download Presets" : {
+      "comment" : "Navigation title of the custom download presets editor.\nStorage settings: open the editor for custom download presets, such as Next 3 Chapters."
+    },
     "Download Network" : {
       "comment" : "Configured bulk download network mode"
     },
@@ -1681,6 +1768,9 @@
     "Download failed" : {
       "comment" : "Chapter download status"
     },
+    "Download presets" : {
+      "comment" : "Backup restore report: the component holding the user's custom download presets."
+    },
     "Download storage couldn't be measured. Try opening Storage again." : {
       "comment" : "Storage settings failed to read offline inventory totals"
     },
@@ -1695,6 +1785,9 @@
     },
     "Downloads" : {
       "comment" : "Downloads action error alert title\nDownloads manager title\nEmpty downloaded series title\nLibrary toolbar: open the downloads manager\nStorage settings offline downloads section"
+    },
+    "Downloads chapters after your last read one that aren't saved or queued yet. Saved and queued chapters don't count." : {
+      "comment" : "Download More prompt footer: what counts toward the number."
     },
     "Downloads couldn't be cancelled. Check the list before trying again." : {
       "comment" : "Downloads manager bulk Cancel failure"
@@ -1763,6 +1856,9 @@
     "Edit List" : {
 
     },
+    "Edit Preset" : {
+      "comment" : "Download preset editor title when editing a preset."
+    },
     "Edit fallback order" : {
       "comment" : "Open the explicit ordered fallback policy editor, with optional Remember.",
       "localizations" : {
@@ -1785,6 +1881,17 @@
     },
     "Enter a new value to replace it" : {
 
+    },
+    "Enter a number from %lld to %lld." : {
+      "comment" : "Download More prompt: the count must be a whole number in the range. The placeholders are the bounds.\nDownload preset editor: the count must be a whole number in the range. The placeholders are the bounds.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a number from %1$lld to %2$lld."
+          }
+        }
+      }
     },
     "Enter a number from 0 to 100." : {
       "comment" : "Validation for a personal tracker rating"
@@ -2450,6 +2557,9 @@
     "Monospace" : {
       "comment" : "Reading font: generic monospaced face"
     },
+    "More Chapters" : {
+      "comment" : "Download preset editor: the More type."
+    },
     "More Like This" : {
 
     },
@@ -2494,11 +2604,26 @@
     "MyAnimeList returned an incomplete list entry. Reopen this entry before saving." : {
 
     },
+    "Name" : {
+      "comment" : "Download preset editor: section header for the optional name."
+    },
+    "Name is too long." : {
+      "comment" : "Download preset editor: the name is longer than 40 characters or 256 bytes."
+    },
+    "Names can't contain control characters." : {
+      "comment" : "Download preset editor: the name contains an unsupported control character, such as a tab."
+    },
+    "Names can't contain line breaks." : {
+      "comment" : "Download preset editor: the name contains a line break, which is not allowed."
+    },
     "Network" : {
 
     },
     "New List" : {
 
+    },
+    "New Preset" : {
+      "comment" : "Download preset editor title when adding a preset."
     },
     "New Update" : {
 
@@ -2509,6 +2634,29 @@
     "Newest First" : {
 
     },
+    "Next %lld Chapters" : {
+      "comment" : "Custom download preset summary: download the next N chapters from the last read one. The placeholder is the number of chapters, which needs plural forms.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Next %lld Chapter"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Next %lld Chapters"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Next 10 Chapters" : {
       "comment" : "Download menu item: download the next ten unread chapters."
     },
@@ -2517,6 +2665,9 @@
     },
     "Next Chapter" : {
 
+    },
+    "Next Chapters" : {
+      "comment" : "Download preset editor: the Next type."
     },
     "Next Chapter Only" : {
       "comment" : "Adjacent chapter prefetch picker value: only the following chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch."
@@ -2544,6 +2695,9 @@
     },
     "Next chapter opens in the text reader" : {
       "comment" : "Reader: the next chapter is text; go back to the series to open it"
+    },
+    "No Custom Presets" : {
+      "comment" : "Download presets settings empty state title."
     },
     "No Adjacent Chapters" : {
       "comment" : "Adjacent chapter prefetch picker value: no neighbouring chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch."
@@ -2592,6 +2746,9 @@
     },
     "No items in %@." : {
 
+    },
+    "No last-read chapter is available, so these begin with the first unread chapters." : {
+      "comment" : "Download preview warning: without a last-read anchor, Download More traverses unread chapters from the beginning, skipping saved or queued positions."
     },
     "No local reading or watching history was found for this series." : {
 
@@ -2776,7 +2933,7 @@
       "comment" : "History: accessibility hint of an earlier episode row"
     },
     "Optional" : {
-
+      "comment" : "Download preset editor: the name field is optional."
     },
     "Options could not be loaded." : {
 
@@ -2958,7 +3115,7 @@
       "comment" : "Chapter download status: waiting for its turn"
     },
     "Queued %lld chapters" : {
-      "comment" : "Series details: a download preset queued chapters. The placeholder is the number of chapters, which needs plural forms.",
+      "comment" : "Series details: a download preset queued chapters. The placeholder is the number of chapters, which needs plural forms.\nSeries details: a download queued chapters. The placeholder is the number of chapters, which needs plural forms.",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -2973,6 +3130,29 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "Queued %lld chapters"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Queued %lld of %@ chapters" : {
+      "comment" : "Series details: Download More queued fewer chapters than requested. The first placeholder is the queued count and controls plural forms; the second is the locale-formatted requested total.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Queued %1$lld of %2$@ chapters"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Queued %1$lld of %2$@ chapters"
                 }
               }
             }
@@ -3135,6 +3315,9 @@
     "Removes all cookies, cached website data and Cloudflare clearance. Sources that use a website login will need you to sign in again." : {
 
     },
+    "Removes every custom download preset. Downloaded chapters are kept." : {
+      "comment" : "Confirmation message: deleting every custom download preset keeps downloaded chapters."
+    },
     "Removes this series from the list" : {
 
     },
@@ -3283,13 +3466,16 @@
 
     },
     "Save" : {
-
+      "comment" : "Download preset editor: save the preset."
     },
     "Saved" : {
 
     },
     "Saved Source • %@ • Confirmed" : {
 
+    },
+    "Saved and queued chapters count toward the number, like Next 5 Chapters." : {
+      "comment" : "Download preset editor footer: a Next preset counts chapters already saved or queued."
     },
     "Saved chapters of %lld series are deleted, and their queued downloads are cancelled." : {
       "comment" : "Confirm deleting selected downloaded series. The count is the number of selected series; deletion also cancels their queued downloads.",
@@ -3639,6 +3825,9 @@
     },
     "Skipped, locked" : {
       "comment" : "Download preview section: chapters the source marks locked, which are not downloaded."
+    },
+    "Skips saved and queued chapters and downloads this many missing ones." : {
+      "comment" : "Download preset editor footer: a More preset counts only chapters not yet saved or queued."
     },
     "Smaller Text" : {
 
@@ -4095,6 +4284,9 @@
     "Theme" : {
 
     },
+    "These aren't counted." : {
+      "comment" : "Download preview section footer for Download More: the stored chapters listed above do not count toward the number."
+    },
     "These aren't downloaded unless you tick them." : {
       "comment" : "Download preview footer: the uploads listed above are only downloaded when ticked."
     },
@@ -4166,6 +4358,9 @@
     },
     "This plugin will be permanently removed from your device." : {
 
+    },
+    "This preset no longer exists." : {
+      "comment" : "Download preset editor: the preset was deleted while it was being edited."
     },
     "This removes all reading and watch history." : {
 
@@ -4314,7 +4509,7 @@
 
     },
     "Type" : {
-
+      "comment" : "Download preset editor: the type of preset."
     },
     "UI Test Fixture" : {
       "shouldTranslate" : false
@@ -4640,6 +4835,9 @@
     },
     "Yesterday" : {
       "comment" : "History section"
+    },
+    "You can have up to %lld presets." : {
+      "comment" : "Download preset editor: the maximum number of presets has been reached. The placeholder is that maximum."
     },
     "You stopped this episode at %@." : {
 

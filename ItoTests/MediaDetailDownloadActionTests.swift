@@ -408,7 +408,7 @@ final class MediaDetailDownloadActionTests: XCTestCase {
 
         XCTAssertNil(viewModel.downloadBatch.meteredPrompt)
         XCTAssertEqual(downloads.batchRequests.map { $0.chapters.map(\.key) }, [["chapter-1"]])
-        XCTAssertEqual(downloads.batchRequests.first?.preset, .single)
+        XCTAssertEqual(downloads.batchRequests.first?.provenance.preset, .single)
         XCTAssertEqual(downloads.confirmedMeteredUses, [true])
     }
 
@@ -499,7 +499,7 @@ final class MediaDetailDownloadActionTests: XCTestCase {
             downloads.holdsBatches = false
             downloads.releaseBatches()
         }
-        let queueing = viewModel.downloadBatch.startDownload(.next)
+        let queueing = viewModel.downloadBatch.startDownload(.builtIn(.next))
         try await downloads.waitForPendingBatch()
 
         await viewModel.downloadBatch.resolveMeteredPrompt(prompt.id, useMeteredData: true).value
@@ -525,7 +525,7 @@ final class MediaDetailDownloadActionTests: XCTestCase {
             downloads.holdsBatches = false
             downloads.releaseBatches()
         }
-        let queueing = viewModel.downloadBatch.startDownload(.next)
+        let queueing = viewModel.downloadBatch.startDownload(.builtIn(.next))
         try await downloads.waitForPendingBatch()
         downloads.meteredConfirmationNeeded = true
 
@@ -559,7 +559,7 @@ final class MediaDetailDownloadActionTests: XCTestCase {
         downloads.meteredConfirmationNeeded = true
         let viewModel = makeViewModel(media: series, saved: true, downloads: downloads)
 
-        await viewModel.downloadBatch.startDownload(.all).value
+        await viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         guard case .preview(let preview)? = viewModel.downloadBatch.sheet else {
             return XCTFail("All of twelve chapters is previewed before it is queued")
         }
@@ -583,7 +583,7 @@ final class MediaDetailDownloadActionTests: XCTestCase {
         downloads.meteredConfirmationNeeded = true
         let viewModel = makeViewModel(media: series, saved: true, downloads: downloads)
 
-        await viewModel.downloadBatch.startDownload(.all).value
+        await viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         guard case .preview(let preview)? = viewModel.downloadBatch.sheet else {
             return XCTFail("All of twelve chapters is previewed before it is queued")
         }
@@ -693,6 +693,7 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
     private(set) var preferenceReadCount = 0
     private(set) var preferenceWriteCount = 0
     private var pendingPreferenceReads: [CheckedContinuation<Void, Never>] = []
+    private var preferenceReadArrivalWaiters: [CheckedContinuation<Void, Never>] = []
     private var pendingPreferenceWrites: [CheckedContinuation<Void, Never>] = []
     private var pendingBatches: [CheckedContinuation<Void, Never>] = []
     private var pendingBatchObservers: [UUID: (count: Int, continuation: CheckedContinuation<Void, any Error>)] = [:]
@@ -828,7 +829,14 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
 
     func editionPreference(for media: MediaIdentity) async throws -> EditionSelection? {
         preferenceReadCount += 1
-        if holdsPreferenceReads { await withCheckedContinuation { pendingPreferenceReads.append($0) } }
+        if holdsPreferenceReads {
+            await withCheckedContinuation { continuation in
+                pendingPreferenceReads.append(continuation)
+                let waiters = preferenceReadArrivalWaiters
+                preferenceReadArrivalWaiters.removeAll()
+                waiters.forEach { $0.resume() }
+            }
+        }
         if let preferenceReadFailure { throw preferenceReadFailure }
         return storedPreferences[media]
     }
@@ -867,6 +875,10 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
         storedBytes
     }
 
+    func waitForPendingPreferenceRead() async {
+        if !pendingPreferenceReads.isEmpty { return }
+        await withCheckedContinuation { preferenceReadArrivalWaiters.append($0) }
+    }
     func releasePreferenceReads() {
         let pending = pendingPreferenceReads
         pendingPreferenceReads = []

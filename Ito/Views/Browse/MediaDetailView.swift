@@ -240,13 +240,21 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     @ViewBuilder
     private func downloadSheetContent(_ sheet: DownloadSheet) -> some View {
         switch sheet {
+        case .moreCount(let prompt):
+            DownloadMorePromptView(
+                prompt: prompt,
+                onContinue: { count in
+                    viewModel.downloadBatch.confirmDownloadMore(count: count, promptID: prompt.id)
+                },
+                onCancel: viewModel.downloadBatch.dismissDownloadSheet
+            )
         case .chooser(let presentation):
             EditionChooserSheet(
                 presentation: presentation,
                 isApplying: viewModel.downloadBatch.isApplyingChoice,
                 onConfirm: { selection, remember in
                     _ = viewModel.downloadBatch.applyEditionChoice(
-                        selection, remember: remember, then: presentation.preset, chooserID: presentation.id
+                        selection, remember: remember, then: presentation.action, chooserID: presentation.id
                     )
                 },
                 onCancel: viewModel.downloadBatch.dismissDownloadSheet
@@ -483,7 +491,9 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 if viewModel.showsBatchDownloadControls {
                     DownloadPresetMenu(
                         isEnabled: !viewModel.downloadBatch.isEnqueuing,
+                        customPresets: viewModel.downloadBatch.customPresets,
                         onSelect: { viewModel.downloadBatch.startDownload($0) },
+                        onDownloadMore: { viewModel.downloadBatch.presentDownloadMore() },
                         onChooseScanlators: { viewModel.downloadBatch.openEditionChooser() }
                     )
                     .padding(.trailing, 8)

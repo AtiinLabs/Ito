@@ -149,6 +149,7 @@ nonisolated public struct ImportedBackup: Sendable {
     public let legacyUnscopedMediaState: [LegacyUnscopedMediaStateRecord]
     public let legacyStateArchives: [LegacyStateArchiveRecord]
     public let savedLibraryThumbnails: [LibraryCoverThumbnailRecord]
+    public let downloadPresets: [DownloadPresetDefinitionRecord]
     public let migrationReport: MigrationReport?
 
     public var formatVersion: Int? { metadata?.formatVersion }
@@ -181,6 +182,7 @@ nonisolated public struct ImportedBackup: Sendable {
         legacyUnscopedMediaState: [LegacyUnscopedMediaStateRecord] = [],
         legacyStateArchives: [LegacyStateArchiveRecord] = [],
         savedLibraryThumbnails: [LibraryCoverThumbnailRecord] = [],
+        downloadPresets: [DownloadPresetDefinitionRecord] = [],
         migrationReport: MigrationReport? = nil
     ) {
         self.metadata = metadata
@@ -210,6 +212,7 @@ nonisolated public struct ImportedBackup: Sendable {
             LegacyArchiveContentClass.allCases.contains($0.contentClass)
         }
         self.savedLibraryThumbnails = savedLibraryThumbnails
+        self.downloadPresets = downloadPresets
         self.migrationReport = migrationReport
     }
 
@@ -325,6 +328,8 @@ nonisolated public struct ImportedBackup: Sendable {
             !legacyUnscopedMediaState.isEmpty
         case .savedLibraryThumbnails:
             !savedLibraryThumbnails.isEmpty
+        case .downloadPresets:
+            !downloadPresets.isEmpty
         case .legacyStateArchive:
             !legacyStateArchives.isEmpty
         }
