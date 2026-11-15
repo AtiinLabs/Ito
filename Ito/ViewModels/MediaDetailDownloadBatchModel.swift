@@ -31,7 +31,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     /// SHA-256 hex digest of the chapter list as the source returned it. Empty where nothing is downloadable.
     @Published private(set) var catalogDigest = ""
     /// A batch is being queued; a second one waits for it instead of being dropped.
-    @Published private(set) var isEnqueuing = false
+    @Published var isEnqueuing = false
     /// A scanlator choice is being applied; a second confirm of the same sheet is not acted on.
     @Published private(set) var isApplyingChoice = false
     /// Free space where downloads are stored, for the preview.
@@ -45,7 +45,9 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     /// What the saved details say about the catalog they hold; nil when nothing was recorded.
     @Published private(set) var coverageBasis: LibrarySnapshotBasis?
     /// Set while a planned batch waits for the user to decide whether it may use cellular data.
-    @Published private(set) var meteredPrompt: MeteredDownloadPrompt?
+    @Published var meteredPrompt: MeteredDownloadPrompt?
+    /// The saved custom presets, in order. Read from the store; the model never writes them.
+    @Published private(set) var customPresets: [CustomDownloadPreset] = []
 
     weak var host: (any MediaDetailDownloadBatchHost)? {
         didSet {
@@ -54,7 +56,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         }
     }
 
-    private let downloads: any MediaDetailDownloadServing
+    let downloads: any MediaDetailDownloadServing
     private let progress: any MediaDetailProgressServing
     private let snapshots: MediaDetailSnapshotRefresher
     private let inventory: ((MediaIdentity) async -> [DownloadedChapterRecord])?
@@ -68,6 +70,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     private var requestedSavedOnly: SavedOnlyRequest?
     /// Saved-only snapshots whose metadata still belongs to this exact source series.
     private var policySavedOnlyChapters: [Chapter] = []
+    private var presetSubscription: AnyCancellable?
 
     private var preferenceTask: Task<Void, Never>?
     /// The read that may still publish; a replaced or superseded read finds another token and leaves.
@@ -76,21 +79,26 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     private var savedOnlyTask: Task<Void, Never>?
     private var capacityTask: Task<Void, Never>?
     private var bytesTask: Task<Void, Never>?
-    private var enqueueTask: Task<Void, Never>?
+    // The queueing state below is internal, not private, so MediaDetailDownloadBatchModel+Queueing can reach it.
+    var enqueueTask: Task<Void, Never>?
     private var choiceOperationID: UUID?
+    /// A More prompt confirmation is scoped to this exact prompt until it either replaces it with a chooser/preview
+    /// or admits the batch write. Dismissal, replacement and navigation invalidate it.
+    var pendingMoreOperationID: UUID?
+    var pendingMorePromptID: UUID?
     private var scopeGeneration = 0
     private var lastSavedState: Bool?
     /// Advances when the saved series is removed or reset, and never on a catalogue change alone.
-    private var savedScopeGeneration = 0
+    private(set) var savedScopeGeneration = 0
     /// The submission that set `isEnqueuing`; only that submission may end the queueing state.
-    private var enqueueOperationID: UUID?
+    var enqueueOperationID: UUID?
     /// The batch held until the user decides whether it may use an expensive path.
-    private var pendingMeteredBatch: PendingMeteredBatch?
+    var pendingMeteredBatch: PendingMeteredBatch?
     /// Whether the screen reported the current download sheet on screen, and so will report its dismissal.
-    private var sheetIsOnScreen = false
+    var sheetIsOnScreen = false
     /// Set from the moment a shown sheet is cleared until SwiftUI reports it dismissed. A metered prompt waits for
     /// that, because a dialog presented over a sheet that is still going away is not shown.
-    private var sheetDismissalPending = false
+    var sheetDismissalPending = false
 
     /// The saved editions asked of the inventory, for one series and one set of unlisted keys.
     private struct SavedOnlyRequest: Equatable {
@@ -99,16 +107,18 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     }
 
     /// A planned batch held for the user's decision about expensive paths.
-    private struct PendingMeteredBatch {
+    struct PendingMeteredBatch {
         let id: UUID
         let request: DownloadBatchRequest
         let alreadyStored: Int
+        /// The count a "Download More" request asked for, reported against what was actually queued.
+        let requestedMore: Int?
         let scope: BatchScope
         /// The dialog has been shown for this batch; hiding it does not show it again.
         var wasPresented = false
     }
 
-    private struct BatchScope {
+    struct BatchScope {
         let identity: MediaIdentity
         let generation: Int
         let catalogDigest: String
@@ -120,13 +130,15 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         progress: any MediaDetailProgressServing,
         snapshots: MediaDetailSnapshotRefresher,
         inventory: ((MediaIdentity) async -> [DownloadedChapterRecord])?,
-        loadsFromSource: Bool
+        loadsFromSource: Bool,
+        presets: any DownloadPresetProviding
     ) {
         self.downloads = downloads
         self.progress = progress
         self.snapshots = snapshots
         self.inventory = inventory
         self.loadsFromSource = loadsFromSource
+        presetSubscription = presets.presetsPublisher.sink { [weak self] in self?.customPresets = $0 }
     }
 
     deinit {
@@ -199,6 +211,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         preferenceTask?.cancel()
         preferenceTask = nil
         preferenceIdentity = nil
+        invalidateMoreOperation()
         remembered = .unknown
     }
 
@@ -213,6 +226,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             isApplyingChoice = false
         }
         revalidatePreview()
+        invalidateMoreOperation()
         refreshSavedOnly()
     }
     /// The states of a series' chapters, with the series they belong to.
@@ -248,6 +262,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         scopeGeneration &+= 1
         savedScopeGeneration &+= 1
         releaseEnqueueOwnership()
+        invalidateMoreOperation()
         preferenceTask?.cancel()
         coverageTask?.cancel()
         savedOnlyTask?.cancel()
@@ -296,7 +311,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         }
     }
 
-    private func loadPreference(force: Bool) {
+    func loadPreference(force: Bool) {
         guard let identity = host?.batchIdentity else { return }
         if !force, preferenceIdentity == identity, remembered != .unreadable { return }
         preferenceIdentity = identity
@@ -339,36 +354,40 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     }
 
     /// Waits for the remembered choice. One that could not be read is read again first.
-    private func ensurePreferenceRead() async {
+    private func ensurePreferenceRead(validating isValid: () -> Bool = { true }) async -> Bool {
         if remembered == .unreadable || (remembered == .unknown && preferenceTask == nil) {
             loadPreference(force: true)
         }
         await preferenceTask?.value
-        await refreshStoredPreference()
+        guard !Task.isCancelled, isValid() else { return false }
+        return await refreshStoredPreference(validating: isValid)
     }
 
-    /// Reads the stored choice once more before an action plans with it, so a choice another screen of the
-    /// same series saved meanwhile is not planned under its old copy. A read that fails or is overtaken keeps
-    /// what is cached; the store still checks the reviewed policy when the batch is queued.
-    private func refreshStoredPreference() async {
+    /// Reads the stored choice once more before an action plans with it. A prompt-bound action validates its token
+    /// immediately after the read resumes, before using the resulting choice.
+    private func refreshStoredPreference(validating isValid: () -> Bool) async -> Bool {
         let before = remembered
-        guard before != .unknown, before != .unreadable, let identity = host?.batchIdentity else { return }
+        guard before != .unknown, before != .unreadable, let identity = host?.batchIdentity else {
+            return isValid()
+        }
         let savedGeneration = savedScopeGeneration
         let fresh: RememberedEditionChoice
         do {
             if let stored = try await downloads.editionPreference(for: identity) {
                 fresh = .chosen(stored)
             } else {
-                fresh = RememberedEditionChoice.none
+                fresh = .none
             }
         } catch SeriesEditionPreferenceError.unreadable {
             fresh = .unreadable
         } catch {
-            return
+            return isValid()
         }
-        guard !Task.isCancelled, host?.batchIdentity == identity, host?.batchIsSaved == true,
-              savedScopeGeneration == savedGeneration, remembered == before else { return }
+        guard !Task.isCancelled, isValid() else { return false }
+        guard host?.batchIdentity == identity, host?.batchIsSaved == true,
+              savedScopeGeneration == savedGeneration, remembered == before else { return true }
         remembered = fresh
+        return true
     }
 
     private func loadStoredBytes() {
@@ -442,7 +461,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
 
     /// The scope an action starts under. The source epoch is read once here; the stores compare it again
     /// inside their write transactions. A read that fails is reported: an action never silently does nothing.
-    private func currentBatchScope(reportingFailure: Bool = true) -> BatchScope? {
+    func currentBatchScope(reportingFailure: Bool = true) -> BatchScope? {
         guard let host, host.batchIsSaved else { return nil }
         guard let epoch = try? downloads.editionPreferenceEpoch(for: host.batchIdentity.pluginId) else {
             if reportingFailure { host.presentBatchMessage(.downloadActionFailed) }
@@ -454,7 +473,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         )
     }
 
-    private func isCurrent(_ scope: BatchScope) -> Bool {
+    func isCurrent(_ scope: BatchScope) -> Bool {
         host?.batchIdentity == scope.identity
             && host?.batchIsSaved == true
             && scopeGeneration == scope.generation
@@ -503,41 +522,72 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     /// nothing to confirm is queued at once; anything else is shown in the preview. The returned task lets a
     /// caller wait for the queueing.
     @discardableResult
-    func startDownload(_ preset: DownloadPreset) -> Task<Void, Never> {
-        guard showsControls, !isEnqueuing, let scope = currentBatchScope() else { return Task {} }
+    func startDownload(_ action: DownloadAction) -> Task<Void, Never> {
+        invalidateMoreOperation()
+        return startDownload(action, promptOperationID: nil)
+    }
+
+    /// Internal continuation for a confirmed More prompt. Its token must still own the visible prompt after every
+    /// asynchronous read; once consumed by a chooser/preview or batch admission, the token no longer owns work.
+    func startDownload(
+        _ action: DownloadAction,
+        promptOperationID: UUID?
+    ) -> Task<Void, Never> {
+        guard showsControls, !isEnqueuing, let scope = currentBatchScope() else {
+            if let promptOperationID, pendingMoreOperationID == promptOperationID { invalidateMoreOperation() }
+            return Task {}
+        }
         return Task { [weak self] in
-            await self?.ensurePreferenceRead()
-            await self?.savedOnlyTask?.value
-            guard let self, self.isCurrent(scope), self.showsControls, !self.isEnqueuing else { return }
+            guard let self else { return }
+            let validPrompt = { self.isValidMoreOperation(promptOperationID) }
+            guard validPrompt() else { return }
+            guard await self.ensurePreferenceRead(validating: validPrompt),
+                  validPrompt(),
+                  self.isCurrent(scope),
+                  self.showsControls,
+                  !self.isEnqueuing else { return }
+            await self.savedOnlyTask?.value
+            guard validPrompt(),
+                  self.isCurrent(scope),
+                  self.showsControls,
+                  !self.isEnqueuing else { return }
             switch self.remembered {
             case .chosen(let selection):
                 let resolution = self.resolveSelection(selection)
                 if resolution == nil {
-                    self.sheet = .chooser(self.makeChooser(preset: preset, problem: .needsReview, scope: scope))
+                    guard self.consumeMoreOperation(promptOperationID) else { return }
+                    self.sheet = .chooser(self.makeChooser(action: action, problem: .needsReview, scope: scope))
                 } else if let resolution {
+                    guard validPrompt() else { return }
                     await self.resolveDownload(
-                        preset, selection: resolution.selection, resolvedSelection: resolution, scope: scope
+                        action, selection: resolution.selection, resolvedSelection: resolution, scope: scope,
+                        promptOperationID: promptOperationID
                     )?.value
                 }
             case .none:
                 if self.scanlatorOptions().count >= 2 {
-                    self.sheet = .chooser(self.makeChooser(preset: preset, problem: nil, scope: scope))
+                    guard self.consumeMoreOperation(promptOperationID) else { return }
+                    self.sheet = .chooser(self.makeChooser(action: action, problem: nil, scope: scope))
                 } else if let resolution = self.resolveSelection(.sourceList) {
+                    guard validPrompt() else { return }
                     await self.resolveDownload(
-                        preset, selection: resolution.selection, resolvedSelection: resolution, scope: scope
+                        action, selection: resolution.selection, resolvedSelection: resolution, scope: scope,
+                        promptOperationID: promptOperationID
                     )?.value
                 }
             case .unreadable, .unknown:
                 let problem: StoredChoiceProblem = self.remembered == .unreadable ? .unreadable : .readFailed
                 if self.scanlatorOptions().count >= 2 {
-                    self.sheet = .chooser(self.makeChooser(preset: preset, problem: problem, scope: scope))
+                    guard self.consumeMoreOperation(promptOperationID) else { return }
+                    self.sheet = .chooser(self.makeChooser(action: action, problem: problem, scope: scope))
                 } else if let resolution = self.resolveSelection(.sourceList) {
+                    guard validPrompt() else { return }
                     self.host?.presentBatchMessage(
                         problem == .unreadable ? .editionChoiceUnreadable : .editionChoiceReadFailed(reviewing: true)
                     )
                     await self.resolveDownload(
-                        preset, selection: resolution.selection, resolvedSelection: resolution,
-                        alwaysPreview: true, scope: scope
+                        action, selection: resolution.selection, resolvedSelection: resolution,
+                        alwaysPreview: true, scope: scope, promptOperationID: promptOperationID
                     )?.value
                 }
             }
@@ -548,6 +598,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     /// first, so the chooser never opens on a default the series has already replaced.
     @discardableResult
     func openEditionChooser() -> Task<Void, Never> {
+        invalidateMoreOperation()
         guard showsControls, let scope = currentBatchScope() else { return Task {} }
         return Task { [weak self] in
             await self?.ensurePreferenceRead()
@@ -567,7 +618,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
                 ? .needsReview
                 : (self.remembered == .unreadable ? .unreadable : nil)
             self.sheet = .chooser(
-                self.makeChooser(preset: nil, problem: problem, resolvedSelection: resolution, scope: scope)
+                self.makeChooser(action: nil, problem: problem, resolvedSelection: resolution, scope: scope)
             )
         }
     }
@@ -579,7 +630,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     func applyEditionChoice(
         _ selection: EditionSelection,
         remember: Bool,
-        then preset: DownloadPreset?,
+        then action: DownloadAction?,
         chooserID: UUID? = nil
     ) -> Task<Void, Never> {
         guard showsControls, !isApplyingChoice, let scope = currentBatchScope() else { return Task {} }
@@ -617,7 +668,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             }
             var storeFailed = false
             var sourceChanged = false
-            let store = remember || preset == nil
+            let store = remember || action == nil
             if store {
                 do {
                     try await downloads.setEditionPreference(
@@ -651,15 +702,15 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
                 return
             }
             if storeFailed {
-                self.host?.presentBatchMessage(preset == nil ? .editionChoiceNotSaved : .editionChoiceNotRemembered)
+                self.host?.presentBatchMessage(action == nil ? .editionChoiceNotSaved : .editionChoiceNotRemembered)
                 self.sheet = .chooser(self.makeChooser(
-                    preset: preset, problem: nil, initialSelection: reviewedSelection, scope: scope
+                    action: action, problem: nil, initialSelection: reviewedSelection, scope: scope
                 ))
                 return
             }
-            if let preset {
+            if let action {
                 await self.resolveDownload(
-                    preset, selection: reviewedSelection, resolvedSelection: resolution, scope: scope
+                    action, selection: reviewedSelection, resolvedSelection: resolution, scope: scope
                 )?.value
             } else {
                 self.sheet = nil
@@ -708,7 +759,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             return Task {}
         }
         return enqueueBatch(
-            preset: preview.preset,
+            action: preview.action,
             selection: preview.selection,
             chapters: chapters,
             alreadyStored: preview.storedCount,
@@ -718,9 +769,18 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     }
 
     func dismissDownloadSheet() {
+        invalidateMoreOperation()
         sheet = nil
         choiceOperationID = nil
         isApplyingChoice = false
+    }
+
+    /// Replaces the download sheet with the count prompt. Kept in the main declaration because `sheet` has a
+    /// private setter; the prompt continuation itself lives in the focused More extension.
+    func presentDownloadMore() {
+        invalidateMoreOperation()
+        guard showsControls, !isEnqueuing, let identity = host?.batchIdentity else { return }
+        sheet = .moreCount(DownloadMorePrompt(id: UUID(), identity: identity))
     }
 
     /// Editing fallback is a separate deliberate save, not promotion of checked exact uploads.
@@ -733,7 +793,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             return
         }
         sheet = .chooser(makeChooser(
-            preset: preview.preset, problem: nil, initialSelection: preview.selection, scope: scope
+            action: preview.action, problem: nil, initialSelection: preview.selection, scope: scope
         ))
     }
 
@@ -745,7 +805,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     }
 
     private func planDownload(
-        _ preset: DownloadPreset,
+        _ window: DownloadWindow,
         selection: EditionSelection,
         resolvedSelection: ResolvedEditionSelection,
         identity: MediaIdentity
@@ -785,7 +845,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         }
         let plan = DownloadPresetResolver.plan(
             rows: rows,
-            preset: preset,
+            window: window,
             selection: selection,
             anchorKey: progress.lastReadChapter(for: identity),
             resolvedSelection: resolvedSelection
@@ -799,26 +859,28 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     }
 
     private func resolveDownload(
-        _ preset: DownloadPreset,
+        _ action: DownloadAction,
         selection: EditionSelection,
         resolvedSelection: ResolvedEditionSelection,
         alwaysPreview: Bool = false,
-        scope: BatchScope
+        scope: BatchScope,
+        promptOperationID: UUID? = nil
     ) -> Task<Void, Never>? {
-        guard isCurrent(scope) else { return nil }
+        guard isCurrent(scope), isValidMoreOperation(promptOperationID) else { return nil }
         let planned = planDownload(
-            preset, selection: selection, resolvedSelection: resolvedSelection, identity: scope.identity
+            action.window, selection: selection, resolvedSelection: resolvedSelection, identity: scope.identity
         )
         let holdsFailedJob = planned.plan.satisfied.contains { isFailed(planned.chapters[$0].key) }
         if alwaysPreview || planned.plan.requiresPreview || holdsFailedJob {
-            sheet = .preview(makePreview(planned, preset: preset, selection: selection, scope: scope, listChanged: false))
+            guard consumeMoreOperation(promptOperationID) else { return nil }
+            sheet = .preview(makePreview(planned, action: action, selection: selection, scope: scope, listChanged: false))
             loadAvailableCapacity()
             return nil
         }
-        sheet = nil
         let queueable = planned.plan.toQueue.map { planned.chapters[$0] }
         guard !queueable.isEmpty else {
-            // A policy whose groups have no rows at all says so; a plain "nothing new" would hide the cause.
+            guard consumeMoreOperation(promptOperationID) else { return nil }
+            sheet = nil
             var explainsAbsence = false
             if case .preferred = selection {
                 explainsAbsence = !planned.chapters.contains {
@@ -828,8 +890,10 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             host?.presentBatchMessage(explainsAbsence ? .preferredGroupNotListed : .nothingToDownload)
             return nil
         }
+        guard consumeMoreOperation(promptOperationID) else { return nil }
+        sheet = nil
         return enqueueBatch(
-            preset: preset,
+            action: action,
             selection: selection,
             chapters: queueable,
             alreadyStored: planned.plan.satisfied.count,
@@ -840,7 +904,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
 
     private func makePreview(
         _ planned: PlannedDownload,
-        preset: DownloadPreset,
+        action: DownloadAction,
         selection: EditionSelection,
         scope: BatchScope,
         listChanged: Bool
@@ -860,7 +924,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         let plan = planned.plan
         return DownloadPreview(
             id: UUID(),
-            preset: preset,
+            action: action,
             selection: selection,
             identity: scope.identity,
             scopeGeneration: scope.generation,
@@ -895,7 +959,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         guard let resolution = resolveSelection(preview.selection) else {
             sheet = .chooser(
                 makeChooser(
-                    preset: preview.preset,
+                    action: preview.action,
                     problem: .needsReview,
                     initialSelection: preview.selection,
                     scope: scope
@@ -904,12 +968,12 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             return
         }
         let planned = planDownload(
-            preview.preset, selection: resolution.selection,
+            preview.action.window, selection: resolution.selection,
             resolvedSelection: resolution, identity: scope.identity
         )
         sheet = .preview(
             makePreview(
-                planned, preset: preview.preset, selection: resolution.selection,
+                planned, action: preview.action, selection: resolution.selection,
                 scope: scope, listChanged: true
             )
         )
@@ -929,7 +993,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     // MARK: - Chooser
 
     private func makeChooser(
-        preset: DownloadPreset?,
+        action: DownloadAction?,
         problem: StoredChoiceProblem?,
         resolvedSelection: ResolvedEditionSelection? = nil,
         initialSelection: EditionSelection? = nil,
@@ -944,213 +1008,10 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
             options: scanlatorOptions(),
             initialSelection: initialSelection ?? resolvedSelection?.selection ?? rememberedSelection,
             remember: problem != .readFailed,
-            offersRemember: preset != nil,
-            preset: preset,
+            offersRemember: action != nil,
+            action: action,
             storedChoiceProblem: problem
         )
-    }
-
-    // MARK: - Queueing
-
-    private func enqueueBatch(
-        preset: DownloadPreset,
-        selection: EditionSelection,
-        chapters: [Chapter],
-        alreadyStored: Int,
-        scope: BatchScope,
-        policy: RememberedEditionChoice
-    ) -> Task<Void, Never>? {
-        guard !isEnqueuing, isCurrent(scope), let host,
-              let entry = host.batchEntry,
-              let storedSelection = try? selection.storageData() else {
-            if isCurrent(scope) { host?.presentBatchMessage(.downloadRefused) }
-            return nil
-        }
-        let request = DownloadBatchRequest(
-            pluginId: scope.identity.pluginId,
-            mediaKind: scope.identity.mediaKind,
-            canonicalMediaId: scope.identity.canonicalMediaId,
-            entry: entry,
-            seriesTitle: host.batchSeriesTitle,
-            preset: DownloadBatchPreset(preset),
-            selection: storedSelection,
-            catalogDigest: scope.catalogDigest.isEmpty ? nil : scope.catalogDigest,
-            chapters: chapters,
-            reviewedSourceEpoch: scope.sourceEpoch,
-            reviewedPolicy: reviewedPolicy(of: policy)
-        )
-        return queueOrHold(request, alreadyStored: alreadyStored, scope: scope)
-    }
-
-    /// Queues one chapter the user tapped, as the one-chapter `single` batch the store makes for it. Under
-    /// "Ask on Metered Networks" on an expensive path it waits for the same foreground confirmation a batch gets.
-    func queueSingleChapter(_ chapter: Chapter) -> Task<Void, Never> {
-        if isEnqueuing, isCurrentSeriesSaved {
-            host?.presentBatchMessage(.downloadBatchBusy)
-            return Task {}
-        }
-        guard let scope = currentBatchScope(), let host, let entry = host.batchEntry else {
-            host?.presentBatchMessage(.downloadRefused)
-            return Task {}
-        }
-        let request = DownloadBatchRequest(
-            pluginId: scope.identity.pluginId,
-            mediaKind: scope.identity.mediaKind,
-            canonicalMediaId: scope.identity.canonicalMediaId,
-            entry: entry,
-            seriesTitle: host.batchSeriesTitle,
-            preset: .single,
-            selection: DownloadBatchRecord.sourceListSelection,
-            catalogDigest: nil,
-            chapters: [chapter]
-        )
-        return queueOrHold(request, alreadyStored: 0, scope: scope) ?? Task {}
-    }
-
-    /// Queues the request, or holds it for the user's decision when it would use an expensive path under a mode
-    /// that asks. The decision is applied to this exact request.
-    private func queueOrHold(_ request: DownloadBatchRequest, alreadyStored: Int, scope: BatchScope) -> Task<Void, Never>? {
-        guard downloads.meteredUseNeedsConfirmation() else {
-            return submitBatch(request, confirmedMeteredUse: false, alreadyStored: alreadyStored, scope: scope)
-        }
-        pendingMeteredBatch = PendingMeteredBatch(id: UUID(), request: request, alreadyStored: alreadyStored, scope: scope)
-        presentHeldMeteredPrompt()
-        return nil
-    }
-
-    /// Shows the held batch's prompt unless a sheet is still dismissing or the dialog was already shown for it.
-    /// `downloadSheetDidDismiss()` shows it then.
-    private func presentHeldMeteredPrompt() {
-        guard var pending = pendingMeteredBatch, !pending.wasPresented, !sheetDismissalPending else { return }
-        pending.wasPresented = true
-        pendingMeteredBatch = pending
-        meteredPrompt = MeteredDownloadPrompt(id: pending.id, chapterCount: pending.request.chapters.count)
-    }
-
-    /// Called when the screen shows a download sheet. Only a sheet that was shown reports its dismissal.
-    func downloadSheetDidAppear() {
-        guard sheet != nil else { return }
-        sheetIsOnScreen = true
-    }
-
-    /// Called when a download sheet has finished dismissing. A prompt held behind that sheet is shown now. A sheet
-    /// that was replaced rather than cleared is still on screen.
-    func downloadSheetDidDismiss() {
-        if sheet == nil { sheetIsOnScreen = false }
-        sheetDismissalPending = false
-        presentHeldMeteredPrompt()
-    }
-
-    /// Whether the screen shows this series as a saved one, so a message about its downloads is about it.
-    private var isCurrentSeriesSaved: Bool { host?.batchIsSaved == true }
-
-    private func submitBatch(
-        _ request: DownloadBatchRequest,
-        confirmedMeteredUse: Bool,
-        alreadyStored: Int,
-        scope: BatchScope
-    ) -> Task<Void, Never>? {
-        guard !isEnqueuing, isCurrent(scope) else { return nil }
-        let downloads = downloads
-        let operation = UUID()
-        let savedGeneration = savedScopeGeneration
-        let identity = scope.identity
-        isEnqueuing = true
-        enqueueOperationID = operation
-        let task = Task { [weak self] in
-            let outcome = await downloads.enqueueBatch(request, confirmedMeteredUse: confirmedMeteredUse)
-            self?.finishBatch(
-                outcome,
-                alreadyStored: alreadyStored,
-                operation: operation,
-                identity: identity,
-                savedGeneration: savedGeneration
-            )
-        }
-        enqueueTask = task
-        return task
-    }
-
-    /// Applies the user's decision to the batch held for it. `useMeteredData` queues it with consent to use an
-    /// expensive path for this batch alone; otherwise it is queued without one and waits for an unmetered path.
-    /// The batch is found by the prompt the dialog presented, so a dialog that already hid itself while dismissing
-    /// still resolves it. A decision for a batch no longer held does nothing: its series is no longer shown. A
-    /// batch that cannot be submitted now is reported, not dropped silently.
-    @discardableResult
-    func resolveMeteredPrompt(_ promptID: UUID, useMeteredData: Bool) -> Task<Void, Never> {
-        guard let pending = pendingMeteredBatch, pending.id == promptID else { return Task {} }
-        pendingMeteredBatch = nil
-        meteredPrompt = nil
-        if let task = submitBatch(
-            pending.request,
-            confirmedMeteredUse: useMeteredData,
-            alreadyStored: pending.alreadyStored,
-            scope: pending.scope
-        ) {
-            return task
-        }
-        if host?.batchIdentity == pending.scope.identity, isCurrentSeriesSaved {
-            host?.presentBatchMessage(isEnqueuing ? .downloadBatchBusy : .editionChoiceChanged)
-        }
-        return Task {}
-    }
-
-    /// Hides the dialog without deciding. The held batch stays, because the dialog hides itself while a button's
-    /// action is still to run; only `cancelMeteredPrompt()` drops it.
-    func hideMeteredPrompt() {
-        meteredPrompt = nil
-    }
-
-    /// The user's Cancel, or the series going away: drops the held batch without queueing anything.
-    func cancelMeteredPrompt() {
-        pendingMeteredBatch = nil
-        meteredPrompt = nil
-    }
-
-    /// Ends the queueing state of the submission that set it; a reset, a removal, or a later submission owns its own.
-    /// The outcome is reported only while the saved series it was admitted for is still the one shown. A catalogue
-    /// change does not suppress it, because it changes neither the series nor its saved state.
-    private func finishBatch(
-        _ outcome: DownloadBatchOutcome,
-        alreadyStored: Int,
-        operation: UUID,
-        identity: MediaIdentity,
-        savedGeneration: Int
-    ) {
-        guard enqueueOperationID == operation else { return }
-        releaseEnqueueOwnership()
-        guard savedScopeGeneration == savedGeneration,
-              host?.batchIsSaved == true,
-              host?.batchIdentity == identity else { return }
-        if let refusal = outcome.refusal {
-            switch refusal {
-            case .unavailable:
-                host?.presentBatchMessage(.downloadActionFailed)
-            case .sourceChanged:
-                host?.presentBatchMessage(.editionChoiceChanged)
-            case .policyChanged:
-                // Another screen changed the series' policy: read it again so the next tap plans with it.
-                loadPreference(force: true)
-                host?.presentBatchMessage(.editionChoiceChanged)
-            default:
-                host?.presentBatchMessage(.downloadRefused)
-            }
-        } else if outcome.queued > 0 {
-            host?.presentBatchMessage(.downloadsQueued(
-                queued: outcome.queued,
-                alreadyStored: alreadyStored + outcome.alreadySaved + outcome.alreadyQueued
-            ))
-        } else {
-            host?.presentBatchMessage(.nothingToDownload)
-        }
-    }
-
-    /// Gives up the screen's queueing state. The submitted batch is not cancelled: it finishes and commits under the
-    /// series it was admitted for, but no longer reports to this screen.
-    private func releaseEnqueueOwnership() {
-        enqueueTask = nil
-        enqueueOperationID = nil
-        isEnqueuing = false
     }
 
 #if DEBUG

@@ -13,6 +13,7 @@ extension AppDatabase {
         registerHistoryScanlatorIdentityMigration(&migrator)
         registerLibraryCountBasisMigration(&migrator)
         registerPortableThumbnailsMigration(&migrator)
+        registerDownloadPresetsMigration(&migrator)
     }
 
     nonisolated private static func registerMultiKindSourceMappingMigration(_ migrator: inout DatabaseMigrator) {

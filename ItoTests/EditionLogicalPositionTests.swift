@@ -60,7 +60,7 @@ struct EditionLogicalPositionTests {
     ) -> Outcome {
         Outcome(
             rows: rows,
-            plan: DownloadPresetResolver.plan(rows: rows, preset: preset, selection: selection, anchorKey: anchor)
+            plan: DownloadPresetResolver.plan(rows: rows, window: preset.window, selection: selection, anchorKey: anchor)
         )
     }
 

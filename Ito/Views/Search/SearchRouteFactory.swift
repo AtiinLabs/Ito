@@ -27,6 +27,7 @@ struct AppViewFactory {
     let mediaDetailViewFactory: MediaDetailViewFactory?
     private let downloadsOverview: (any DownloadsOverviewServing)?
     private let downloadsThumbnails: any DownloadsThumbnailServing
+    private let downloadPresets: DownloadPresetStore?
 
     var hasDownloads: Bool { downloadsOverview != nil }
 
@@ -59,7 +60,8 @@ struct AppViewFactory {
         pluginCookies: PluginCookieJar? = nil,
         pluginTrust: PluginTrustStore? = nil,
         downloadsOverview: (any DownloadsOverviewServing)? = nil,
-        downloadsThumbnails: any DownloadsThumbnailServing = UnavailableDownloadsThumbnails()
+        downloadsThumbnails: any DownloadsThumbnailServing = UnavailableDownloadsThumbnails(),
+        downloadPresets: DownloadPresetStore? = nil
     ) {
         self.rootModels = rootModels
         self.repositoryManagement = repositoryManagement
@@ -81,6 +83,7 @@ struct AppViewFactory {
         self.pluginTrust = pluginTrust
         self.downloadsOverview = downloadsOverview
         self.downloadsThumbnails = downloadsThumbnails
+        self.downloadPresets = downloadPresets
         let categoryHistoryViewFactory = CategoryHistoryViewFactory(
             dependencies: categoryHistoryDependencies,
             messagePresenter: categoryHistoryMessagePresenter,
@@ -522,6 +525,11 @@ struct AppViewFactory {
 
     func makeStorageSettingsView() -> StorageSettingsView {
         StorageSettingsView(viewModel: rootModels.storageSettingsViewModel, viewFactory: self)
+    }
+
+    /// The custom download presets editor. Nil when downloads are not composed, so no entry point leads here.
+    func makeDownloadPresetsView() -> DownloadPresetsSettingsView? {
+        downloadPresets.map { DownloadPresetsSettingsView(store: $0) }
     }
 
     func makeNetworkSettingsView() -> NetworkSettingsView {
