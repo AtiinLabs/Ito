@@ -92,7 +92,7 @@ final class SearchRouteFactoryTests: XCTestCase {
 
     func testSourceRouteFactoryPreservesTypedPayloadRunnerAndCanonicalID() {
         let runner = ItoRunner()
-        let context = ItoRunnerSourceContext(runner: runner, pluginID: "plugin.test", contexts: PluginNetworkContexts())
+        let context = ItoRunnerSourceContext(runner: runner, pluginID: "plugin.test", contexts: PluginNetworkContexts(policy: NetworkPolicyCenter()))
         let media = ResolvedPluginMedia.manga(
             Manga(key: "source-key", title: "Source")
         )

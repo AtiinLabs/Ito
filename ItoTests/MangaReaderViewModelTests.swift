@@ -226,6 +226,48 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.loadPhase, .content)
     }
 
+    func testAPolicyChangeThatLeavesPrefetchAllowedDoesNotCancelARunningAdjacentPrefetch() async {
+        let a = makeChapter("a", number: 1)
+        let b = makeChapter("b", number: 2)
+        let subject = makeSubject(chapters: [a, b], initial: a)
+        subject.loader.enqueue(.pages([page(0)]), for: "a")
+        subject.loader.enqueue(.suspended, for: "b")
+        subject.viewModel.start()
+        await waitForReader { subject.loader.pendingCount(for: "b") == 1 }
+
+        // For instance a batch's consent expiring: nothing about prefetching changed.
+        subject.viewModel.networkPolicyDidChange()
+        subject.loader.resolveFirst(for: "b", with: .success([page(2)]))
+        await waitForReader { subject.viewModel.prefetchedChapters["b"] != nil }
+
+        XCTAssertEqual(subject.loader.callCount(for: "b"), 1, "The running prefetch finished; none was started again")
+    }
+
+    func testARevokedAdjacentPrefetchStartsAgainWhenPrefetchIsAllowedAgain() async {
+        let a = makeChapter("a", number: 1)
+        let b = makeChapter("b", number: 2)
+        let subject = makeSubject(chapters: [a, b], initial: a)
+        subject.loader.enqueue(.pages([page(0)]), for: "a")
+        subject.loader.enqueue(.suspended, for: "b")
+        subject.loader.enqueue(.pages([page(2)]), for: "b")
+        subject.viewModel.start()
+        await waitForReader { subject.loader.pendingCount(for: "b") == 1 }
+
+        subject.settings.policyPath = .init(status: .satisfied, isExpensive: true)
+        subject.viewModel.networkPolicyDidChange()
+        subject.loader.resolveFirst(for: "b", with: .success([page(2)]))
+        await waitForReader {
+            subject.logger.events.contains { $0.kind == .chapterPrefetch && $0.phase == .finished }
+        }
+        XCTAssertNil(subject.viewModel.prefetchedChapters["b"], "A revoked prefetch publishes nothing")
+
+        subject.settings.policyPath = .init(status: .satisfied)
+        subject.viewModel.networkPolicyDidChange()
+        await waitForReader { subject.viewModel.prefetchedChapters["b"] != nil }
+
+        XCTAssertEqual(subject.loader.callCount(for: "b"), 2)
+    }
+
     func testAdjacentPrefetchChecksNextThenPreviousAndKeepsFailuresBestEffort() async {
         let a = makeChapter("a", number: 1)
         let b = makeChapter("b", number: 2)

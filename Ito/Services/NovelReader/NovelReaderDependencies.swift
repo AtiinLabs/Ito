@@ -107,9 +107,12 @@ struct NovelReaderSettingsSnapshot: Equatable {
 }
 
 @MainActor
-protocol NovelReaderSettingsAccessing: AnyObject {
+protocol NovelReaderSettingsAccessing: ReaderContinuationSettingsAccessing {
     var novelReaderSettings: NovelReaderSettingsSnapshot { get }
     var novelReaderSettingsUpdates: AnyPublisher<NovelReaderSettingsSnapshot, Never> { get }
+    var novelReaderAllowsSpeculativePrefetch: Bool { get }
+    var novelReaderNetworkChanges: AnyPublisher<Void, Never> { get }
+    var novelReaderPrefetchEpoch: NetworkPrefetchEpoch { get }
 
     func setNovelFontSize(_ value: Double) async throws
     func setNovelLineSpacing(_ value: Double) async throws
@@ -119,7 +122,19 @@ protocol NovelReaderSettingsAccessing: AnyObject {
     func setNovelPrefetchChapters(_ value: Bool) async throws
 }
 
+extension NovelReaderSettingsAccessing {
+    var novelReaderAllowsSpeculativePrefetch: Bool { novelReaderSettings.prefetchChapters }
+    var novelReaderNetworkChanges: AnyPublisher<Void, Never> { Empty().eraseToAnyPublisher() }
+    var novelReaderPrefetchEpoch: NetworkPrefetchEpoch { .init(speculativeRevision: 0, pathGeneration: 0) }
+}
+
 extension AppSettingsStore: NovelReaderSettingsAccessing {
+    var novelReaderNetworkChanges: AnyPublisher<Void, Never> { networkPolicy.changes }
+    var novelReaderPrefetchEpoch: NetworkPrefetchEpoch { networkPolicy.prefetchEpoch }
+    var novelReaderAllowsSpeculativePrefetch: Bool {
+        networkPolicy.projection(path: networkPolicy.observedPath ?? .unknown).novelPrefetch
+    }
+
     var novelReaderSettings: NovelReaderSettingsSnapshot {
         NovelReaderSettingsSnapshot(
             fontSize: novelFontSize,
@@ -287,6 +302,16 @@ private final class UnavailableNovelReaderDependencies:
     )
 
     var novelReaderSettings: NovelReaderSettingsSnapshot { settings }
+
+    var askBeforeSwitchingGroups: Bool {
+        AppPreferenceCatalog.askBeforeSwitchingGroups.defaultValue
+    }
+
+    var readerContinuationSettingsRevision: UInt64 { 0 }
+
+    func setAskBeforeSwitchingGroups(_ value: Bool) async throws {
+        _ = value
+    }
 
     var novelReaderSettingsUpdates: AnyPublisher<NovelReaderSettingsSnapshot, Never> {
         Just(settings).eraseToAnyPublisher()

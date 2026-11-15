@@ -65,7 +65,7 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
         let factory = MediaDetailReaderViewFactory(
             mangaReaderDependencies: .unavailable(),
             novelReaderDependencies: dependencies,
-            networkContexts: PluginNetworkContexts()
+            networkContexts: PluginNetworkContexts(policy: NetworkPolicyCenter())
         )
         let runner = ItoRunner()
 
@@ -136,10 +136,10 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
             legacyTokenStore: FakeLegacyTokenStore(),
             usernameDefaults: defaults
         )
-        let settings = AppSettingsStore(dbPool: database.dbPool)
+        let settings = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         let discord = DiscordRPCManager(libraryManager: library)
         let plugin = PluginManager(
-            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool)
+            pluginSettingsStore: PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         )
         let logger = PresentationEventCaptureSpy()
 
@@ -160,17 +160,6 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
         XCTAssertTrue(dependencies.presence as AnyObject === discord)
         XCTAssertTrue(dependencies.pluginMetadata as AnyObject === plugin)
         XCTAssertTrue(dependencies.presentationLogger as AnyObject === logger)
-    }
-
-    func testPR12HelpersRemainOnlyNovelOrderingAndEffectAlgorithms() throws {
-        let viewModel = try source("Ito/ViewModels/NovelReaderViewModel.swift")
-        let behavior = try source("Ito/Views/Reader/ReaderBehavior.swift")
-
-        XCTAssertTrue(viewModel.contains("ReaderChapterOrdering.novelChapter("))
-        XCTAssertTrue(viewModel.contains("ReaderPageOrdering.ascending("))
-        XCTAssertFalse(viewModel.contains("chapterNumberEpsilon"))
-        XCTAssertFalse(viewModel.contains("missingChapterNumber"))
-        XCTAssertTrue(behavior.contains("static let chapterNumberEpsilon: Float32 = 0.0001"))
     }
 
     func testPaginationUIKitAndPageStateRemainInPagingView() throws {

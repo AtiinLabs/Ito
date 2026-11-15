@@ -29,7 +29,7 @@ struct PluginImageNetworkContextTests {
     func everyExportOfOneResolutionSharesItsOperationAndGetsItsOwnGeneration() async throws {
         let locator = PluginImageLocator(pluginID: "fixture.plugin", realURLString: "https://images.example/cover")
         let runner = RecordingImageRunner()
-        let contexts = PluginNetworkContexts()
+        let contexts = PluginNetworkContexts(policy: NetworkPolicyCenter())
         let operation = PluginNetworkOperation(purpose: .coverImage, operationID: UUID())
 
         let result = try await PluginImageResolution.resolve(locator, runner: runner, context: {

@@ -170,6 +170,9 @@ final class NovelReaderProgressFake: NovelReaderProgressTracking {
         return context
     }
 
+    /// Read-only, like production: it never records a capture.
+    func currentCompletionEpoch(media: MediaIdentity, mediaKey: String) -> String? { originatingEpoch }
+
     func markNovelChapterRead(
         context: PluginCompletionContext,
         chapterID: String,
@@ -310,6 +313,13 @@ final class NovelReaderTrackerFake: NovelReaderTrackerUpdating {
 
 @MainActor
 final class NovelReaderSettingsFake: NovelReaderSettingsAccessing {
+    var askBeforeSwitchingGroups = false {
+        didSet { readerContinuationSettingsRevision &+= 1 }
+    }
+    private(set) var readerContinuationSettingsRevision: UInt64 = 0
+    func setAskBeforeSwitchingGroups(_ value: Bool) async throws {
+        askBeforeSwitchingGroups = value
+    }
     enum Key: Hashable {
         case fontSize
         case lineSpacing
@@ -350,6 +360,19 @@ final class NovelReaderSettingsFake: NovelReaderSettingsAccessing {
     private var pending: [Pending] = []
     private var pendingWaiters: [PendingWaiter] = []
     private(set) var writes: [Write] = []
+    /// No invalidation publisher, so execution/publication checks must stand on their own.
+    var policyPath = NetworkPathSnapshot(status: .satisfied) {
+        didSet { pathGeneration += 1 }
+    }
+    private var pathGeneration: UInt64 = 0
+    var novelReaderPrefetchEpoch: NetworkPrefetchEpoch {
+        .init(speculativeRevision: 0, pathGeneration: pathGeneration)
+    }
+    var novelReaderAllowsSpeculativePrefetch: Bool {
+        var configuration = NetworkPolicyConfiguration.defaults
+        configuration.novelPrefetchChapters = subject.value.prefetchChapters
+        return NetworkPolicy.projection(configuration: configuration, path: policyPath).novelPrefetch
+    }
 
     init(
         settings: NovelReaderSettingsSnapshot = NovelReaderSettingsSnapshot(

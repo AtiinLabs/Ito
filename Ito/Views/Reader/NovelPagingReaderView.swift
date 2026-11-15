@@ -22,6 +22,8 @@ struct NovelPagingReaderView: View {
     let onRestoreAnchorApplied: (NovelReadingAnchor) -> Void
     /// Called with the chapter, offset and whether the page is the chapter's last.
     let onPositionChanged: (UUID, Int, Bool) -> Void
+    /// Asked when the reader's notice offers consent for the next chapter's group.
+    var onBoundaryNoticeTap: () -> Void = {}
 
     @State private var paginatedCache: [UUID: [NovelPaginationPage]] = [:]
     @State private var flattenedPages: [NovelPaginationPage] = []
@@ -93,6 +95,7 @@ struct NovelPagingReaderView: View {
                                 Text(boundaryNotice.text)
                             }
                             .accessibilityElement(children: .combine)
+                            .accessibilityAddTraits(boundaryNotice.requestsGroupConsent ? .isButton : [])
                             .font(.footnote)
                             .foregroundColor(theme.textColor)
                             .padding(.horizontal, 16)
@@ -100,8 +103,11 @@ struct NovelPagingReaderView: View {
                             .background(theme.backgroundColor.opacity(0.95), in: Capsule())
                             .overlay(Capsule().stroke(theme.textColor.opacity(0.2), lineWidth: 1))
                             .padding(.bottom, 32)
+                            .onTapGesture {
+                                if boundaryNotice.requestsGroupConsent { onBoundaryNoticeTap() }
+                            }
                         }
-                        .allowsHitTesting(false)
+                        .allowsHitTesting(boundaryNotice.requestsGroupConsent)
                     }
 
                     if appendFailed, boundaryNotice == nil, currentPageIndex >= flattenedPages.count - 3 {

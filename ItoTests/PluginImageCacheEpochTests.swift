@@ -95,7 +95,7 @@ struct PluginImageCacheEpochTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
 
-        let store = PluginSettingsStore(dbPool: database.dbPool)
+        let store = PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         let initialEpoch = try #require(try database.dbPool.read { db in
             try PluginImageCacheEpoch.current(in: db)
         })
@@ -196,7 +196,7 @@ struct PluginImageCacheEpochTests {
 
         let keychain = InMemoryPluginSecretKeychain()
         let secrets = PluginSecretStore(keychain: keychain)
-        _ = PluginSettingsStore(dbPool: database.dbPool, secrets: secrets)
+        _ = PluginSettingsStore(dbPool: database.dbPool, secrets: secrets, networkPolicy: NetworkPolicyCenter())
 
         let plainRowCount = try database.dbPool.read { db in
             try PluginSettingRecord.fetchCount(db)
@@ -281,7 +281,7 @@ struct PluginImageCacheEpochTests {
 
         let keychain = InMemoryPluginSecretKeychain()
         let secrets = PluginSecretStore(keychain: keychain)
-        _ = PluginSettingsStore(dbPool: database.dbPool, secrets: secrets)
+        _ = PluginSettingsStore(dbPool: database.dbPool, secrets: secrets, networkPolicy: NetworkPolicyCenter())
 
         let initialEpoch = try #require(try database.dbPool.read { db in
             try PluginImageCacheEpoch.current(in: db)
@@ -310,7 +310,7 @@ struct PluginImageCacheEpochTests {
         let initialEpoch = try #require(try database.dbPool.read { db in
             try PluginImageCacheEpoch.current(in: db)
         })
-        _ = PluginSettingsStore(dbPool: database.dbPool, secrets: secretsForStore)
+        _ = PluginSettingsStore(dbPool: database.dbPool, secrets: secretsForStore, networkPolicy: NetworkPolicyCenter())
         try secretsForStore.setValue("v", pluginID: "p", key: "k")
         let epochAfterStoreSecret = try #require(try database.dbPool.read { db in
             try PluginImageCacheEpoch.current(in: db)
@@ -336,7 +336,7 @@ struct PluginImageCacheEpochTests {
         let database = try TestDatabase()
         defer { database.cleanup() }
 
-        let store = PluginSettingsStore(dbPool: database.dbPool)
+        let store = PluginSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         let capture = EpochCapture()
 
         let token = try store.observeImageCacheEpoch { epoch in

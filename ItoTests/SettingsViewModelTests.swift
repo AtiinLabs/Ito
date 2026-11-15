@@ -947,7 +947,7 @@ final class SettingsViewModelTests: XCTestCase {
     ) async throws -> (AppSettingsStore, TestAppSettingsPersistence) {
         let preference = try AppPreference(key: AppPreferenceCatalog.appTheme, value: theme)
         let persistence = TestAppSettingsPersistence(preferences: [preference])
-        let store = AppSettingsStore(persistence: persistence)
+        let store = AppSettingsStore(persistence: persistence, networkPolicy: NetworkPolicyCenter())
         try await store.reload()
         await persistence.resetWriteTracking()
         return (store, persistence)
@@ -982,7 +982,7 @@ final class SettingsViewModelTests: XCTestCase {
             try AppPreference(key: AppPreferenceCatalog.wifiOnlyUpdates, value: false)
         ]
         let persistence = TestAppSettingsPersistence(preferences: preferences)
-        let store = AppSettingsStore(persistence: persistence)
+        let store = AppSettingsStore(persistence: persistence, networkPolicy: NetworkPolicyCenter())
         try await store.reload()
         await persistence.resetWriteTracking()
         return (
@@ -1017,7 +1017,7 @@ final class SettingsViewModelTests: XCTestCase {
             )
         ]
         let persistence = TestAppSettingsPersistence(preferences: preferences)
-        let store = AppSettingsStore(persistence: persistence)
+        let store = AppSettingsStore(persistence: persistence, networkPolicy: NetworkPolicyCenter())
         try await store.reload()
         await persistence.resetWriteTracking()
         return (store, persistence, makeTestDiscordRPCManager())
@@ -1035,7 +1035,7 @@ final class SettingsViewModelTests: XCTestCase {
             value: limit
         )
         let persistence = TestAppSettingsPersistence(preferences: [preference])
-        let store = AppSettingsStore(persistence: persistence)
+        let store = AppSettingsStore(persistence: persistence, networkPolicy: NetworkPolicyCenter())
         try await store.reload()
         await persistence.resetWriteTracking()
         return (store, persistence, TestSettingsStorageAccess())

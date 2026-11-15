@@ -163,6 +163,8 @@ public struct ReadingHistoryRecord: Codable, Identifiable, Hashable, Sendable, F
     public var volume: Double?
     /// The scanlation group, or for episodes the language (such as "SUB" or "DUB").
     public var scanlator: String?
+    /// The source-provided group identity; null for legacy, imported, and anime rows.
+    public var scanlatorID: String?
     /// The reader the chapter was opened in; nil for rows before v17.
     public var format: HistoryReaderFormat?
     /// Loaded novel body length in the same UTF-16 units as its saved offset. Unknown for old rows.
@@ -182,6 +184,7 @@ public struct ReadingHistoryRecord: Codable, Identifiable, Hashable, Sendable, F
         chapterNumber: Double? = nil,
         volume: Double? = nil,
         scanlator: String? = nil,
+        scanlatorID: String? = nil,
         format: HistoryReaderFormat? = nil,
         textLength: Int? = nil,
         readAt: Date = Date()
@@ -198,6 +201,7 @@ public struct ReadingHistoryRecord: Codable, Identifiable, Hashable, Sendable, F
         self.chapterNumber = chapterNumber
         self.volume = volume
         self.scanlator = scanlator
+        self.scanlatorID = scanlatorID
         self.format = format
         self.textLength = textLength
         self.readAt = readAt
@@ -216,6 +220,7 @@ public struct ReadingHistoryRecord: Codable, Identifiable, Hashable, Sendable, F
         public static let chapterNumber = Column(CodingKeys.chapterNumber)
         public static let volume = Column(CodingKeys.volume)
         public static let scanlator = Column(CodingKeys.scanlator)
+        public static let scanlatorID = Column(CodingKeys.scanlatorID)
         public static let format = Column(CodingKeys.format)
         public static let textLength = Column(CodingKeys.textLength)
         public static let readAt = Column(CodingKeys.readAt)

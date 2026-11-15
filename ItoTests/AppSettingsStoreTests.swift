@@ -6,10 +6,10 @@ import Testing
 
 @MainActor
 struct AppSettingsStoreTests {
-    @Test func materializesAllTwentyDocumentedDefaultsWithTypedState() async throws {
+    @Test func materializesAllDocumentedDefaultsWithTypedState() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let store = AppSettingsStore(dbPool: database.dbPool)
+        let store = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
 
         try await store.reload()
 
@@ -30,6 +30,7 @@ struct AppSettingsStoreTests {
         #expect(store.novelIsPaging == false)
         #expect(store.novelPrefetchChapters)
         #expect(store.preloadImageCount == .five)
+        #expect(store.askBeforeSwitchingGroups == false)
         #expect(store.incognitoMode == false)
         #expect(store.autoSyncTrackersToLocal)
         #expect(store.diskCacheLimitGB == 10)
@@ -40,10 +41,10 @@ struct AppSettingsStoreTests {
         #expect(Set(rows.map(\.key)) == Set(AppPreferenceCatalogEntry.allCases.map(\.rawValue)))
     }
 
-    @Test func allTwentyTypedWritesRoundTripThroughGRDB() async throws {
+    @Test func allTypedWritesRoundTripThroughGRDB() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let store = AppSettingsStore(dbPool: database.dbPool)
+        let store = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         try await store.reload()
 
         try await store.set(0, for: AppPreferenceCatalog.libraryLayoutStyle)
@@ -63,11 +64,12 @@ struct AppSettingsStoreTests {
         try await store.set(true, for: AppPreferenceCatalog.novelIsPaging)
         try await store.set(false, for: AppPreferenceCatalog.novelPrefetchChapters)
         try await store.set(.twenty, for: AppPreferenceCatalog.preloadImageCount)
+        try await store.setAskBeforeSwitchingGroups(true)
         try await store.set(true, for: AppPreferenceCatalog.incognitoMode)
         try await store.set(false, for: AppPreferenceCatalog.autoSyncTrackersToLocal)
         try await store.set(50, for: AppPreferenceCatalog.diskCacheLimitGB)
 
-        let reloaded = AppSettingsStore(dbPool: database.dbPool)
+        let reloaded = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         try await reloaded.reload()
         #expect(reloaded.libraryLayoutStyle == 0)
         #expect(reloaded.alwaysShowCategoryPicker)
@@ -86,6 +88,7 @@ struct AppSettingsStoreTests {
         #expect(reloaded.novelIsPaging)
         #expect(reloaded.novelPrefetchChapters == false)
         #expect(reloaded.preloadImageCount == .twenty)
+        #expect(reloaded.askBeforeSwitchingGroups)
         #expect(reloaded.incognitoMode)
         #expect(reloaded.autoSyncTrackersToLocal == false)
         #expect(reloaded.diskCacheLimitGB == 50)
@@ -93,7 +96,7 @@ struct AppSettingsStoreTests {
 
     @Test func writeDoesNotPublishUntilPersistenceCommits() async throws {
         let persistence = ControlledSettingsPersistence()
-        let store = AppSettingsStore(persistence: persistence)
+        let store = AppSettingsStore(persistence: persistence, networkPolicy: NetworkPolicyCenter())
         try await store.reload()
         await persistence.suspendWrites()
 
@@ -112,7 +115,7 @@ struct AppSettingsStoreTests {
 
     @Test func databaseFailureLeavesCommittedAndPublishedStateUnchanged() async throws {
         let persistence = ControlledSettingsPersistence()
-        let store = AppSettingsStore(persistence: persistence)
+        let store = AppSettingsStore(persistence: persistence, networkPolicy: NetworkPolicyCenter())
         try await store.reload()
         try await store.set(.light, for: AppPreferenceCatalog.appTheme)
         await persistence.failNextWrite()
@@ -147,7 +150,7 @@ struct AppSettingsStoreTests {
                 value: Data("\"Blue\"".utf8)
             ).insert(db)
         }
-        let store = AppSettingsStore(dbPool: database.dbPool)
+        let store = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
 
         try await store.reload()
 
@@ -162,7 +165,7 @@ struct AppSettingsStoreTests {
         let repaired = try await database.dbPool.read { db in
             try AppPreference.fetchAll(db)
         }
-        #expect(repaired.count == 20)
+        #expect(repaired.count == AppPreferenceCatalogEntry.allCases.count)
         #expect(try #require(repaired.first {
             $0.key == AppPreferenceKeys.updateInterval
         }).decodedValue(for: AppPreferenceCatalog.updateInterval) == .fourHours)
@@ -170,7 +173,7 @@ struct AppSettingsStoreTests {
 
     @Test func invalidRuntimeWriteIsRejectedBeforePersistence() async throws {
         let persistence = ControlledSettingsPersistence()
-        let store = AppSettingsStore(persistence: persistence)
+        let store = AppSettingsStore(persistence: persistence, networkPolicy: NetworkPolicyCenter())
         try await store.reload()
         let writesBefore = await persistence.writeCount
 
@@ -187,7 +190,7 @@ struct AppSettingsStoreTests {
 
     @Test func sequentialAndConcurrentUpdatesRemainCommittedAndObservable() async throws {
         let persistence = ControlledSettingsPersistence()
-        let store = AppSettingsStore(persistence: persistence)
+        let store = AppSettingsStore(persistence: persistence, networkPolicy: NetworkPolicyCenter())
         try await store.reload()
         var observed: [Bool] = []
         let cancellable = store.$skipCompleted.dropFirst().sink { observed.append($0) }
@@ -213,7 +216,7 @@ struct AppSettingsStoreTests {
     @Test func reloadAfterRestorePublishesRestoredValuesToObservers() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
-        let store = AppSettingsStore(dbPool: database.dbPool)
+        let store = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
         try await store.reload()
         var observed: [AppThemePreference] = []
         let cancellable = store.$appTheme.dropFirst().sink { observed.append($0) }
@@ -290,6 +293,16 @@ private actor ControlledSettingsPersistence: AppSettingsPersistence {
         }
         writeCount += 1
         for preference in preferences {
+            rows[preference.key] = preference
+        }
+        return Array(rows.values)
+    }
+
+    func insertAbsentNetworkPreferences() async throws -> [AppPreference] {
+        let missing = NetworkPreferenceMigration.missingRows(in: Array(rows.values))
+        guard !missing.isEmpty else { return Array(rows.values) }
+        writeCount += 1
+        for preference in missing {
             rows[preference.key] = preference
         }
         return Array(rows.values)
