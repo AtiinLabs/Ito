@@ -13,6 +13,14 @@ struct StorageSettingsView: View {
 
     var body: some View {
         Form {
+            // Its own section, outside the downloads one, so presets can be set up before the first download.
+            if let viewFactory, let presets = viewFactory.makeDownloadPresetsView() {
+                Section {
+                    NavigationLink(destination: presets) {
+                        Text("Download Presets", comment: "Storage settings: open the editor for custom download presets, such as Next 3 Chapters.")
+                    }
+                }
+            }
             if viewModel.hasDownloads {
                 Section {
                     HStack {

@@ -849,7 +849,7 @@ final class MediaDetailDownloadedAlternativeTests: XCTestCase {
         await viewModel.refresh()
 
         // A preset waits for the remembered choice. It would open the scanlator chooser.
-        let batch = viewModel.startDownload(.next)
+        let batch = viewModel.startDownload(.builtIn(.next))
         await viewModel.showDownloadedAlternatives(for: chapters[0]).value
         subject.downloads.holdsPreferenceReads = false
         subject.downloads.releasePreferenceReads()

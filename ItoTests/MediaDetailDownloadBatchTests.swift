@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 import ito_runner
 @testable import Ito
@@ -27,17 +28,70 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
     }
 
     // MARK: - One tap or a preview
+    func testCustomActionRemainsFrozenThroughChooserEditDeleteAndPreviewRefresh() async throws {
+        let original = CustomDownloadPreset(
+            id: UUID(), name: CustomPresetName(validating: "Original"), rule: .next(.builtIn(3))
+        )
+        let presets = PresetProvider([original])
+        let subject = await makeSubject(chapters: Self.twoScanlators(), presets: presets)
+        let action = DownloadAction.custom(original)
+        await subject.viewModel.downloadBatch.startDownload(action).value
+        guard case .chooser(let chooser)? = subject.viewModel.downloadSheet else {
+            return XCTFail("Expected scanlator chooser")
+        }
+        XCTAssertEqual(chooser.action, action)
+        presets.publish([CustomDownloadPreset(
+            id: original.id, name: CustomPresetName(validating: "Edited"), rule: .more(.builtIn(9))
+        )])
+        XCTAssertEqual(subject.viewModel.downloadBatch.customPresets.first?.name?.value, "Edited")
+        XCTAssertEqual(chooser.action?.title, action.title)
+        presets.publish([])
+        XCTAssertTrue(subject.viewModel.downloadBatch.customPresets.isEmpty)
+        await subject.viewModel.downloadBatch.applyEditionChoice(
+            .allUploads, remember: false, then: chooser.action, chooserID: chooser.id
+        ).value
+        let before = try XCTUnwrap(Self.preview(of: subject.viewModel))
+        XCTAssertEqual(before.action, action)
+        presets.publish([CustomDownloadPreset(
+            id: original.id, name: CustomPresetName(validating: "Changed in preview"), rule: .more(.builtIn(12))
+        )])
+        XCTAssertEqual(Self.preview(of: subject.viewModel)?.action, action)
+        presets.publish([])
+        XCTAssertEqual(Self.preview(of: subject.viewModel)?.action, action)
+        subject.catalog.chapters += [Chapter(key: "new-upload", chapter: 6, scanlator: "A")]
+        await subject.viewModel.refresh()
+        let refreshed = try XCTUnwrap(Self.preview(of: subject.viewModel))
+        XCTAssertTrue(refreshed.listChanged)
+        XCTAssertEqual(refreshed.action, action)
+        XCTAssertEqual(refreshed.action.title, action.title)
+        XCTAssertEqual(refreshed.action.window, .next(.builtIn(3)))
+        XCTAssertEqual(refreshed.action.provenance, action.provenance)
+        await subject.viewModel.downloadBatch.confirmDownloadPreview().value
+        let request = try XCTUnwrap(subject.downloads.batchRequests.first)
+        XCTAssertEqual(request.provenance, action.provenance)
+        XCTAssertEqual(request.provenance.customPresetId, original.id.uuidString)
+        XCTAssertEqual(request.provenance.positionCount, 3)
+        XCTAssertEqual(request.provenance.windowKind, .next)
+    }
+
+    final class PresetProvider: DownloadPresetProviding {
+        private let subject: CurrentValueSubject<[CustomDownloadPreset], Never>
+        init(_ presets: [CustomDownloadPreset]) { subject = CurrentValueSubject(presets) }
+        var presetsPublisher: AnyPublisher<[CustomDownloadPreset], Never> { subject.eraseToAnyPublisher() }
+        func publish(_ presets: [CustomDownloadPreset]) { subject.send(presets) }
+    }
+
 
     func testAPlanWithNothingToConfirmQueuesAtOnceAndSaysSo() async {
         let subject = await makeSubject(chapters: Self.numbered(1...5))
 
-        await subject.viewModel.downloadBatch.startDownload(.next).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
 
         XCTAssertNil(subject.viewModel.downloadSheet)
         let request = subject.downloads.batchRequests.first
         XCTAssertEqual(subject.downloads.batchRequests.count, 1)
         XCTAssertEqual(request?.chapters.map(\.key), ["c1"])
-        XCTAssertEqual(request?.preset, .next)
+        XCTAssertEqual(request?.provenance.preset, .next)
         XCTAssertEqual(request?.catalogDigest, subject.viewModel.catalogDigest)
         XCTAssertEqual(request?.canonicalMediaId, "series-1")
         XCTAssertEqual(subject.messages.messages, [.downloadsQueued(queued: 1, alreadyStored: 0)])
@@ -47,7 +101,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         let subject = await makeSubject(chapters: Self.numbered(21...25))
         for key in ["c21", "c22", "c23", "c24"] { subject.downloads.set(.downloaded, chapterKey: key) }
 
-        await subject.viewModel.downloadBatch.startDownload(.next5).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next5)).value
 
         XCTAssertEqual(subject.downloads.batchRequests.first?.chapters.map(\.key), ["c25"])
         XCTAssertEqual(subject.messages.messages, [.downloadsQueued(queued: 1, alreadyStored: 4)])
@@ -57,7 +111,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         let subject = await makeSubject(chapters: Self.numbered(1...2))
         for key in ["c1", "c2"] { subject.downloads.set(.downloaded, chapterKey: key) }
 
-        await subject.viewModel.downloadBatch.startDownload(.next5).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next5)).value
 
         XCTAssertTrue(subject.downloads.batchRequests.isEmpty)
         XCTAssertNil(subject.viewModel.downloadSheet)
@@ -67,7 +121,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
     func testALargeBatchWaitsInAPreviewAndQueuesOnlyWhenConfirmed() async throws {
         let subject = await makeSubject(chapters: Self.numbered(1...12).reversed())
 
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
 
         let preview = try XCTUnwrap(Self.preview(of: subject.viewModel))
         XCTAssertTrue(subject.downloads.batchRequests.isEmpty, "A large batch is never queued before the user confirms")
@@ -78,7 +132,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
 
         XCTAssertNil(subject.viewModel.downloadSheet)
         let request = try XCTUnwrap(subject.downloads.batchRequests.first)
-        XCTAssertEqual(request.preset, .all)
+        XCTAssertEqual(request.provenance.preset, .all)
         // Reading order, whatever order the source listed the chapters in.
         XCTAssertEqual(request.chapters.map(\.key), (1...12).map { "c\($0)" })
         XCTAssertEqual(subject.messages.messages, [.downloadsQueued(queued: 12, alreadyStored: 0)])
@@ -92,7 +146,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         ]
         let subject = await makeSubject(chapters: chapters)
 
-        await subject.viewModel.downloadBatch.startDownload(.next5).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next5)).value
 
         let preview = try XCTUnwrap(Self.preview(of: subject.viewModel))
         XCTAssertTrue(subject.downloads.batchRequests.isEmpty)
@@ -106,7 +160,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         downloads.capacity = 5_000_000
         let subject = await makeSubject(chapters: Self.numbered(1...12), downloads: downloads)
 
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         await subject.viewModel.downloadBatch.settleForTesting()
 
         XCTAssertEqual(subject.viewModel.downloadBatch.availableBytes, 5_000_000)
@@ -114,7 +168,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
 
     func testDismissingThePreviewQueuesNothing() async {
         let subject = await makeSubject(chapters: Self.numbered(1...12))
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
 
         subject.viewModel.downloadBatch.dismissDownloadSheet()
         await subject.viewModel.downloadBatch.confirmDownloadPreview().value
@@ -127,7 +181,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
 
     func testAChangedChapterListReplacesAnOpenPreviewAndQueuesTheNewPlan() async throws {
         let subject = await makeSubject(chapters: Self.numbered(1...12))
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         let before = try XCTUnwrap(Self.preview(of: subject.viewModel))
         XCTAssertFalse(before.listChanged)
 
@@ -151,7 +205,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
 
     func testARefreshThatLeavesTheChaptersAloneKeepsThePreview() async throws {
         let subject = await makeSubject(chapters: Self.numbered(1...12))
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         let before = try XCTUnwrap(Self.preview(of: subject.viewModel))
 
         await subject.viewModel.refresh()
@@ -164,12 +218,12 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
     func testACatalogWithSeveralScanlatorsAsksWhichToFollowBeforeAnyPlan() async throws {
         let subject = await makeSubject(chapters: Self.twoScanlators())
 
-        await subject.viewModel.downloadBatch.startDownload(.next).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
 
         guard case .chooser(let presentation)? = subject.viewModel.downloadSheet else {
             return XCTFail("The chooser comes first")
         }
-        XCTAssertEqual(presentation.preset, .next)
+        XCTAssertEqual(presentation.action, .builtIn(.next))
         XCTAssertTrue(presentation.remember)
         XCTAssertEqual(Set(presentation.options.map(\.ref.name)), ["A", "B"])
         XCTAssertEqual(presentation.options.first { $0.ref.name == "A" }?.chapterCount, 3)
@@ -182,7 +236,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         subject.progress.readChapterIDs[Self.identity] = ["a3"]
         let choice = EditionSelection.scanlators([ScanlatorRef(name: "A", binding: .exactIDless)])
 
-        await subject.viewModel.downloadBatch.applyEditionChoice(choice, remember: false, then: .next5).value
+        await subject.viewModel.downloadBatch.applyEditionChoice(choice, remember: false, then: .builtIn(.next5)).value
 
         let preview = try XCTUnwrap(Self.preview(of: subject.viewModel))
         XCTAssertTrue(preview.toQueue.isEmpty)
@@ -207,7 +261,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         XCTAssertNil(first.viewModel.downloadSheet)
 
         let second = await makeSubject(chapters: Self.twoScanlators(), downloads: downloads)
-        await second.viewModel.downloadBatch.startDownload(.next).value
+        await second.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
 
         XCTAssertFalse(Self.isChooser(second.viewModel.downloadSheet), "A remembered choice is not asked for again")
         let request = try XCTUnwrap(downloads.batchRequests.first)
@@ -218,10 +272,10 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
     func testAChoiceMadeWithRememberOffAppliesToThatBatchOnlyAndLeavesTheSessionAlone() async throws {
         let downloads = MediaDetailDownloadsFake()
         let first = await makeSubject(chapters: Self.twoScanlators(), downloads: downloads)
-        await first.viewModel.downloadBatch.startDownload(.next).value
+        await first.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
         XCTAssertTrue(Self.isChooser(first.viewModel.downloadSheet))
 
-        await first.viewModel.downloadBatch.applyEditionChoice(.allUploads, remember: false, then: .next).value
+        await first.viewModel.downloadBatch.applyEditionChoice(.allUploads, remember: false, then: .builtIn(.next)).value
 
         // This batch follows the choice; several uploads share a number, so it waits in a preview.
         XCTAssertEqual(Self.preview(of: first.viewModel)?.selection, .allUploads)
@@ -232,10 +286,10 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
 
         // The next preset asks again, here and on the next visit.
         first.viewModel.downloadBatch.dismissDownloadSheet()
-        await first.viewModel.downloadBatch.startDownload(.next).value
+        await first.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
         XCTAssertTrue(Self.isChooser(first.viewModel.downloadSheet))
         let second = await makeSubject(chapters: Self.twoScanlators(), downloads: downloads)
-        await second.viewModel.downloadBatch.startDownload(.next).value
+        await second.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
         XCTAssertTrue(Self.isChooser(second.viewModel.downloadSheet))
     }
 
@@ -244,13 +298,13 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         downloads.preferenceWriteFailure = MediaDetailTestFailure.expected
         let subject = await makeSubject(chapters: Self.numbered(1...3), downloads: downloads)
 
-        await subject.viewModel.downloadBatch.applyEditionChoice(.sourceList, remember: true, then: .next).value
+        await subject.viewModel.downloadBatch.applyEditionChoice(.sourceList, remember: true, then: .builtIn(.next)).value
 
         XCTAssertEqual(subject.messages.messages.first, .editionChoiceNotRemembered)
         XCTAssertTrue(downloads.batchRequests.isEmpty, "A failed durable approval never becomes batch-only consent")
         XCTAssertEqual(subject.viewModel.downloadBatch.remembered, .none, "A choice that was not stored is not remembered")
         XCTAssertTrue(Self.isChooser(subject.viewModel.downloadSheet))
-        await subject.viewModel.downloadBatch.applyEditionChoice(.sourceList, remember: false, then: .next).value
+        await subject.viewModel.downloadBatch.applyEditionChoice(.sourceList, remember: false, then: .builtIn(.next)).value
         XCTAssertEqual(downloads.batchRequests.count, 1)
     }
 
@@ -298,12 +352,12 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         let subject = await makeSubject(chapters: Self.twoScanlators(), downloads: downloads)
         XCTAssertEqual(subject.viewModel.downloadBatch.remembered, .unreadable)
 
-        await subject.viewModel.downloadBatch.startDownload(.next).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
 
         // Nothing is planned from the source's list: the chooser opens with the warning and nothing is queued.
         guard case .chooser(let presentation)? = subject.viewModel.downloadSheet else { return XCTFail("The chooser opens") }
         XCTAssertEqual(presentation.storedChoiceProblem, .unreadable)
-        XCTAssertEqual(presentation.preset, .next)
+        XCTAssertEqual(presentation.action, .builtIn(.next))
         XCTAssertTrue(presentation.remember, "A choice that cannot be read is replaced by default")
         XCTAssertTrue(subject.downloads.batchRequests.isEmpty)
         XCTAssertTrue(downloads.storedPreferences.isEmpty)
@@ -316,7 +370,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         let subject = await makeSubject(chapters: Self.twoScanlators(), downloads: downloads)
         XCTAssertEqual(subject.viewModel.downloadBatch.remembered, .unknown, "A read that failed leaves the state unknown")
 
-        await subject.viewModel.downloadBatch.startDownload(.next).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
 
         guard case .chooser(let presentation)? = subject.viewModel.downloadSheet else { return XCTFail("The chooser opens") }
         XCTAssertEqual(presentation.storedChoiceProblem, .readFailed)
@@ -328,7 +382,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         // Once the store answers, the stored choice is used and nothing is asked.
         downloads.preferenceReadFailure = nil
         subject.viewModel.downloadBatch.dismissDownloadSheet()
-        await subject.viewModel.downloadBatch.startDownload(.next).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
         guard case .chooser(let afterRecovery)? = subject.viewModel.downloadSheet else { return XCTFail("No choice is stored, so it asks") }
         XCTAssertNil(afterRecovery.storedChoiceProblem)
     }
@@ -342,7 +396,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
             downloads.preferenceReadFailure = failure
             let subject = await makeSubject(chapters: Self.numbered(1...3), downloads: downloads)
 
-            await subject.viewModel.downloadBatch.startDownload(.next).value
+            await subject.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
 
             let preview = try XCTUnwrap(Self.preview(of: subject.viewModel), "A plan that would queue at once is previewed instead")
             XCTAssertEqual(preview.selection, .sourceList)
@@ -430,7 +484,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
     func testAnEmptyScanlatorSetIsNotAChoice() async {
         let subject = await makeSubject(chapters: Self.twoScanlators())
 
-        await subject.viewModel.downloadBatch.applyEditionChoice(.scanlators([]), remember: true, then: .all).value
+        await subject.viewModel.downloadBatch.applyEditionChoice(.scanlators([]), remember: true, then: .builtIn(.all)).value
 
         XCTAssertTrue(subject.downloads.batchRequests.isEmpty)
         XCTAssertTrue(subject.downloads.storedPreferences.isEmpty)
@@ -444,7 +498,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         guard case .chooser(let presentation)? = subject.viewModel.downloadSheet else {
             return XCTFail("Scanlators… opens the chooser")
         }
-        XCTAssertNil(presentation.preset)
+        XCTAssertNil(presentation.action)
     }
 
     // MARK: - Failed jobs
@@ -453,7 +507,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         let subject = await makeSubject(chapters: Self.numbered(1...3))
         subject.downloads.set(.failed(.network), chapterKey: "c1")
 
-        await subject.viewModel.downloadBatch.startDownload(.next5).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next5)).value
 
         let preview = try XCTUnwrap(Self.preview(of: subject.viewModel))
         XCTAssertTrue(subject.downloads.batchRequests.isEmpty, "A failed row is never queued without the user looking")
@@ -473,7 +527,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         subject.downloads.set(.queued, chapterKey: "c1")
         subject.downloads.set(.downloaded, chapterKey: "c2")
 
-        await subject.viewModel.downloadBatch.startDownload(.next5).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next5)).value
 
         XCTAssertNil(subject.viewModel.downloadSheet)
         XCTAssertEqual(subject.messages.messages, [.downloadsQueued(queued: 1, alreadyStored: 2)])
@@ -485,13 +539,13 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         let downloads = MediaDetailDownloadsFake()
         downloads.holdsBatches = true
         let subject = await makeSubject(chapters: Self.numbered(1...12), downloads: downloads)
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         let confirming = subject.viewModel.downloadBatch.confirmDownloadPreview()
         await waitUntil { downloads.pendingBatchCount == 1 }
         XCTAssertTrue(subject.viewModel.downloadBatch.isEnqueuing)
 
         // Another preset and another confirm do nothing while the first is queued.
-        await subject.viewModel.downloadBatch.startDownload(.next).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
         XCTAssertEqual(downloads.batchRequests.count, 1)
 
         downloads.holdsBatches = false
@@ -499,17 +553,20 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         await confirming.value
         XCTAssertFalse(subject.viewModel.downloadBatch.isEnqueuing)
 
-        await subject.viewModel.downloadBatch.startDownload(.next).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
         XCTAssertEqual(downloads.batchRequests.count, 2, "The menu works again once the batch is queued")
     }
 
     // MARK: - Titles and names
 
     func testPreviewRowsAreNamedLikeTheReaderNamesChapters() async throws {
-        let chapters = (1...12).map { Chapter(key: "c\($0)", title: $0 == 1 ? "Opening" : nil, chapter: Double($0) + ($0 == 2 ? 0.5 : 0)) }
+        let chapters: [Chapter] = (1...12).map { index in
+            let number: Double = index == 2 ? 2.5 : Double(index)
+            return Chapter(key: "c\(index)", title: index == 1 ? "Opening" : nil, chapter: number)
+        }
         let subject = await makeSubject(chapters: chapters)
 
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
 
         let rows = try XCTUnwrap(Self.preview(of: subject.viewModel)).toQueue
         XCTAssertEqual(rows.first { $0.key == "c1" }?.title, "Opening")
@@ -531,11 +588,11 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
             let subject = await makeSubject(chapters: Self.numbered(1...3, scanlator: "A"))
             await subject.viewModel.downloadBatch.applyEditionChoice(selection, remember: false, then: nil).value
 
-            await subject.viewModel.downloadBatch.startDownload(preset).value
+            await subject.viewModel.downloadBatch.startDownload(.builtIn(preset)).value
 
             let request = try XCTUnwrap(subject.downloads.batchRequests.first, "\(preset) queues a batch")
-            XCTAssertEqual(request.preset, DownloadBatchPreset(rawValue: preset.rawValue), "\(preset)")
-            XCTAssertEqual(DownloadBatchPreset(preset), request.preset)
+            XCTAssertEqual(request.provenance.preset, DownloadBatchPreset(rawValue: preset.rawValue), "\(preset)")
+            XCTAssertEqual(DownloadBatchPreset(preset), request.provenance.preset)
             XCTAssertEqual(request.selection, try selection.storageData(), "\(preset)")
             let stored = try JSONDecoder().decode(EditionSelection.self, from: request.selection)
             XCTAssertEqual(stored, selection)
@@ -545,7 +602,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
     func testTheSourceListSelectionIsStoredAsItsExactBytes() async throws {
         let subject = await makeSubject(chapters: Self.numbered(1...3))
 
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
 
         XCTAssertEqual(subject.downloads.batchRequests.first?.selection, try EditionSelection.sourceList.storageData())
         XCTAssertEqual(DownloadBatchRecord.sourceListSelection, Data(#"{"formatVersion":1,"kind":"sourceList"}"#.utf8))
@@ -556,7 +613,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         downloads.batchOutcome = .refused(.unavailable)
         let subject = await makeSubject(chapters: Self.numbered(1...3), downloads: downloads)
 
-        await subject.viewModel.downloadBatch.startDownload(.next).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
 
         XCTAssertEqual(subject.messages.messages, [.downloadActionFailed])
     }
@@ -566,7 +623,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         downloads.batchOutcome = DownloadBatchOutcome(queued: 2, alreadySaved: 1, alreadyQueued: 1)
         let subject = await makeSubject(chapters: Self.numbered(1...3), downloads: downloads)
 
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
 
         XCTAssertEqual(subject.messages.messages, [.downloadsQueued(queued: 2, alreadyStored: 2)])
     }
@@ -986,9 +1043,9 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.displayedChapters.count, subject.viewModel.media.chapterList?.count)
         XCTAssertEqual(inventory.readCount, 0)
 
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         await subject.viewModel.downloadBatch.openEditionChooser().value
-        await subject.viewModel.downloadBatch.applyEditionChoice(.allUploads, remember: true, then: .all).value
+        await subject.viewModel.downloadBatch.applyEditionChoice(.allUploads, remember: true, then: .builtIn(.all)).value
         await subject.viewModel.downloadBatch.confirmDownloadPreview().value
 
         XCTAssertNil(subject.viewModel.downloadSheet)
@@ -1011,7 +1068,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
             canonicalMediaId: "series-1",
             entry: .manga(Manga(key: "series-1", title: "Series")),
             seriesTitle: "Series",
-            preset: .next,
+            provenance: .builtIn(.next),
             selection: DownloadBatchRecord.sourceListSelection,
             catalogDigest: nil,
             chapters: [Chapter(key: "c1", chapter: 1)]
@@ -1039,7 +1096,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         XCTAssertFalse(unsaved.viewModel.showsBatchDownloadControls)
         XCTAssertFalse(savedOnly.viewModel.showsBatchDownloadControls)
         XCTAssertFalse(empty.viewModel.showsBatchDownloadControls)
-        await unsaved.viewModel.downloadBatch.startDownload(.all).value
+        await unsaved.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         XCTAssertTrue(unsaved.downloads.batchRequests.isEmpty)
     }
 
@@ -1191,17 +1248,7 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         )
     }
 
-    /// Serves a fixed inventory by series and records which series it was asked for.
-    final class InventoryBox {
-        let rows: [DownloadedChapterRecord]
-        private(set) var requested: [MediaIdentity] = []
-        var readCount: Int { requested.count }
-        init(rows: [DownloadedChapterRecord]) { self.rows = rows }
-        func read(_ media: MediaIdentity) -> [DownloadedChapterRecord] {
-            requested.append(media)
-            return rows.filter { $0.canonicalMediaId == media.canonicalMediaId }
-        }
-    }
+    typealias InventoryBox = MediaDetailDownloadTestInventory
 
     private static func dependencies(
         library: MediaDetailLibraryFake,
@@ -1235,7 +1282,8 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         basis: LibrarySnapshotBasis? = nil,
         relinkTargets: [Manga] = [],
         awaitsLoads: Bool = true,
-        downloadService: (any MediaDetailDownloadServing)? = nil
+        downloadService: (any MediaDetailDownloadServing)? = nil,
+        presets: any DownloadPresetProviding = NoDownloadPresets()
     ) async -> Subject {
         let catalog = Catalog(chapters)
         let library = MediaDetailLibraryFake(state: MediaDetailLibraryState(
@@ -1268,13 +1316,14 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
                 )
             },
             makeDownloadedAlternativeDestination: { _, _, _ in throw UnexpectedDownloadedAlternativeOpening() },
-            inventoryChapters: inventory.map { box in { box.read($0) } }
+            inventoryChapters: inventory.map { box in { await box.read($0) } }
         )
         let relink = MediaDetailRelinkFake()
         var dependencies = Self.dependencies(
             library: library, progress: progress, relink: relink, downloads: downloadService ?? downloads
         )
         dependencies.connectivity = connectivity
+        dependencies.downloadPresets = presets
         let viewModel = MediaDetailViewModel(
             media: Manga(key: "series-1", title: "Series", chapters: chapters),
             pluginID: Self.pluginID,

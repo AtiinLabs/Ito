@@ -56,7 +56,7 @@ struct DownloadPreviewSheet: View {
                 alternativesSection
                 sizeSection
             }
-            .navigationTitle(preview.preset.menuTitle)
+            .navigationTitle(preview.action.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -143,7 +143,19 @@ struct DownloadPreviewSheet: View {
                 comment: "Download preview warning: the selected scanlators do not have enough chapters to fill the preset."
             ))
         }
+        if preview.issues.contains(.noReadingAnchor) {
+            messages.append(String(
+                localized: "No last-read chapter is available, so these begin with the first unread chapters.",
+                comment: "Download preview warning: without a last-read anchor, Download More traverses unread chapters from the beginning, skipping saved or queued positions."
+            ))
+        }
         return messages
+    }
+
+    /// Download More counts only the chapters it queues, so the stored ones it passes are shown apart and not counted.
+    private var isMore: Bool {
+        if case .more = preview.action.window { return true }
+        return false
     }
 
     @ViewBuilder
@@ -168,6 +180,20 @@ struct DownloadPreviewSheet: View {
                         comment: "Download preview: how many chapters in range have a failed download, which is not queued again. The placeholder is a number, which needs plural forms. Retry is in each chapter's menu."
                     )
                     .foregroundStyle(.orange)
+                }
+            } header: {
+                if isMore {
+                    Text(
+                        "Already Saved or Queued",
+                        comment: "Download preview section header for Download More: chapters already stored, which are not counted."
+                    )
+                }
+            } footer: {
+                if isMore {
+                    Text(
+                        "These aren't counted.",
+                        comment: "Download preview section footer for Download More: the stored chapters listed above do not count toward the number."
+                    )
                 }
             }
         }

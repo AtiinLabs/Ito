@@ -96,9 +96,15 @@ extension MediaDetailViewModel {
 
     /// A preset takes the download sheet from any saved-copy choice first.
     @discardableResult
-    func startDownload(_ preset: DownloadPreset) -> Task<Void, Never> {
+    func startDownload(_ action: DownloadAction) -> Task<Void, Never> {
         downloadedAlternatives.cancel()
-        return downloadBatch.startDownload(preset)
+        return downloadBatch.startDownload(action)
+    }
+
+    /// "Download More" takes the download sheet from any saved-copy choice first.
+    func presentDownloadMore() {
+        downloadedAlternatives.cancel()
+        downloadBatch.presentDownloadMore()
     }
 
     @discardableResult
