@@ -1280,7 +1280,8 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
         relinkTargets: [Manga] = [],
         awaitsLoads: Bool = true,
         downloadService: (any MediaDetailDownloadServing)? = nil,
-        presets: any DownloadPresetProviding = NoDownloadPresets()
+        presets: any DownloadPresetProviding = NoDownloadPresets(),
+        enumerateEditions: ChapterEditionEnumeration? = nil
     ) async -> Subject {
         let catalog = Catalog(chapters)
         let library = MediaDetailLibraryFake(state: MediaDetailLibraryState(
@@ -1312,7 +1313,8 @@ final class MediaDetailDownloadBatchTests: XCTestCase {
                     chapter: chapter
                 )
             },
-            inventoryChapters: inventory.map { box in { await box.read($0) } }
+            inventoryChapters: inventory.map { box in { await box.read($0) } },
+            enumerateEditions: enumerateEditions
         )
         let relink = MediaDetailRelinkFake()
         var dependencies = Self.dependencies(library: library, progress: progress, relink: relink)

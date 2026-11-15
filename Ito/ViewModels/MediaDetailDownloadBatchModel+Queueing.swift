@@ -13,6 +13,24 @@ extension MediaDetailDownloadBatchModel {
         scope: BatchScope,
         policy: RememberedEditionChoice
     ) -> Task<Void, Never>? {
+        enqueueBatch(
+            provenance: action.provenance, selection: selection, chapters: chapters,
+            alreadyStored: alreadyStored, scope: scope, policy: policy
+        )
+    }
+
+    /// Queues `chapters` with the given provenance. Exact uploads chosen from a listing are `single` and record no
+    /// catalog digest, because they were not planned from the chapter list. A More window reports the count it
+    /// asked for against what was queued.
+    func enqueueBatch(
+        provenance: DownloadBatchProvenance,
+        selection: EditionSelection,
+        chapters: [Chapter],
+        alreadyStored: Int,
+        scope: BatchScope,
+        policy: RememberedEditionChoice,
+        recordsCatalogDigest: Bool = true
+    ) -> Task<Void, Never>? {
         guard !isEnqueuing, isCurrent(scope), let host,
               let entry = host.batchEntry,
               let storedSelection = try? selection.storageData() else {
@@ -25,14 +43,14 @@ extension MediaDetailDownloadBatchModel {
             canonicalMediaId: scope.identity.canonicalMediaId,
             entry: entry,
             seriesTitle: host.batchSeriesTitle,
-            provenance: action.provenance,
+            provenance: provenance,
             selection: storedSelection,
-            catalogDigest: scope.catalogDigest.isEmpty ? nil : scope.catalogDigest,
+            catalogDigest: recordsCatalogDigest && !scope.catalogDigest.isEmpty ? scope.catalogDigest : nil,
             chapters: chapters,
             reviewedSourceEpoch: scope.sourceEpoch,
             reviewedPolicy: reviewedPolicy(of: policy)
         )
-        let requestedMore: Int? = if case .more(let count) = action.window { count.value } else { nil }
+        let requestedMore = provenance.windowKind == .more ? provenance.positionCount : nil
         return queueOrHold(request, alreadyStored: alreadyStored, requestedMore: requestedMore, scope: scope)
     }
 
