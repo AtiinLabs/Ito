@@ -264,7 +264,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     }
 
     /// The saved-copy chooser, only while the model's state is the presentation this sheet was asked for. A
-    /// marker without its state is stale and is cancelled instead of shown.
+    /// marker without its state belongs to a sheet that is closing and shows nothing.
     @ViewBuilder
     private func downloadedAlternativeContent(id: UUID) -> some View {
         if viewModel.downloadedAlternativeState.context?.id == id {
@@ -277,7 +277,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             .onAppear { displayedAlternativeID = id }
             .onChange(of: id) { displayedAlternativeID = $0 }
         } else {
-            Color.clear.onAppear { viewModel.cancelDownloadedAlternatives(presentationID: id) }
+            Color.clear
         }
     }
 

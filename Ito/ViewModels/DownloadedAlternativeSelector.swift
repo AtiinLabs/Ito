@@ -251,12 +251,6 @@ final class DownloadedAlternativeSelector<M: MediaDisplayable>: ObservableObject
         running?.cancel()
     }
 
-    /// Ends the presentation `presentationID` names. A different or later presentation is left alone.
-    func cancel(presentationID: UUID) {
-        guard state.context?.id == presentationID else { return }
-        cancel()
-    }
-
     private func isCurrent(_ context: DownloadedAlternativeContext) -> Bool {
         guard context.detailGeneration == generation, let screen = host?.screen() else { return false }
         return screen.identity.isByteIdentical(to: context.mediaIdentity)

@@ -79,12 +79,6 @@ extension MediaDetailViewModel {
         downloadedAlternatives.cancel()
     }
 
-    /// Cancels the choice that `presentationID` names, such as a sheet marker that shows nothing. A later
-    /// presentation is left alone.
-    func cancelDownloadedAlternatives(presentationID: UUID) {
-        downloadedAlternatives.cancel(presentationID: presentationID)
-    }
-
     /// The download sheet that showed `presentationID` has closed.
     func downloadedAlternativeSheetDidDismiss(presentationID: UUID) {
         downloadedAlternatives.sheetDidDismiss(presentationID: presentationID)
