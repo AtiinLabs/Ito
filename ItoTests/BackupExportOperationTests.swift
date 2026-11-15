@@ -76,9 +76,10 @@ struct BackupExportOperationTests {
             let capabilities = try BackupCapabilityRecord.fetchAll(db)
             #expect(capabilities.count == BackupComponent.allCases.count)
             #expect(Set(capabilities.map(\.component)) == Set(BackupComponent.allCases))
-            #expect(capabilities.filter { $0.component != .savedLibraryThumbnails }
+            #expect(capabilities.filter { $0.component != .savedLibraryThumbnails && $0.component != .downloadPresets }
                 .allSatisfy { $0.representation == .representedNonempty })
             #expect(capabilities.first(where: { $0.component == .savedLibraryThumbnails })?.representation == .representedEmpty)
+            #expect(capabilities.first(where: { $0.component == .downloadPresets })?.representation == .representedEmpty)
 
             let pluginSecret = Data("opaque-plugin-secret".utf8)
             #expect(
@@ -129,6 +130,45 @@ struct BackupExportOperationTests {
             ]
         }
         #expect(sourceCounts == [2, 1, 1, 3, AppPreferenceCatalogEntry.allCases.count + 1, 1])
+    }
+
+    @Test(arguments: ["bad-id", "control", "count", "kind", "order", "limit"])
+    func invalidPresetSourceRefusesPublicationAndKeepsSource(problem: String) async throws {
+        let database = try TestDatabase()
+        defer { database.cleanup() }
+        try await database.dbPool.write { db in
+            // Simulate on-disk corruption that bypassed the normal writer and schema checks.
+            try db.execute(sql: "PRAGMA ignore_check_constraints = ON")
+            defer { try? db.execute(sql: "PRAGMA ignore_check_constraints = OFF") }
+            for entry in AppPreferenceCatalogEntry.allCases {
+                try insertPreference(entry, in: db)
+            }
+            for index in 0..<(problem == "limit" ? 21 : 1) {
+                try DownloadPresetDefinitionRecord(
+                    id: problem == "bad-id" ? "invalid" : UUID().uuidString,
+                    name: problem == "control" ? "short\tname" : "Name",
+                    windowKind: problem == "kind" ? "future" : "next",
+                    positionCount: problem == "count" ? 1001 : 3,
+                    sortIndex: problem == "order" ? 2 : index
+                ).insert(db)
+            }
+        }
+        let before = try await database.dbPool.read { db in try DownloadPresetDefinitionRecord.fetchAll(db) }
+        let destination = try ExportDestination()
+        defer { destination.cleanup() }
+        let operation = BackupExportOperation(
+            dbPool: database.dbPool,
+            sourceDatabaseURL: database.databaseURL,
+            standardApplicationDomain: appDomain,
+            readinessGate: {}
+        )
+        await #expect(throws: BackupExportOperation.ValidationError.invalidDownloadPresets) {
+            try await operation.export(to: destination.url)
+        }
+        #expect(!FileManager.default.fileExists(atPath: destination.url.path))
+        #expect(try destination.stagingArtifacts().isEmpty)
+        let after = try await database.dbPool.read { db in try DownloadPresetDefinitionRecord.fetchAll(db) }
+        #expect(after == before)
     }
 
     @Test func emptyScalarCatalogRefusesPublication() async throws {

@@ -26,6 +26,11 @@
     "one": "%lld Hour",
     "other": "%lld Hours"
   },
+  "%lld More Chapters": {
+    "description": "Custom download preset summary: download N more chapters that are not saved or queued yet. The placeholder is the number of chapters, which needs plural forms.",
+    "one": "%lld More Chapter",
+    "other": "%lld More Chapters"
+  },
   "%lld already queued": {
     "description": "Download preview: how many chapters in range are already queued. The placeholder is a number, which needs plural forms.",
     "one": "%lld already queued",
@@ -123,6 +128,11 @@
     "one": "%lld saved",
     "other": "%lld saved"
   },
+  "%lld saved or queued in the meantime": {
+    "description": "Series details: chapters of a Download More request became saved or queued before it was committed. The placeholder is a number, which needs plural forms.",
+    "one": "%lld saved or queued in the meantime",
+    "other": "%lld saved or queued in the meantime"
+  },
   "%lld selected positions need another edition or will be skipped.": {
     "description": "Aggregate unresolved download positions; count needs plural forms. Does not claim source deletion.",
     "one": "%lld selected position needs another edition or will be skipped.",
@@ -164,10 +174,20 @@
     "one": "Failed to refresh %lld repository.",
     "other": "Failed to refresh %lld repositories."
   },
+  "Next %lld Chapters": {
+    "description": "Custom download preset summary: download the next N chapters from the last read one. The placeholder is the number of chapters, which needs plural forms.",
+    "one": "Next %lld Chapter",
+    "other": "Next %lld Chapters"
+  },
   "Queued %lld chapters": {
-    "description": "Series details: a download preset queued chapters. The placeholder is the number of chapters, which needs plural forms.",
+    "description": "Series details: a download preset queued chapters. The placeholder is the number of chapters, which needs plural forms.\nSeries details: a download queued chapters. The placeholder is the number of chapters, which needs plural forms.",
     "one": "Queued %lld chapter",
     "other": "Queued %lld chapters"
+  },
+  "Queued %lld of %@ chapters": {
+    "description": "Series details: Download More queued fewer chapters than requested. The first placeholder is the queued count and controls plural forms; the second is the locale-formatted requested total.",
+    "one": "Queued %1$lld of %2$@ chapters",
+    "other": "Queued %1$lld of %2$@ chapters"
   },
   "Saved chapters of %lld series are deleted, and their queued downloads are cancelled.": {
     "description": "Confirm deleting selected downloaded series. The count is the number of selected series; deletion also cancels their queued downloads.",

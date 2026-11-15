@@ -121,11 +121,16 @@ struct DurableStateSchemaTests {
             ),
             "downloadBatch": .init(
                 columns: [
-                    "id", "pluginId", "mediaKind", "canonicalMediaId", "preset", "selection", "catalogDigest",
-                    "entrySnapshot", "createdAt"
+                    "id", "pluginId", "mediaKind", "canonicalMediaId", "preset", "windowKind", "positionCount",
+                    "customPresetId", "selection", "catalogDigest", "entrySnapshot", "createdAt"
                 ],
                 primaryKey: ["id"],
-                nullable: ["catalogDigest"]
+                nullable: ["catalogDigest", "windowKind", "positionCount", "customPresetId"]
+            ),
+            "downloadPresetDefinition": .init(
+                columns: ["id", "name", "windowKind", "positionCount", "sortIndex"],
+                primaryKey: ["id"],
+                nullable: ["name"]
             ),
             "downloadSuppression": .init(
                 columns: [

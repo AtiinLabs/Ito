@@ -321,6 +321,9 @@ enum MediaDetailMessage: Equatable {
     case downloadActionFailed
     /// A preset queued chapters. `alreadyStored` counts the chapters of its range that were saved or queued.
     case downloadsQueued(queued: Int, alreadyStored: Int)
+    /// Download More queued chapters. `requested` is the number asked for; `storedMeanwhile` counts the chapters of
+    /// the request that became saved or queued before the commit. Chapters passed over earlier are not part of it.
+    case downloadsQueuedMore(requested: Int, queued: Int, storedMeanwhile: Int)
     /// A preset found nothing new to queue.
     case nothingToDownload
     /// The scanlator choice could not be remembered for the series; it applies to this download only.
@@ -374,6 +377,10 @@ final class AppMessageMediaDetailPresenter: MediaDetailMessagePresenting {
             messageCenter.publish(.mediaDetailDownloadActionFailed)
         case .downloadsQueued(let queued, let alreadyStored):
             messageCenter.publish(.mediaDetailDownloadsQueued(queued: queued, alreadyStored: alreadyStored))
+        case .downloadsQueuedMore(let requested, let queued, let storedMeanwhile):
+            messageCenter.publish(.mediaDetailDownloadsQueuedMore(
+                requested: requested, queued: queued, storedMeanwhile: storedMeanwhile
+            ))
         case .nothingToDownload:
             messageCenter.publish(.mediaDetailNothingToDownload)
         case .editionChoiceNotRemembered:
@@ -409,6 +416,8 @@ struct PreparedMediaDetailDependencies {
     let discord: any MediaDetailDiscordPresenting
     /// Unavailable unless the composition root passes the live download center.
     var downloads: any MediaDetailDownloadServing = UnavailableMediaDetailDownloads()
+    /// The saved custom presets. Empty unless the composition root passes the live store.
+    var downloadPresets: any DownloadPresetProviding = NoDownloadPresets()
     /// Never offline unless the composition root passes the live observer.
     var connectivity: any ConnectivityServing = UnavailableConnectivity()
 
@@ -423,6 +432,7 @@ struct PreparedMediaDetailDependencies {
         pluginManager: PluginManager,
         discordRPCManager: DiscordRPCManager,
         downloads: (any MediaDetailDownloadServing)?,
+        downloadPresets: (any DownloadPresetProviding)? = nil,
         connectivity: any ConnectivityServing = UnavailableConnectivity()
     ) -> Self {
         Self(
@@ -438,6 +448,7 @@ struct PreparedMediaDetailDependencies {
             pluginMetadata: pluginManager,
             discord: discordRPCManager,
             downloads: downloads ?? UnavailableMediaDetailDownloads(),
+            downloadPresets: downloadPresets ?? NoDownloadPresets(),
             connectivity: connectivity
         )
     }

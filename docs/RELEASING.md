@@ -25,6 +25,11 @@ The compatibility is one-directional. Every backup this version exports lists th
 (`unknownComponent`), so they cannot read these backups at all. Say so in the release notes of the
 version that ships it.
 
+Custom download presets travel in a separate `downloadPresets` component, which every backup from this version
+lists (empty when no presets exist). Earlier builds reject these backups with `unknownComponent`, as they already
+do for `savedLibraryThumbnails`. Backups from earlier versions have no such component and restore with local
+presets untouched. Release notes must say that backups from this version need this version or later.
+
 Snapshot freshness remains installation-local. Restored details do not prove current catalog
 completeness. Backups still exclude downloaded chapter media, inventory pointers, queues, source
 epochs and runtime permissions.
@@ -169,3 +174,10 @@ Another open screen for the same series may hold an older copy of the policy. A 
 carries the policy it was planned under, and the store refuses it in the write transaction when the
 stored policy differs, so verify the second screen cannot queue another group after the first
 narrows to Strict.
+
+For custom download presets, verify native import rejects physical preset rows without a represented
+capability before loading their payloads, and invalid definitions cannot be exported. Editing or
+deleting a definition must not alter an open chooser or preview, even after a chapter catalog refresh:
+the chosen name, rule and batch provenance remain frozen. Without a last-read anchor, More starts
+at the first unread position and skips saved or queued chapters; it makes no reading-history claim.
+Unreadable preset recovery must show a failed Delete All operation and preserve the stored rows.

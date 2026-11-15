@@ -25,7 +25,7 @@ struct EditionIdentityBatchTests {
 
         let selection = EditionSelection.scanlators([ScanlatorRef(id: "group-a", name: "Shared")])
         await subject.viewModel.downloadBatch.applyEditionChoice(
-            selection, remember: false, then: .all, chooserID: presentation.id
+            selection, remember: false, then: .builtIn(.all), chooserID: presentation.id
         ).value
         let request = try #require(downloads.batchRequests.first)
         #expect(try JSONDecoder().decode(EditionSelection.self, from: request.selection) == selection)
@@ -62,7 +62,7 @@ struct EditionIdentityBatchTests {
             Chapter(key: "current", chapter: 1, scanlator: "Same label", scanlatorID: "replacement")
         ], downloads: downloads)
 
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
 
         guard case .chooser(let presentation)? = subject.viewModel.downloadSheet else {
             Issue.record("An unavailable bound ID must open review instead of planning")
@@ -98,7 +98,7 @@ struct EditionIdentityBatchTests {
         #expect(downloads.storedPreferences[identity] == stored)
 
         await subject.viewModel.downloadBatch.applyEditionChoice(
-            presentation.initialSelection, remember: false, then: .all, chooserID: presentation.id
+            presentation.initialSelection, remember: false, then: .builtIn(.all), chooserID: presentation.id
         ).value
         let currentDescriptor = EditionSelection.scanlators([ScanlatorRef(id: "group-a", name: "Current")])
         let request = try #require(downloads.batchRequests.first)
@@ -123,7 +123,7 @@ struct EditionIdentityBatchTests {
             Chapter(key: "identified", chapter: 2, scanlator: "Shared", scanlatorID: "group-id")
         ], downloads: downloads)
 
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         guard case .chooser(let presentation)? = subject.viewModel.downloadSheet else {
             Issue.record("The mixed legacy reference must require review")
             return
@@ -135,13 +135,13 @@ struct EditionIdentityBatchTests {
         ])
 
         await subject.viewModel.downloadBatch.applyEditionChoice(
-            exactIDless, remember: true, then: .all, chooserID: presentation.id
+            exactIDless, remember: true, then: .builtIn(.all), chooserID: presentation.id
         ).value
 
         #expect(downloads.preferenceWriteCount == 1)
         #expect(downloads.storedPreferences[identity] == exactIDless)
         #expect(downloads.batchRequests.first?.chapters.map(\.key) == ["idless"])
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         #expect(downloads.batchRequests.last?.selection == (try exactIDless.storageData()))
         #expect(downloads.batchRequests.last?.chapters.map(\.key) == ["idless"])
     }
@@ -165,7 +165,7 @@ struct EditionIdentityBatchTests {
         await subject.viewModel.downloadBatch.applyEditionChoice(
             .scanlators([ScanlatorRef(id: "group-a", name: "A")]),
             remember: true,
-            then: .all,
+            then: .builtIn(.all),
             chooserID: old.id
         ).value
 
@@ -189,7 +189,7 @@ struct EditionIdentityBatchTests {
         let apply = subject.viewModel.downloadBatch.applyEditionChoice(
             .scanlators([ScanlatorRef(id: "group-a", name: "A")]),
             remember: true,
-            then: .all,
+            then: .builtIn(.all),
             chooserID: presentation.id
         )
         subject.viewModel.downloadBatch.dismissDownloadSheet()
@@ -219,7 +219,7 @@ struct EditionIdentityBatchTests {
         await subject.viewModel.downloadBatch.applyEditionChoice(
             .scanlators([ScanlatorRef(id: "group-a", name: "A")]),
             remember: true,
-            then: .all,
+            then: .builtIn(.all),
             chooserID: old.id
         ).value
 
@@ -234,7 +234,7 @@ struct EditionIdentityBatchTests {
             Chapter(key: "c\($0)", chapter: Double($0), scanlator: "A", scanlatorID: "group-a")
         }
         let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: chapters, downloads: downloads)
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         guard case .preview(let oldPreview)? = subject.viewModel.downloadSheet else {
             Issue.record("A large plan should have a preview")
             return
@@ -347,7 +347,7 @@ struct EditionIdentityBatchTests {
             chapters: oneGroupChapters(), downloads: downloads
         )
 
-        let queueing = subject.viewModel.downloadBatch.startDownload(.all)
+        let queueing = subject.viewModel.downloadBatch.startDownload(.builtIn(.all))
         try await downloads.waitForPendingBatch()
         subject.catalog.chapters.append(Chapter(key: "b", chapter: 2, scanlator: "A", scanlatorID: "group-a"))
         await subject.viewModel.refresh()
@@ -372,7 +372,7 @@ struct EditionIdentityBatchTests {
             chapters: oneGroupChapters(), downloads: downloads
         )
 
-        let queueing = subject.viewModel.downloadBatch.startDownload(.all)
+        let queueing = subject.viewModel.downloadBatch.startDownload(.builtIn(.all))
         try await downloads.waitForPendingBatch()
         subject.catalog.chapters.append(Chapter(key: "b", chapter: 2, scanlator: "A", scanlatorID: "group-a"))
         await subject.viewModel.refresh()
@@ -398,13 +398,13 @@ struct EditionIdentityBatchTests {
         )
         let saved = MediaDetailLibraryRecord(itemID: "series-1", pluginID: "plugin.test", mediaKind: .manga)
 
-        let older = subject.viewModel.downloadBatch.startDownload(.all)
+        let older = subject.viewModel.downloadBatch.startDownload(.builtIn(.all))
         try await downloads.waitForPendingBatch()
         subject.library.publish(records: [], hasCustomCategories: false)
         subject.library.publish(records: [saved], hasCustomCategories: false)
         #expect(!subject.viewModel.downloadBatch.isEnqueuing, "Removal releases the screen's queueing state")
 
-        let newer = subject.viewModel.downloadBatch.startDownload(.all)
+        let newer = subject.viewModel.downloadBatch.startDownload(.builtIn(.all))
         try await downloads.waitForPendingBatch(count: 2)
         #expect(subject.viewModel.downloadBatch.isEnqueuing)
 
@@ -430,13 +430,13 @@ struct EditionIdentityBatchTests {
         ], downloads: downloads)
         let saved = MediaDetailLibraryRecord(itemID: "series-1", pluginID: "plugin.test", mediaKind: .manga)
 
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         #expect(downloads.batchRequests.count == 1, "The remembered choice applies while the series is saved")
 
         subject.library.publish(records: [], hasCustomCategories: false)
         downloads.forgetPreference(for: identity)
         subject.library.publish(records: [saved], hasCustomCategories: false)
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
 
         #expect(downloads.batchRequests.count == 1, "The forgotten choice is not reused; the chooser opens instead")
         guard case .chooser? = subject.viewModel.downloadSheet else {
@@ -462,7 +462,7 @@ extension EditionIdentityBatchTests {
         let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: (16...20).map {
             Chapter(key: "b\($0)", chapter: Double($0), scanlator: "B", scanlatorID: "b", logicalUnitID: "u\($0)")
         }, downloads: downloads)
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         guard case .preview(let preview)? = subject.viewModel.downloadSheet else {
             Issue.record("One aggregate missing-primary decision must be presented")
             return
@@ -487,7 +487,7 @@ extension EditionIdentityBatchTests {
             Chapter(key: "c17", chapter: 17, scanlator: "C", scanlatorID: "c", logicalUnitID: "u17"),
             Chapter(key: "b18", chapter: 18, scanlator: "B", scanlatorID: "b", logicalUnitID: "u18")
         ], downloads: downloads)
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         guard case .preview(let preview)? = subject.viewModel.downloadSheet else {
             Issue.record("An aggregate decision must precede enqueue")
             return
@@ -512,7 +512,7 @@ extension EditionIdentityBatchTests {
             Chapter(key: "a1", chapter: 1, scanlator: "A", scanlatorID: "a", logicalUnitID: "u1"),
             Chapter(key: "b1", chapter: 1, scanlator: "B", scanlatorID: "b", logicalUnitID: "u1")
         ], downloads: downloads)
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         #expect(downloads.batchRequests.first?.chapters.map(\.key) == ["a1"])
     }
 
@@ -526,7 +526,7 @@ extension EditionIdentityBatchTests {
             Chapter(key: "a1", chapter: 1, scanlator: "A", scanlatorID: "a", logicalUnitID: "u1"),
             Chapter(key: "b1", chapter: 1, scanlator: "B", scanlatorID: "b", logicalUnitID: "u1")
         ], downloads: downloads)
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         #expect(downloads.batchRequests.isEmpty)
         #expect(subject.messages.messages == [.nothingToDownload])
     }
@@ -542,7 +542,7 @@ extension EditionIdentityBatchTests {
         guard case .chooser(let chooser)? = subject.viewModel.downloadSheet else { Issue.record("Expected chooser"); return }
         let policy = EditionSelection.preferred(primary: Self.primary, fallback: .approved([Self.secondary]))
         let saving = subject.viewModel.downloadBatch.applyEditionChoice(
-            policy, remember: true, then: .all, chooserID: chooser.id
+            policy, remember: true, then: .builtIn(.all), chooserID: chooser.id
         )
         try await downloads.waitForPendingPreferenceWrite()
         #expect(downloads.batchRequests.isEmpty)
@@ -563,7 +563,7 @@ extension EditionIdentityBatchTests {
         let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
             Chapter(key: "b16", chapter: 16, scanlator: "B", scanlatorID: "b", logicalUnitID: "u16")
         ], downloads: downloads)
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         guard case .preview(let preview)? = subject.viewModel.downloadSheet else { Issue.record("Expected preview"); return }
         downloads.policyEpoch = "changed"
         await subject.viewModel.downloadBatch.confirmDownloadPreview(including: ["b16"], previewID: preview.id).value
@@ -582,7 +582,7 @@ extension EditionIdentityBatchTests {
         guard case .chooser(let chooser)? = subject.viewModel.downloadSheet else { Issue.record("Expected chooser"); return }
         downloads.policyEpoch = "changed"
         await subject.viewModel.downloadBatch.applyEditionChoice(
-            .sourceList, remember: true, then: .all, chooserID: chooser.id
+            .sourceList, remember: true, then: .builtIn(.all), chooserID: chooser.id
         ).value
         #expect(downloads.preferenceWriteCount == 0)
         #expect(downloads.batchRequests.isEmpty)
@@ -596,7 +596,7 @@ extension EditionIdentityBatchTests {
         let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
             Chapter(key: "b16", chapter: 16, scanlator: "B", scanlatorID: "b", logicalUnitID: "u16")
         ], downloads: downloads)
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         guard case .preview(let preview)? = subject.viewModel.downloadSheet else { Issue.record("Expected preview"); return }
         downloads.policyEpoch = "changed"
         subject.viewModel.downloadBatch.editFallbackOrder(previewID: preview.id)
@@ -610,7 +610,7 @@ extension EditionIdentityBatchTests {
             Chapter(key: "a1", chapter: 1, scanlator: "A", scanlatorID: "a", logicalUnitID: "u1")
         ], downloads: downloads)
         downloads.epochFailure = MediaDetailTestFailure.expected
-        await subject.viewModel.downloadBatch.startDownload(.next).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
         #expect(subject.messages.messages == [.downloadActionFailed])
         #expect(downloads.batchRequests.isEmpty)
     }
@@ -621,7 +621,7 @@ extension EditionIdentityBatchTests {
         let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
             Chapter(key: "b16", chapter: 16, scanlator: "B", scanlatorID: "b", logicalUnitID: "u16")
         ], downloads: downloads)
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         guard case .preview(let preview)? = subject.viewModel.downloadSheet else { Issue.record("Expected preview"); return }
         downloads.holdsBatches = true
         defer { downloads.holdsBatches = false; downloads.releaseBatches() }
@@ -644,7 +644,7 @@ extension EditionIdentityBatchTests {
         let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
             Chapter(key: "b1", chapter: 1, scanlator: "B", scanlatorID: "b")
         ], downloads: downloads)
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         #expect(downloads.batchRequests.isEmpty)
         #expect(subject.messages.messages == [.preferredGroupNotListed])
     }
@@ -655,7 +655,7 @@ extension EditionIdentityBatchTests {
         let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
             Chapter(key: "b1", chapter: 1, scanlator: "B", scanlatorID: "b", logicalUnitID: "u1")
         ], downloads: downloads)
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         downloads.epochFailure = MediaDetailTestFailure.expected
         subject.catalog.chapters.append(Chapter(key: "b2", chapter: 2, scanlator: "B", scanlatorID: "b", logicalUnitID: "u2"))
         await subject.viewModel.refresh()
@@ -682,7 +682,7 @@ extension EditionIdentityBatchTests {
         let first = await MediaDetailDownloadBatchTests().makeSubject(chapters: chapters, downloadService: fixture.center)
         let second = await MediaDetailDownloadBatchTests().makeSubject(chapters: chapters, downloadService: fixture.center)
         let strict = EditionSelection.preferred(primary: Self.primary, fallback: .strict)
-        await second.viewModel.downloadBatch.applyEditionChoice(.allUploads, remember: false, then: .all).value
+        await second.viewModel.downloadBatch.applyEditionChoice(.allUploads, remember: false, then: .builtIn(.all)).value
         guard case .preview(let older)? = second.viewModel.downloadSheet else { Issue.record("Expected preview"); return }
 
         await first.viewModel.downloadBatch.applyEditionChoice(strict, remember: true, then: nil).value
@@ -693,7 +693,7 @@ extension EditionIdentityBatchTests {
         await second.viewModel.downloadBatch.settleForTesting()
         #expect(second.viewModel.downloadBatch.remembered == .chosen(strict))
 
-        await second.viewModel.downloadBatch.startDownload(.all).value
+        await second.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         let keys = try await fixture.store.jobs().map(\.chapterKey)
         #expect(Set(keys) == ["a1", "a2"], "Never another group's upload after the first screen narrowed to Strict")
     }
@@ -705,7 +705,7 @@ extension EditionIdentityBatchTests {
         ], downloads: downloads)
         downloads.holdsBatches = true
         defer { downloads.holdsBatches = false; downloads.releaseBatches() }
-        let queuing = subject.viewModel.downloadBatch.startDownload(.next)
+        let queuing = subject.viewModel.downloadBatch.startDownload(.builtIn(.next))
         try await downloads.waitForPendingBatch()
         #expect(downloads.batchRequests.first?.reviewedPolicy == ReviewedEditionPolicy.none)
 
@@ -732,7 +732,7 @@ extension EditionIdentityBatchTests {
             records: [MediaDetailLibraryRecord(itemID: "series-1", pluginID: "plugin.test", mediaKind: .manga)],
             hasCustomCategories: false
         )
-        await subject.viewModel.downloadBatch.startDownload(.next).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.next)).value
         #expect(downloads.batchRequests.first?.chapters.map(\.key) == ["a1"])
         #expect(subject.messages.messages == [.downloadsQueued(queued: 1, alreadyStored: 0)])
     }
@@ -743,7 +743,7 @@ extension EditionIdentityBatchTests {
         let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
             Chapter(key: "b16", chapter: 16, scanlator: "B", scanlatorID: "b", logicalUnitID: "u16")
         ], downloads: downloads)
-        await subject.viewModel.downloadBatch.startDownload(.all).value
+        await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
         guard case .preview(let preview)? = subject.viewModel.downloadSheet else { Issue.record("Expected preview"); return }
         subject.catalog.chapters = [
             Chapter(key: "new-b16", chapter: 16, scanlator: "B", scanlatorID: "b", logicalUnitID: "u16")
@@ -772,7 +772,7 @@ extension EditionIdentityBatchTests {
         )
         try await downloads.waitForPendingPreferenceWrite()
         subject.viewModel.downloadBatch.dismissDownloadSheet()
-        await subject.viewModel.downloadBatch.applyEditionChoice(.allUploads, remember: false, then: .all).value
+        await subject.viewModel.downloadBatch.applyEditionChoice(.allUploads, remember: false, then: .builtIn(.all)).value
         guard case .preview(let preview)? = subject.viewModel.downloadSheet else { Issue.record("Expected preview"); return }
         downloads.releasePreferenceWrites()
         await saving.value
@@ -808,7 +808,7 @@ extension EditionIdentityBatchTests {
         await saving.value
         await subject.viewModel.downloadBatch.settleForTesting()
         await subject.viewModel.downloadBatch.applyEditionChoice(
-            .sourceList, remember: true, then: .all, chooserID: newer.id
+            .sourceList, remember: true, then: .builtIn(.all), chooserID: newer.id
         ).value
         #expect(downloads.preferenceWriteCount == 1, "The newer chooser was made before the resynchronized policy")
         #expect(downloads.batchRequests.isEmpty)
@@ -840,7 +840,7 @@ struct EditionFallbackResolverTests {
         let rows = [row("c1", "c", "u1"), row("b1", "b", "u1"),
                     row("c2", "c", "u2"), row("d3", "d", "u3"), row("b-extra", "b", nil)]
         let plan = DownloadPresetResolver.plan(
-            rows: rows, preset: .all, selection: .preferred(primary: primary, fallback: .approved([b, c])), anchorKey: nil
+            rows: rows, window: .all, selection: .preferred(primary: primary, fallback: .approved([b, c])), anchorKey: nil
         )
         // b-extra shares u1's response order without sharing its logical identity, making ordering
         // ambiguous. This assertion tests approved membership/priority, not that incidental sequence.
@@ -852,12 +852,12 @@ struct EditionFallbackResolverTests {
     @Test func committedApprovedCopyBeatsNewPrimaryAndForbiddenCopyNeverDoes() {
         let rows = [row("a", "a", "u"), row("b", "b", "u", stored: .verified)]
         let approved = DownloadPresetResolver.plan(
-            rows: rows, preset: .next, selection: .preferred(primary: primary, fallback: .approved([b])), anchorKey: nil
+            rows: rows, window: DownloadPreset.next.window, selection: .preferred(primary: primary, fallback: .approved([b])), anchorKey: nil
         )
         #expect(approved.toQueue.isEmpty)
         #expect(approved.satisfied == [1])
         let strict = DownloadPresetResolver.plan(
-            rows: rows, preset: .next, selection: .preferred(primary: primary, fallback: .strict), anchorKey: nil
+            rows: rows, window: DownloadPreset.next.window, selection: .preferred(primary: primary, fallback: .strict), anchorKey: nil
         )
         #expect(strict.toQueue == [0])
         #expect(strict.satisfied.isEmpty)
@@ -866,7 +866,7 @@ struct EditionFallbackResolverTests {
     @Test func missingPrimaryNextWindowDoesNotSkipAheadToHideTheGap() {
         let rows = [row("b1", "b", "u1"), row("a2", "a", "u2")]
         let plan = DownloadPresetResolver.plan(
-            rows: rows, preset: .next, selection: .preferred(primary: primary, fallback: .ask), anchorKey: nil
+            rows: rows, window: DownloadPreset.next.window, selection: .preferred(primary: primary, fallback: .ask), anchorKey: nil
         )
         #expect(plan.toQueue.isEmpty)
         #expect(plan.missingPositionCount == 1)
@@ -885,7 +885,7 @@ struct EditionFallbackResolverTests {
     @Test func anyAvailableNeverSubstitutesWithoutLogicalProofButKeepsThePrimaryRows() {
         let rows = [plain("b", 1), plain("a", 2), plain("b", 3), plain("a", 4), plain("b", 5)]
         let plan = DownloadPresetResolver.plan(
-            rows: rows, preset: .all, selection: .preferred(primary: primary, fallback: .anyAvailable), anchorKey: nil
+            rows: rows, window: .all, selection: .preferred(primary: primary, fallback: .anyAvailable), anchorKey: nil
         )
         #expect(plan.toQueue == [1, 3])
         #expect(plan.missingPositionCount == 0, "ID-less rows of other groups are alternatives, never proven gaps")
@@ -898,7 +898,7 @@ struct EditionFallbackResolverTests {
         let fallbacks: [EditionFallback] = [.strict, .ask, .anyAvailable, .approved([b])]
         for fallback in fallbacks {
             let plan = DownloadPresetResolver.plan(
-                rows: rows, preset: .next5, selection: .preferred(primary: primary, fallback: fallback), anchorKey: nil
+                rows: rows, window: DownloadPreset.next5.window, selection: .preferred(primary: primary, fallback: fallback), anchorKey: nil
             )
             #expect(plan.toQueue.map { rows[$0].facts.key } == ["a1", "a2", "a3", "a4", "a5"])
             #expect(plan.missingPositionCount == 0)
@@ -910,7 +910,7 @@ struct EditionFallbackResolverTests {
     @Test func anyAvailableIsExplicitAndStillPrefersPrimary() {
         let rows = [row("b", "b", "u"), row("a", "a", "u"), row("c", "c", "other")]
         let plan = DownloadPresetResolver.plan(
-            rows: rows, preset: .all, selection: .preferred(primary: primary, fallback: .anyAvailable), anchorKey: nil
+            rows: rows, window: .all, selection: .preferred(primary: primary, fallback: .anyAvailable), anchorKey: nil
         )
         #expect(plan.toQueue == [1, 2])
     }
@@ -977,7 +977,7 @@ extension EditionIdentityBatchTests {
         guard case .chooser(let chooser)? = subject.viewModel.downloadSheet else { Issue.record("Expected chooser"); return }
         let policy = EditionSelection.preferred(primary: Self.primary, fallback: .ask)
         let saving = subject.viewModel.downloadBatch.applyEditionChoice(
-            policy, remember: true, then: .all, chooserID: chooser.id
+            policy, remember: true, then: .builtIn(.all), chooserID: chooser.id
         )
         try await downloads.waitForPendingPreferenceWrite()
         subject.catalog.chapters.append(
@@ -1002,7 +1002,7 @@ extension EditionIdentityBatchTests {
         await subject.viewModel.downloadBatch.openEditionChooser().value
         guard case .chooser(let chooser)? = subject.viewModel.downloadSheet else { Issue.record("Expected chooser"); return }
         let saving = subject.viewModel.downloadBatch.applyEditionChoice(
-            .preferred(primary: Self.primary, fallback: .ask), remember: true, then: .all, chooserID: chooser.id
+            .preferred(primary: Self.primary, fallback: .ask), remember: true, then: .builtIn(.all), chooserID: chooser.id
         )
         try await downloads.waitForPendingPreferenceWrite()
         subject.library.publish(records: [], hasCustomCategories: false)
@@ -1025,7 +1025,7 @@ extension EditionIdentityBatchTests {
         guard case .chooser(let chooser)? = subject.viewModel.downloadSheet else { Issue.record("Expected chooser"); return }
         let policy = EditionSelection.preferred(primary: Self.primary, fallback: .approved([Self.secondary]))
         let saving = subject.viewModel.downloadBatch.applyEditionChoice(
-            policy, remember: true, then: .all, chooserID: chooser.id
+            policy, remember: true, then: .builtIn(.all), chooserID: chooser.id
         )
         try await downloads.waitForPendingPreferenceWrite()
         downloads.policyEpoch = "rotated"
@@ -1069,7 +1069,7 @@ extension EditionIdentityBatchTests {
             let subject = await MediaDetailDownloadBatchTests().makeSubject(chapters: [
                 Chapter(key: "a1", chapter: 1, scanlator: "A", scanlatorID: "a", logicalUnitID: "u1", readingOrder: 1)
             ], downloads: downloads, inventory: .init(rows: [record]))
-            await subject.viewModel.downloadBatch.startDownload(.all).value
+            await subject.viewModel.downloadBatch.startDownload(.builtIn(.all)).value
             if foreign != 0 {
                 #expect(downloads.batchRequests.first?.chapters.map(\.key) == ["a1"])
             } else {
@@ -1085,7 +1085,7 @@ extension EditionFallbackResolverTests {
         let rows = [row("b1", "b", "u1", locked: true), row("c1", "c", "u1"),
                     row("b2", "b", "u2", stored: .damaged), row("c2", "c", "u2")]
         let plan = DownloadPresetResolver.plan(
-            rows: rows, preset: .all, selection: .preferred(primary: primary, fallback: .approved([b, c])), anchorKey: nil
+            rows: rows, window: .all, selection: .preferred(primary: primary, fallback: .approved([b, c])), anchorKey: nil
         )
         #expect(plan.toQueue == [1])
         #expect(plan.damaged == [2])

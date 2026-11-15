@@ -34,6 +34,8 @@ struct DownloadStack {
     let store: OfflineChapterStore
     let coordinator: DownloadQueueCoordinator
     let center: DownloadCenter
+    /// The one writer of custom download presets, observed from the same database as the queue.
+    let presets: DownloadPresetStore
 
     /// - Parameter predecessor: what the worker of a replaced runtime is still finishing.
     init(
@@ -84,5 +86,9 @@ struct DownloadStack {
         self.store = store
         self.coordinator = coordinator
         self.center = center
+        self.presets = DownloadPresetStore(
+            dbPool: dbPool,
+            scheduling: DelayedMainActorValueObservationScheduler.mainActor
+        )
     }
 }

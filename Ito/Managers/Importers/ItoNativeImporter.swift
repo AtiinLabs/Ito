@@ -39,6 +39,17 @@ public struct ItoNativeImporter: BackupImporter {
             }
                 ? fetchBoundedThumbnails(in: db)
                 : []
+            let representsDownloadPresets = capabilities.contains {
+                $0.component == .downloadPresets && $0.representation != .unrepresented
+            }
+            if !representsDownloadPresets,
+               try db.tableExists(DownloadPresetDefinitionRecord.databaseTableName),
+               try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM downloadPresetDefinition)") == true {
+                throw invalidCapability(component: .downloadPresets, code: "unrepresentedContainsRows")
+            }
+            let downloadPresets = try representsDownloadPresets
+                ? fetchBoundedDownloadPresets(in: db)
+                : []
 
             var legacyStateArchives = try fetchArchives(in: db)
             let capturedAt = metadata?.createdAt ?? Date()
@@ -201,7 +212,8 @@ public struct ItoNativeImporter: BackupImporter {
                 pluginSettings: pluginSettings,
                 legacyUnscopedMediaState: legacyUnscopedMediaState,
                 legacyStateArchives: legacyStateArchives,
-                savedLibraryThumbnails: savedLibraryThumbnails
+                savedLibraryThumbnails: savedLibraryThumbnails,
+                downloadPresets: downloadPresets
             )
             try imported.validateCapabilityMetadata()
             try validateCapabilityRepresentations(imported)
@@ -572,6 +584,34 @@ public struct ItoNativeImporter: BackupImporter {
         return try LibraryCoverThumbnailRecord.fetchAll(db)
     }
 
+    /// The backup's custom download presets. The count and every name are checked in SQL before any row loads, so a
+    /// crafted backup cannot make the importer load an unbounded list. Then each row goes through the strict validator.
+    nonisolated private func fetchBoundedDownloadPresets(in db: Database) throws -> [DownloadPresetDefinitionRecord] {
+        guard try db.tableExists(DownloadPresetDefinitionRecord.databaseTableName) else { return [] }
+        let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM downloadPresetDefinition") ?? 0
+        guard count <= DownloadPresetDefinitionRecord.maximumCount else {
+            throw invalidCapability(component: .downloadPresets, code: "tooManyPresets")
+        }
+        let oversizedNames = try Int.fetchOne(db, sql: """
+            SELECT COUNT(*) FROM downloadPresetDefinition
+            WHERE typeof(name) NOT IN ('text', 'null') OR length(CAST(name AS BLOB)) > 256
+            """) ?? 0
+        guard oversizedNames == 0 else {
+            throw invalidCapability(component: .downloadPresets, code: "invalidPreset")
+        }
+        do {
+            let records = try DownloadPresetDefinitionRecord.order(Column("sortIndex")).fetchAll(db)
+            _ = try records.map { try $0.validated() }
+            guard Set(records.map(\.id)).count == records.count,
+                  Set(records.map(\.sortIndex)).count == records.count else {
+                throw CustomDownloadPresetError.invalidRecord
+            }
+            return records
+        } catch {
+            throw invalidCapability(component: .downloadPresets, code: "invalidPreset")
+        }
+    }
+
     nonisolated private func validateSavedThumbnails(
         _ thumbnails: [LibraryCoverThumbnailRecord],
         items: [LibraryItem]
@@ -626,6 +666,8 @@ public struct ItoNativeImporter: BackupImporter {
             !backup.legacyUnscopedMediaState.isEmpty
         case .savedLibraryThumbnails:
             !backup.savedLibraryThumbnails.isEmpty
+        case .downloadPresets:
+            !backup.downloadPresets.isEmpty
         case .legacyStateArchive:
             !backup.legacyStateArchives.isEmpty
         }

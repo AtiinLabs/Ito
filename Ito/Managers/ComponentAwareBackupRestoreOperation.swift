@@ -241,6 +241,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         try restorePluginSettings(plan, db: db, outcomes: &outcomes)
         try restoreUnscopedMediaState(plan, db: db, outcomes: &outcomes)
         try restoreSavedThumbnails(plan, db: db, outcomes: &outcomes)
+        try restoreDownloadPresets(plan, db: db, outcomes: &outcomes)
 
         try restoreArchives(plan, db: db, outcomes: &outcomes)
 
@@ -434,6 +435,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             !backup.legacyUnscopedMediaState.isEmpty
         case .savedLibraryThumbnails:
             !backup.savedLibraryThumbnails.isEmpty
+        case .downloadPresets:
+            !backup.downloadPresets.isEmpty
         case .legacyStateArchive:
             !backup.legacyStateArchives.isEmpty
         }
@@ -461,6 +464,19 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                 throw rejection(.invalidComponentData(component: .savedLibraryThumbnails, code: "invalidThumbnail"))
             }
             thumbnailBudget -= thumbnail.imageData.count
+        }
+        var presetIDs = Set<String>()
+        var presetSortIndexes = Set<Int>()
+        guard backup.downloadPresets.count <= DownloadPresetDefinitionRecord.maximumCount else {
+            throw rejection(.invalidComponentData(component: .downloadPresets, code: "invalidPreset"))
+        }
+        for preset in backup.downloadPresets {
+            guard (try? preset.validated()) != nil,
+                  presetIDs.insert(preset.id).inserted,
+                  presetSortIndexes.insert(preset.sortIndex).inserted
+            else {
+                throw rejection(.invalidComponentData(component: .downloadPresets, code: "invalidPreset"))
+            }
         }
         try requireUnique(
             backup.links.map { "\($0.itemId)\u{1F}\($0.categoryId)" },
@@ -1387,6 +1403,49 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                 try restored.insert(db)
                 outcomes[.savedLibraryThumbnails]?.inserted += 1
             }
+        }
+    }
+
+    /// Restores custom download presets. Older backups, which have no component, leave local presets untouched.
+    /// Wipe replaces every preset with the backup's, renumbered. Merge is keyed by id, and the local copy wins:
+    /// a new id is appended in backup order while the total stays under the limit.
+    private func restoreDownloadPresets(
+        _ plan: RestorePlan,
+        db: Database,
+        outcomes: inout [BackupComponent: MutableOutcome]
+    ) throws {
+        guard plan.represented.contains(.downloadPresets) else { return }
+        let backupRows = plan.backup.downloadPresets.sorted { $0.sortIndex < $1.sortIndex }
+        if plan.mode == .wipe {
+            outcomes[.downloadPresets]?.replaced += try DownloadPresetDefinitionRecord.deleteAll(db)
+            for (index, var row) in backupRows.enumerated() {
+                row.sortIndex = index
+                try row.insert(db)
+                outcomes[.downloadPresets]?.inserted += 1
+            }
+            return
+        }
+        var localRows = try DownloadPresetDefinitionRecord.order(Column("sortIndex")).fetchAll(db)
+        var localIDs = Set(localRows.map(\.id))
+        for row in backupRows {
+            if let local = localRows.first(where: { $0.id == row.id }) {
+                if local.name == row.name, local.windowKind == row.windowKind, local.positionCount == row.positionCount {
+                    outcomes[.downloadPresets]?.skipped += 1
+                } else {
+                    outcomes[.downloadPresets]?.preservedLocal += 1
+                }
+                continue
+            }
+            guard localRows.count < DownloadPresetDefinitionRecord.maximumCount,
+                  localIDs.insert(row.id).inserted else {
+                outcomes[.downloadPresets]?.skipped += 1
+                continue
+            }
+            var appended = row
+            appended.sortIndex = localRows.count
+            try appended.insert(db)
+            localRows.append(appended)
+            outcomes[.downloadPresets]?.inserted += 1
         }
     }
 

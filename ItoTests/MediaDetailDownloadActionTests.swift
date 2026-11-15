@@ -399,6 +399,7 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
     private(set) var preferenceReadCount = 0
     private(set) var preferenceWriteCount = 0
     private var pendingPreferenceReads: [CheckedContinuation<Void, Never>] = []
+    private var preferenceReadArrivalWaiters: [CheckedContinuation<Void, Never>] = []
     private var pendingPreferenceWrites: [CheckedContinuation<Void, Never>] = []
     private var pendingBatches: [CheckedContinuation<Void, Never>] = []
     private var pendingBatchObservers: [UUID: (count: Int, continuation: CheckedContinuation<Void, any Error>)] = [:]
@@ -503,7 +504,14 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
 
     func editionPreference(for media: MediaIdentity) async throws -> EditionSelection? {
         preferenceReadCount += 1
-        if holdsPreferenceReads { await withCheckedContinuation { pendingPreferenceReads.append($0) } }
+        if holdsPreferenceReads {
+            await withCheckedContinuation { continuation in
+                pendingPreferenceReads.append(continuation)
+                let waiters = preferenceReadArrivalWaiters
+                preferenceReadArrivalWaiters.removeAll()
+                waiters.forEach { $0.resume() }
+            }
+        }
         if let preferenceReadFailure { throw preferenceReadFailure }
         return storedPreferences[media]
     }
@@ -542,6 +550,10 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
         storedBytes
     }
 
+    func waitForPendingPreferenceRead() async {
+        if !pendingPreferenceReads.isEmpty { return }
+        await withCheckedContinuation { preferenceReadArrivalWaiters.append($0) }
+    }
     func releasePreferenceReads() {
         let pending = pendingPreferenceReads
         pendingPreferenceReads = []

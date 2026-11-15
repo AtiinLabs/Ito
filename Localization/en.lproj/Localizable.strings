@@ -64,7 +64,13 @@
 
 "Add" = "Add";
 
+/* Download presets settings: add a custom preset. */
+"Add Preset" = "Add Preset";
+
 "Add Repository" = "Add Repository";
+
+/* Download presets settings empty state: what a preset is for. */
+"Add a preset to download a set number of chapters from a series' download menu." = "Add a preset to download a set number of chapters from a series' download menu.";
 
 "Add a repository URL to discover and install plugins." = "Add a repository URL to discover and install plugins.";
 
@@ -92,6 +98,9 @@ History filter: every kind of media */
 "All sources resolved" = "All sources resolved";
 
 "All-Time Popular" = "All-Time Popular";
+
+/* Download preview section header for Download More: chapters already stored, which are not counted. */
+"Already Saved or Queued" = "Already Saved or Queued";
 
 "Already added" = "Already added";
 
@@ -232,6 +241,9 @@ Downloads queue: cancel one job */
 
 "Chapter no longer listed" = "Chapter no longer listed";
 
+/* Download More prompt: section header for the number of chapters.
+Download More prompt: the field for the number of chapters.
+Download preset editor: the count field. */
 "Chapters" = "Chapters";
 
 /* Compatibility key-or-number read markers, not offline coverage. */
@@ -325,7 +337,8 @@ Downloads queue: cancel one job */
 
 "Content Not Found" = "Content Not Found";
 
-/* History: resume reading or watching a series */
+/* Download More prompt: continue to the preview with the entered count.
+History: resume reading or watching a series */
 "Continue" = "Continue";
 
 /* History: resume button, with the series title */
@@ -349,6 +362,9 @@ Downloads queue: cancel one job */
 
 "Couldn't Load Saved Item" = "Couldn't Load Saved Item";
 
+/* Download presets settings: the stored presets cannot be read, so none are shown. */
+"Couldn't load download presets." = "Couldn't load download presets.";
+
 "Couldn't load popular titles: %@" = "Couldn't load popular titles: %@";
 
 "Couldn't load the next chapter" = "Couldn't load the next chapter";
@@ -369,6 +385,9 @@ Downloads queue: cancel one job */
 
 /* Series details: reading the scanlators remembered for this series failed this time. The choice itself may be fine. */
 "Couldn't read the saved scanlator choice" = "Couldn't read the saved scanlator choice";
+
+/* Download presets settings: a preset could not be saved, reordered or deleted. The draft is kept. */
+"Couldn't save the preset. Try again." = "Couldn't save the preset. Try again.";
 
 /* Series details: a Download, Cancel, Retry or Delete Download action did not take effect. */
 "Couldn't update the download" = "Couldn't update the download";
@@ -422,6 +441,11 @@ Downloads manager: delete selected series */
 
 "Delete %@?" = "Delete %@?";
 
+/* Confirmation button: delete every custom download preset.
+Confirmation title: delete every custom download preset.
+Download presets settings: remove every stored custom preset after the presets cannot be read. */
+"Delete All Presets" = "Delete All Presets";
+
 /* Chapter menu: remove the saved copy of this chapter */
 "Delete Download" = "Delete Download";
 
@@ -440,6 +464,9 @@ Confirm permanent deletion of selected downloads */
 
 /* Download preview footer: a damaged copy must be deleted before the chapter can be downloaded again. */
 "Delete damaged downloads to download them again." = "Delete damaged downloads to download them again.";
+
+/* Download presets settings footer: deleting presets never removes downloaded chapters. */
+"Deleting presets doesn't remove downloaded chapters." = "Deleting presets doesn't remove downloaded chapters.";
 
 /* Downloads manager deletion failed or its cleanup failed after removing inventory. Never claims rollback. */
 "Deletion couldn't be completed for: %@. Check the list; some downloads may already have been removed." = "Deletion couldn't be completed for: %@. Check the list; some downloads may already have been removed.";
@@ -477,6 +504,16 @@ Confirm permanent deletion of selected downloads */
 /* Chapter menu: save this chapter for offline reading */
 "Download" = "Download";
 
+/* Download More prompt: title of the count prompt. */
+"Download More" = "Download More";
+
+/* Download menu item: ask for a count and download that many missing chapters after the last read one. */
+"Download More…" = "Download More…";
+
+/* Navigation title of the custom download presets editor.
+Storage settings: open the editor for custom download presets, such as Next 3 Chapters. */
+"Download Presets" = "Download Presets";
+
 /* Advanced action: download every exact upload, including multiple translations of one chapter. */
 "Download all editions" = "Download all editions";
 
@@ -488,6 +525,9 @@ Confirm permanent deletion of selected downloads */
 
 /* Chapter download status */
 "Download failed" = "Download failed";
+
+/* Backup restore report: the component holding the user's custom download presets. */
+"Download presets" = "Download presets";
 
 /* Storage settings failed to read offline inventory totals */
 "Download storage couldn't be measured. Try opening Storage again." = "Download storage couldn't be measured. Try opening Storage again.";
@@ -508,6 +548,9 @@ Empty downloaded series title
 Library toolbar: open the downloads manager
 Storage settings offline downloads section */
 "Downloads" = "Downloads";
+
+/* Download More prompt footer: what counts toward the number. */
+"Downloads chapters after your last read one that aren't saved or queued yet. Saved and queued chapters don't count." = "Downloads chapters after your last read one that aren't saved or queued yet. Saved and queued chapters don't count.";
 
 /* Downloads manager bulk Cancel failure */
 "Downloads couldn't be cancelled. Check the list before trying again." = "Downloads couldn't be cancelled. Check the list before trying again.";
@@ -541,6 +584,9 @@ Storage settings offline downloads section */
 
 "Edit List" = "Edit List";
 
+/* Download preset editor title when editing a preset. */
+"Edit Preset" = "Edit Preset";
+
 /* Open the explicit ordered fallback policy editor, with optional Remember. */
 "Edit fallback order" = "Edit fallback order";
 
@@ -553,6 +599,10 @@ Storage settings offline downloads section */
 "Enter a name for your new list." = "Enter a name for your new list.";
 
 "Enter a new value to replace it" = "Enter a new value to replace it";
+
+/* Download More prompt: the count must be a whole number in the range. The placeholders are the bounds.
+Download preset editor: the count must be a whole number in the range. The placeholders are the bounds. */
+"Enter a number from %lld to %lld." = "Enter a number from %1$lld to %2$lld.";
 
 /* Validation for a personal tracker rating */
 "Enter a number from 0 to 100." = "Enter a number from 0 to 100.";
@@ -973,6 +1023,9 @@ Manga format */
 /* Reading font: generic monospaced face */
 "Monospace" = "Monospace";
 
+/* Download preset editor: the More type. */
+"More Chapters" = "More Chapters";
+
 "More Like This" = "More Like This";
 
 "More Line Spacing" = "More Line Spacing";
@@ -1000,9 +1053,24 @@ Manga format */
 
 "MyAnimeList returned an incomplete list entry. Reopen this entry before saving." = "MyAnimeList returned an incomplete list entry. Reopen this entry before saving.";
 
+/* Download preset editor: section header for the optional name. */
+"Name" = "Name";
+
+/* Download preset editor: the name is longer than 40 characters or 256 bytes. */
+"Name is too long." = "Name is too long.";
+
+/* Download preset editor: the name contains an unsupported control character, such as a tab. */
+"Names can't contain control characters." = "Names can't contain control characters.";
+
+/* Download preset editor: the name contains a line break, which is not allowed. */
+"Names can't contain line breaks." = "Names can't contain line breaks.";
+
 "Network" = "Network";
 
 "New List" = "New List";
+
+/* Download preset editor title when adding a preset. */
+"New Preset" = "New Preset";
 
 "New Update" = "New Update";
 
@@ -1017,6 +1085,9 @@ Manga format */
 "Next 5 Chapters" = "Next 5 Chapters";
 
 "Next Chapter" = "Next Chapter";
+
+/* Download preset editor: the Next type. */
+"Next Chapters" = "Next Chapters";
 
 "Next Page" = "Next Page";
 
@@ -1034,6 +1105,9 @@ Manga format */
 
 /* Reader: the next chapter is text; go back to the series to open it */
 "Next chapter opens in the text reader" = "Next chapter opens in the text reader";
+
+/* Download presets settings empty state title. */
+"No Custom Presets" = "No Custom Presets";
 
 "No History" = "No History";
 
@@ -1069,6 +1143,9 @@ Downloads manager empty inventory */
 "No group listed" = "No group listed";
 
 "No items in %@." = "No items in %@.";
+
+/* Download preview warning: without a last-read anchor, Download More traverses unread chapters from the beginning, skipping saved or queued positions. */
+"No last-read chapter is available, so these begin with the first unread chapters." = "No last-read chapter is available, so these begin with the first unread chapters.";
 
 "No local reading or watching history was found for this series." = "No local reading or watching history was found for this series.";
 
@@ -1200,6 +1277,7 @@ Manga format: light novel */
 /* History: accessibility hint of an earlier episode row */
 "Opens this episode" = "Opens this episode";
 
+/* Download preset editor: the name field is optional. */
 "Optional" = "Optional";
 
 "Options could not be loaded." = "Options could not be loaded.";
@@ -1419,6 +1497,9 @@ History: the page a chapter was left on */
 
 "Removes all cookies, cached website data and Cloudflare clearance. Sources that use a website login will need you to sign in again." = "Removes all cookies, cached website data and Cloudflare clearance. Sources that use a website login will need you to sign in again.";
 
+/* Confirmation message: deleting every custom download preset keeps downloaded chapters. */
+"Removes every custom download preset. Downloaded chapters are kept." = "Removes every custom download preset. Downloaded chapters are kept.";
+
 "Removes this series from the list" = "Removes this series from the list";
 
 "Repeating" = "Repeating";
@@ -1509,11 +1590,15 @@ Downloads queue: retry a failed or paused job */
 
 "Run" = "Run";
 
+/* Download preset editor: save the preset. */
 "Save" = "Save";
 
 "Saved" = "Saved";
 
 "Saved Source • %@ • Confirmed" = "Saved Source • %@ • Confirmed";
+
+/* Download preset editor footer: a Next preset counts chapters already saved or queued. */
+"Saved and queued chapters count toward the number, like Next 5 Chapters." = "Saved and queued chapters count toward the number, like Next 5 Chapters.";
 
 /* Backup restore report: the component containing bounded cover images saved with library items. */
 "Saved cover thumbnails" = "Saved cover thumbnails";
@@ -1706,6 +1791,9 @@ Downloads queue: retry a failed or paused job */
 
 /* Download preview section: chapters the source marks locked, which are not downloaded. */
 "Skipped, locked" = "Skipped, locked";
+
+/* Download preset editor footer: a More preset counts only chapters not yet saved or queued. */
+"Skips saved and queued chapters and downloads this many missing ones." = "Skips saved and queued chapters and downloads this many missing ones.";
 
 "Smaller Text" = "Smaller Text";
 
@@ -2030,6 +2118,9 @@ Reading font: the system font */
 
 "Theme" = "Theme";
 
+/* Download preview section footer for Download More: the stored chapters listed above do not count toward the number. */
+"These aren't counted." = "These aren't counted.";
+
 /* Download preview footer: the uploads listed above are only downloaded when ticked. */
 "These aren't downloaded unless you tick them." = "These aren't downloaded unless you tick them.";
 
@@ -2078,6 +2169,9 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 "This plugin is no longer maintained.\nReason: %@" = "This plugin is no longer maintained.\nReason: %@";
 
 "This plugin will be permanently removed from your device." = "This plugin will be permanently removed from your device.";
+
+/* Download preset editor: the preset was deleted while it was being edited. */
+"This preset no longer exists." = "This preset no longer exists.";
 
 "This removes all reading and watch history." = "This removes all reading and watch history.";
 
@@ -2165,6 +2259,7 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 
 "Try different search terms or adjust your filters" = "Try different search terms or adjust your filters";
 
+/* Download preset editor: the type of preset. */
 "Type" = "Type";
 
 "URL Open error: The plugin could not be imported." = "URL Open error: The plugin could not be imported.";
@@ -2340,6 +2435,9 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 
 /* History section */
 "Yesterday" = "Yesterday";
+
+/* Download preset editor: the maximum number of presets has been reached. The placeholder is that maximum. */
+"You can have up to %lld presets." = "You can have up to %lld presets.";
 
 "You stopped this episode at %@." = "You stopped this episode at %@.";
 

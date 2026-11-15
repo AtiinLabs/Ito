@@ -102,6 +102,10 @@ private extension BackupComponent {
         case .pluginSettings: String(localized: "Plugin settings")
         case .legacyUnscopedMediaState: String(localized: "Unresolved legacy media")
         case .savedLibraryThumbnails: String(localized: "Saved cover thumbnails")
+        case .downloadPresets: String(
+            localized: "Download presets",
+            comment: "Backup restore report: the component holding the user's custom download presets."
+        )
         case .legacyStateArchive: String(localized: "Legacy archive")
         }
     }
