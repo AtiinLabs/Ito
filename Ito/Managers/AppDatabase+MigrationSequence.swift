@@ -12,6 +12,7 @@ extension AppDatabase {
         registerEditionPreferencesMigration(&migrator)
         registerHistoryScanlatorIdentityMigration(&migrator)
         registerLibraryCountBasisMigration(&migrator)
+        registerDownloadReplacementMigration(&migrator)
         registerPortableThumbnailsMigration(&migrator)
         registerDownloadPresetsMigration(&migrator)
     }

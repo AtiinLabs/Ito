@@ -19,6 +19,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     @Environment(\.sourceCoverRequests) private var coverRequests
 
     @State private var showNavTitle = false
+    @State private var replacementPreview: DownloadReplacementPreview?
     @Environment(\.scenePhase) private var scenePhase
 
     init(
@@ -117,6 +118,19 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 Button("Cancel", role: .cancel) { viewModel.cancelGroupSwitch() }
             } message: { consent in
                 Text(consent.message)
+            }
+            .alert(
+                replacementPreview?.title ?? String(localized: "Replace download"),
+                isPresented: Binding(
+                    get: { replacementPreview != nil },
+                    set: { if !$0 { replacementPreview = nil } }
+                ),
+                presenting: replacementPreview
+            ) { preview in
+                Button(preview.title) { viewModel.confirmReplacement(preview) }
+                Button("Cancel", role: .cancel) {}
+            } message: { preview in
+                Text(preview.message)
             }
     }
 
@@ -611,12 +625,19 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     /// The chapter's download actions, headed by its state where the state explains what to do next.
     @ViewBuilder
     private func downloadMenu(for chapter: M.Chapter, actions: [ChapterDownloadAction]) -> some View {
-        if let state = viewModel.downloadState(for: chapter), state.explainsMenu {
+        if let activity = viewModel.replacementState(for: chapter) {
+            // A replacement heads the menu over the saved copy; the copy's reading and deletion stay listed below it.
+            activity.replacementLabel
+        } else if let state = viewModel.downloadState(for: chapter), state.explainsMenu {
             state.label
         }
         ForEach(actions) { action in
             Button(role: action == .delete ? .destructive : nil) {
-                viewModel.performDownloadAction(action, for: chapter)
+                if action == .replace {
+                    Task { replacementPreview = await viewModel.replacementPreview(for: chapter) }
+                } else {
+                    viewModel.performDownloadAction(action, for: chapter)
+                }
             } label: {
                 Label { action.title } icon: { Image(systemName: action.systemImage) }
             }

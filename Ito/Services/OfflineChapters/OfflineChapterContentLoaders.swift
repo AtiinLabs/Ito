@@ -258,7 +258,8 @@ private extension OfflineStoreError {
         switch self {
         case .damaged, .versionUnavailable:
             true
-        case .reconciliationPending, .blocked, .jobUnavailable, .notVerified, .protectedDataUnavailable:
+        case .reconciliationPending, .blocked, .jobUnavailable, .notVerified, .protectedDataUnavailable,
+             .replacementSettled:
             false
         }
     }
