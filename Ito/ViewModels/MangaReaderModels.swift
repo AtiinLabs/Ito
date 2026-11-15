@@ -207,6 +207,11 @@ struct ChapterToken: Equatable {
     let url: String?
     let language: String?
     let paywalled: Bool?
+    let scanlatorID: String?
+    let kind: ContentKind?
+    let logicalUnitID: String?
+    let readingOrder: Int64?
+    let revision: String?
 
     init(_ chapter: Manga.Chapter) {
         key = chapter.key
@@ -218,6 +223,11 @@ struct ChapterToken: Equatable {
         url = chapter.url
         language = chapter.lang
         paywalled = chapter.paywalled
+        scanlatorID = chapter.scanlatorID
+        kind = chapter.kind
+        logicalUnitID = chapter.logicalUnitID
+        readingOrder = chapter.readingOrder
+        revision = chapter.revision
     }
 
     init(_ segment: ChapterSegment) {

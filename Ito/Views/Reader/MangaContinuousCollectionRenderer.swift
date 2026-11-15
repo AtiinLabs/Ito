@@ -816,7 +816,14 @@ final class MangaContinuousCollectionViewController: UIViewController,
             isNext: false,
             phase: snapshot?.loadingPrevious == true ? .loading : snapshot?.prependFailed == true ? .failed : .tap,
             notice: ReaderBoundaryNotice.pages(for: boundary, isNext: false),
-            action: { [weak self] in self?.viewModel.prependPreviousChapter() }
+            action: { [weak self] in
+                guard let self else { return }
+                if boundary.needsGroupConsent {
+                    self.viewModel.requestGroupSwitch(.previous, atLoadedEdge: true)
+                } else {
+                    self.viewModel.prependPreviousChapter()
+                }
+            }
         )
     }
 
@@ -829,7 +836,9 @@ final class MangaContinuousCollectionViewController: UIViewController,
             notice: ReaderBoundaryNotice.pages(for: boundary, isNext: true),
             action: { [weak self] in
                 guard let self else { return }
-                if self.snapshot?.appendFailed == true {
+                if boundary.needsGroupConsent {
+                    self.viewModel.requestGroupSwitch(.next, atLoadedEdge: true)
+                } else if self.snapshot?.appendFailed == true {
                     self.viewModel.retryAppendNextChapter()
                 } else {
                     self.viewModel.appendNextChapter()
@@ -1005,7 +1014,7 @@ private struct MangaContinuousChapterPrompt: View {
     let action: () -> Void
 
     var body: some View {
-        if notice != nil {
+        if let notice, !notice.requestsGroupConsent {
             // Where reading stops there is nothing to press: the prompt only says why.
             content.accessibilityElement(children: .combine)
         } else {

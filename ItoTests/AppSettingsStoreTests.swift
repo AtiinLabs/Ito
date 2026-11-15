@@ -6,7 +6,7 @@ import Testing
 
 @MainActor
 struct AppSettingsStoreTests {
-    @Test func materializesAllTwentyDocumentedDefaultsWithTypedState() async throws {
+    @Test func materializesAllDocumentedDefaultsWithTypedState() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let store = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
@@ -30,6 +30,7 @@ struct AppSettingsStoreTests {
         #expect(store.novelIsPaging == false)
         #expect(store.novelPrefetchChapters)
         #expect(store.preloadImageCount == .five)
+        #expect(store.askBeforeSwitchingGroups == false)
         #expect(store.incognitoMode == false)
         #expect(store.autoSyncTrackersToLocal)
         #expect(store.diskCacheLimitGB == 10)
@@ -40,7 +41,7 @@ struct AppSettingsStoreTests {
         #expect(Set(rows.map(\.key)) == Set(AppPreferenceCatalogEntry.allCases.map(\.rawValue)))
     }
 
-    @Test func allTwentyTypedWritesRoundTripThroughGRDB() async throws {
+    @Test func allTypedWritesRoundTripThroughGRDB() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }
         let store = AppSettingsStore(dbPool: database.dbPool, networkPolicy: NetworkPolicyCenter())
@@ -63,6 +64,7 @@ struct AppSettingsStoreTests {
         try await store.set(true, for: AppPreferenceCatalog.novelIsPaging)
         try await store.set(false, for: AppPreferenceCatalog.novelPrefetchChapters)
         try await store.set(.twenty, for: AppPreferenceCatalog.preloadImageCount)
+        try await store.setAskBeforeSwitchingGroups(true)
         try await store.set(true, for: AppPreferenceCatalog.incognitoMode)
         try await store.set(false, for: AppPreferenceCatalog.autoSyncTrackersToLocal)
         try await store.set(50, for: AppPreferenceCatalog.diskCacheLimitGB)
@@ -86,6 +88,7 @@ struct AppSettingsStoreTests {
         #expect(reloaded.novelIsPaging)
         #expect(reloaded.novelPrefetchChapters == false)
         #expect(reloaded.preloadImageCount == .twenty)
+        #expect(reloaded.askBeforeSwitchingGroups)
         #expect(reloaded.incognitoMode)
         #expect(reloaded.autoSyncTrackersToLocal == false)
         #expect(reloaded.diskCacheLimitGB == 50)

@@ -249,6 +249,20 @@ final class MediaDetailLibraryFake: MediaDetailLibraryServing {
 
 @MainActor
 final class MediaDetailProgressFake: MediaDetailProgressServing {
+    /// The source's scope the series screen reads; tests move it to simulate an account or settings change.
+    var scopeEpoch: String? = "test-scope"
+    private(set) var capturedContexts: [PluginCompletionContext] = []
+
+    func captureCompletionContext(media: MediaIdentity, mediaKey: String) -> PluginCompletionContext {
+        let context = PluginCompletionContext(media: media, mediaKey: mediaKey, originatingEpoch: scopeEpoch)
+        capturedContexts.append(context)
+        return context
+    }
+
+    func currentCompletionEpoch(media: MediaIdentity, mediaKey: String) -> String? { scopeEpoch }
+
+    func verifiedCompletionEpoch(media: MediaIdentity, mediaKey: String) async -> String? { scopeEpoch }
+
     struct ReadRequest {
         let media: MediaIdentity
         let chapterID: String
@@ -463,6 +477,10 @@ final class MediaDetailBaselineFake: MediaDetailBaselineAdvancing {
 
 @MainActor
 final class MediaDetailSettingsFake: MediaDetailSettingsReading {
+    var askBeforeSwitchingGroups = false {
+        didSet { readerContinuationSettingsRevision &+= 1 }
+    }
+    private(set) var readerContinuationSettingsRevision: UInt64 = 0
     var alwaysShowCategoryPicker: Bool
     var autoSyncTrackersToLocal: Bool
 

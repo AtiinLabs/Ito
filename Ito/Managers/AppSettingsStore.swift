@@ -66,6 +66,8 @@ public final class AppSettingsStore: ObservableObject {
     @Published public private(set) var novelIsPaging = AppPreferenceCatalog.novelIsPaging.defaultValue
     @Published public private(set) var novelPrefetchChapters = AppPreferenceCatalog.novelPrefetchChapters.defaultValue
     @Published public private(set) var preloadImageCount = AppPreferenceCatalog.preloadImageCount.defaultValue
+    @Published public private(set) var askBeforeSwitchingGroups = AppPreferenceCatalog.askBeforeSwitchingGroups.defaultValue
+    public private(set) var readerContinuationSettingsRevision: UInt64 = 0
     @Published public private(set) var incognitoMode = AppPreferenceCatalog.incognitoMode.defaultValue
     @Published public private(set) var autoSyncTrackersToLocal = AppPreferenceCatalog.autoSyncTrackersToLocal.defaultValue
     @Published public private(set) var diskCacheLimitGB = AppPreferenceCatalog.diskCacheLimitGB.defaultValue
@@ -216,6 +218,10 @@ public final class AppSettingsStore: ObservableObject {
         novelIsPaging = snapshot.novelIsPaging
         novelPrefetchChapters = snapshot.novelPrefetchChapters
         preloadImageCount = snapshot.preloadImageCount
+        if askBeforeSwitchingGroups != snapshot.askBeforeSwitchingGroups {
+            readerContinuationSettingsRevision &+= 1
+        }
+        askBeforeSwitchingGroups = snapshot.askBeforeSwitchingGroups
         incognitoMode = snapshot.incognitoMode
         autoSyncTrackersToLocal = snapshot.autoSyncTrackersToLocal
         diskCacheLimitGB = snapshot.diskCacheLimitGB
@@ -225,6 +231,10 @@ public final class AppSettingsStore: ObservableObject {
         // The configuration is published only here, after persistence acknowledged it, so the live policy
         // revision never runs ahead of what is stored.
         networkPolicy.apply(snapshot.networkConfiguration)
+    }
+
+    public func setAskBeforeSwitchingGroups(_ value: Bool) async throws {
+        try await set(value, for: AppPreferenceCatalog.askBeforeSwitchingGroups)
     }
 }
 
@@ -250,6 +260,7 @@ private struct AppSettingsSnapshot: Sendable {
     let novelIsPaging: Bool
     let novelPrefetchChapters: Bool
     let preloadImageCount: ImagePreloadCountPreference
+    let askBeforeSwitchingGroups: Bool
     let incognitoMode: Bool
     let autoSyncTrackersToLocal: Bool
     let diskCacheLimitGB: Double
@@ -305,6 +316,7 @@ private struct AppSettingsSnapshot: Sendable {
                 novelIsPaging: value(AppPreferenceCatalog.novelIsPaging),
                 novelPrefetchChapters: value(AppPreferenceCatalog.novelPrefetchChapters),
                 preloadImageCount: value(AppPreferenceCatalog.preloadImageCount),
+                askBeforeSwitchingGroups: value(AppPreferenceCatalog.askBeforeSwitchingGroups),
                 incognitoMode: value(AppPreferenceCatalog.incognitoMode),
                 autoSyncTrackersToLocal: value(AppPreferenceCatalog.autoSyncTrackersToLocal),
                 diskCacheLimitGB: value(AppPreferenceCatalog.diskCacheLimitGB),
