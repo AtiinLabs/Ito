@@ -101,6 +101,10 @@ actor DownloadAttempt {
         let entry = try decoder.decode(MediaEntry.self, from: work.entrySnapshot)
         let chapter = try decoder.decode(Chapter.self, from: work.job.chapterSnapshot)
 
+        let replacement = try await store.replacementIntent(jobID: job.id)
+        if let replacement {
+            try await confirmTarget(replacement, entry: entry, chapter: chapter)
+        }
         try await admit()
         let pages = runtime.pages
         let context = networkContext()
@@ -134,6 +138,10 @@ actor DownloadAttempt {
             await report(completed: completed + 1, total: ordered.count, bytes: bytes)
         }
 
+        if let replacement {
+            try await confirmTarget(replacement, entry: entry, chapter: chapter)
+            try await store.confirmReplacement(replacement, staging: staging)
+        }
         try throwIfDenied()
         try requirePluginCurrent()
         try requirePolicyCurrent()
@@ -143,6 +151,22 @@ actor DownloadAttempt {
             // P5 publishes verified local bytes. Soft network permissions no longer govern this commit;
             // the store independently rechecks the source epoch and live job in the same transaction.
             isPluginCurrent() && isTrustCurrent()
+        }
+    }
+
+    /// The ABI does not promise revision-pinned page acquisition. Confirm the same exact revision
+    /// both before acquisition and after staging. Unknown is permitted only by manual refresh intent.
+    private func confirmTarget(_ intent: DownloadReplacementIntent, entry: MediaEntry, chapter: Chapter) async throws {
+        try await admit()
+        let context = networkContext()
+        let provider = runtime.pages
+        let current = try await pluginCall {
+            try await provider.replacementChapter(entry: entry, key: chapter.key, context: context)
+        }
+        guard let current, current.key == chapter.key, current.paywalled != true,
+              current.scanlatorID == chapter.scanlatorID, current.scanlator == chapter.scanlator,
+              DownloadReplacementIntent.revision(current) == intent.targetRevision else {
+            throw DownloadAttemptFailure(outcome: .failed(.replacementContentChanged))
         }
     }
 
@@ -320,6 +344,8 @@ actor DownloadAttempt {
                 return .waiting(.protectedDataUnavailable)
             case .reconciliationPending, .jobUnavailable, .notVerified, .damaged, .versionUnavailable:
                 return .failed(.fileSystem)
+            case .replacementSettled(let reason):
+                return .failed(reason)
             }
         }
         if let fileError = error as? OfflineFileSystemError {

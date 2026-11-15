@@ -190,6 +190,9 @@ carries the policy it was planned under, and the store refuses it in the write t
 stored policy differs, so verify the second screen cannot queue another group after the first
 narrows to Strict.
 
+## Manual offline replacement candidate
+
+See [Offline chapter replacement](OFFLINE_DOWNLOADS.md) for the v24 schema, conservative recovery and release acceptance suites. Replacement is manual-only: do not advertise automatic refreshing or guaranteed newer content for unknown source revisions. Verify localization after the clean simulator build and retain lease/delete/recovery race coverage before publication.
 ## Network preference upgrade checks
 
 Network preferences are scalar GRDB configuration, not runtime permissions. Upgrade and older-backup restore derive a missing adjacent-chapter prefetch amount once from the stored image preload (zero → zero, positive or absent → two); explicit values survive. No database schema migration is needed.

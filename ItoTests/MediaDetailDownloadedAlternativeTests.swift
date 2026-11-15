@@ -289,7 +289,7 @@ final class MediaDetailDownloadedAlternativeTests: XCTestCase {
         subject.downloads.set(.downloaded, chapterKey: "a")
         XCTAssertEqual(
             viewModel.downloadActions(for: Self.anchorChapter),
-            [.readOnlineThisTime, .chooseDownloadedAlternative, .delete]
+            [.readOnlineThisTime, .replace, .chooseDownloadedAlternative, .delete]
         )
         subject.downloads.set(.damaged, chapterKey: "a")
         XCTAssertEqual(viewModel.downloadActions(for: Self.anchorChapter), [.chooseDownloadedAlternative, .delete])

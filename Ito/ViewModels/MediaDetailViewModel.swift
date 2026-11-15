@@ -59,6 +59,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     @Published private(set) var relinkPresentation: MediaDetailRelinkPresentation?
     /// This series' chapter download states, keyed by chapter key.
     @Published private(set) var chapterDownloadStates: [String: ChapterDownloadState] = [:]
+    /// This series' replacement activity over saved chapters, keyed by chapter key. Empty when none is in progress.
+    @Published private(set) var chapterReplacementStates: [String: ChapterDownloadState] = [:]
     /// Whether the device reports no network.
     @Published private(set) var isOffline: Bool
     /// When the saved details of this series were last refreshed from their source; nil when unknown. Read
@@ -135,13 +137,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         self.messagePresenter = messagePresenter
         downloads = dependencies.downloads
         snapshots = MediaDetailSnapshotRefresher(library: dependencies.library, encoder: snapshotEncoder)
-        downloadBatch = MediaDetailDownloadBatchModel(
-            downloads: dependencies.downloads,
-            progress: dependencies.progress, snapshots: snapshots,
-            inventory: routeContext.inventoryChapters,
-            loadsFromSource: routeContext.loadDetails != nil,
-            presets: dependencies.downloadPresets
-        )
+        downloadBatch = Self.makeDownloadBatch(dependencies: dependencies, routeContext: routeContext, snapshots: snapshots)
         self.presentationLogger = presentationLogger
         downloadedAlternatives = DownloadedAlternativeSelector(
             downloads: dependencies.downloads,
@@ -181,15 +177,20 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             .store(in: &cancellables)
         // Follows the series identity, so a relink observes the new series' chapters.
         let downloads = dependencies.downloads
-        $media
-            .map { [pluginID] in MediaIdentity(pluginId: pluginID, canonicalMediaId: $0.key, mediaKind: $0.mediaKind) }
-            .removeDuplicates()
+        Self.seriesIdentities(of: $media, pluginID: pluginID)
             .map { identity in downloads.chapterStates(for: identity).map { (identity, $0) } }
             .switchToLatest()
             .sink { [weak self] identity, states in
                 self?.chapterDownloadStates = states
                 self?.downloadBatch.statesDidChange(states, for: identity)
             }
+            .store(in: &cancellables)
+        // A replacement's activity over a saved copy. It is separate from the copy's own state, so the copy keeps
+        // its reading and deletion while the replacement shows its progress, cancellation and retry.
+        Self.seriesIdentities(of: $media, pluginID: pluginID)
+            .map { identity in downloads.replacementStates(for: identity) }
+            .switchToLatest()
+            .sink { [weak self] in self?.chapterReplacementStates = $0 }
             .store(in: &cancellables)
         dependencies.connectivity.isOfflinePublisher
             .sink { [weak self] isOffline in
