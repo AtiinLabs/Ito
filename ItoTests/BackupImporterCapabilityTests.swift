@@ -35,7 +35,7 @@ struct BackupImporterCapabilityTests {
             for component in BackupComponent.allCases {
                 try BackupCapabilityRecord(
                     component: component,
-                    representation: component == .savedLibraryThumbnails
+                    representation: component == .savedLibraryThumbnails || component == .downloadPresets
                         ? .representedEmpty
                         : .representedNonempty
                 ).insert(db)
@@ -493,6 +493,63 @@ struct BackupImporterCapabilityTests {
                 try RepositoryRecord.fetchOne(db, key: localRepository.url)
             } == localRepository
         )
+    }
+
+    /// A backup that does not represent presets (no capability row; "unrepresented" is never stored) cannot
+    /// carry preset rows.
+    @Test func physicalPresetRowsWithoutRepresentationAreRejected() async throws {
+        let fixture = try TemporaryBackupFixture(extension: "itobackup")
+        defer { fixture.cleanup() }
+        try fixture.withDatabase { db in
+            try createMetadataTables(in: db)
+            try db.execute(sql: "INSERT INTO backupMetadata VALUES (1, 1, 0)")
+            // No decodable columns: presence must be checked without loading payloads.
+            try db.execute(sql: """
+                CREATE TABLE downloadPresetDefinition (payload BLOB);
+                INSERT INTO downloadPresetDefinition VALUES (zeroblob(1048576));
+                """)
+        }
+        await #expect(throws: BackupPreflightError.rejected(
+            .invalidCapabilityMetadata(component: .downloadPresets, code: "unrepresentedContainsRows")
+        )) {
+            _ = try await ItoNativeImporter().parse(url: fixture.url)
+        }
+    }
+
+    @Test(arguments: [
+        ("bad-id", "Name", "next", 3, 1, "invalidPreset"),
+        ("00000000-0000-0000-0000-000000000001", "two\twords", "next", 3, 1, "invalidPreset"),
+        ("00000000-0000-0000-0000-000000000001", "Name", "future", 3, 1, "invalidPreset"),
+        ("00000000-0000-0000-0000-000000000001", "Name", "more", 1001, 1, "invalidPreset"),
+        ("00000000-0000-0000-0000-000000000001", String(repeating: "x", count: 257), "next", 3, 1, "invalidPreset"),
+        ("00000000-0000-0000-0000-000000000001", "Name", "next", 3, 21, "tooManyPresets"),
+        ("00000000-0000-0000-0000-000000000001", "Name", "next", 3, 2, "invalidPreset")
+    ])
+    func malformedNativePresetRowsAreRejected(
+        id: String, name: String, kind: String, count: Int, rows: Int, code: String
+    ) async throws {
+        let fixture = try TemporaryBackupFixture(extension: "itobackup")
+        defer { fixture.cleanup() }
+        try fixture.withDatabase { db in
+            try createMetadataTables(in: db)
+            try db.execute(sql: """
+                INSERT INTO backupMetadata VALUES (1, 1, 0);
+                INSERT INTO backupCapability VALUES ('downloadPresets', 'representedNonempty');
+                CREATE TABLE downloadPresetDefinition
+                    (id TEXT, name TEXT, windowKind TEXT, positionCount INTEGER, sortIndex INTEGER);
+                """)
+            for index in 0..<rows {
+                try db.execute(
+                    sql: "INSERT INTO downloadPresetDefinition VALUES (?, ?, ?, ?, ?)",
+                    arguments: [id, name, kind, count, index]
+                )
+            }
+        }
+        await #expect(throws: BackupPreflightError.rejected(
+            .invalidCapabilityMetadata(component: .downloadPresets, code: code)
+        )) {
+            _ = try await ItoNativeImporter().parse(url: fixture.url)
+        }
     }
 
     @Test func malformedCapabilityMetadataIsRejectedWithTypedReasons() async throws {

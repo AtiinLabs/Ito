@@ -139,10 +139,10 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         snapshots = MediaDetailSnapshotRefresher(library: dependencies.library, encoder: snapshotEncoder)
         downloadBatch = MediaDetailDownloadBatchModel(
             downloads: dependencies.downloads,
-            progress: dependencies.progress,
-            snapshots: snapshots,
+            progress: dependencies.progress, snapshots: snapshots,
             inventory: routeContext.inventoryChapters,
-            loadsFromSource: routeContext.loadDetails != nil
+            loadsFromSource: routeContext.loadDetails != nil,
+            presets: dependencies.downloadPresets
         )
         self.presentationLogger = presentationLogger
         pendingOpenIntent = openIntent

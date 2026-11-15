@@ -18,6 +18,7 @@ nonisolated public struct BackupExportOperation: Sendable {
         case credentialPayloadRemains
         case invalidScalarPreferenceCatalog
         case invalidMetadata
+        case invalidDownloadPresets
         case invalidCapabilities
         case integrityCheckFailed(String)
         case foreignKeyCheckFailed
@@ -122,6 +123,7 @@ nonisolated public struct BackupExportOperation: Sendable {
         ],
         .pluginSettings: [PluginSettingRecord.databaseTableName],
         .legacyUnscopedMediaState: [LegacyUnscopedMediaStateRecord.databaseTableName],
+        .downloadPresets: [DownloadPresetDefinitionRecord.databaseTableName],
         .legacyStateArchive: [LegacyStateArchiveRecord.databaseTableName]
     ]
 
@@ -298,6 +300,7 @@ nonisolated public struct BackupExportOperation: Sendable {
             try Self.validateScalarPreferences(in: db)
 
             try Self.validateThumbnails(in: db)
+            try Self.validateDownloadPresets(in: db)
 
             let metadata = try BackupMetadataRecord.fetchAll(db)
             guard metadata.count == 1,
@@ -421,6 +424,19 @@ nonisolated public struct BackupExportOperation: Sendable {
             coverURLs[id] = coverUrl
         }
         return coverURLs
+    }
+
+    /// The store is the only writer, so a violation means corruption: at most 20 definitions, every row valid, and a
+    /// dense order from 0. The export fails rather than publishing a backup that restore would reject.
+    private static func validateDownloadPresets(in db: Database) throws {
+        let records = try DownloadPresetDefinitionRecord.order(Column("sortIndex")).fetchAll(db)
+        guard records.count <= DownloadPresetDefinitionRecord.maximumCount,
+              records.map(\.sortIndex) == Array(records.indices),
+              Set(records.map(\.id)).count == records.count,
+              (try? records.map { try $0.validated() }) != nil
+        else {
+            throw ValidationError.invalidDownloadPresets
+        }
     }
 
     private static func validateScalarPreferences(in db: Database) throws {

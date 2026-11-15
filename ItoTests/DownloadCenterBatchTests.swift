@@ -25,7 +25,7 @@ struct DownloadCenterBatchTests {
             canonicalMediaId: "series-1",
             entry: .manga(Manga(key: "series-1", title: "Series One")),
             seriesTitle: "Series One",
-            preset: .next5,
+            provenance: .builtIn(.next5),
             selection: DownloadBatchRecord.sourceListSelection,
             catalogDigest: String(repeating: "c", count: 64),
             chapters: keys.map { OfflineStoreFixture.chapter($0) }

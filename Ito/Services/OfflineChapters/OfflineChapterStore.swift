@@ -454,7 +454,7 @@ actor OfflineChapterStore {
             canonicalMediaId: request.canonicalMediaId,
             entry: request.entry,
             seriesTitle: request.seriesTitle,
-            preset: .single,
+            provenance: .single,
             selection: DownloadBatchRecord.sourceListSelection,
             catalogDigest: nil,
             chapters: [request.chapter]

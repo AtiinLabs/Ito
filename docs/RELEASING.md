@@ -25,6 +25,11 @@ The compatibility is one-directional. Every backup this version exports lists th
 (`unknownComponent`), so they cannot read these backups at all. Say so in the release notes of the
 version that ships it.
 
+Custom download presets travel in a separate `downloadPresets` component, which every backup from this version
+lists (empty when no presets exist). Earlier builds reject these backups with `unknownComponent`, as they already
+do for `savedLibraryThumbnails`. Backups from earlier versions have no such component and restore with local
+presets untouched. Release notes must say that backups from this version need this version or later.
+
 Snapshot freshness remains installation-local. Restored details do not prove current catalog
 completeness. Backups still exclude downloaded chapter media, inventory pointers, queues, source
 epochs and runtime permissions.
@@ -200,3 +205,10 @@ Speculative reader work (image preload, adjacent manga chapters and novel prefet
 "Ask on Metered Networks" applies the same foreground confirmation to a single-chapter download as to a batch. Cancelling one chapter keeps the batch's consent for its remaining chapters; the consent ends when the batch has no jobs left, the app leaves the foreground, the path class changes, or the download mode changes. A job waiting for a metered network offers Cancel only, not Retry: the wait clears when an unmetered network is available, and a queued job cannot be granted metered consent after the fact. Cancel it and download the chapter again to be asked.
 
 Backups written by this build carry the new `Ito.NetworkDownloadMode` and `Ito.AdjacentChapterPrefetchCount` keys. Older app versions require an exact scalar-key catalog and reject backups containing these new keys; restore them only on a current build.
+
+For custom download presets, verify native import rejects physical preset rows without a represented
+capability before loading their payloads, and invalid definitions cannot be exported. Editing or
+deleting a definition must not alter an open chooser or preview, even after a chapter catalog refresh:
+the chosen name, rule and batch provenance remain frozen. Without a last-read anchor, More starts
+at the first unread position and skips saved or queued chapters; it makes no reading-history claim.
+Unreadable preset recovery must show a failed Delete All operation and preserve the stored rows.
