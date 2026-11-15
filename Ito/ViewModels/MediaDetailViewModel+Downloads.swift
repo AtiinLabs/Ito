@@ -15,7 +15,8 @@ extension MediaDetailViewModel {
             snapshots: snapshots,
             inventory: routeContext.inventoryChapters,
             loadsFromSource: routeContext.loadDetails != nil,
-            presets: dependencies.downloadPresets
+            presets: dependencies.downloadPresets,
+            enumerateEditions: routeContext.enumerateEditions
         )
     }
 
@@ -28,7 +29,6 @@ extension MediaDetailViewModel {
             .removeDuplicates()
             .eraseToAnyPublisher()
     }
-
     /// Whether this series shows download controls: offline chapters exist on this build and the series is
     /// a manga or a novel. Anime episodes are never stored.
     var showsDownloadControls: Bool {

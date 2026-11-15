@@ -249,8 +249,8 @@ nonisolated struct DownloadStoreRecord: Codable, Sendable, FetchableRecord, Pers
     var createdAt: Date
 }
 
-/// What the user asked for when the batch was queued. `single` is one chapter chosen on its own; `more` is
-/// "Download N More…"; `custom` is a saved custom preset (its id is on the batch).
+/// What the user asked for when the batch was queued. `single` is exact chapters chosen individually, not from a
+/// preset; `more` is "Download N More…"; `custom` is a saved custom preset (its id is on the batch).
 nonisolated enum DownloadBatchPreset: String, Codable, CaseIterable, Sendable {
     case single
     case next
@@ -276,7 +276,7 @@ nonisolated struct DownloadBatchProvenance: Equatable, Sendable {
     let positionCount: Int?
     let customPresetId: String?
 
-    /// A chapter queued on its own: every optional field is nil.
+    /// Exact chapters chosen individually, not from a preset: every optional field is nil.
     static let single = builtIn(.single)
 
     /// A request for a built-in preset, which has no window, count or custom definition.

@@ -23,11 +23,14 @@ protocol MediaDetailDownloadBatchHost: AnyObject {
 final class MediaDetailDownloadBatchModel: ObservableObject {
     @Published private(set) var sheet: DownloadSheet? {
         didSet {
-            // A sheet the screen reported on screen is still dismissing when it is cleared; a metered prompt waits
-            // for that. One cleared before it was ever shown never reports a dismissal, so nothing waits for it.
+            // A listing belongs to the chooser it was asked from; any other sheet, or none, ends it.
+            if oldValue?.chooserID != sheet?.chooserID { cancelEnumeration() }
+            // Only a sheet actually shown can leave a pending dismissal.
             if sheet == nil, oldValue != nil, sheetIsOnScreen { sheetDismissalPending = true }
         }
     }
+    /// Ephemeral listing owned by the chooser. The separate enumeration extension needs write access.
+    @Published var enumeration = EditionEnumerationState.idle
     /// SHA-256 hex digest of the chapter list as the source returned it. Empty where nothing is downloadable.
     @Published private(set) var catalogDigest = ""
     /// A batch is being queued; a second one waits for it instead of being dropped.
@@ -61,8 +64,11 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     private let snapshots: MediaDetailSnapshotRefresher
     private let inventory: ((MediaIdentity) async -> [DownloadedChapterRecord])?
     private let loadsFromSource: Bool
+    /// Lists the series' exact uploads; nil where the source has no such export or no source can be asked.
+    let enumerateEditions: ChapterEditionEnumeration?
 
-    private var states: [String: ChapterDownloadState] = [:]
+    /// The extension only reads the states; they are written here, from the store's publication.
+    private(set) var states: [String: ChapterDownloadState] = [:]
     /// The series `states` belong to; they arrive with the identity, not with the list that is current.
     private var statesIdentity: MediaIdentity?
     private var storedKeys = Set<String>()
@@ -81,6 +87,14 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     private var bytesTask: Task<Void, Never>?
     // The queueing state below is internal, not private, so MediaDetailDownloadBatchModel+Queueing can reach it.
     var enqueueTask: Task<Void, Never>?
+    // The listing's state is written by the "Find All Uploads" extension in its own file, which keeps this file
+    // under the file-length limit; `private(set)` would hide these setters from it. Nothing else writes them.
+    /// What the open listing was asked under, and the chapters it returned, frozen for queueing.
+    var enumerationScope: BatchScope?
+    var enumeratedChapters: [Chapter] = []
+    var enumerationTask: Task<Void, Never>?
+    /// The listing that may still publish; a cancelled or replaced listing finds another token and leaves.
+    var enumerationToken: UUID?
     private var choiceOperationID: UUID?
     /// A More prompt confirmation is scoped to this exact prompt until it either replaces it with a chooser/preview
     /// or admits the batch write. Dismissal, replacement and navigation invalidate it.
@@ -114,7 +128,6 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         /// The count a "Download More" request asked for, reported against what was actually queued.
         let requestedMore: Int?
         let scope: BatchScope
-        /// The dialog has been shown for this batch; hiding it does not show it again.
         var wasPresented = false
     }
 
@@ -131,13 +144,15 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         snapshots: MediaDetailSnapshotRefresher,
         inventory: ((MediaIdentity) async -> [DownloadedChapterRecord])?,
         loadsFromSource: Bool,
-        presets: any DownloadPresetProviding
+        presets: any DownloadPresetProviding,
+        enumerateEditions: ChapterEditionEnumeration? = nil
     ) {
         self.downloads = downloads
         self.progress = progress
         self.snapshots = snapshots
         self.inventory = inventory
         self.loadsFromSource = loadsFromSource
+        self.enumerateEditions = enumerateEditions
         presetSubscription = presets.presetsPublisher.sink { [weak self] in self?.customPresets = $0 }
     }
 
@@ -147,6 +162,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         savedOnlyTask?.cancel()
         capacityTask?.cancel()
         bytesTask?.cancel()
+        enumerationTask?.cancel()
     }
 
     // MARK: - Availability
@@ -233,6 +249,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
     func statesDidChange(_ states: [String: ChapterDownloadState], for identity: MediaIdentity) {
         self.states = states
         statesIdentity = identity
+        refreshEnumerationStatuses()
         guard isAvailable else { return }
         let current = SeriesDownloadSummary(states: states)
         if current != summary { summary = current }
@@ -258,6 +275,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
 
     /// A new series identity starts over. A batch already submitted is not cancelled; it no longer reports here.
     func reset() {
+        cancelEnumeration()
         cancelMeteredPrompt()
         scopeGeneration &+= 1
         savedScopeGeneration &+= 1
@@ -482,14 +500,14 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
 
     /// Whether the source's epoch is still the one a sheet was made under. A read that fails is not "the
     /// same": the consent is stale.
-    private func isCurrentEpoch(_ epoch: String, for identity: MediaIdentity) -> Bool {
+    func isCurrentEpoch(_ epoch: String, for identity: MediaIdentity) -> Bool {
         (try? downloads.editionPreferenceEpoch(for: identity.pluginId)) == epoch
     }
 
     /// A consent was made under a source epoch, policy or catalog that is no longer current. The sheet closes,
     /// nothing is stored or queued, and the user is asked to review again; a confirm that cannot work is
     /// never left on screen.
-    private func closeStaleConsent() {
+    func closeStaleConsent() {
         sheet = nil
         choiceOperationID = nil
         isApplyingChoice = false
@@ -862,7 +880,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         return PlannedDownload(chapters: chapters, plan: plan)
     }
 
-    private func isFailed(_ key: String) -> Bool {
+    func isFailed(_ key: String) -> Bool {
         if case .failed? = states[key] { return true }
         return false
     }
@@ -1031,6 +1049,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         await savedOnlyTask?.value
         await capacityTask?.value
         await bytesTask?.value
+        await enumerationTask?.value
     }
 #endif
 }

@@ -181,6 +181,9 @@ struct MediaDetailRouteContext<M: MediaDisplayable> {
     /// The stored copies of a series, for the saved-only rows of a runner route. It is asked for the series
     /// shown now, which a relink changes. Nil where no offline store is composed.
     var inventoryChapters: ((MediaIdentity) async -> [DownloadedChapterRecord])?
+    /// Lists every exact upload of the series for the explicit "Find All Uploads" action. Nil where there is no
+    /// source to ask, or where the kind has no stored form. Nothing but that action calls it.
+    var enumerateEditions: ChapterEditionEnumeration?
 }
 
 /// The one saved-copy choice the series screen can present, tied to this screen's state when it began.
