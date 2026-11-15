@@ -63,7 +63,7 @@ private func loadedPage(
     authority: NetworkRequestAuthority? = nil
 ) async throws -> WebviewManager {
     let manager = WebviewManager(
-        pageLoadDeadline: 20, authority: authority,
+        pageLoadDeadline: 20, authority: authority, websites: SourceWebsiteContexts(),
         scriptEvaluator: held.evaluator, plainScriptDeadline: plainScriptDeadline)
     do {
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))

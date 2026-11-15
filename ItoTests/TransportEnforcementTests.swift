@@ -106,7 +106,7 @@ final class TransportEnforcementTests: XCTestCase {
     @MainActor
     func testBackgroundChallengeRefusesWithoutCreatingAPage() async throws {
         let contexts = makeContexts()
-        let module = AppWebviewModule(contexts: contexts)
+        let module = AppWebviewModule(contexts: contexts, websites: SourceWebsiteContexts())
         let context = authority(contexts, .automaticLibraryUpdate).context
         do {
             _ = try await module.loadUrl(request: WebviewRequest(url: "https://fixture.invalid/", script: nil), context: context)

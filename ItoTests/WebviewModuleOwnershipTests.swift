@@ -11,7 +11,7 @@ final class WebviewModuleOwnershipTests: XCTestCase {
         )
         let result = try await Task.detached {
             // The final module reference is released by a background executor, as on runner teardown.
-            var module: AppWebviewModule? = await AppWebviewModule()
+            var module: AppWebviewModule? = await AppWebviewModule(websites: SourceWebsiteContexts())
             _ = try await module?.loadUrl(
                 request: WebviewRequest(url: "data:text/html,<p id='value'>operation-owned</p>", script: nil),
                 context: context

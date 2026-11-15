@@ -64,7 +64,7 @@ final class TransportReviewRegressionTests: XCTestCase {
         let page = ReaderPageImageDescriptor(pageID: "held", request: URLRequest(url: URL(string: "https://fixture.invalid/held")!))
         _ = session.acquire(page, consumer: .visible)
         await fulfillment(of: [started], timeout: 5)
-        let manager = WebviewManager(authority: authority)
+        let manager = WebviewManager(authority: authority, websites: SourceWebsiteContexts())
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>bound</p>", script: nil))
         // A path change from the monitor's queue is transient: the page lives, the reader image keeps its transfer.
         let pathHandled = hookExpectation("page handled a background-queue path change")
@@ -85,7 +85,7 @@ final class TransportReviewRegressionTests: XCTestCase {
 
     func testLivePageSurvivesBackgroundAndRefusesNewLoadsUntilForeground() async throws {
         let (_, contexts, authority) = fixture()
-        let manager = WebviewManager(authority: authority)
+        let manager = WebviewManager(authority: authority, websites: SourceWebsiteContexts())
         defer { manager.retire(with: CancellationError()) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>verification</p>", script: nil))
         let original = manager.webView
@@ -122,6 +122,10 @@ final class TransportReviewRegressionTests: XCTestCase {
             XCTAssertEqual(decision(local), .allow, local)
         }
         XCTAssertEqual(decision("https://fixture.invalid/frame"), .allow)
+        // Other schemes are not loaded by a challenge and do not end it.
+        for other in ["mailto:someone@fixture.invalid", "itms-apps://fixture.invalid/app", "file:///tmp/x"] {
+            XCTAssertEqual(decision(other), .cancel, other)
+        }
         XCTAssertEqual(results, 0, "Allowed frames leave the challenge pending")
         // Network navigations keep their rules.
         XCTAssertEqual(decision("http://fixture.invalid/downgrade"), .cancel)
@@ -179,7 +183,7 @@ final class TransportReviewRegressionTests: XCTestCase {
 
     func testModuleKeepsInterleavedOperationPagesUpToTheIdleBound() async throws {
         let (_, contexts, _) = fixture()
-        let module = AppWebviewModule(contexts: contexts)
+        let module = AppWebviewModule(contexts: contexts, websites: SourceWebsiteContexts())
         var operations: [NetworkOperationContext] = []
         for index in 0..<4 {
             let context = contexts.context(pluginID: "fixture", PluginNetworkOperation(purpose: .foregroundReading, operationID: UUID()))

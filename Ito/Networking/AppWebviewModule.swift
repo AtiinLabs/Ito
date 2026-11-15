@@ -17,7 +17,7 @@ import ito_runner
     var retainedPageCount: Int { pages.count }
 #endif
 
-    init(contexts: PluginNetworkContexts? = nil, websites: SourceWebsiteContexts = SourceWebsiteContexts()) {
+    init(contexts: PluginNetworkContexts? = nil, websites: SourceWebsiteContexts) {
         self.contexts = contexts
         self.websites = websites
     }
@@ -212,7 +212,7 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         pageLoadDeadline: TimeInterval = 45,
         isInteractive: @escaping @MainActor () -> Bool = { PagePresentation.foregroundScene != nil },
         authority: NetworkRequestAuthority? = nil,
-        websites: SourceWebsiteContexts = SourceWebsiteContexts(),
+        websites: SourceWebsiteContexts,
         scriptEvaluator: ScriptEvaluator? = nil,
         plainScriptDeadline: TimeInterval? = nil
     ) {

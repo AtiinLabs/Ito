@@ -10,7 +10,7 @@ final class CloudflareManager: NSObject, ObservableObject {
     private var challenges: [UUID: CloudflareChallenge] = [:]
     private let websites: SourceWebsiteContexts
 
-    init(websites: SourceWebsiteContexts = SourceWebsiteContexts()) {
+    init(websites: SourceWebsiteContexts) {
         self.websites = websites
         super.init()
     }
@@ -139,16 +139,17 @@ final class CloudflareChallenge: NSObject, WKNavigationDelegate, WKHTTPCookieSto
         decisionHandler(decideNavigation(to: navigationAction.request.url))
     }
 
-    /// The policy for one navigation of the challenge page, in any frame. Local documents and frames make no
-    /// HTTP request and need no network admission; an HTTP(S) request needs the interactive admission, and a
-    /// downgrade or credentials in the URL end the challenge.
+    /// The policy for one navigation of the challenge page, in any frame. Local `about:`, `blob:` and `data:`
+    /// documents make no HTTP request and need no network admission; an HTTP(S) request needs the interactive
+    /// admission, and a downgrade or credentials in the URL end the challenge. Any other scheme is cancelled.
     func decideNavigation(to target: URL?) -> WKNavigationActionPolicy {
-        guard completion != nil, let target else { return .cancel }
-        guard target.scheme == "https" || target.scheme == "http" else { return .allow }
+        guard completion != nil, let target, let scheme = target.scheme?.lowercased() else { return .cancel }
+        if ["about", "blob", "data"].contains(scheme) { return .allow }
+        guard scheme == "https" || scheme == "http" else { return .cancel }
         do {
             try authority.checkInteractive()
             guard target.user == nil, target.password == nil,
-                  !(url.scheme == "https" && target.scheme == "http") else { throw URLError(.unsupportedURL) }
+                  !(url.scheme == "https" && scheme == "http") else { throw URLError(.unsupportedURL) }
             return .allow
         } catch HostNetworkPolicyOutcome.foregroundPermissionRequired {
             return .cancel

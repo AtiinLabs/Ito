@@ -91,7 +91,7 @@ final class SystemSiteDataClearer: SiteDataClearing {
     /// stored, cleared with the rest: sources need signing in again afterwards.
     init(
         pluginCookies: PluginCookieJar? = nil, pluginTokens: PluginSecretStore? = nil,
-        websites: SourceWebsiteContexts = SourceWebsiteContexts()
+        websites: SourceWebsiteContexts
     ) {
         self.pluginCookies = pluginCookies
         self.pluginTokens = pluginTokens
@@ -132,24 +132,4 @@ struct PreparedSettingsDependencies {
     let logReader: any DebugLogReading
     let clipboardWriter: any ClipboardWriting
     let siteDataClearer: any SiteDataClearing
-
-    init(
-        settingsStore: AppSettingsStore,
-        notificationAuthorization: any NotificationAuthorizationRequesting,
-        applicationSettingsOpener: any ApplicationSettingsOpening,
-        storageAccess: any SettingsStorageAccessing,
-        discordRPCManager: DiscordRPCManager,
-        logReader: any DebugLogReading,
-        clipboardWriter: any ClipboardWriting,
-        siteDataClearer: any SiteDataClearing = SystemSiteDataClearer()
-    ) {
-        self.settingsStore = settingsStore
-        self.notificationAuthorization = notificationAuthorization
-        self.applicationSettingsOpener = applicationSettingsOpener
-        self.storageAccess = storageAccess
-        self.discordRPCManager = discordRPCManager
-        self.logReader = logReader
-        self.clipboardWriter = clipboardWriter
-        self.siteDataClearer = siteDataClearer
-    }
 }
