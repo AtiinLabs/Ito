@@ -71,7 +71,7 @@ struct DownloadCenterReplacementTests {
     @Test func knownChangedRevisionAndUnknownManualRefreshStayDistinct() {
         let download = OfflineStoreFixture.request()
         let unknown = DownloadReplacementPreview(
-            download: download, installed: Chapter(key: "chapter-1"), expectedVersionId: "old"
+            download: download, installed: Chapter(key: "chapter-1"), expectedVersionId: "old", downloadMode: .unmeteredOnly
         )
         #expect(!unknown.hasChangedRevision)
         let knownDownload = DownloadEnqueueRequest(
@@ -81,7 +81,8 @@ struct DownloadCenterReplacementTests {
             sourceEpoch: download.sourceEpoch
         )
         let changed = DownloadReplacementPreview(
-            download: knownDownload, installed: Chapter(key: "chapter-1", revision: "r1"), expectedVersionId: "old"
+            download: knownDownload, installed: Chapter(key: "chapter-1", revision: "r1"), expectedVersionId: "old",
+            downloadMode: .unmeteredOnly
         )
         #expect(changed.hasChangedRevision)
     }
@@ -97,7 +98,8 @@ struct DownloadCenterReplacementTests {
         let preview = DownloadReplacementPreview(
             download: target,
             installed: Chapter(key: "chapter-1", title: "Chapter 1: Old", scanlator: "Group A", revision: "r1"),
-            expectedVersionId: "old"
+            expectedVersionId: "old",
+            downloadMode: .unmeteredOnly
         )
         #expect(preview.message.contains("Chapter 1: Old"))
         #expect(preview.message.contains("Group A"))
@@ -105,5 +107,29 @@ struct DownloadCenterReplacementTests {
         #expect(preview.message.contains("Group B"))
         #expect(preview.message.contains("newer content"))
         #expect(!preview.message.contains("newer edition"))
+    }
+
+    /// Replacement never gets the batch metered prompt: it waits for an unmetered network unless downloads may
+    /// use metered networks, and the confirmation says which.
+    @Test(arguments: [
+        (NetworkDownloadMode.unmeteredOnly, true),
+        (NetworkDownloadMode.askMetered, true),
+        (NetworkDownloadMode.allowMetered, false),
+    ])
+    func theConfirmationStatesWhetherTheDownloadWaitsForAnUnmeteredNetwork(
+        mode: NetworkDownloadMode, waits: Bool
+    ) async throws {
+        let fixture = try DownloadWorkerFixture()
+        _ = try await fixture.offline.publishedEdition(fixture.store)
+        var configuration = fixture.networkContexts.policy.current
+        configuration.downloadMode = mode
+        fixture.networkContexts.policy.apply(configuration)
+
+        let preview = try await fixture.confirmablePreview()
+
+        #expect(preview.downloadMode == mode)
+        #expect(preview.message.contains("Downloads wait on metered networks") == waits)
+        #expect(preview.message.contains("may use cellular data") == !waits)
+        #expect(preview.message.contains("Low Data Mode"))
     }
 }

@@ -1636,8 +1636,11 @@ Downloads queue: retry a failed or paused job */
 
 "Saved Source • %@ • Confirmed" = "Saved Source • %@ • Confirmed";
 
-/* Manual replacement confirmation. The chapter titles, group names and revisions are untranslated source data; each one is shown as its own value. */
+/* Manual replacement confirmation when downloads wait for an unmetered network. The chapter titles, group names and revisions are untranslated source data; each one is shown as its own value. */
 "Saved copy: %@, group %@, revision %@.\nNew copy: %@, group %@, revision %@.\nThe saved copy stays available until the new copy is verified. If a revision is unknown, this is a manual refresh, not evidence of newer content. Downloads wait on metered networks and in Low Data Mode." = "Saved copy: %1$@, group %2$@, revision %3$@.\nNew copy: %4$@, group %5$@, revision %6$@.\nThe saved copy stays available until the new copy is verified. If a revision is unknown, this is a manual refresh, not evidence of newer content. Downloads wait on metered networks and in Low Data Mode.";
+
+/* Manual replacement confirmation when downloads may use metered networks. The chapter titles, group names and revisions are untranslated source data; each one is shown as its own value. */
+"Saved copy: %@, group %@, revision %@.\nNew copy: %@, group %@, revision %@.\nThe saved copy stays available until the new copy is verified. If a revision is unknown, this is a manual refresh, not evidence of newer content. The download may use cellular data or a personal hotspot, and waits in Low Data Mode." = "Saved copy: %1$@, group %2$@, revision %3$@.\nNew copy: %4$@, group %5$@, revision %6$@.\nThe saved copy stays available until the new copy is verified. If a revision is unknown, this is a manual refresh, not evidence of newer content. The download may use cellular data or a personal hotspot, and waits in Low Data Mode.";
 
 /* Backup restore report: the component containing bounded cover images saved with library items. */
 "Saved cover thumbnails" = "Saved cover thumbnails";

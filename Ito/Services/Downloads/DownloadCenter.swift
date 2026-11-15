@@ -162,7 +162,8 @@ final class DownloadCenter: ObservableObject {
                 seriesTitle: seriesTitle, sourceEpoch: epoch
             ),
             installed: JSONDecoder().decode(Chapter.self, from: installed.chapterSnapshot),
-            expectedVersionId: installed.versionId
+            expectedVersionId: installed.versionId,
+            downloadMode: contexts.policy.current.downloadMode
         ))
     }
 

@@ -767,7 +767,7 @@ final class MediaDetailDownloadsFake: MediaDetailDownloadServing {
                 pluginId: media.pluginId, mediaKind: media.mediaKind, canonicalMediaId: media.canonicalMediaId,
                 entry: entry, chapter: chapter, seriesTitle: seriesTitle, sourceEpoch: "test"
             ),
-            installed: chapter, expectedVersionId: "installed"
+            installed: chapter, expectedVersionId: "installed", downloadMode: .unmeteredOnly
         ))
     }
 

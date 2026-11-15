@@ -59,6 +59,9 @@ nonisolated struct DownloadReplacementPreview: Identifiable, Sendable {
     let download: DownloadEnqueueRequest
     let installed: Chapter
     let expectedVersionId: String
+    /// The download mode when the preview was made. Replacement never asks for metered consent, so only
+    /// "Allow Metered Networks" lets it use an expensive path.
+    let downloadMode: NetworkDownloadMode
 
     var hasChangedRevision: Bool {
         guard let old = DownloadReplacementIntent.revision(installed),
@@ -79,10 +82,18 @@ nonisolated struct DownloadReplacementPreview: Identifiable, Sendable {
         let newGroup = download.chapter.scanlator ?? Self.unknownGroup
         let savedRevision = DownloadReplacementIntent.revision(installed) ?? Self.unknownRevision
         let newRevision = DownloadReplacementIntent.revision(download.chapter) ?? Self.unknownRevision
-        return String(
-            localized: "Saved copy: \(savedTitle), group \(savedGroup), revision \(savedRevision).\nNew copy: \(newTitle), group \(newGroup), revision \(newRevision).\nThe saved copy stays available until the new copy is verified. If a revision is unknown, this is a manual refresh, not evidence of newer content. Downloads wait on metered networks and in Low Data Mode.",
-            comment: "Manual replacement confirmation. The chapter titles, group names and revisions are untranslated source data; each one is shown as its own value."
-        )
+        switch downloadMode {
+        case .unmeteredOnly, .askMetered:
+            return String(
+                localized: "Saved copy: \(savedTitle), group \(savedGroup), revision \(savedRevision).\nNew copy: \(newTitle), group \(newGroup), revision \(newRevision).\nThe saved copy stays available until the new copy is verified. If a revision is unknown, this is a manual refresh, not evidence of newer content. Downloads wait on metered networks and in Low Data Mode.",
+                comment: "Manual replacement confirmation when downloads wait for an unmetered network. The chapter titles, group names and revisions are untranslated source data; each one is shown as its own value."
+            )
+        case .allowMetered:
+            return String(
+                localized: "Saved copy: \(savedTitle), group \(savedGroup), revision \(savedRevision).\nNew copy: \(newTitle), group \(newGroup), revision \(newRevision).\nThe saved copy stays available until the new copy is verified. If a revision is unknown, this is a manual refresh, not evidence of newer content. The download may use cellular data or a personal hotspot, and waits in Low Data Mode.",
+                comment: "Manual replacement confirmation when downloads may use metered networks. The chapter titles, group names and revisions are untranslated source data; each one is shown as its own value."
+            )
+        }
     }
 
     /// The chapter's title, or its source key when the source gave no title.
