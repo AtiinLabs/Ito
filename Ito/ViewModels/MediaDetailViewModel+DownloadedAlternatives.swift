@@ -28,31 +28,41 @@ extension MediaDetailViewModel {
     }
 
     /// Whether the chapter's menu offers the chooser: a manga or novel row the account can open whose source
-    /// named its reading position. Every row asks, so this reads the row alone; the tap looks the row up again.
+    /// named its reading position. On a saved-only route or for a saved-only row the list is the saved Library
+    /// catalog or the stored copies, so the row must also be downloaded: another row has no stored copy to
+    /// anchor on. Every row asks, so this reads the row and its state alone; the tap looks the row up again.
     func offersDownloadedAlternatives(for chapter: M.Chapter) -> Bool {
         guard showsDownloadControls, chapter is ito_runner.Chapter, !chapter.isPaywalled,
-              let logicalUnitID = chapter.logicalUnitID else { return false }
-        return !logicalUnitID.isEmpty
+              let logicalUnitID = chapter.logicalUnitID, !logicalUnitID.isEmpty else { return false }
+        if detailLoadState == .savedOnly || isSavedOnlyRow(chapter) { return downloadState(for: chapter) == .downloaded }
+        return true
     }
 
     /// What the chapter's lookup is anchored on, or nil when the chapter has nothing to look up: a series
-    /// without chapter readers, a locked row, a row the list no longer has, or a row whose source named no
-    /// logical unit. The row is found again by its exact key in the list shown now. A saved-only row or route
-    /// is anchored on its own stored copy, which knows where its metadata came from; any other row is
-    /// anchored on the catalog the source just supplied.
+    /// without chapter readers, a locked row, a row neither list has, or a row whose source named no logical
+    /// unit. The row is found again by its exact key in the list shown now, then among the saved-only rows.
+    /// A saved-only row or route is anchored on its own stored copy, which knows where its metadata came from;
+    /// any other row is anchored on the catalog the source just supplied.
     func downloadedAlternativeAnchor(for chapter: M.Chapter) -> OfflineChapterAlternativeAnchor? {
-        guard let row = media.chapterList?.first(where: { $0.key.utf8.elementsEqual(chapter.key.utf8) }),
-              offersDownloadedAlternatives(for: row), let logicalUnitID = row.logicalUnitID else { return nil }
+        let isMatch: (M.Chapter) -> Bool = { $0.key.utf8.elementsEqual(chapter.key.utf8) }
+        let listed = media.chapterList?.first(where: isMatch)
+        let savedOnly = listed == nil
+            ? downloadBatch.savedOnlyChapters.lazy.compactMap { $0 as? M.Chapter }.first(where: isMatch) : nil
+        guard let row = listed ?? savedOnly, offersDownloadedAlternatives(for: row),
+              let logicalUnitID = row.logicalUnitID else { return nil }
         let edition = OfflineChapterEdition(media: mediaIdentity, chapterKey: row.key)
-        if detailLoadState == .savedOnly || isSavedOnlyRow(row) { return .saved(edition: edition) }
+        if savedOnly != nil || detailLoadState == .savedOnly { return .saved(edition: edition) }
         return .catalog(edition: edition, logicalUnitID: logicalUnitID)
     }
 
     /// Lists the saved uploads of the chapter's reading position in the download sheet. Reads only: nothing
-    /// is queued, remembered or recorded.
+    /// is queued, remembered or recorded. A Resume or a saved-route copy check still waiting is cancelled, so
+    /// that a late completion cannot open a reader or ask for consent over the closing sheet.
     @discardableResult
     func showDownloadedAlternatives(for chapter: M.Chapter) -> Task<Void, Never> {
         guard let anchor = downloadedAlternativeAnchor(for: chapter) else { return Task {} }
+        cancelGroupSwitch()
+        cancelSavedChapterOpening()
         return downloadedAlternatives.show(anchor: anchor)
     }
 
@@ -67,6 +77,12 @@ extension MediaDetailViewModel {
 
     func cancelDownloadedAlternatives() {
         downloadedAlternatives.cancel()
+    }
+
+    /// Cancels the choice that `presentationID` names, such as a sheet marker that shows nothing. A later
+    /// presentation is left alone.
+    func cancelDownloadedAlternatives(presentationID: UUID) {
+        downloadedAlternatives.cancel(presentationID: presentationID)
     }
 
     /// The download sheet that showed `presentationID` has closed.

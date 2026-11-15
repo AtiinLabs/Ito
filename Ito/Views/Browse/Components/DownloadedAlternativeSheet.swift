@@ -96,8 +96,10 @@ struct DownloadedAlternativeSheet: View {
         switch state {
         case .idle:
             EmptyView()
-        case .loading, .handingOff:
+        case .loading:
             progress(Text("Looking for saved copies…", comment: "Downloaded versions sheet: reading the list of saved copies"))
+        case .handingOff:
+            progress(Text("Opening the saved copy…", comment: "Downloaded versions sheet: the chosen saved copy is being opened"))
         case .choosing(let context, let candidates, let selected, let failure):
             if let failure { failureRow(failure) }
             candidateRows(candidates, selected: selected, context: context, isEnabled: true)
@@ -146,7 +148,9 @@ struct DownloadedAlternativeSheet: View {
                 formText(model.form).font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
-            if isSelected { Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint) }
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint).accessibilityHidden(true)
+            }
         }
         .contentShape(Rectangle())
     }

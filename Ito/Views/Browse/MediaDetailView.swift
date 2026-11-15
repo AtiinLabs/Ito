@@ -277,7 +277,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             .onAppear { displayedAlternativeID = id }
             .onChange(of: id) { displayedAlternativeID = $0 }
         } else {
-            Color.clear.onAppear { viewModel.cancelDownloadedAlternatives() }
+            Color.clear.onAppear { viewModel.cancelDownloadedAlternatives(presentationID: id) }
         }
     }
 

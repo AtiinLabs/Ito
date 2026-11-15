@@ -487,6 +487,13 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         }
     }
 
+    /// Retires a copy check that is still running, so its answer opens nothing.
+    func cancelSavedChapterOpening() {
+        savedChapterOperationID = nil
+        savedChapterTask?.cancel()
+        savedChapterTask = nil
+    }
+
     func dismissReader() {
         readerDestination = nil
     }

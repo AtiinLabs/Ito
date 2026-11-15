@@ -18,10 +18,14 @@ extension MediaDetailViewModel {
     /// locked chapter and a saved-only series offer none. Reading a downloaded chapter online this time
     /// needs the same source and an unlocked chapter. A Retry is offered only where an event cannot
     /// clear the wait. Choosing a downloaded version needs neither a saved series, a copy of this chapter nor a
-    /// network: it is offered for any row whose source named its reading position.
+    /// network: it is offered for any row whose source named its reading position, ahead of the destructive
+    /// Delete. A saved-only route or row is anchored on its own stored copy, so it is offered only where that
+    /// copy is downloaded.
     func downloadActions(for chapter: M.Chapter) -> [ChapterDownloadAction] {
-        let actions = rowDownloadActions(for: chapter)
-        return offersDownloadedAlternatives(for: chapter) ? actions + [.chooseDownloadedAlternative] : actions
+        var actions = rowDownloadActions(for: chapter)
+        guard offersDownloadedAlternatives(for: chapter) else { return actions }
+        actions.insert(.chooseDownloadedAlternative, at: actions.firstIndex(of: .delete) ?? actions.endIndex)
+        return actions
     }
 
     private func rowDownloadActions(for chapter: M.Chapter) -> [ChapterDownloadAction] {

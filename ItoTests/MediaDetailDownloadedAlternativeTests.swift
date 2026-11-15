@@ -66,12 +66,22 @@ final class MediaDetailDownloadedAlternativeTests: XCTestCase {
         let route: MediaRouteHarness<Manga>
         let progress: MediaDetailProgressFake
         let baseline: MediaDetailBaselineFake
+        let settings: MediaDetailSettingsFake
         let messages: MediaDetailMessageSpy
         let destinations: DestinationLog
         let epoch: EpochBox
     }
 
-    private func makeSubject(chapters: [Chapter]? = nil, saved: Bool = true) -> Subject {
+    /// `savedOnly` builds a route with no installed source, which shows the saved series and answers
+    /// `availability` before it opens a chapter. `inventory` is what the stored copies of the series are.
+    private func makeSubject(
+        chapters: [Chapter]? = nil,
+        saved: Bool = true,
+        savedOnly: Bool = false,
+        availability: ((Chapter) async -> Bool)? = nil,
+        inventory: [DownloadedChapterRecord]? = nil,
+        history: (any MediaDetailHistoryReading)? = nil
+    ) -> Subject {
         let media = Manga(
             key: "series-1",
             title: "Series One",
@@ -89,8 +99,11 @@ final class MediaDetailDownloadedAlternativeTests: XCTestCase {
         let progress = MediaDetailProgressFake()
         let baseline = MediaDetailBaselineFake()
         let messages = MediaDetailMessageSpy()
+        let settings = MediaDetailSettingsFake(alwaysShowCategoryPicker: false, autoSyncTrackersToLocal: true)
+        var load: ((Manga, PluginNetworkOperation) async throws -> Manga)?
+        if !savedOnly { load = { try await route.load($0, operation: $1) } }
         let context = MediaDetailRouteContext<Manga>(
-            loadDetails: { try await route.load($0, operation: $1) },
+            loadDetails: load,
             searchForRelink: nil,
             makeReaderDestination: { parent, selected in
                 .pages(
@@ -111,9 +124,11 @@ final class MediaDetailDownloadedAlternativeTests: XCTestCase {
                     remote: nil,
                     pluginID: Self.pluginID
                 )
-            }
+            },
+            isChapterAvailableOffline: availability,
+            inventoryChapters: inventory.map { rows in { media in rows.filter { $0.canonicalMediaId == media.canonicalMediaId } } }
         )
-        let dependencies = PreparedMediaDetailDependencies(
+        var dependencies = PreparedMediaDetailDependencies(
             library: MediaDetailLibraryFake(state: MediaDetailLibraryState(
                 records: saved
                     ? [MediaDetailLibraryRecord(itemID: "series-1", pluginID: Self.pluginID, mediaKind: .manga)]
@@ -125,11 +140,12 @@ final class MediaDetailDownloadedAlternativeTests: XCTestCase {
             theme: MediaDetailThemeFake(),
             relink: MediaDetailRelinkFake(),
             baseline: baseline,
-            settings: MediaDetailSettingsFake(alwaysShowCategoryPicker: false, autoSyncTrackersToLocal: true),
+            settings: settings,
             pluginMetadata: MediaDetailPluginMetadataFake(),
             discord: MediaDetailDiscordFake(),
             downloads: downloads
         )
+        dependencies.history = history
         let viewModel = MediaDetailViewModel(
             media: media,
             pluginID: Self.pluginID,
@@ -144,6 +160,7 @@ final class MediaDetailDownloadedAlternativeTests: XCTestCase {
             route: route,
             progress: progress,
             baseline: baseline,
+            settings: settings,
             messages: messages,
             destinations: destinations,
             epoch: epoch
@@ -223,7 +240,7 @@ final class MediaDetailDownloadedAlternativeTests: XCTestCase {
         // A locked row and a row without a logical unit are not eligible.
         XCTAssertEqual(viewModel.downloadActions(for: Chapter(key: "locked", chapter: 6, paywalled: true, logicalUnitID: "unit-1")), [])
         XCTAssertEqual(viewModel.downloadActions(for: Chapter(key: "no-unit", chapter: 7)), [.download])
-        // The menu reads the row alone; a tap on a row the list no longer has finds nothing to look up.
+        // The menu reads the row alone; a tap on a row that neither list has (a stale row) finds nothing to look up.
         let unlisted = Chapter(key: "unlisted", chapter: 9, logicalUnitID: "unit-1")
         XCTAssertEqual(viewModel.downloadActions(for: unlisted), [.download, .chooseDownloadedAlternative])
         subject.downloads.alternativeLookup = { [self] anchor in listing(anchor, []) }
@@ -241,6 +258,155 @@ final class MediaDetailDownloadedAlternativeTests: XCTestCase {
         XCTAssertEqual(subject.downloads.alternativeLookupCount, 1)
         XCTAssertEqual(subject.downloads.alternativeOpenCount, 0)
         assertNoEffects(subject)
+    }
+
+    private static func inventoryRow(_ chapter: Chapter) throws -> DownloadedChapterRecord {
+        DownloadedChapterRecord(
+            pluginId: pluginID,
+            mediaKind: .manga,
+            canonicalMediaId: "series-1",
+            chapterKey: chapter.key,
+            authorityScope: .publicUnscoped,
+            versionId: UUID().uuidString,
+            state: .verified,
+            damageReason: nil,
+            contentKind: .images,
+            pageCount: 1,
+            byteCount: 1,
+            manifestFormatVersion: 1,
+            manifestSHA256: String(repeating: "a", count: 64),
+            chapterSnapshot: try JSONEncoder().encode(chapter),
+            seriesTitle: "Series One",
+            sourceEpoch: nil,
+            verifiedAt: Date(timeIntervalSince1970: 0)
+        )
+    }
+
+    func testTheChooserIsOfferedBeforeDeleteAndAfterTheOtherActions() {
+        let subject = makeSubject()
+        let viewModel = subject.viewModel
+
+        subject.downloads.set(.downloaded, chapterKey: "a")
+        XCTAssertEqual(
+            viewModel.downloadActions(for: Self.anchorChapter),
+            [.readOnlineThisTime, .chooseDownloadedAlternative, .delete]
+        )
+        subject.downloads.set(.damaged, chapterKey: "a")
+        XCTAssertEqual(viewModel.downloadActions(for: Self.anchorChapter), [.chooseDownloadedAlternative, .delete])
+        subject.downloads.set(.queued, chapterKey: "a")
+        XCTAssertEqual(viewModel.downloadActions(for: Self.anchorChapter), [.cancel, .chooseDownloadedAlternative])
+    }
+
+    func testASavedOnlyRowOfALiveRouteOpensTheChooserOnItsOwnSavedCopies() async throws {
+        let gone = Chapter(key: "gone", chapter: 3, logicalUnitID: "unit-1")
+        let subject = makeSubject(inventory: [try Self.inventoryRow(gone)])
+        let viewModel = subject.viewModel
+        subject.downloads.set(.downloaded, chapterKey: "gone")
+        await viewModel.downloadBatch.settleForTesting()
+        let row = try XCTUnwrap(viewModel.displayedChapters.first { $0.key == "gone" })
+        XCTAssertTrue(viewModel.isSavedOnlyRow(row))
+        XCTAssertFalse(viewModel.media.chapterList?.contains { $0.key == "gone" } ?? true, "The row is not in the source's list")
+        XCTAssertEqual(viewModel.downloadActions(for: row), [.chooseDownloadedAlternative, .delete])
+
+        var anchor: OfflineChapterAlternativeAnchor?
+        subject.downloads.alternativeLookup = { [self] requested in
+            anchor = requested
+            return listing(requested, [candidate("b", group: "Group B")])
+        }
+        await viewModel.showDownloadedAlternatives(for: row).value
+
+        guard case .saved(let edition)? = anchor else { return XCTFail("A saved-only row is anchored on its stored copy") }
+        XCTAssertEqual(edition.chapterKey, "gone")
+        XCTAssertEqual(edition.canonicalMediaId, "series-1")
+        XCTAssertEqual(phase(viewModel), .choosing)
+        guard case .choosing(_, let candidates, _, _) = viewModel.downloadedAlternativeState else {
+            return XCTFail("The list is open")
+        }
+        XCTAssertEqual(candidates.map(\.id), [candidate("b", group: "Group B").id])
+        XCTAssertTrue(isAlternativeSheet(viewModel))
+        XCTAssertEqual(subject.downloads.alternativeOpenCount, 0)
+        assertNoEffects(subject)
+    }
+
+    func testASavedOnlyRouteOffersTheChooserOnlyForARowThatIsDownloaded() async throws {
+        let notDownloaded = Chapter(key: "a", chapter: 5, logicalUnitID: "unit-1")
+        let downloaded = Chapter(key: "b", chapter: 6, logicalUnitID: "unit-1")
+        let subject = makeSubject(chapters: [notDownloaded, downloaded], savedOnly: true)
+        let viewModel = subject.viewModel
+        viewModel.start()
+        viewModel.appear()
+        XCTAssertEqual(viewModel.detailLoadState, .savedOnly)
+        subject.downloads.set(.downloaded, chapterKey: "b")
+        var anchors: [OfflineChapterAlternativeAnchor] = []
+        subject.downloads.alternativeLookup = { [self] requested in
+            anchors.append(requested)
+            return listing(requested, [candidate("c")])
+        }
+
+        XCTAssertEqual(viewModel.downloadActions(for: notDownloaded), [])
+        XCTAssertEqual(viewModel.downloadActions(for: downloaded), [.chooseDownloadedAlternative, .delete])
+        subject.downloads.set(.damaged, chapterKey: "a")
+        XCTAssertEqual(viewModel.downloadActions(for: notDownloaded), [.delete])
+
+        // Nothing is opened from a row without a verified copy, whatever the caller asks.
+        await viewModel.showDownloadedAlternatives(for: notDownloaded).value
+        XCTAssertEqual(phase(viewModel), .idle)
+        XCTAssertTrue(anchors.isEmpty)
+
+        await viewModel.showDownloadedAlternatives(for: downloaded).value
+        XCTAssertEqual(phase(viewModel), .choosing)
+        guard case .saved(let edition)? = anchors.first else { return XCTFail("The saved route anchors on its stored copy") }
+        XCTAssertEqual(edition.chapterKey, "b")
+        XCTAssertEqual(anchors.count, 1)
+    }
+
+    func testOpeningTheChooserRetiresAResumeStillReadingHistoryAndItsLateAnswerOpensNothing() async throws {
+        let history = HeldRecordedGroup()
+        let chapter = Chapter(key: "a", chapter: 5, scanlator: "A", scanlatorID: "a-id", logicalUnitID: "unit-1")
+        let subject = makeSubject(chapters: [chapter], history: history)
+        let viewModel = subject.viewModel
+        subject.settings.askBeforeSwitchingGroups = true
+        subject.progress.lastRead[viewModel.mediaIdentity] = "missing-key"
+        subject.downloads.alternativeLookup = { [self] anchor in listing(anchor, [candidate("b")]) }
+        viewModel.resumeReading()
+        await history.waitForRequest()
+        let resume = try XCTUnwrap(viewModel.continuationTaskForTesting)
+
+        await viewModel.showDownloadedAlternatives(for: chapter).value
+        XCTAssertEqual(phase(viewModel), .choosing)
+        // The recorded group is the candidate's own, so a live Resume would open its reader now.
+        history.resolve(ReaderContinuationGroup(id: "a-id", name: "A"))
+        await resume.value
+
+        XCTAssertEqual(phase(viewModel), .choosing)
+        XCTAssertTrue(isAlternativeSheet(viewModel))
+        XCTAssertNil(viewModel.readerDestination)
+        XCTAssertNil(viewModel.groupSwitchConsent)
+    }
+
+    func testOpeningTheChooserRetiresASavedRouteCopyCheckSoAFreshTapIsNotIgnored() async throws {
+        let first = Chapter(key: "a", chapter: 5, logicalUnitID: "unit-1")
+        let second = Chapter(key: "b", chapter: 6, logicalUnitID: "unit-1")
+        let gates = GateSequence(count: 2)
+        let subject = makeSubject(chapters: [first, second], savedOnly: true, availability: { _ in
+            try? await gates.pass()
+            return true
+        })
+        let viewModel = subject.viewModel
+        viewModel.start()
+        viewModel.appear()
+        subject.downloads.set(.downloaded, chapterKey: "b")
+        subject.downloads.alternativeLookup = { [self] anchor in listing(anchor, [candidate("c")]) }
+        viewModel.selectChapter(first)
+        await gates.gates[0].awaitArrival()
+
+        await viewModel.showDownloadedAlternatives(for: second).value
+        XCTAssertEqual(phase(viewModel), .choosing)
+        XCTAssertNil(viewModel.readerDestination)
+        // A check still running would make this tap a no-op; a retired one lets a fresh check start.
+        viewModel.selectChapter(first)
+        await gates.gates[1].awaitArrival()
+        XCTAssertNil(viewModel.readerDestination)
     }
 
     func testTheMenuOffersNothingWhereDownloadsAreUnavailableAndNothingOpensFromTheUnavailableSeam() {
@@ -817,5 +983,30 @@ final class MediaDetailDownloadedAlternativeTests: XCTestCase {
         viewModel.dismissReader()
         await real.store.leases.awaitReclamations()
         XCTAssertFalse(real.store.leases.isLeased(versionId: real.versionB))
+    }
+}
+
+/// Holds the one recorded-group read a Resume makes until the test answers it.
+@MainActor
+private final class HeldRecordedGroup: MediaDetailHistoryReading {
+    private var result: CheckedContinuation<ReaderContinuationGroup?, Never>?
+    private var requestWaiter: CheckedContinuation<Void, Never>?
+
+    func recordedGroup(media: MediaIdentity, chapterKey: String) async throws -> ReaderContinuationGroup? {
+        await withCheckedContinuation { continuation in
+            result = continuation
+            requestWaiter?.resume()
+            requestWaiter = nil
+        }
+    }
+
+    func waitForRequest() async {
+        if result != nil { return }
+        await withCheckedContinuation { requestWaiter = $0 }
+    }
+
+    func resolve(_ group: ReaderContinuationGroup?) {
+        result?.resume(returning: group)
+        result = nil
     }
 }
