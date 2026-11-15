@@ -1112,9 +1112,6 @@
     "Are you sure you want to reject this match?" : {
 
     },
-    "Ask before switching groups" : {
-      "comment" : "Reader setting, off by default: require confirmation before Next, Previous or Resume opens another translation group's upload"
-    },
     "Ask before switching" : {
       "comment" : "Require batch consent before using another group.",
       "localizations" : {
@@ -1125,6 +1122,9 @@
           }
         }
       }
+    },
+    "Ask before switching groups" : {
+      "comment" : "Reader setting, off by default: require confirmation before Next, Previous or Resume opens another translation group's upload"
     },
     "Ask on Discord" : {
 
@@ -1255,6 +1255,9 @@
     },
     "Cancel Downloads" : {
       "comment" : "Downloads manager: cancel the selected queued or running downloads"
+    },
+    "Cancel Replacement" : {
+      "comment" : "Chapter menu: stop a replacement of this saved chapter, or dismiss its ended record. The saved copy stays."
     },
     "Cancelled" : {
       "comment" : "Series status"
@@ -1665,6 +1668,9 @@
     "Delete damaged downloads to download them again." : {
       "comment" : "Download preview footer: a damaged copy must be deleted before the chapter can be downloaded again."
     },
+    "Delete the saved copy and download the chapter again." : {
+      "comment" : "Series details: what to do when a saved chapter cannot be replaced."
+    },
     "Deleted downloads for %lld series. Deletion couldn't be completed for: %@. Check the list; some downloads may already have been removed." : {
       "comment" : "Downloads manager partial delete result. Names identify the failed series; successful deletions are not rolled back.",
       "localizations" : {
@@ -1796,6 +1802,9 @@
     },
     "Download Network" : {
       "comment" : "Configured bulk download network mode"
+    },
+    "Download again" : {
+      "comment" : "Manual refresh; source revision is unchanged or unknown"
     },
     "Download all editions" : {
       "comment" : "Advanced action: download every exact upload, including multiple translations of one chapter.",
@@ -2745,11 +2754,11 @@
     "Next Unread Chapter" : {
       "comment" : "Download menu item: download the next unread chapter."
     },
-    "Next chapter is from another group. Tap to continue" : {
-      "comment" : "Reader boundary: the next chapter belongs to a different translation group; tapping asks to open that one upload"
-    },
     "Next and Previous" : {
       "comment" : "Adjacent chapter prefetch: the following and the preceding chapter are prefetched"
+    },
+    "Next chapter is from another group. Tap to continue" : {
+      "comment" : "Reader boundary: the next chapter belongs to a different translation group; tapping asks to open that one upload"
     },
     "Next chapter is locked" : {
       "comment" : "Reader: shown after the last page when the next chapter needs an unlock"
@@ -3114,9 +3123,6 @@
     "Preferences" : {
 
     },
-    "Prefetch Novel Chapters" : {
-      "comment" : "Configured speculative novel chapter loading"
-    },
     "Preferred edition unavailable" : {
       "comment" : "Some positions are not currently offered by the preferred group.",
       "localizations" : {
@@ -3141,6 +3147,9 @@
     },
     "Preferred group not listed" : {
       "comment" : "Series details: the group chosen for this series has no chapters in the source's current list, so nothing was queued. Does not claim the group stopped publishing."
+    },
+    "Prefetch Novel Chapters" : {
+      "comment" : "Configured speculative novel chapter loading"
     },
     "Preload Images" : {
 
@@ -3397,8 +3406,23 @@
     "Repeating" : {
 
     },
+    "Replace download" : {
+      "comment" : "Chapter menu: manually replace the exact saved copy after confirmation\nManual replacement confirmation title"
+    },
     "Replaced" : {
 
+    },
+    "Replacement failed" : {
+      "comment" : "Chapter download status: a replacement of a saved chapter failed. The saved copy stays available."
+    },
+    "Replacement interrupted" : {
+      "comment" : "Chapter download status: the app restarted before a replacement was verified. The saved copy is kept; replace it again to fetch the chapter."
+    },
+    "Replacement no longer applies" : {
+      "comment" : "Chapter download status: the saved copy or its source changed after a replacement was confirmed. The saved copy is kept; replace it again to review the chapter."
+    },
+    "Replacing download" : {
+      "comment" : "Chapter download status: a replacement of a saved chapter is queued or running. The saved copy stays available."
     },
     "Report on GitHub" : {
 
@@ -3554,6 +3578,28 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "Saved copy: %@, group %@, revision %@.\nNew copy: %@, group %@, revision %@.\nThe saved copy stays available until the new copy is verified. If a revision is unknown, this is a manual refresh, not evidence of newer content. Downloads wait on metered networks and in Low Data Mode." : {
+      "comment" : "Manual replacement confirmation when downloads wait for an unmetered network. The chapter titles, group names and revisions are untranslated source data; each one is shown as its own value.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Saved copy: %1$@, group %2$@, revision %3$@.\nNew copy: %4$@, group %5$@, revision %6$@.\nThe saved copy stays available until the new copy is verified. If a revision is unknown, this is a manual refresh, not evidence of newer content. Downloads wait on metered networks and in Low Data Mode."
+          }
+        }
+      }
+    },
+    "Saved copy: %@, group %@, revision %@.\nNew copy: %@, group %@, revision %@.\nThe saved copy stays available until the new copy is verified. If a revision is unknown, this is a manual refresh, not evidence of newer content. The download may use cellular data or a personal hotspot, and waits in Low Data Mode." : {
+      "comment" : "Manual replacement confirmation when downloads may use metered networks. The chapter titles, group names and revisions are untranslated source data; each one is shown as its own value.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Saved copy: %1$@, group %2$@, revision %3$@.\nNew copy: %4$@, group %5$@, revision %6$@.\nThe saved copy stays available until the new copy is verified. If a revision is unknown, this is a manual refresh, not evidence of newer content. The download may use cellular data or a personal hotspot, and waits in Low Data Mode."
           }
         }
       }
@@ -3912,6 +3958,9 @@
     },
     "Source Settings" : {
 
+    },
+    "Source chapter changed" : {
+      "comment" : "Chapter download status: the source's chapter changed after a replacement was confirmed. The saved copy is kept; replace it again to review the chapter."
     },
     "Source home" : {
 
@@ -4351,11 +4400,11 @@
     "The source's web page failed: %@" : {
 
     },
-    "The source, chapter list or edition choice changed. Review again." : {
-      "comment" : "Series details: detail when a draft was invalidated before confirmation because the source, chapter list or edition policy changed; no changed plan was submitted automatically."
-    },
     "The source's web page took too long to respond. Try again." : {
       "comment" : "Error: a web page the source loaded did not respond in time"
+    },
+    "The source, chapter list or edition choice changed. Review again." : {
+      "comment" : "Series details: detail when a draft was invalidated before confirmation because the source, chapter list or edition policy changed; no changed plan was submitted automatically."
     },
     "The specified HTTP header is prohibited." : {
 
@@ -4407,6 +4456,9 @@
     },
     "This control type is not supported." : {
 
+    },
+    "This copy can't be replaced." : {
+      "comment" : "Series details: a saved chapter cannot be replaced, because its source settings changed after it was saved or it was saved under another series."
     },
     "This episode is locked on the source." : {
 
@@ -4659,17 +4711,23 @@
     "Unknown Repository" : {
 
     },
+    "Unknown group" : {
+      "comment" : "Replacement confirmation: the source gave this chapter no scanlator group"
+    },
+    "Unknown revision" : {
+      "comment" : "Replacement confirmation: the source does not provide a revision for this chapter"
+    },
     "Unlock your device to read this chapter." : {
       "comment" : "Reader failure: the offline copy is stored under data protection and the device is locked."
     },
     "Unmatched Sources" : {
 
     },
-    "Unnamed group" : {
-      "comment" : "Reader consent: shown in place of the group name when the source supplies none"
-    },
     "Unmetered Only" : {
       "comment" : "Download mode that avoids cellular and hotspots"
+    },
+    "Unnamed group" : {
+      "comment" : "Reader consent: shown in place of the group name when the source supplies none"
     },
     "Unread/Unwatched" : {
 
@@ -4716,12 +4774,6 @@
     "Updating queued progress…" : {
 
     },
-    "Use Metered Data for This Batch" : {
-      "comment" : "Grants cellular permission only to this exact download batch"
-    },
-    "Use Metered Data?" : {
-      "comment" : "Confirmation for one download batch on cellular or a hotspot"
-    },
     "Use %lld selected alternatives this time" : {
       "comment" : "Confirm exact alternatives ticked in the preview for this batch only; does not remember fallback permission. The placeholder is the number ticked and needs plural forms.",
       "localizations" : {
@@ -4744,6 +4796,12 @@
           }
         }
       }
+    },
+    "Use Metered Data for This Batch" : {
+      "comment" : "Grants cellular permission only to this exact download batch"
+    },
+    "Use Metered Data?" : {
+      "comment" : "Confirmation for one download batch on cellular or a hotspot"
     },
     "Use Selection" : {
       "comment" : "Button on the scanlator sheet: apply the choice and continue with the download."

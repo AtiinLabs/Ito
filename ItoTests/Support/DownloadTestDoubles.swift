@@ -153,6 +153,7 @@ nonisolated final class ScriptedSourceState: @unchecked Sendable {
     private var listingGate: DownloadTestGate?
     private var listedRequests: [(entry: MediaEntry, chapter: Chapter)] = []
     private var pages: [Page]
+    private var replacementTarget: Chapter? = Chapter(key: "chapter-1")
     let imageRunnerCreations = DownloadCallCounter()
     let listings = DownloadCallCounter()
     let contexts = NetworkContextRecorder()
@@ -171,6 +172,14 @@ nonisolated final class ScriptedSourceState: @unchecked Sendable {
 
     var currentPages: [Page] {
         lock.withLock { pages }
+    }
+
+    var currentReplacementTarget: Chapter? {
+        lock.withLock { replacementTarget }
+    }
+
+    func setReplacementTarget(_ target: Chapter?) {
+        lock.withLock { replacementTarget = target }
     }
 
     var currentListingHook: (@Sendable (PluginRunnerHostModules) async -> Void)? {
@@ -223,6 +232,11 @@ nonisolated final class ScriptedChapterPages: ChapterPageProviding, @unchecked S
     init(state: ScriptedSourceState, modules: PluginRunnerHostModules) {
         self.state = state
         self.modules = modules
+    }
+
+    func replacementChapter(entry: MediaEntry, key: String, context: NetworkOperationContext) async throws -> Chapter? {
+        state.contexts.record(context)
+        return state.currentReplacementTarget
     }
 
     func getChapterPages(entry: MediaEntry, chapter: Chapter, context: NetworkOperationContext) async throws -> [Page] {

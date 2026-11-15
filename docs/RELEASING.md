@@ -212,6 +212,9 @@ Ticked uploads queue through the shared batch as the exact chapters the source l
 source epoch and remembered policy the sheet was reviewed under; locked uploads stay blocked and no
 group choice is remembered unless the sheet's own Remember flow is used.
 
+## Manual offline replacement candidate
+
+See [Offline chapter replacement](OFFLINE_DOWNLOADS.md) for the v24 schema, conservative recovery and release acceptance suites. Replacement is manual-only: do not advertise automatic refreshing or guaranteed newer content for unknown source revisions. Verify localization after the clean simulator build and retain lease/delete/recovery race coverage before publication.
 ## Network preference upgrade checks
 
 Network preferences are scalar GRDB configuration, not runtime permissions. Upgrade and older-backup restore derive a missing adjacent-chapter prefetch amount once from the stored image preload (zero → zero, positive or absent → two); explicit values survive. No database schema migration is needed.
