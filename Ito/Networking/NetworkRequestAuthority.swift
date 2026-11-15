@@ -15,7 +15,7 @@ nonisolated struct NetworkRequestAuthority: Sendable {
 
     let contexts: PluginNetworkContexts
     let context: NetworkOperationContext
-    private let isAppOwned: Bool
+    let isAppOwned: Bool
 
     init(contexts: PluginNetworkContexts, context: NetworkOperationContext) {
         self.contexts = contexts
@@ -60,12 +60,12 @@ nonisolated struct NetworkRequestAuthority: Sendable {
     }
 
     /// Throws the typed host outcome when the request may not start or continue now.
-    func check() throws {
+    func check(requiresCurrentRevision: Bool = true) throws {
         if !isAppOwned, context.authorizationScope != contexts.liveScope(pluginID: context.sourceID) {
             throw HostNetworkPolicyOutcome.sourceAuthorizationFailure
         }
         let policy = contexts.policy
-        guard context.policyRevision == policy.revision else {
+        guard !requiresCurrentRevision || context.policyRevision == policy.revision else {
             throw HostNetworkPolicyOutcome.deferred(.policyChanged)
         }
         var binding: NetworkConsentBinding?
@@ -102,6 +102,18 @@ nonisolated struct NetworkRequestAuthority: Sendable {
         try check()
         guard intent == .interactive, contexts.policy.isForeground else {
             throw HostNetworkPolicyOutcome.foregroundPermissionRequired
+        }
+    }
+
+    /// Existing interactive surfaces survive backgrounding and transient path loss. New work still uses
+    /// `checkInteractive`; only actual authorization or policy revocation tears a live surface down.
+    func checkLiveSurface() throws {
+        do {
+            try check(requiresCurrentRevision: false)
+        } catch HostNetworkPolicyOutcome.deferred(.offline) {
+            return
+        } catch HostNetworkPolicyOutcome.deferred(.unknownPath) {
+            return
         }
     }
 
@@ -146,6 +158,7 @@ nonisolated struct NetworkRequestAuthority: Sendable {
         }
         let refusal = NetworkRequestRefusal()
         let subscription = observeRevocation { error in
+            guard refusesLateResult else { return }
             refusal.record(error)
             task.cancel()
         }

@@ -95,6 +95,7 @@ nonisolated public final class PluginCookieJar: @unchecked Sendable {
     public func removeAll(pluginID: String) throws {
         lock.lock()
         defer { lock.unlock() }
+        writeGeneration &+= 1
         let status = keychain.delete(account: pluginID)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             cache.removeValue(forKey: pluginID)

@@ -106,7 +106,7 @@ final class AVPlayerVideoPlaybackSurface: VideoPlaybackSurface {
 }
 
 @MainActor
-private final class AVPlayerVideoPlaybackPreparation: VideoPlaybackPreparation {
+final class AVPlayerVideoPlaybackPreparation: VideoPlaybackPreparation {
     let item: AVPlayerItem
     let authority: NetworkRequestAuthority?
 
@@ -143,6 +143,9 @@ final class AVPlayerVideoPlaybackCoordinator: VideoPlaybackCoordinating {
     private var readyObservation: NSKeyValueObservation?
     private var policyObservation: AnyCancellable?
     private var networkObservationID: UUID?
+#if DEBUG
+    var onPolicyEvaluation: (() -> Void)?
+#endif
     /// True from activation until the seek to the start time finishes: until then the player
     /// reports 0:00, which must not reach (and be saved by) the caller.
     private var isSeekingToStart = false
@@ -246,15 +249,18 @@ final class AVPlayerVideoPlaybackCoordinator: VideoPlaybackCoordinating {
     private func observePolicy(_ authority: NetworkRequestAuthority) {
         let id = UUID()
         networkObservationID = id
-        policyObservation = authority.changes.sink { [weak self] _ in
-            do {
-                try authority.check()
-            } catch let outcome as HostNetworkPolicyOutcome {
-                Task { @MainActor [weak self] in
-                    guard let self, self.networkObservationID == id else { return }
+        policyObservation = authority.changes.sink { @Sendable [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.networkObservationID == id else { return }
+#if DEBUG
+                defer { self.onPolicyEvaluation?() }
+#endif
+                do {
+                    try authority.checkLiveSurface()
+                } catch let outcome as HostNetworkPolicyOutcome {
                     self.stopForRefusal(outcome)
-                }
-            } catch {}
+                } catch {}
+            }
         }
     }
 

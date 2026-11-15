@@ -85,19 +85,25 @@ protocol SiteDataClearing: AnyObject {
 final class SystemSiteDataClearer: SiteDataClearing {
     private let pluginCookies: PluginCookieJar?
     private let pluginTokens: PluginSecretStore?
+    private let websites: SourceWebsiteContexts
 
     /// `pluginCookies` and `pluginTokens` hold the sources' sign-in cookies and the tokens they
     /// stored, cleared with the rest: sources need signing in again afterwards.
-    init(pluginCookies: PluginCookieJar? = nil, pluginTokens: PluginSecretStore? = nil) {
+    init(
+        pluginCookies: PluginCookieJar? = nil, pluginTokens: PluginSecretStore? = nil,
+        websites: SourceWebsiteContexts = SourceWebsiteContexts()
+    ) {
         self.pluginCookies = pluginCookies
         self.pluginTokens = pluginTokens
+        self.websites = websites
     }
 
     func clearSiteData() async throws {
         // Pending pages and challenges end, and every per-source web data store is emptied, before the clear is
         // acknowledged, so none of them can publish into the next session.
-        CloudflareManager.shared.cancelAllChallenges()
-        await SourceWebsiteContexts.shared.clear()
+        websites.beginClearing()
+        defer { websites.endClearing() }
+        await websites.clear()
         if let cookies = HTTPCookieStorage.shared.cookies {
             for cookie in cookies {
                 HTTPCookieStorage.shared.deleteCookie(cookie)

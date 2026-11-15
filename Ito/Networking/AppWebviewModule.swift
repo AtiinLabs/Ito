@@ -9,21 +9,23 @@ import ito_runner
 /// website data for the current authorization scope, never to a host shared across sources. Without a policy
 /// (tests, previews) one unbound page serves every call.
 @MainActor final class AppWebviewModule: WebviewModule {
-    /// Live pages. More than this many retire the one used least recently: a page is a full web view.
-    private static let maximumPages = 3
-
     private let contexts: PluginNetworkContexts?
+    private let websites: SourceWebsiteContexts
     private var pages: [(operationID: UUID, page: WebviewManager)] = []
     private var unboundPage: WebviewManager?
+#if DEBUG
+    var retainedPageCount: Int { pages.count }
+#endif
 
-    init(contexts: PluginNetworkContexts? = nil) {
+    init(contexts: PluginNetworkContexts? = nil, websites: SourceWebsiteContexts = SourceWebsiteContexts()) {
         self.contexts = contexts
+        self.websites = websites
     }
 
-    private func page(for context: NetworkOperationContext) async throws -> WebviewManager {
+    private func page(for context: NetworkOperationContext) throws -> WebviewManager {
         guard let contexts else {
             if let unboundPage { return unboundPage }
-            let created = await WebviewManager()
+            let created = WebviewManager(websites: websites)
             unboundPage = created
             return created
         }
@@ -33,36 +35,42 @@ import ito_runner
         try authority.checkInteractive()
         var live: [(operationID: UUID, page: WebviewManager)] = []
         for entry in pages {
-            if await !entry.page.isRetired { live.append(entry) }
+            if !entry.page.isRetired { live.append(entry) }
         }
         pages = live
         if let index = pages.firstIndex(where: { $0.operationID == context.operationID }) {
             let entry = pages.remove(at: index)
             pages.append(entry)
-            try await entry.page.validate(authority)
+            try entry.page.validate(authority)
             return entry.page
         }
-        let created = await WebviewManager(authority: authority)
+        let created = WebviewManager(authority: authority, websites: websites)
         pages.append((context.operationID, created))
-        // Capacity never retires another operation that still has a native waiter.
-        while pages.count > Self.maximumPages {
-            var idleIndex: Int?
-            for index in pages.indices where pages[index].operationID != context.operationID {
-                if await pages[index].page.isIdle { idleIndex = index; break }
-            }
-            guard let idleIndex else { break }
-            let oldest = pages.remove(at: idleIndex)
-            await oldest.page.retire(with: CancellationError())
-        }
         return created
     }
 
+    /// Idle pages are bounded, least recently used first. Several operations of one plugin may interleave their
+    /// calls, and a page dropped between calls loses the document its operation loaded, so the bound is not one.
+    private static let maximumIdlePages = 3
+
+    private func evictIdlePages() {
+        var keptIdle = 0
+        pages = pages.reversed().filter { entry in
+            guard entry.page.isIdle else { return true }
+            if keptIdle < Self.maximumIdlePages { keptIdle += 1; return true }
+            entry.page.retire(with: CancellationError())
+            return false
+        }.reversed()
+    }
+
     func loadUrl(request: WebviewRequest, context: NetworkOperationContext) async throws -> WebviewResponse {
-        try await page(for: context).loadUrl(request: request)
+        defer { evictIdlePages() }
+        return try await page(for: context).loadUrl(request: request)
     }
 
     func executeJs(script: String, context: NetworkOperationContext) async throws -> String {
-        try await page(for: context).executeJs(script: script)
+        defer { evictIdlePages() }
+        return try await page(for: context).executeJs(script: script)
     }
 
     // A runner may drop its module from a background executor; release its WebKit pages on MainActor too.
@@ -82,6 +90,7 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     private let isInteractive: @MainActor () -> Bool
     /// The authority of the operation that owns this page; nil for the unbound page.
     private let authority: NetworkRequestAuthority?
+    private let websites: SourceWebsiteContexts
     private var policyObservation: AnyCancellable?
     var isIdle: Bool { pendingLoad == nil && pendingScripts.isEmpty }
     private var retirement: UUID?
@@ -100,6 +109,7 @@ class WebviewManager: NSObject, WKNavigationDelegate {
 
     private func checkAdmission() throws {
         guard !isRetired else { throw HostNetworkPolicyOutcome.sourceAuthorizationFailure }
+        guard !websites.isClearing else { throw CancellationError() }
         try authority?.checkInteractive()
     }
 
@@ -114,7 +124,7 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         isRetired = true
         policyObservation?.cancel()
         policyObservation = nil
-        if let retirement { SourceWebsiteContexts.shared.removeObserver(retirement) }
+        if let retirement { websites.removeObserver(retirement) }
         retirement = nil
         finishLoad(with: .failure(error))
         invalidatePendingScripts(with: error)
@@ -195,31 +205,40 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     var onAsyncScriptSent: (() -> Void)?
     /// Test hook: called with the reply to each `itoShowPage` message.
     var onShowPageDecision: ((Bool) -> Void)?
+    var onPolicyEvaluation: (() -> Void)?
 #endif
 
     init(
         pageLoadDeadline: TimeInterval = 45,
         isInteractive: @escaping @MainActor () -> Bool = { PagePresentation.foregroundScene != nil },
         authority: NetworkRequestAuthority? = nil,
+        websites: SourceWebsiteContexts = SourceWebsiteContexts(),
         scriptEvaluator: ScriptEvaluator? = nil,
         plainScriptDeadline: TimeInterval? = nil
     ) {
         self.authority = authority
+        self.websites = websites
         self.pageLoadDeadline = pageLoadDeadline
         self.plainScriptDeadline = plainScriptDeadline ?? pageLoadDeadline
         self.isInteractive = isInteractive
         self.evaluator = scriptEvaluator ?? WebviewManager.webKitEvaluator
         super.init()
         if let authority {
-            retirement = SourceWebsiteContexts.shared.observeRetirement { [weak self] in
+            retirement = websites.observeRetirement { [weak self] in
                 self?.retire(with: CancellationError())
             }
             // A live change that no longer admits this operation ends only this page.
-            policyObservation = authority.changes.sink { [weak self] _ in
-                do {
-                    try authority.checkInteractive()
-                } catch {
-                    Task { @MainActor [weak self] in self?.retire(with: error) }
+            policyObservation = authority.changes.sink { @Sendable [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+#if DEBUG
+                    defer { self.onPolicyEvaluation?() }
+#endif
+                    do {
+                        try authority.checkLiveSurface()
+                    } catch {
+                        self.retire(with: error)
+                    }
                 }
             }
         }
@@ -232,12 +251,12 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         NotificationCenter.default.removeObserver(self)
     }
 
-    private func setupWebView() {
+    private func setupWebView() throws {
         if webView == nil {
             let config = WKWebViewConfiguration()
             // A page owned by an operation uses its source's website data for the current scope; the unbound page
             // keeps the app's default store.
-            config.websiteDataStore = authority.map { SourceWebsiteContexts.shared.store(for: $0.context) } ?? .default()
+            config.websiteDataStore = try authority.map { try websites.store(for: $0.context) } ?? .default()
             let prefs = WKWebpagePreferences()
             prefs.allowsContentJavaScript = true
             config.defaultWebpagePreferences = prefs
@@ -271,7 +290,7 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         guard let url = URL(string: request.url) else {
             throw URLError(.badURL)
         }
-        setupWebView()
+        try setupWebView()
 
         let id = UUID()
         let deadlineNanoseconds = UInt64(pageLoadDeadline * 1_000_000_000)
@@ -352,7 +371,7 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         script.deadline?.cancel()
         let result: Result<String, Error>
         if case .success = resultFromCallback {
-            do { try checkAdmission(); result = resultFromCallback } catch { result = .failure(error) }
+            do { try authority?.checkLiveSurface(); result = resultFromCallback } catch { result = .failure(error) }
         } else {
             result = resultFromCallback
         }
@@ -449,6 +468,9 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         do {
             try checkAdmission()
             decisionHandler(.allow)
+        } catch HostNetworkPolicyOutcome.foregroundPermissionRequired {
+            // Refuse this navigation without destroying the verification the user left open.
+            decisionHandler(.cancel)
         } catch {
             decisionHandler(.cancel)
             retire(with: error)

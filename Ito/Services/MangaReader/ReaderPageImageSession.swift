@@ -122,7 +122,7 @@ final class ReaderPageImageSession {
         pipelineOverride = pipeline
         self.offlinePipeline = offlinePipeline
         self.sourceAuthority = sourceAuthority
-        authorityObservation = sourceAuthority?.changes.sink { [weak self] _ in
+        authorityObservation = sourceAuthority?.changes.sink { @Sendable [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, let authority = self.sourceAuthority,
                       authority.context.authorizationScope != authority.contexts.liveScope(pluginID: authority.context.sourceID) else { return }
@@ -130,6 +130,21 @@ final class ReaderPageImageSession {
                 self.deactivate()
             }
         }
+    }
+
+    /// A session whose page requests are bound to `pluginID`'s current source authority. Every reader of a
+    /// source's images (manga, novel) is made here, so none can load source images as app-owned traffic.
+    static func sourceBound(
+        pluginID: String,
+        contexts: PluginNetworkContexts,
+        pipeline: ImagePipeline? = nil,
+        offlinePipeline: ImagePipeline? = nil
+    ) -> ReaderPageImageSession {
+        ReaderPageImageSession(
+            pipeline: pipeline,
+            offlinePipeline: offlinePipeline,
+            sourceAuthority: ImageRequestSourceAuthority.capture(pluginID: pluginID, contexts: contexts)
+        )
     }
 
     private func boundRequest(_ request: URLRequest, purpose: ImageRequestPurpose) -> URLRequest {

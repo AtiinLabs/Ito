@@ -34,7 +34,7 @@ final class TransportEnforcementTests: XCTestCase {
         let frozen = authority(contexts, .foregroundReading)
         try frozen.check()
         var changed = contexts.policy.current
-        changed.preloadImageCount = 0
+        changed.downloadMode = .allowMetered
         contexts.policy.apply(changed)
         assertRefusal(.deferred(.policyChanged)) { try frozen.check() }
         // A new operation may be admitted; a retry of the original cannot acquire its revision.
@@ -117,17 +117,17 @@ final class TransportEnforcementTests: XCTestCase {
     }
 
     @MainActor
-    func testWebsiteDataAndRetirementAreScoped() async {
+    func testWebsiteDataAndRetirementAreScoped() async throws {
         let contexts = makeContexts()
         let first = authority(contexts, .foregroundReading).context
         let second = contexts.context(pluginID: "other", PluginNetworkOperation(purpose: .foregroundReading, operationID: UUID()))
         let websites = SourceWebsiteContexts()
-        XCTAssertTrue(websites.store(for: first) === websites.store(for: first))
-        XCTAssertFalse(websites.store(for: first) === websites.store(for: second))
+        XCTAssertTrue(try websites.store(for: first) === websites.store(for: first))
+        XCTAssertFalse(try websites.store(for: first) === websites.store(for: second))
         var ended: [Int] = []
         let detached = websites.observeRetirement { ended.append(0) }
         _ = websites.observeRetirement { ended.append(1) }
-        websites.removeObserver(detached)
+        websites.removeObserver(try XCTUnwrap(detached))
         await websites.clear()
         XCTAssertEqual(ended, [1])
     }

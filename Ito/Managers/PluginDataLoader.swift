@@ -45,7 +45,7 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
     }
 
     /// - Parameter defaultLoader: loads every request that is not `ito://`, and the direct requests a plugin
-    ///   resolves to. Nil uses Nuke's loader over `configuration`.
+    ///   resolves to. Nil uses the policy-aware loader over `configuration`.
     init(
         configuration: URLSessionConfiguration,
         trust: PluginTrustStore? = nil,

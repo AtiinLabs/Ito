@@ -21,7 +21,7 @@ nonisolated struct PolicyHTTPTransport: Sendable {
         try authority?.check()
         let redirects = PolicyHTTPRedirects(original: request.url, authority: authority)
         let method = request.httpMethod?.uppercased() ?? "GET"
-        let isMutation = mutates || ["POST", "PUT", "PATCH", "DELETE"].contains(method)
+        let isMutation = mutates || !["GET", "HEAD", "OPTIONS"].contains(method)
         let session = self.session
         let transfer: @Sendable () async throws -> (Data, URLResponse) = {
             try await session.data(for: request, delegate: redirects)
@@ -34,7 +34,6 @@ nonisolated struct PolicyHTTPTransport: Sendable {
         } catch {
             try Task.checkCancellation()
             if !isMutation, let refusal = redirects.refusal { throw refusal }
-            if (error as? URLError)?.code == .timedOut { throw ItoError.hostCallTimedOut(.net) }
             throw error
         }
     }

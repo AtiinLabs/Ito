@@ -60,7 +60,7 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
             presence: subject.presence,
             pluginMetadata: subject.metadata,
             presentationLogger: subject.logger,
-            makeImageSession: { ReaderPageImageSession() }
+            makeImageSession: { _ in ReaderPageImageSession() }
         )
         let factory = MediaDetailReaderViewFactory(
             mangaReaderDependencies: .unavailable(),

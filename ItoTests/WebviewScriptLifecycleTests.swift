@@ -193,7 +193,7 @@ struct WebviewScriptLifecycleTests {
         }
     }
 
-    @Test func aPlainAnswerThatArrivesAfterAPolicyChangeIsNotPublished() async throws {
+    @Test func aPlainAnswerThatArrivesAfterItsSourceScopeChangedIsNotPublished() async throws {
         let policy = NetworkPolicyCenter(path: ManualNetworkPathObserver(initial: .init(status: .satisfied)))
         policy.enterForeground()
         let contexts = PluginNetworkContexts(policy: policy)
@@ -208,13 +208,16 @@ struct WebviewScriptLifecycleTests {
         let script = Task { try await manager.executeJs(script: "document.title") }
         let call = await held.nextCall()
 
+        // A settings change that does not withdraw this page keeps it live, so its answer is still the page's own.
         var changed = policy.current
         changed.preloadImageCount = 0
         policy.apply(changed)
-        // The answer lands before the page's own retirement has run: admission is re-checked at publication.
+        // The source's sign-in or settings scope rotates before the answer lands: admission is re-checked at
+        // publication and the answer belongs to the old scope.
+        contexts.replaceEpochs(["fixture": String(repeating: "b", count: 32)])
         call.complete("secret", nil)
 
-        await #expect(throws: HostNetworkPolicyOutcome.deferred(.policyChanged)) { try await script.value }
+        await #expect(throws: HostNetworkPolicyOutcome.sourceAuthorizationFailure) { try await script.value }
         #expect(manager.isIdle)
     }
 }

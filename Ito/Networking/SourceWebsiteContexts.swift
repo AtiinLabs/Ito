@@ -5,7 +5,6 @@ import ito_runner
 /// WebKit cannot intercept every HTTP subresource. Stores nevertheless never cross source/account epochs.
 @MainActor
 final class SourceWebsiteContexts {
-    static let shared = SourceWebsiteContexts()
     struct Scope: Hashable {
         let sourceID: String
         let authorizationScope: UUID
@@ -16,8 +15,24 @@ final class SourceWebsiteContexts {
     }
     private var stores: [Scope: WKWebsiteDataStore] = [:]
     private var retirements: [UUID: () -> Void] = [:]
+    private var clearingCount = 0
+    var isClearing: Bool { clearingCount > 0 }
 
-    func store(for context: NetworkOperationContext) -> WKWebsiteDataStore {
+    /// The barrier spans the entire settings clear, including cookie/token and default-store awaits.
+    func beginClearing() {
+        clearingCount += 1
+        let callbacks = Array(retirements.values)
+        retirements.removeAll()
+        callbacks.forEach { $0() }
+    }
+
+    func endClearing() {
+        precondition(clearingCount > 0)
+        clearingCount -= 1
+    }
+
+    func store(for context: NetworkOperationContext) throws -> WKWebsiteDataStore {
+        guard !isClearing else { throw CancellationError() }
         let scope = Scope(context)
         if let store = stores[scope] { return store }
         let store = WKWebsiteDataStore.nonPersistent()
@@ -25,7 +40,8 @@ final class SourceWebsiteContexts {
         return store
     }
 
-    func observeRetirement(_ retire: @escaping () -> Void) -> UUID {
+    func observeRetirement(_ retire: @escaping () -> Void) -> UUID? {
+        guard !isClearing else { retire(); return nil }
         let id = UUID()
         retirements[id] = retire
         return id
@@ -33,9 +49,8 @@ final class SourceWebsiteContexts {
     func removeObserver(_ id: UUID) { retirements[id] = nil }
 
     func clear() async {
-        let callbacks = Array(retirements.values)
-        retirements.removeAll()
-        callbacks.forEach { $0() }
+        beginClearing()
+        defer { endClearing() }
         let retired = Array(stores.values)
         stores.removeAll()
         for store in retired {

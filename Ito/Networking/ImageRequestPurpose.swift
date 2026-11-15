@@ -1,5 +1,4 @@
 import Nuke
-import SwiftUI
 import Foundation
 import ito_runner
 
@@ -136,7 +135,7 @@ nonisolated enum ImageRequestSourceAuthority {
         )
     }
 
-    /// Change purpose without borrowing a replacement source epoch, operation or policy revision.
+    /// Freeze source scope and operation, but capture current policy for each newly started page.
     static func withPurpose(_ purpose: ImageRequestPurpose, authority: NetworkRequestAuthority) -> NetworkRequestAuthority {
         let context = authority.context
         return NetworkRequestAuthority(contexts: authority.contexts, context: NetworkOperationContext(
@@ -145,7 +144,7 @@ nonisolated enum ImageRequestSourceAuthority {
             authorizationScope: context.authorizationScope,
             operationID: context.operationID,
             batchID: context.batchID,
-            policyRevision: context.policyRevision,
+            policyRevision: authority.contexts.policy.revision,
             generation: context.generation,
             scopedGrant: context.scopedGrant
         ))
@@ -161,25 +160,5 @@ nonisolated struct SourceCoverRequests: Sendable {
         guard let url, let pluginID, let contexts else { return nil }
         let authority = ImageRequestSourceAuthority.capture(pluginID: pluginID, contexts: contexts)
         return ImageRequest(urlRequest: ImageRequestSourceAuthority.applied(authority, to: URLRequest(url: url)))
-    }
-}
-
-private nonisolated struct SourceCoverRequestsKey: EnvironmentKey {
-    static let defaultValue = SourceCoverRequests(contexts: nil)
-}
-
-private nonisolated struct ImageSourceIDKey: EnvironmentKey {
-    static let defaultValue: String? = nil
-}
-
-extension EnvironmentValues {
-    var sourceCoverRequests: SourceCoverRequests {
-        get { self[SourceCoverRequestsKey.self] }
-        set { self[SourceCoverRequestsKey.self] = newValue }
-    }
-
-    var imageSourceID: String? {
-        get { self[ImageSourceIDKey.self] }
-        set { self[ImageSourceIDKey.self] = newValue }
     }
 }

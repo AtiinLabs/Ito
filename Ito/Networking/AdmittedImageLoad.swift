@@ -17,7 +17,7 @@ nonisolated final class AdmittedImageLoad: Nuke.Cancellable, @unchecked Sendable
     init(authority: NetworkRequestAuthority, completion: @escaping @Sendable (Error?) -> Void) {
         self.completion = completion
         // A context captured under an older revision never silently acquires the current permissions.
-        let subscription = authority.changes.sink { [weak self] _ in
+        let subscription = authority.changes.sink { @Sendable [weak self] _ in
             do {
                 try authority.checkImageAdmission()
             } catch {

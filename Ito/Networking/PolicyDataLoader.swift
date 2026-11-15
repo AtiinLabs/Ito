@@ -17,9 +17,9 @@ nonisolated protocol AuthorizedDataLoading: DataLoading {
 }
 
 nonisolated final class PolicyDataLoader: AuthorizedDataLoading, @unchecked Sendable {
-    private let session: URLSession
+    let session: URLSession
     /// Nuke owns source/epoch-partitioned caching. URLCache's URL-only namespace must not bridge epochs.
-    private let sourceSession: URLSession
+    let sourceSession: URLSession
 
     init(configuration: URLSessionConfiguration) {
         session = URLSession(configuration: configuration)
@@ -27,6 +27,9 @@ nonisolated final class PolicyDataLoader: AuthorizedDataLoading, @unchecked Send
             preconditionFailure("Unable to isolate source image transport cache")
         }
         sourceConfiguration.urlCache = nil
+        sourceConfiguration.httpCookieStorage = nil
+        sourceConfiguration.httpShouldSetCookies = false
+        sourceConfiguration.urlCredentialStorage = nil
         sourceSession = URLSession(configuration: sourceConfiguration)
     }
 
@@ -51,13 +54,15 @@ nonisolated final class PolicyDataLoader: AuthorizedDataLoading, @unchecked Send
     ) -> any Cancellable {
         start(
             request,
-            transport: PolicyHTTPTransport(
-                session: authority.context.sourceID == NetworkRequestAuthority.appSourceID ? session : sourceSession,
-                authority: authority
-            ),
+            transport: PolicyHTTPTransport(session: transportSession(for: authority), authority: authority),
             didReceiveData: didReceiveData,
             completion: completion
         )
+    }
+
+    /// Source-owned transfers use the cookie-less, cache-less session; only app-owned ones use the default.
+    func transportSession(for authority: NetworkRequestAuthority) -> URLSession {
+        authority.isAppOwned ? session : sourceSession
     }
 
     private func start(

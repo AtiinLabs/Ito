@@ -1,5 +1,7 @@
 import Foundation
+import Combine
 import Nuke
+import ito_runner
 
 /// Uses Nuke's complete keys (including processors and thumbnail options) inside one opaque
 /// configuration partition. Old requests retain their old wrapper when settings change.
@@ -19,14 +21,41 @@ nonisolated final class PluginEpochDataCache: DataCaching {
     func removeAll() { underlying.removeAll() }
 }
 
-/// Mutable partition caches are confined to `lock`; all other dependencies are immutable and thread-safe.
+/// A request-specific key view over one bounded cache. Rebuilding Nuke's key with a prefixed image ID
+/// retains its processors and thumbnail options without allocating a separate LRU for each header set.
+nonisolated private final class SourceImageMemoryCache: ImageCaching, @unchecked Sendable {
+    private let cache: ImageCache
+    private let key: ImageCacheKey
+    private let authority: NetworkRequestAuthority?
+
+    init(cache: ImageCache, request: ImageRequest, partition: String) {
+        self.cache = cache
+        authority = request.urlRequest.flatMap { ImageRequestSourceAuthority.marked(on: $0) }
+        var keyed = request
+        let imageID = request.userInfo[.imageIdKey] as? String ?? request.imageId ?? ""
+        keyed.userInfo[.imageIdKey] = "ito-source-\(partition):\(imageID)"
+        key = ImageCacheKey(request: keyed)
+    }
+
+    private var isCurrent: Bool {
+        guard let authority else { return false }
+        return authority.context.authorizationScope == authority.contexts.liveScope(pluginID: authority.context.sourceID)
+    }
+
+    subscript(key: ImageCacheKey) -> ImageContainer? {
+        get { isCurrent ? cache[self.key] : nil }
+        set { if isCurrent { cache[self.key] = newValue } }
+    }
+
+    func removeAll() { cache.removeAll() }
+}
+
+/// Immutable dependencies; the one bounded source cache is thread-safe.
 nonisolated private final class PluginImageCacheDelegate: ImagePipelineDelegate, @unchecked Sendable {
     let pluginMemory: (any ImageCaching)?
     private let pluginDisk: (any DataCaching)?
     private let diagnostics: any ImagePipelineDelegate
-    private let lock = NSLock()
-    private var sourceMemory: [String: ImageCache] = [:]
-    private var sourceDisk: [String: any DataCaching] = [:]
+    private let sourceMemory: ImageCache
 
     /// Partition the caches, not Nuke's key: its complete processor/thumbnail identity stays intact.
     private func sourcePartition(_ request: ImageRequest) -> String? {
@@ -34,7 +63,8 @@ nonisolated private final class PluginImageCacheDelegate: ImagePipelineDelegate,
         return ImageRequestSourceAuthority.cachePartition(on: wire)
     }
 
-    init(epoch: String?, dataCache: (any DataCaching)?, diagnostics: any ImagePipelineDelegate) {
+    init(epoch: String?, dataCache: (any DataCaching)?, sourceMemory: ImageCache, diagnostics: any ImagePipelineDelegate) {
+        self.sourceMemory = sourceMemory
         self.diagnostics = diagnostics
         if let epoch, PluginImageCacheEpoch.isValidEpoch(epoch) {
             pluginMemory = ImageCache()
@@ -49,12 +79,7 @@ nonisolated private final class PluginImageCacheDelegate: ImagePipelineDelegate,
     func imageCache(for request: ImageRequest, pipeline: ImagePipeline) -> (any ImageCaching)? {
         if request.url?.scheme?.lowercased() == "ito", pluginMemory == nil { return nil }
         if let partition = sourcePartition(request) {
-            return lock.withLock {
-                if let cache = sourceMemory[partition] { return cache }
-                let cache = ImageCache()
-                sourceMemory[partition] = cache
-                return cache
-            }
+            return SourceImageMemoryCache(cache: sourceMemory, request: request, partition: partition)
         }
         return request.url?.scheme?.lowercased() == "ito" ? pluginMemory : pipeline.configuration.imageCache
     }
@@ -63,12 +88,7 @@ nonisolated private final class PluginImageCacheDelegate: ImagePipelineDelegate,
         if let partition = sourcePartition(request) {
             guard let underlying = request.url?.scheme?.lowercased() == "ito"
                 ? pluginDisk : pipeline.configuration.dataCache else { return nil }
-            return lock.withLock {
-                if let cache = sourceDisk[partition] { return cache }
-                let cache = PluginEpochDataCache(underlying: underlying, epoch: partition)
-                sourceDisk[partition] = cache
-                return cache
-            }
+            return PluginEpochDataCache(underlying: underlying, epoch: partition)
         }
         return request.url?.scheme?.lowercased() == "ito" ? pluginDisk : pipeline.configuration.dataCache
     }
@@ -91,17 +111,25 @@ nonisolated final class PluginImagePipelineController: @unchecked Sendable {
     private var currentEpoch: String?
     private var currentDelegate: PluginImageCacheDelegate?
     private var observation: PluginImageCacheEpochObservation?
+    private let sourceMemory: ImageCache
+    private var scopeObservation: AnyCancellable?
 
     init(
         dataCache: (any DataCaching)?,
         dataLoader: any DataLoading,
         diagnostics: any ImagePipelineDelegate,
-        publish: @escaping @Sendable (ImagePipeline) -> Void = { ImagePipeline.shared = $0 }
+        publish: @escaping @Sendable (ImagePipeline) -> Void = { ImagePipeline.shared = $0 },
+        contexts: PluginNetworkContexts? = nil,
+        sourceMemory: ImageCache = ImageCache()
     ) {
         self.dataCache = dataCache
         self.dataLoader = dataLoader
         self.diagnostics = diagnostics
         self.publish = publish
+        self.sourceMemory = sourceMemory
+        scopeObservation = contexts?.scopeChanges.sink { @Sendable [weak self] _ in
+            self?.sourceMemory.removeAll()
+        }
     }
 
     func startObserving(_ store: PluginSettingsStore) throws {
@@ -113,7 +141,10 @@ nonisolated final class PluginImagePipelineController: @unchecked Sendable {
     func install(epoch: String?) {
         lock.withLock {
             guard !installed || currentEpoch != epoch else { return }
-            let delegate = PluginImageCacheDelegate(epoch: epoch, dataCache: dataCache, diagnostics: diagnostics)
+            sourceMemory.removeAll()
+            let delegate = PluginImageCacheDelegate(
+                epoch: epoch, dataCache: dataCache, sourceMemory: sourceMemory, diagnostics: diagnostics
+            )
             let pipeline = ImagePipeline(delegate: delegate) {
                 $0.dataCache = dataCache
                 $0.dataLoader = dataLoader
@@ -131,6 +162,9 @@ nonisolated final class PluginImagePipelineController: @unchecked Sendable {
     }
 
     func clearPluginMemoryCache() {
-        lock.withLock { currentDelegate?.pluginMemory?.removeAll() }
+        lock.withLock {
+            currentDelegate?.pluginMemory?.removeAll()
+            sourceMemory.removeAll()
+        }
     }
 }

@@ -39,28 +39,23 @@ struct AppNetCloudflareResolution: @unchecked Sendable {
 
 nonisolated protocol AppNetCloudflareHandling: Sendable {
     nonisolated func cachedUserAgent(for host: String) async -> String
-    nonisolated func resolveChallenge(for url: URL) async throws -> AppNetCloudflareResolution
     nonisolated func resolveChallenge(for url: URL, authority: NetworkRequestAuthority?) async throws -> AppNetCloudflareResolution
 }
 
-extension AppNetCloudflareHandling {
-    nonisolated func resolveChallenge(for url: URL, authority: NetworkRequestAuthority?) async throws -> AppNetCloudflareResolution {
-        try authority?.checkInteractive()
-        return try await resolveChallenge(for: url)
-    }
-}
 struct LiveAppNetCloudflareHandler: AppNetCloudflareHandling {
+    let manager: CloudflareManager?
+
+    init(manager: CloudflareManager? = nil) {
+        self.manager = manager
+    }
+
     nonisolated func cachedUserAgent(for host: String) async -> String {
         CloudflareManager.defaultUserAgent
     }
 
-    nonisolated func resolveChallenge(for url: URL) async throws -> AppNetCloudflareResolution {
-        throw HostNetworkPolicyOutcome.foregroundPermissionRequired
-    }
-
     nonisolated func resolveChallenge(for url: URL, authority: NetworkRequestAuthority?) async throws -> AppNetCloudflareResolution {
-        guard let authority else { throw HostNetworkPolicyOutcome.foregroundPermissionRequired }
-        return try await CloudflareManager.shared.resolveChallenge(for: url, authority: authority)
+        guard let authority, let manager else { throw HostNetworkPolicyOutcome.foregroundPermissionRequired }
+        return try await manager.resolveChallenge(for: url, authority: authority)
     }
 }
 
@@ -76,13 +71,13 @@ actor AppNetModule: NetModule {
     private let contexts: PluginNetworkContexts?
     private let admitContext: @Sendable (NetworkOperationContext) throws -> Void
 
-    init(pluginID: String, cookieJar: PluginCookieJar, trust: PluginTrustStore, contexts: PluginNetworkContexts? = nil) {
+    init(pluginID: String, cookieJar: PluginCookieJar, trust: PluginTrustStore, contexts: PluginNetworkContexts? = nil, cloudflare: CloudflareManager? = nil) {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
         config.urlCredentialStorage = nil
         self.sessions = PluginSessionPool(configuration: Self.uncached(config), trust: trust)
-        self.cloudflare = LiveAppNetCloudflareHandler()
+        self.cloudflare = LiveAppNetCloudflareHandler(manager: cloudflare)
         self.retryLogger = OSLogAppNetRetryLogger()
         self.pluginID = pluginID
         self.cookieJar = cookieJar

@@ -153,7 +153,8 @@ struct PreparedApplicationDependencies {
                 clipboardWriter: SystemClipboardWriter(),
                 siteDataClearer: SystemSiteDataClearer(
                     pluginCookies: pluginManager.pluginSettingsStore.cookies,
-                    pluginTokens: pluginManager.pluginSettingsStore.tokens
+                    pluginTokens: pluginManager.pluginSettingsStore.tokens,
+                    websites: pluginManager.websiteContexts
                 )
             ),
             tracking: tracking,

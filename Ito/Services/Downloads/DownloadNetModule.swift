@@ -195,7 +195,7 @@ nonisolated struct RefusingCloudflareHandler: AppNetCloudflareHandling {
         await userAgent(host)
     }
 
-    nonisolated func resolveChallenge(for url: URL) async throws -> AppNetCloudflareResolution {
+    nonisolated func resolveChallenge(for url: URL, authority: NetworkRequestAuthority?) async throws -> AppNetCloudflareResolution {
         try recorder.deny(.foregroundPermissionRequired)
     }
 }

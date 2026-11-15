@@ -250,11 +250,10 @@ struct PreparedMangaReaderDependencies {
             presence: discordRPCManager,
             pluginMetadata: pluginManager,
             makeImagePrefetcher: { pluginID in
-                let authority = ImageRequestSourceAuthority.capture(
-                    pluginID: pluginID, contexts: pluginManager.pluginSettingsStore.networkContexts
-                )
-                return NukeMangaReaderImagePrefetcher(session: ReaderPageImageSession(
-                    offlinePipeline: offlinePipeline, sourceAuthority: authority
+                NukeMangaReaderImagePrefetcher(session: ReaderPageImageSession.sourceBound(
+                    pluginID: pluginID,
+                    contexts: pluginManager.pluginSettingsStore.networkContexts,
+                    offlinePipeline: offlinePipeline
                 ))
             },
             presentationLogger: presentationLogger
