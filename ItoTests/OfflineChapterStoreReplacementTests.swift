@@ -227,7 +227,7 @@ struct OfflineChapterStoreReplacementTests {
         let ended = try #require(try await store.job(id: job.id))
         #expect(ended.state == .failed)
         #expect(ended.failureReason == .replacementStale)
-        #expect(try await store.nextQueuedJob() == nil)
+        #expect(try await store.nextQueuedJob(automaticAdmitted: true) == nil)
         #expect(try await fixture.rowCount("downloadReplacementIntent") == 0)
         #expect(fixture.fileSystem.exists(fixture.versionURL(old)))
         #expect(fixture.fileSystem.childNames(of: fixture.stagingURL).isEmpty)

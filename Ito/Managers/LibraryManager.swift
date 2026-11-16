@@ -307,6 +307,9 @@ public class LibraryManager: ObservableObject {
                     .filter(Column("canonicalMediaId") == media.canonicalMediaId)
                     .filter(Column("mediaKind") == media.mediaKind.rawValue)
                     .deleteAll(db)
+                // So is its automatic rule: released with its owners in this transaction. A running attempt ends
+                // through the commit's job check and the download center's absence cancel.
+                try OfflineChapterStore.removeSubscription(for: media, in: db)
                 removedMedia.append(media)
             }
             let publication = try Self.makePublication(

@@ -430,7 +430,10 @@ final class DownloadWorkerFixture {
         Page(index: 2, content: .url("https://img.test/3.jpg"))
     ]
 
-    init(pages: [Page] = DownloadWorkerFixture.defaultPages) throws {
+    init(
+        pages: [Page] = DownloadWorkerFixture.defaultPages,
+        automaticLimits: @escaping @Sendable () -> AutomaticDownloadLimits = { .standard }
+    ) throws {
         offline = try OfflineStoreFixture()
         store = offline.makeStore()
         path = ManualNetworkPathObserver(initial: NetworkPathSnapshot(status: .satisfied))
@@ -468,7 +471,8 @@ final class DownloadWorkerFixture {
             protectedDataBecameAvailable: protectedEvents.eraseToAnyPublisher(),
             fetcher: fetcher,
             contexts: networkContexts,
-            progress: progress
+            progress: progress,
+            automaticLimits: automaticLimits
         )
         center = DownloadCenter(
             dbPool: database,
@@ -477,7 +481,8 @@ final class DownloadWorkerFixture {
             progress: progress,
             contexts: networkContexts,
             observedPath: { [path] in path.current },
-            captureEpoch: captureEpoch
+            captureEpoch: captureEpoch,
+            automaticLimits: automaticLimits
         )
     }
 

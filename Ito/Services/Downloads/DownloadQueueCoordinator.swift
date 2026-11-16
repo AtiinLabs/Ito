@@ -72,6 +72,8 @@ final class DownloadQueueCoordinator {
     private let fetcher: any DirectAssetFetching
     private let contexts: PluginNetworkContexts
     private let progress: DownloadProgressBoard
+    /// The queue and disk limits automatic work runs under, read each time the queue head is looked at.
+    private let automaticLimits: @Sendable () -> AutomaticDownloadLimits
 
     private var reconciled = false
     private var loopTask: Task<Void, Never>?
@@ -91,6 +93,7 @@ final class DownloadQueueCoordinator {
     /// - Parameters:
     ///   - protectedDataBecameAvailable: fires when the device unlocks after a lock.
     ///   - predecessor: what a replaced worker is still finishing. This worker's first pass waits for it.
+    ///   - automaticLimits: the limits of automatic downloads; their quota decides whether automatic jobs may start.
     init(
         store: OfflineChapterStore,
         runtimes: any DownloadRuntimeProviding,
@@ -101,7 +104,8 @@ final class DownloadQueueCoordinator {
         fetcher: any DirectAssetFetching,
         contexts: PluginNetworkContexts,
         progress: DownloadProgressBoard,
-        predecessor: Task<Void, Never>? = nil
+        predecessor: Task<Void, Never>? = nil,
+        automaticLimits: @escaping @Sendable () -> AutomaticDownloadLimits
     ) {
         self.store = store
         self.runtimes = runtimes
@@ -111,6 +115,7 @@ final class DownloadQueueCoordinator {
         self.fetcher = fetcher
         self.contexts = contexts
         self.progress = progress
+        self.automaticLimits = automaticLimits
         retiringLoop = predecessor
 
         // Path and protected-data events arrive on the system's own queues. `@Sendable` keeps these
@@ -373,8 +378,11 @@ final class DownloadQueueCoordinator {
         try? await store.readmitWaiting(cleared)
     }
 
+    /// The next queued job, under the automatic quota: while the bytes already stored fill it, only jobs a person asked
+    /// for are started. That bounds the overshoot to the attempt already in flight.
     private func nextQueuedJob() async -> DownloadJobWork? {
-        try? await store.nextQueuedJob()
+        let admitted = (try? await store.automaticQuotaAdmits(automaticLimits())) ?? false
+        return try? await store.nextQueuedJob(automaticAdmitted: admitted)
     }
 
     /// Runs the checks that come before network work, in order, and then one attempt. The first failing

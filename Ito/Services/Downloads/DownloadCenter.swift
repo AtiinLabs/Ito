@@ -57,6 +57,7 @@ final class DownloadCenter: ObservableObject {
     private let contexts: PluginNetworkContexts
     private let observedPath: @Sendable () -> NetworkPathSnapshot
     private let captureEpoch: @Sendable (String) throws -> String
+    private let automaticLimits: @Sendable () -> AutomaticDownloadLimits
     private var snapshot = DownloadTableSnapshot()
     private var observation: DatabaseCancellable?
     private var progressSubscription: AnyCancellable?
@@ -65,6 +66,7 @@ final class DownloadCenter: ObservableObject {
     ///   - captureEpoch: the source's current completion epoch; see `PluginCompletionStore.captureScopeEpoch`.
     ///   - contexts: the host contexts of the sources, whose policy decides consent for a batch.
     ///   - observedPath: the path the policy decides on now.
+    ///   - automaticLimits: the queue and disk limits automatic downloads run under, read when they are applied.
     init(
         dbPool: DatabasePool,
         store: OfflineChapterStore,
@@ -72,7 +74,8 @@ final class DownloadCenter: ObservableObject {
         progress: DownloadProgressBoard,
         contexts: PluginNetworkContexts,
         observedPath: @escaping @Sendable () -> NetworkPathSnapshot,
-        captureEpoch: @escaping @Sendable (String) throws -> String
+        captureEpoch: @escaping @Sendable (String) throws -> String,
+        automaticLimits: @escaping @Sendable () -> AutomaticDownloadLimits
     ) {
         self.dbPool = dbPool
         self.store = store
@@ -81,6 +84,7 @@ final class DownloadCenter: ObservableObject {
         self.contexts = contexts
         self.observedPath = observedPath
         self.captureEpoch = captureEpoch
+        self.automaticLimits = automaticLimits
         progressSubscription = progress.$progress.sink { @MainActor [weak self] value in
             self?.republish(progress: value)
         }
@@ -308,6 +312,66 @@ final class DownloadCenter: ObservableObject {
         return summary
     }
 
+    // MARK: - Automatic downloads
+
+    /// Creates the rule for a series, waiting for its first baseline. Nothing is queued.
+    func enableSubscription(_ request: SubscriptionEnableRequest) async throws -> SubscriptionEnableOutcome {
+        try await store.enableSubscription(request)
+    }
+
+    /// Pauses the rule and returns its running attempts to the queue; a job with no enabled owner is not dequeued.
+    func pauseSubscription(id: String) async throws {
+        for jobID in try await store.pauseSubscription(id: id) {
+            coordinator.cancelAttempt(jobID: jobID)
+        }
+    }
+
+    func resumeSubscription(id: String) async throws {
+        try await store.resumeSubscription(id: id)
+        coordinator.wake()
+    }
+
+    /// Applies an edit. Events that waited are decided again at once under the new configuration.
+    func editSubscription(_ edit: SubscriptionEdit) async throws -> SubscriptionEditOutcome {
+        let outcome = try await store.editSubscription(edit)
+        if case .applied = outcome {
+            _ = try? await drainSubscriptionEvents(subscriptionId: edit.subscriptionId)
+        }
+        return outcome
+    }
+
+    /// Disables the rule: jobs only it asked for are removed, and their attempts stop. Files are kept.
+    func disableSubscription(id: String) async throws -> SubscriptionRelease {
+        let release = try await store.disableSubscription(id: id)
+        for jobID in release.removedJobIds { coordinator.cancelAttempt(jobID: jobID) }
+        return release
+    }
+
+    func deleteSubscription(id: String) async throws -> SubscriptionRelease {
+        let release = try await store.deleteSubscription(id: id)
+        for jobID in release.removedJobIds { coordinator.cancelAttempt(jobID: jobID) }
+        return release
+    }
+
+    func resolveSubscriptionEvent(_ resolution: SubscriptionEventResolution) async throws -> SubscriptionCommitOutcome {
+        let outcome = try await store.resolveSubscriptionEvent(resolution, limits: automaticLimits())
+        if outcome.queuedJobs > 0 { coordinator.wake() }
+        return outcome
+    }
+
+    func approveSubscriptionBackfill(_ approval: SubscriptionBackfillApproval) async throws -> SubscriptionCommitOutcome {
+        let outcome = try await store.approveSubscriptionBackfill(approval, limits: automaticLimits())
+        if outcome.queuedJobs > 0 { coordinator.wake() }
+        return outcome
+    }
+
+    @discardableResult
+    func drainSubscriptionEvents(subscriptionId: String) async throws -> SubscriptionCommitOutcome {
+        let outcome = try await store.drainSubscriptionEvents(subscriptionId: subscriptionId, limits: automaticLimits())
+        if outcome.queuedJobs > 0 { coordinator.wake() }
+        return outcome
+    }
+
     /// The scanlators the user asked to remember for a series; nil when none were. Throws when the stored
     /// choice could not be read, which is not the same as having none.
     func editionPreference(for media: MediaIdentity) async throws -> EditionSelection? {
@@ -490,6 +554,33 @@ final class DownloadCenter: ObservableObject {
             return .waiting(job.waitingReason ?? .networkUnknown)
         case .failed:
             return .failed(job.failureReason ?? .sourceError)
+        }
+    }
+}
+
+/// The subscription ledger's side of a catalog check: `UpdateManager` hands over the one fetch's observation and the
+/// center commits it through the store, then wakes the worker when the commit queued jobs.
+extension DownloadCenter: SubscriptionCatalogSink {
+    func begin(media: MediaIdentity) async -> SubscriptionCheckTicket? {
+        guard let epoch = try? captureEpoch(media.pluginId) else { return nil }
+        return try? await store.beginSubscriptionCheck(media: media, capturedEpoch: epoch)
+    }
+
+    func commit(_ ticket: SubscriptionCheckTicket, _ observation: CatalogObservation) async {
+        guard let outcome = try? await store.commitSubscriptionObservation(
+            ticket, observation, limits: automaticLimits()
+        ) else {
+            AppLogger.database.error("A subscription catalog commit failed")
+            return
+        }
+        if outcome.queuedJobs > 0 { coordinator.wake() }
+    }
+
+    func fail(_ ticket: SubscriptionCheckTicket, _ outcome: SubscriptionCheckOutcome) async {
+        do {
+            try await store.recordSubscriptionCheckFailure(ticket, outcome)
+        } catch {
+            AppLogger.database.error("A subscription check failure could not be recorded")
         }
     }
 }

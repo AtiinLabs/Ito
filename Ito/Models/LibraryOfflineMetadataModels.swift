@@ -47,7 +47,7 @@ nonisolated struct LibraryCatalogDescription: Equatable, Sendable {
 extension LibraryCatalogDescription {
     /// Maps the runner's catalog case for case, with no default, so a runner case this build does not know
     /// breaks the build here instead of being guessed. A missing catalog says nothing: it is `unknown`.
-    init(_ catalog: ChapterCatalog?) {
+    nonisolated init(_ catalog: ChapterCatalog?) {
         guard let catalog else {
             self = .unknown
             return
@@ -55,7 +55,7 @@ extension LibraryCatalogDescription {
         self.init(scope: Self.libraryScope(catalog.scope), completeness: Self.libraryCompleteness(catalog.completeness))
     }
 
-    private static func libraryScope(_ scope: CatalogScope) -> LibraryCatalogScope {
+    nonisolated private static func libraryScope(_ scope: CatalogScope) -> LibraryCatalogScope {
         switch scope {
         case .unknown: return .unknown
         case .visible: return .visible
@@ -63,7 +63,7 @@ extension LibraryCatalogDescription {
         }
     }
 
-    private static func libraryCompleteness(_ completeness: CatalogCompleteness) -> LibraryCatalogCompleteness {
+    nonisolated private static func libraryCompleteness(_ completeness: CatalogCompleteness) -> LibraryCatalogCompleteness {
         switch completeness {
         case .unknown: return .unknown
         case .partial: return .partial

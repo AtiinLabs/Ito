@@ -37,6 +37,14 @@ completeness. Backups still exclude downloaded chapter media, inventory pointers
 epochs and runtime permissions.
 
 
+Schema v27 adds the automatic-download ledger (`seriesSubscription`, `subscriptionBaseline`, `subscriptionSeenKey`,
+`subscriptionEvent`) and `downloadJobOwner`. The migration rebuilds `downloadBatch` (new `automatic` preset) and gives
+every existing job exactly one manual owner named by its batch; no owner is ever inferred from a preset. All five new
+tables are excluded from backups and sanitized child-first on export, so automatic rules and their catalog evidence
+never travel in a backup. Two scalar preferences, `Ito.AutomaticDownloadQueueLimit` (10...500, default 100) and
+`Ito.AutomaticDownloadQuotaGiB` (1...200, default 5), are part of the preference catalog, so backups from this version
+carry them; earlier builds reject those backups, and backups from earlier versions restore with the defaults.
+
 ## One-time repository setup
 
 1. Copy this starter kit into the Ito repository.

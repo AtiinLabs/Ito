@@ -38,7 +38,21 @@ extension OfflineChapterStore {
         let chapterSnapshots = try request.chapters.map { try encoder.encode($0) }
         let now = clock()
         let batchId = UUID().uuidString
-        let jobIDs = request.chapters.map { _ in UUID().uuidString }
+        let prepared = PreparedDownloadBatch(
+            pluginId: request.pluginId,
+            mediaKind: request.mediaKind,
+            canonicalMediaId: request.canonicalMediaId,
+            entrySnapshot: entrySnapshot,
+            seriesTitle: request.seriesTitle,
+            provenance: request.provenance,
+            selection: request.selection,
+            catalogDigest: request.catalogDigest,
+            chapters: request.chapters,
+            chapterSnapshots: chapterSnapshots,
+            batchId: batchId,
+            jobIds: request.chapters.map { _ in UUID().uuidString },
+            sourceEpoch: sourceEpoch
+        )
 
         return try await database.write { db -> DownloadBatchOutcome in
             // A batch reviewed under one source epoch never queues under another.
@@ -65,87 +79,9 @@ extension OfflineChapterStore {
                 }
                 guard stored == reviewedPolicy else { return .refused(.policyChanged) }
             }
-            var outcome = DownloadBatchOutcome()
-            var pending: [Int] = []
-            var requestedKeys = Set<String>()
-            for (index, chapter) in request.chapters.enumerated() {
-                guard chapter.paywalled != true else {
-                    outcome.refusedLocked += 1
-                    continue
-                }
-                let edition = OfflineChapterEdition(
-                    pluginId: request.pluginId,
-                    mediaKind: request.mediaKind,
-                    canonicalMediaId: request.canonicalMediaId,
-                    chapterKey: chapter.key
-                )
-                if let existing = try DownloadedChapterRecord.filter(edition.predicate).fetchOne(db) {
-                    if existing.state == .verified {
-                        outcome.alreadySaved += 1
-                    } else {
-                        outcome.blockedDamaged += 1
-                    }
-                    continue
-                }
-                var isQueued = !requestedKeys.insert(chapter.key).inserted
-                if !isQueued {
-                    isQueued = try DownloadJobRecord.filter(edition.predicate).fetchCount(db) > 0
-                }
-                if isQueued {
-                    outcome.alreadyQueued += 1
-                    continue
-                }
-                pending.append(index)
-            }
-            guard !pending.isEmpty else { return outcome }
-
-            try DownloadBatchRecord(
-                id: batchId,
-                pluginId: request.pluginId,
-                mediaKind: request.mediaKind,
-                canonicalMediaId: request.canonicalMediaId,
-                preset: request.provenance.preset,
-                selection: request.selection,
-                catalogDigest: request.catalogDigest,
-                entrySnapshot: entrySnapshot,
-                createdAt: now,
-                windowKind: request.provenance.windowKind,
-                positionCount: request.provenance.positionCount,
-                customPresetId: request.provenance.customPresetId
-            ).insert(db)
-            for index in pending {
-                let chapter = request.chapters[index]
-                let edition = OfflineChapterEdition(
-                    pluginId: request.pluginId,
-                    mediaKind: request.mediaKind,
-                    canonicalMediaId: request.canonicalMediaId,
-                    chapterKey: chapter.key
-                )
-                _ = try DownloadSuppressionRecord.filter(edition.predicate).deleteAll(db)
-                try DownloadJobRecord(
-                    id: jobIDs[index],
-                    batchId: batchId,
-                    sequence: index,
-                    pluginId: edition.pluginId,
-                    mediaKind: edition.mediaKind,
-                    canonicalMediaId: edition.canonicalMediaId,
-                    chapterKey: edition.chapterKey,
-                    authorityScope: edition.authorityScope,
-                    chapterSnapshot: chapterSnapshots[index],
-                    seriesTitle: request.seriesTitle,
-                    sourceEpoch: sourceEpoch,
-                    state: .queued,
-                    waitingReason: nil,
-                    failureReason: nil,
-                    stagingVersionId: nil,
-                    attemptCount: 0,
-                    createdAt: now,
-                    updatedAt: now
-                ).insert(db)
-            }
-            outcome.queued = pending.count
-            outcome.batchId = batchId
-            return outcome
+            // The request is its own manual owner: its batch identifies it, and a chapter that already has a job
+            // gains this owner instead of being queued twice.
+            return try Self.insertBatch(prepared, owner: .manual(requestId: batchId), now: now, in: db).outcome
         }
     }
 
@@ -228,8 +164,11 @@ extension OfflineChapterStore {
     }
 
     /// The queued job that runs next, with its batch's frozen series snapshot: the oldest batch first,
-    /// then the batch's own order. Jobs that are waiting, downloading or failed are never returned.
-    func nextQueuedJob() async throws -> DownloadJobWork? {
+    /// then the batch's own order. Jobs that are waiting, downloading or failed are never returned, nor is a job
+    /// without an owner that may start it. A manual owner always may; a subscription may only while it is enabled
+    /// and `automaticAdmitted` says the automatic quota has room. Paused and quota-blocked automatic jobs stay
+    /// queued and are simply not started.
+    func nextQueuedJob(automaticAdmitted: Bool) async throws -> DownloadJobWork? {
         try await database.read { db in
             guard let row = try Row.fetchOne(
                 db,
@@ -238,13 +177,19 @@ extension OfflineChapterStore {
                     FROM downloadJob
                     JOIN downloadBatch ON downloadBatch.id = downloadJob.batchId
                     WHERE downloadJob.state = ?
+                      AND \(Self.eligibleOwnerSQL(jobColumn: "downloadJob.id"))
                     ORDER BY downloadJob.createdAt, downloadJob.batchId, downloadJob.sequence, downloadJob.id
                     LIMIT 1
                     """,
-                arguments: [DownloadJobState.queued.rawValue]
+                arguments: [DownloadJobState.queued.rawValue, automaticAdmitted ? 1 : 0]
             ) else { return nil }
             let entrySnapshot: Data = row["entrySnapshot"]
-            return DownloadJobWork(job: try DownloadJobRecord(row: row), entrySnapshot: entrySnapshot)
+            let job = try DownloadJobRecord(row: row)
+            return DownloadJobWork(
+                job: job,
+                entrySnapshot: entrySnapshot,
+                ownership: try Self.ownership(ofJob: job.id, in: db)
+            )
         }
     }
 

@@ -329,7 +329,7 @@ struct OfflineChapterStoreBatchTests {
         let store = fixture.makeStore()
         let ids = try await fixture.enqueueBatch(store, chapterKeys: ["c3", "c1", "c2"])
 
-        let first = try #require(try await store.nextQueuedJob())
+        let first = try #require(try await store.nextQueuedJob(automaticAdmitted: true))
         #expect(first.job.id == ids[0])
         guard case .manga(let manga) = try JSONDecoder().decode(MediaEntry.self, from: first.entrySnapshot) else {
             Issue.record("The work's entry is not the batch's manga entry")
@@ -340,7 +340,7 @@ struct OfflineChapterStoreBatchTests {
         // A waiting job and a downloading job are skipped.
         try await store.setWaiting(jobID: ids[0], reason: .noConnection)
         _ = try await store.beginAttempt(jobID: ids[1])
-        #expect(try await store.nextQueuedJob()?.job.id == ids[2])
+        #expect(try await store.nextQueuedJob(automaticAdmitted: true)?.job.id == ids[2])
 
         // A batch created earlier runs before this one's remaining jobs.
         let older = try await fixture.enqueueBatch(store, chapterKeys: ["o1"], canonicalMediaId: "series-2")
@@ -349,11 +349,11 @@ struct OfflineChapterStoreBatchTests {
             try db.execute(sql: "UPDATE downloadBatch SET createdAt = ? WHERE canonicalMediaId = 'series-2'", arguments: [early])
             try db.execute(sql: "UPDATE downloadJob SET createdAt = ? WHERE canonicalMediaId = 'series-2'", arguments: [early])
         }
-        #expect(try await store.nextQueuedJob()?.job.id == older[0])
+        #expect(try await store.nextQueuedJob(automaticAdmitted: true)?.job.id == older[0])
 
         try await store.setWaiting(jobID: older[0], reason: .noConnection)
         try await store.setWaiting(jobID: ids[2], reason: .noConnection)
-        #expect(try await store.nextQueuedJob() == nil)
+        #expect(try await store.nextQueuedJob(automaticAdmitted: true) == nil)
     }
 
     @Test func jobForAnEditionFindsOnlyThatEditionsJob() async throws {
@@ -386,7 +386,7 @@ struct OfflineChapterStoreBatchTests {
 
         // The worker's query serves the same order.
         var served: [String] = []
-        while let work = try await store.nextQueuedJob() {
+        while let work = try await store.nextQueuedJob(automaticAdmitted: true) {
             served.append(work.job.id)
             try await store.setWaiting(jobID: work.job.id, reason: .noConnection)
         }

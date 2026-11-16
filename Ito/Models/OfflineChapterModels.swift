@@ -250,7 +250,8 @@ nonisolated struct DownloadStoreRecord: Codable, Sendable, FetchableRecord, Pers
 }
 
 /// What the user asked for when the batch was queued. `single` is exact chapters chosen individually, not from a
-/// preset; `more` is "Download N More…"; `custom` is a saved custom preset (its id is on the batch).
+/// preset; `more` is "Download N More…"; `custom` is a saved custom preset (its id is on the batch); `automatic`
+/// is work a subscription queued.
 nonisolated enum DownloadBatchPreset: String, Codable, CaseIterable, Sendable {
     case single
     case next
@@ -260,6 +261,7 @@ nonisolated enum DownloadBatchPreset: String, Codable, CaseIterable, Sendable {
     case all
     case custom
     case more
+    case automatic
 }
 
 /// The window a custom or ad hoc count asked for. Stored with the batch as provenance.
@@ -284,11 +286,14 @@ nonisolated struct DownloadBatchProvenance: Equatable, Sendable {
         DownloadBatchProvenance(preset: preset, windowKind: nil, positionCount: nil, customPresetId: nil)
     }
 
+    /// What a subscription's batch records: no window, count or custom definition.
+    static let automatic = builtIn(.automatic)
+
     var isConsistent: Bool {
         let countIsValid = positionCount.map { DownloadPositionCount($0) != nil } ?? false
         let presetIdIsValid = customPresetId.map { $0.count == 36 } ?? false
         switch preset {
-        case .single, .next, .next5, .next10, .unread, .all:
+        case .single, .next, .next5, .next10, .unread, .all, .automatic:
             return windowKind == nil && positionCount == nil && customPresetId == nil
         case .more:
             return windowKind == .more && countIsValid && customPresetId == nil
@@ -342,6 +347,8 @@ nonisolated struct DownloadJobWork: Sendable {
     let job: DownloadJobRecord
     /// JSON `MediaEntry` frozen on the job's batch.
     let entrySnapshot: Data
+    /// Who asked for the job, for the network policy of the attempt.
+    let ownership: DownloadJobOwnership
 }
 
 /// A chapter the user deleted on purpose. A later automatic download must not bring it back until the
@@ -465,6 +472,12 @@ nonisolated struct DownloadBatchOutcome: Equatable, Sendable {
     var refusal: DownloadRefusal?
     /// The batch row, present only when at least one job was queued.
     var batchId: String?
+    /// Chapters a subscription's request skipped because the user deleted them on purpose. Only an automatic
+    /// request can set it; an explicit download clears the deletion record instead.
+    var suppressed = 0
+    /// The identity of this request: set whenever the request was not refused, even when every chapter was
+    /// already saved or queued. A manual request is also the manual owner it attached to existing jobs under.
+    var requestId: String?
 
     static func refused(_ refusal: DownloadRefusal) -> DownloadBatchOutcome {
         DownloadBatchOutcome(refusal: refusal)
