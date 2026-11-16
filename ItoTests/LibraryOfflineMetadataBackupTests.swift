@@ -28,7 +28,7 @@ struct LibraryOfflineMetadataBackupTests {
         let migrator = AppDatabase.makeMigrator()
         try migrator.migrate(database, upTo: "v21")
         let olderComponents = BackupComponent.allCases.filter {
-            $0 != .savedLibraryThumbnails && $0 != .downloadPresets
+            $0 != .savedLibraryThumbnails && $0 != .downloadPresets && $0 != .automaticDownloadRules
         }
         #expect(olderComponents.count == 13)
         var before: [String: String] = [:]
@@ -452,8 +452,11 @@ struct LibraryOfflineMetadataBackupTests {
         let backupDB = try DatabaseQueue(path: url.path)
         try await backupDB.write { db in
             try db.execute(
-                sql: "DELETE FROM backupCapability WHERE component IN (?, ?)",
-                arguments: [BackupComponent.savedLibraryThumbnails.rawValue, BackupComponent.downloadPresets.rawValue]
+                sql: "DELETE FROM backupCapability WHERE component IN (?, ?, ?)",
+                arguments: [
+                    BackupComponent.savedLibraryThumbnails.rawValue, BackupComponent.downloadPresets.rawValue,
+                    BackupComponent.automaticDownloadRules.rawValue
+                ]
             )
             #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM libraryCoverThumbnail") == 1)
         }

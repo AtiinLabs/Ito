@@ -16,6 +16,7 @@ public enum BackupComponent: String, Codable, CaseIterable, Sendable {
     case legacyUnscopedMediaState
     case savedLibraryThumbnails
     case downloadPresets
+    case automaticDownloadRules
     case legacyStateArchive
 }
 

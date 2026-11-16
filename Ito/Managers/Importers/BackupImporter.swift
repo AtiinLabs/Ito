@@ -150,6 +150,7 @@ nonisolated public struct ImportedBackup: Sendable {
     public let legacyStateArchives: [LegacyStateArchiveRecord]
     public let savedLibraryThumbnails: [LibraryCoverThumbnailRecord]
     public let downloadPresets: [DownloadPresetDefinitionRecord]
+    public let automaticDownloadRules: [PortableSubscriptionRule]
     public let migrationReport: MigrationReport?
 
     public var formatVersion: Int? { metadata?.formatVersion }
@@ -183,6 +184,7 @@ nonisolated public struct ImportedBackup: Sendable {
         legacyStateArchives: [LegacyStateArchiveRecord] = [],
         savedLibraryThumbnails: [LibraryCoverThumbnailRecord] = [],
         downloadPresets: [DownloadPresetDefinitionRecord] = [],
+        automaticDownloadRules: [PortableSubscriptionRule] = [],
         migrationReport: MigrationReport? = nil
     ) {
         self.metadata = metadata
@@ -213,6 +215,7 @@ nonisolated public struct ImportedBackup: Sendable {
         }
         self.savedLibraryThumbnails = savedLibraryThumbnails
         self.downloadPresets = downloadPresets
+        self.automaticDownloadRules = automaticDownloadRules
         self.migrationReport = migrationReport
     }
 
@@ -330,6 +333,8 @@ nonisolated public struct ImportedBackup: Sendable {
             !savedLibraryThumbnails.isEmpty
         case .downloadPresets:
             !downloadPresets.isEmpty
+        case .automaticDownloadRules:
+            !automaticDownloadRules.isEmpty
         case .legacyStateArchive:
             !legacyStateArchives.isEmpty
         }

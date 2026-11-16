@@ -421,24 +421,22 @@ struct SubscriptionLedgerSchemaTests {
 
     // MARK: - Backup classification
 
-    @Test func theNewTablesAreExcludedFromBackupAndSanitizedChildFirst() throws {
-        let tables = [
-            "downloadJobOwner", "seriesSubscription", "subscriptionBaseline", "subscriptionSeenKey", "subscriptionEvent"
-        ]
-        for table in tables {
+    @Test func onlyTheRuleTableCanTravelInABackupAndItsEvidenceIsSanitizedChildFirst() throws {
+        // The evidence and ownership tables are excluded and emptied; the rules are a backup component instead.
+        for table in ["downloadJobOwner", "subscriptionBaseline", "subscriptionSeenKey", "subscriptionEvent"] {
             #expect(BackupExportOperation.excludedTableReasons[table] != nil, "\(table) needs a backup policy")
             #expect(BackupExportOperation.sanitizedTables.contains(table), "\(table) must be sanitized")
         }
+        let rules = SeriesSubscriptionRecord.databaseTableName
+        #expect(BackupExportOperation.excludedTableReasons[rules] == nil)
+        #expect(!BackupExportOperation.sanitizedTables.contains(rules))
+        #expect(BackupExportOperation.durableTablesByComponent[.automaticDownloadRules] == [rules])
         func index(_ table: String) throws -> Int {
             try #require(BackupExportOperation.sanitizedTables.firstIndex(of: table))
         }
-        // A row is deleted before the rows it references: owners before jobs and subscriptions, jobs before batches,
-        // and a subscription's events, seen keys and baseline before the subscription.
+        // A row is deleted before the rows it references: owners before jobs, and jobs before batches. The rules stay,
+        // so their events, seen keys and baseline are deleted while the rows they reference still exist.
         #expect(try index("downloadJobOwner") < index("downloadJob"))
         #expect(try index("downloadJob") < index("downloadBatch"))
-        #expect(try index("downloadJobOwner") < index("seriesSubscription"))
-        for child in ["subscriptionEvent", "subscriptionSeenKey", "subscriptionBaseline"] {
-            #expect(try index(child) < index("seriesSubscription"))
-        }
     }
 }

@@ -181,6 +181,9 @@ History: kind of media */
 
 "Automatic Updates" = "Automatic Updates";
 
+/* Backup restore report: the component holding automatic download rules, restored paused. */
+"Automatic download rules" = "Automatic download rules";
+
 "Automatic progress updates are off while this entry is %@. Set it to %@ to resume them." = "Automatic progress updates are off while this entry is %1$@. Set it to %2$@ to resume them.";
 
 "Automatic reads right to left, since this series does not specify a mode." = "Automatic reads right to left, since this series does not specify a mode.";

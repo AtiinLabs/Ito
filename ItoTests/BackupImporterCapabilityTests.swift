@@ -36,6 +36,7 @@ struct BackupImporterCapabilityTests {
                 try BackupCapabilityRecord(
                     component: component,
                     representation: component == .savedLibraryThumbnails || component == .downloadPresets
+                        || component == .automaticDownloadRules
                         ? .representedEmpty
                         : .representedNonempty
                 ).insert(db)

@@ -51,6 +51,18 @@ public struct ItoNativeImporter: BackupImporter {
                 ? fetchBoundedDownloadPresets(in: db)
                 : []
 
+            let representsAutomaticDownloadRules = capabilities.contains {
+                $0.component == .automaticDownloadRules && $0.representation != .unrepresented
+            }
+            if !representsAutomaticDownloadRules,
+               try db.tableExists(SeriesSubscriptionRecord.databaseTableName),
+               try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM seriesSubscription)") == true {
+                throw invalidCapability(component: .automaticDownloadRules, code: "unrepresentedContainsRows")
+            }
+            let automaticDownloadRules = try representsAutomaticDownloadRules
+                ? fetchBoundedAutomaticDownloadRules(in: db)
+                : []
+
             var legacyStateArchives = try fetchArchives(in: db)
             let capturedAt = metadata?.createdAt ?? Date()
             let resolver = try LegacyMediaKindResolver(db: db)
@@ -213,7 +225,8 @@ public struct ItoNativeImporter: BackupImporter {
                 legacyUnscopedMediaState: legacyUnscopedMediaState,
                 legacyStateArchives: legacyStateArchives,
                 savedLibraryThumbnails: savedLibraryThumbnails,
-                downloadPresets: downloadPresets
+                downloadPresets: downloadPresets,
+                automaticDownloadRules: automaticDownloadRules
             )
             try imported.validateCapabilityMetadata()
             try validateCapabilityRepresentations(imported)
@@ -612,6 +625,55 @@ public struct ItoNativeImporter: BackupImporter {
         }
     }
 
+    /// The backup's automatic download rules. The count, every selection's size and type are checked in SQL before any
+    /// row loads, so a crafted backup cannot make the importer load an unbounded list. Each row is then read by column
+    /// name and must be a rule the database would accept, with no identity twice. A selection this build cannot decode
+    /// is not an error here: restore skips that rule.
+    nonisolated private func fetchBoundedAutomaticDownloadRules(in db: Database) throws -> [PortableSubscriptionRule] {
+        let table = SeriesSubscriptionRecord.databaseTableName
+        guard try db.tableExists(table) else { return [] }
+        let columns = Set(try db.columns(in: table).map(\.name))
+        guard PortableSubscriptionRule.columnNames.allSatisfy(columns.contains) else {
+            throw invalidCapability(component: .automaticDownloadRules, code: "invalidRule")
+        }
+        let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM seriesSubscription") ?? 0
+        let unbounded = try Int.fetchOne(
+            db,
+            sql: """
+                SELECT COUNT(*) FROM seriesSubscription
+                WHERE typeof(selection) != 'blob' OR length(selection) > ?
+                """,
+            arguments: [PortableSubscriptionRule.maximumSelectionByteCount]
+        ) ?? 0
+        let totalSelectionBytes = try Int.fetchOne(
+            db,
+            sql: "SELECT COALESCE(SUM(length(selection)), 0) FROM seriesSubscription"
+        ) ?? 0
+        guard count <= PortableSubscriptionRule.maximumCount,
+              unbounded == 0,
+              totalSelectionBytes <= PortableSubscriptionRule.maximumTotalSelectionByteCount else {
+            throw invalidCapability(component: .automaticDownloadRules, code: "invalidRule")
+        }
+        let rows = try Row.fetchCursor(
+            db,
+            sql: """
+                SELECT \(PortableSubscriptionRule.columnNames.joined(separator: ", ")) FROM seriesSubscription
+                ORDER BY pluginId, mediaKind, canonicalMediaId
+                """
+        )
+        var rules: [PortableSubscriptionRule] = []
+        var identities = Set<MediaIdentity>()
+        while let row = try rows.next() {
+            guard let rule = PortableSubscriptionRule(row: row),
+                  rule.isStructurallyValid,
+                  identities.insert(rule.media).inserted else {
+                throw invalidCapability(component: .automaticDownloadRules, code: "invalidRule")
+            }
+            rules.append(rule)
+        }
+        return rules
+    }
+
     nonisolated private func validateSavedThumbnails(
         _ thumbnails: [LibraryCoverThumbnailRecord],
         items: [LibraryItem]
@@ -668,6 +730,8 @@ public struct ItoNativeImporter: BackupImporter {
             !backup.savedLibraryThumbnails.isEmpty
         case .downloadPresets:
             !backup.downloadPresets.isEmpty
+        case .automaticDownloadRules:
+            !backup.automaticDownloadRules.isEmpty
         case .legacyStateArchive:
             !backup.legacyStateArchives.isEmpty
         }
