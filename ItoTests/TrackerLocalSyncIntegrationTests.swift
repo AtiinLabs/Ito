@@ -49,7 +49,8 @@ final class TrackerLocalSyncIntegrationTests: XCTestCase {
                     content: ReaderContentSource(remote: runner),
                     pluginID: Self.pluginID
                 )
-            }
+            },
+            makeDownloadedAlternativeDestination: { _, _, _ in throw UnexpectedDownloadedAlternativeOpening() }
         )
 
         let viewModel = MediaDetailViewModel(
@@ -65,7 +66,8 @@ final class TrackerLocalSyncIntegrationTests: XCTestCase {
                 baseline: baseline,
                 settings: settings,
                 pluginMetadata: metadata,
-                discord: discord
+                discord: discord,
+                downloads: UnavailableMediaDetailDownloads()
             ),
             messagePresenter: messages,
             presentationLogger: PresentationEventCaptureSpy()

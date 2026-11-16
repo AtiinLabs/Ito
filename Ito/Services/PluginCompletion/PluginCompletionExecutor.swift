@@ -44,7 +44,8 @@ nonisolated final class PluginCompletionExecutor: PluginCompletionExecuting, Sen
         self.init(store: store, contexts: contexts, locatePlugin: locatePlugin, makeNetModule: { pluginID in
             PluginCompletionNetModule(
                 cookies: { url in cookies.cookies(pluginID: pluginID, for: url) },
-                trust: (pluginID, trust)
+                trust: (pluginID, trust),
+                contexts: contexts
             )
         })
     }

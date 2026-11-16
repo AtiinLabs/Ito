@@ -39,7 +39,7 @@ final class AtsuPluginLiveImageIntegrationTests: XCTestCase {
         ))
         await runner.setStdModule(DefaultStdModule())
         await runner.setHtmlModule(DefaultHtmlModule())
-        await runner.setWebviewModule(AppWebviewModule())
+        await runner.setWebviewModule(AppWebviewModule(websites: SourceWebsiteContexts()))
         _ = try await runner.loadBundle(from: pluginURL)
         // 3. Request manga update (details + chapters) for user's sample "YMv6"
         let manga = Manga(key: "YMv6", title: "", status: .Unknown, contentRating: .Safe)

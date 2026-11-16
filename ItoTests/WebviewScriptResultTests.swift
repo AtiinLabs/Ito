@@ -14,7 +14,7 @@ private func dispose(_ manager: WebviewManager) {
 
 @MainActor
 private func loadedPage(_ html: String = "<p>x</p>") async throws -> WebviewManager {
-    let manager = WebviewManager(pageLoadDeadline: 20)
+    let manager = WebviewManager(pageLoadDeadline: 20, websites: SourceWebsiteContexts())
     do {
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,\(html)", script: nil))
         return manager

@@ -136,17 +136,17 @@ private func dispose(_ manager: WebviewManager) {
 struct WebviewManagerTests {
     @Test func aPageThatNeverAnswersTimesOut() async throws {
         let server = try SilentServer()
-        let manager = WebviewManager(pageLoadDeadline: 0.3)
+        let manager = WebviewManager(pageLoadDeadline: 0.3, websites: SourceWebsiteContexts())
         defer { dispose(manager) }
 
-        await #expect(throws: URLError(.timedOut)) {
+        await #expect(throws: ItoError.hostCallTimedOut(.webview)) {
             try await manager.loadUrl(request: WebviewRequest(url: await server.url(), script: nil))
         }
     }
 
     @Test func cancellingTheCallerEndsTheLoad() async throws {
         let server = try SilentServer()
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         let url = await server.url()
 
@@ -160,7 +160,7 @@ struct WebviewManagerTests {
     @Test func aNewerLoadReplacesThePendingOne() async throws {
         let server = try SilentServer()
         let replacementServer = try SilentServer()
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         let url = await server.url()
         let replacementURL = await replacementServer.url()
@@ -184,7 +184,7 @@ struct WebviewManagerTests {
     }
 
     @Test func cancellingAPendingAsyncScriptEndsItAndLaterScriptsStillRun() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
@@ -197,7 +197,7 @@ struct WebviewManagerTests {
     }
 
     @Test func loadingAnotherPageEndsPendingAsyncScriptsWithCancelled() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>one</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
@@ -208,7 +208,7 @@ struct WebviewManagerTests {
     }
 
     @Test func aPageNavigationEndsPendingAsyncScriptsWithCancelled() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
@@ -221,7 +221,7 @@ struct WebviewManagerTests {
     }
 
     @Test func aFragmentChangeInThePageKeepsPendingAsyncScripts() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
@@ -234,7 +234,7 @@ struct WebviewManagerTests {
     }
 
     @Test func aWaitingScriptCanShowThePageInAModalOverlay() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
@@ -255,7 +255,7 @@ struct WebviewManagerTests {
     }
 
     @Test func releasingTheLastWaitingScriptHidesThePage() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
@@ -268,7 +268,7 @@ struct WebviewManagerTests {
     }
 
     @Test func thePageStaysUpUntilItsLastWaitingScriptEnds() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let first = await startNeverSettlingScript(on: manager)
@@ -286,7 +286,7 @@ struct WebviewManagerTests {
     }
 
     @Test func aRejectedWaitingScriptHidesThePage() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startAsyncScript(
@@ -300,7 +300,7 @@ struct WebviewManagerTests {
     }
 
     @Test func aCancelledWaitingScriptHidesThePage() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
@@ -313,7 +313,7 @@ struct WebviewManagerTests {
     }
 
     @Test func navigatingThePageAwayHidesIt() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
@@ -326,7 +326,7 @@ struct WebviewManagerTests {
     }
 
     @Test func loadingAnotherPageHidesIt() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>one</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
@@ -339,7 +339,7 @@ struct WebviewManagerTests {
     }
 
     @Test func closingThePageFailsItsScriptsAndDeclinesTheOriginUntilTheAppReturns() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
@@ -373,7 +373,7 @@ struct WebviewManagerTests {
     }
 
     @Test func theAccessibilityEscapeClosesThePageLikeClose() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
@@ -397,7 +397,7 @@ struct WebviewManagerTests {
     }
 
     @Test func aPostWithNoWaitingScriptIsRefused() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let decisions = showPageDecisions(on: manager)
@@ -407,7 +407,7 @@ struct WebviewManagerTests {
     }
 
     @Test func aPostFromASubframeIsRefusedWhileAScriptWaits() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
@@ -423,7 +423,7 @@ struct WebviewManagerTests {
     }
 
     @Test func aPageIsNotShownWhileTheAppIsNotInteractive() async throws {
-        let manager = WebviewManager(isInteractive: { false })
+        let manager = WebviewManager(isInteractive: { false }, websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let pending = await startNeverSettlingScript(on: manager)
@@ -439,7 +439,7 @@ struct WebviewManagerTests {
     }
 
     @Test func aShowPagePostNotAwaitedByItsScriptLeavesNoPageBehind() async throws {
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         _ = try await manager.loadUrl(request: WebviewRequest(url: "data:text/html,<p>x</p>", script: nil))
         let decisions = showPageDecisions(on: manager)
@@ -453,7 +453,7 @@ struct WebviewManagerTests {
 
     @Test func failedPresentedPageScopeStaysDetachedAfterItsScriptCompletes() async throws {
         enum FixtureFailure: Error { case expected }
-        let manager = WebviewManager()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
         defer { dispose(manager) }
         var pending: Task<String, Error>?
         do {

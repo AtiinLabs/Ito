@@ -93,7 +93,7 @@ final class NovelReaderViewModel: ObservableObject {
         offline: ReaderOfflineContext
     ) {
         self.chapterLoader = chapterLoader
-        imageSession = dependencies.makeImageSession()
+        imageSession = dependencies.makeImageSession(pluginID)
         self.pluginID = pluginID
         self.entry = entry
         self.offline = offline

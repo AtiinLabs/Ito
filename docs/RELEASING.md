@@ -239,9 +239,26 @@ Speculative reader work (image preload, adjacent manga chapters and novel prefet
 
 Backups written by this build carry the new `Ito.NetworkDownloadMode` and `Ito.AdjacentChapterPrefetchCount` keys. Older app versions require an exact scalar-key catalog and reject backups containing these new keys; restore them only on a current build.
 
+Source transport enforcement (see `docs/NETWORK_TRANSPORT_ENFORCEMENT.md`) changes two things users notice once after upgrading. Source covers and images cached by earlier builds are not reused: they download again the first time they are shown, under the network policy. Source website data now lives in nonpersistent per-source stores, so earlier Cloudflare clearance cookies are not used and a protected source shows its verification page again. Before shipping, observe a real WebKit challenge (including `about:blank` frames and a backgrounded challenge) and AVPlayer playback across Low Data Mode and cellular changes on a physical device.
+
 For custom download presets, verify native import rejects physical preset rows without a represented
 capability before loading their payloads, and invalid definitions cannot be exported. Editing or
 deleting a definition must not alter an open chooser or preview, even after a chapter catalog refresh:
 the chosen name, rule and batch provenance remain frozen. Without a last-read anchor, More starts
 at the first unread position and skips saved or queued chapters; it makes no reading-history claim.
 Unreadable preset recovery must show a failed Delete All operation and preserve the stored rows.
+
+## Downloaded-alternative checks
+
+Before releasing changes to the chapter menu's "Choose Downloaded Version…", verify that it opens exactly
+one saved copy the user selected, for this reading only. The list holds only verified copies of the same
+source-supplied logical unit under the same metadata origin; number, title and group never match, and an
+upload that is no longer in the catalog is still listed. Several choices start unselected and a single one
+still needs confirmation.
+
+Confirm that choosing, cancelling, a failed lookup and a failed lease write no progress, History,
+tracker, preference or queue state, and call no plugin. A deleted, replaced, retagged or damaged copy, a
+locked device and a rotated source epoch fail instead of opening another copy, and the opened chapter
+never reads from the source, including on retry. The reader opens only after the sheet has closed; a
+dismissal that is stale, cancelled or from another presentation opens nothing and leaves no lease.
+Ordinary local-first reading, Read Online This Time and the source fallback for a damaged copy are unchanged.

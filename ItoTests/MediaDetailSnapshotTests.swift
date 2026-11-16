@@ -73,7 +73,8 @@ final class MediaDetailSnapshotTests: XCTestCase {
                     entry: .manga(parent),
                     chapter: selected
                 )
-            }
+            },
+            makeDownloadedAlternativeDestination: { _, _, _ in throw UnexpectedDownloadedAlternativeOpening() }
         )
         var dependencies = PreparedMediaDetailDependencies(
             library: library,
@@ -84,7 +85,8 @@ final class MediaDetailSnapshotTests: XCTestCase {
             baseline: MediaDetailBaselineFake(),
             settings: MediaDetailSettingsFake(alwaysShowCategoryPicker: false, autoSyncTrackersToLocal: false),
             pluginMetadata: MediaDetailPluginMetadataFake(),
-            discord: MediaDetailDiscordFake()
+            discord: MediaDetailDiscordFake(),
+            downloads: UnavailableMediaDetailDownloads()
         )
         dependencies.connectivity = connectivity
         let viewModel = MediaDetailViewModel(

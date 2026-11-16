@@ -1336,6 +1336,9 @@
     "China" : {
       "comment" : "Country of origin"
     },
+    "Choose Downloaded Version…" : {
+      "comment" : "Chapter menu: list the saved uploads of this chapter's reading position and open one of them, for this reading only"
+    },
     "Choose List on Save" : {
 
     },
@@ -1841,6 +1844,9 @@
     "Downloaded Chapters" : {
       "comment" : "Storage settings: offline chapters disk usage"
     },
+    "Downloaded Versions" : {
+      "comment" : "Title of the sheet that lists the saved copies of a chapter's reading position"
+    },
     "Downloading" : {
       "comment" : "Chapter download status"
     },
@@ -2198,7 +2204,7 @@
 
     },
     "Group ID %@" : {
-      "comment" : "Accessibility label for the untranslated source-provided group ID."
+      "comment" : "Accessibility label for the untranslated source-provided group ID.\nDownloaded versions sheet: the source's identifier of a translation group. The placeholder is that identifier, shown as the source wrote it."
     },
     "HTTPS to HTTP redirect downgrades are prohibited." : {
 
@@ -2546,6 +2552,9 @@
     "Logout failed. Please try again." : {
 
     },
+    "Looking for saved copies…" : {
+      "comment" : "Downloaded versions sheet: reading the list of saved copies"
+    },
     "Low Match" : {
 
     },
@@ -2695,6 +2704,9 @@
     "Network" : {
 
     },
+    "Network settings changed. Try again." : {
+      "comment" : "A request was stopped because its captured network policy is no longer current."
+    },
     "New List" : {
 
     },
@@ -2818,7 +2830,10 @@
       "comment" : "Downloaded series is empty after deletion\nDownloads manager empty inventory"
     },
     "No group listed" : {
-      "comment" : "Scanlator choice: the chapters whose source names no scanlator."
+      "comment" : "Downloaded versions sheet: the source named no translation group for this upload\nScanlator choice: the chapters whose source names no scanlator."
+    },
+    "No internet connection. Try again when connected." : {
+      "comment" : "A request was not sent because the device is offline."
     },
     "No items in %@." : {
 
@@ -2843,6 +2858,9 @@
     },
     "No options found." : {
 
+    },
+    "No other saved copy of this chapter is on this device." : {
+      "comment" : "Downloaded versions sheet: no saved upload shares this chapter's reading position"
     },
     "No other uploads found." : {
       "comment" : "Scanlator sheet: the source's full list holds nothing the chapter list does not already show."
@@ -3002,8 +3020,17 @@
     "Open Settings" : {
 
     },
+    "Open this source to continue in the foreground." : {
+      "comment" : "A source needs user interaction that background work cannot perform."
+    },
+    "Open This Saved Copy" : {
+      "comment" : "Button in the downloaded versions sheet: reads the selected saved copy, for this reading only"
+    },
     "Open This Upload" : {
       "comment" : "Reader consent alert button: opens the one upload from another translation group, for this reading only"
+    },
+    "Opening the saved copy…" : {
+      "comment" : "Downloaded versions sheet: the chosen saved copy is being opened"
     },
     "Opens the series" : {
       "comment" : "History: accessibility hint of a series row"
@@ -3080,6 +3107,9 @@
     },
     "Planning" : {
 
+    },
+    "Playback stopped because the source or network settings changed. Try again." : {
+      "comment" : "Video player error when settings changed while an episode was loading or playing."
     },
     "Please drop a valid .ito plugin file." : {
 
@@ -3556,6 +3586,15 @@
     "Saved Source • %@ • Confirmed" : {
 
     },
+    "Saved as images" : {
+      "comment" : "Downloaded versions sheet: this copy is saved as page images"
+    },
+    "Saved as images and text" : {
+      "comment" : "Downloaded versions sheet: this copy is saved with both page images and text"
+    },
+    "Saved as text" : {
+      "comment" : "Downloaded versions sheet: this copy is saved as text"
+    },
     "Saved and queued chapters count toward the number, like Next 5 Chapters." : {
       "comment" : "Download preset editor footer: a Next preset counts chapters already saved or queued."
     },
@@ -3581,6 +3620,9 @@
           }
         }
       }
+    },
+    "Saved copies aren't available on this device." : {
+      "comment" : "Downloaded versions sheet: offline storage is not available"
     },
     "Saved copy: %@, group %@, revision %@.\nNew copy: %@, group %@, revision %@.\nThe saved copy stays available until the new copy is verified. If a revision is unknown, this is a manual refresh, not evidence of newer content. Downloads wait on metered networks and in Low Data Mode." : {
       "comment" : "Manual replacement confirmation when downloads wait for an unmetered network. The chapter titles, group names and revisions are untranslated source data; each one is shown as its own value.",
@@ -4316,6 +4358,12 @@
     "The repository package identifier is invalid." : {
 
     },
+    "The saved copies couldn't be read. Close this and try again." : {
+      "comment" : "Downloaded versions sheet: reading the list of saved copies failed"
+    },
+    "The saved copies of this chapter changed. Close this and choose again." : {
+      "comment" : "Downloaded versions sheet: the listed copy is no longer the one that is stored"
+    },
     "The saved item and extension types do not match." : {
 
     },
@@ -4393,6 +4441,9 @@
     },
     "The source was saved, but could not be opened. Try Open again." : {
 
+    },
+    "The source's sign-in or settings changed. Review them and try again." : {
+      "comment" : "The request belongs to a source authorization scope that is no longer current."
     },
     "The source's current list has no chapters from it. Choose another group to continue." : {
       "comment" : "Series details: detail when the preferred group is absent from the current chapter list; the user may change the group in the scanlator choice."
@@ -4484,6 +4535,9 @@
     "This item may have been imported with an incompatible content key. Search this source to link it to the correct entry." : {
 
     },
+    "This kind of series has no saved chapters to choose from." : {
+      "comment" : "Downloaded versions sheet: the series cannot have saved chapter copies"
+    },
     "This page has no valid image address" : {
 
     },
@@ -4514,6 +4568,21 @@
     "This repository is already in your list." : {
 
     },
+    "This request is blocked by your network settings." : {
+      "comment" : "An explicit user network restriction blocks the request."
+    },
+    "This request is paused while Low Data Mode is enabled." : {
+      "comment" : "Network policy refuses a request on a constrained connection."
+    },
+    "This request is waiting for an unmetered network." : {
+      "comment" : "Network policy refuses a request on a metered connection."
+    },
+    "This saved copy is damaged and can't be read." : {
+      "comment" : "Reader failure after integrity verification fails for a specifically chosen downloaded alternative."
+    },
+    "This saved copy is no longer available." : {
+      "comment" : "Reader failure after choosing a specific downloaded alternative that became unavailable."
+    },
     "This series is no longer available on MangaBaka. Stop tracking it and link it again." : {
 
     },
@@ -4543,6 +4612,9 @@
     },
     "This source's file is damaged or can't be run by this version of Ito." : {
       "comment" : "Error shown on a source's screen when its installed file is damaged, or is built in a form this version of Ito can't run. The user cannot pick another file here, and the message names neither Ito nor the source as the side to update."
+    },
+    "This source's settings changed. Close this and choose again." : {
+      "comment" : "Downloaded versions sheet: the source's configuration changed after the list was read"
     },
     "This tracker does not support manual scoring." : {
 
@@ -4727,7 +4799,7 @@
       "comment" : "Download mode that avoids cellular and hotspots"
     },
     "Unnamed group" : {
-      "comment" : "Reader consent: shown in place of the group name when the source supplies none"
+      "comment" : "Downloaded versions sheet: the source gave this upload a group identifier but no name\nReader consent: shown in place of the group name when the source supplies none"
     },
     "Unread/Unwatched" : {
 
@@ -4773,6 +4845,9 @@
     },
     "Updating queued progress…" : {
 
+    },
+    "Upload %@" : {
+      "comment" : "Downloaded versions sheet: the source's exact key for one upload. The placeholder is that key, shown as the source wrote it."
     },
     "Use %lld selected alternatives this time" : {
       "comment" : "Confirm exact alternatives ticked in the preview for this batch only; does not remember fallback permission. The placeholder is the number ticked and needs plural forms.",
@@ -4874,6 +4949,9 @@
     },
     "Waiting for a connection" : {
       "comment" : "Chapter download status\nEffective network policy refusal"
+    },
+    "Waiting for a network connection." : {
+      "comment" : "A request is waiting until the network path is known."
     },
     "Waiting for a network reading" : {
       "comment" : "No path observation yet"
@@ -4988,6 +5066,9 @@
     "You stopped this episode at %@." : {
 
     },
+    "You're offline. Connect to the internet to play this episode." : {
+      "comment" : "Video player error when playback needs a network connection that is not available."
+    },
     "Your Library is Empty" : {
 
     },
@@ -5014,6 +5095,9 @@
     },
     "Your list order couldn't be saved. Please try again." : {
 
+    },
+    "Your network settings don't allow this episode to play right now." : {
+      "comment" : "Video player error when the network policy refuses to start or continue playback."
     },
     "Your restored data is saved. Refresh must finish before a report can be shown." : {
 

@@ -156,7 +156,8 @@ struct PreparedApplicationDependencies {
                 clipboardWriter: SystemClipboardWriter(),
                 siteDataClearer: SystemSiteDataClearer(
                     pluginCookies: pluginManager.pluginSettingsStore.cookies,
-                    pluginTokens: pluginManager.pluginSettingsStore.tokens
+                    pluginTokens: pluginManager.pluginSettingsStore.tokens,
+                    websites: pluginManager.websiteContexts
                 )
             ),
             tracking: tracking,
@@ -170,7 +171,8 @@ struct PreparedApplicationDependencies {
                 settingsStore: settingsStore,
                 pluginManager: pluginManager,
                 discordRPCManager: discordRPCManager,
-                downloads: downloads?.center,
+                downloads: downloads.map { $0.center as any MediaDetailDownloadServing }
+                    ?? UnavailableMediaDetailDownloads(),
                 downloadPresets: downloads?.presets,
                 connectivity: connectivity ?? UnavailableConnectivity(),
                 historyManager: historyManager

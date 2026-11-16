@@ -30,6 +30,7 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
     /// The source's trust generation when this attempt started.
     private let trustGeneration: UUID?
     private let transfers = TrustBoundTransfers()
+    private let contexts: PluginNetworkContexts?
 
     /// `cookies` returns the plugin's stored cookies for a URL. `configuration` and
     /// `maximumResponseBytes` exist so tests can install a protocol stub and a small limit.
@@ -38,7 +39,8 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
         configuration: URLSessionConfiguration = .ephemeral,
         maximumResponseBytes: Int = PluginCompletionNetModule.defaultMaximumResponseBytes,
         cookies: @escaping @Sendable (URL) -> [HTTPCookie] = { _ in [] },
-        trust: (pluginID: String, store: PluginTrustStore)? = nil
+        trust: (pluginID: String, store: PluginTrustStore)? = nil,
+        contexts: PluginNetworkContexts? = nil
     ) {
         let hardened = (configuration.copy() as? URLSessionConfiguration) ?? .ephemeral
         hardened.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
@@ -55,6 +57,7 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
         self.maximumResponseBytes = maximumResponseBytes
         self.cookies = cookies
         self.trust = trust
+        self.contexts = contexts
         if let trust {
             // A connection authenticated under the old trust must not carry another byte. The
             // session itself is only invalidated by `invalidate()`, never while a request may be
@@ -88,8 +91,10 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
         session.invalidateAndCancel()
     }
 
-    // The host context is accepted for the runner's contract; trust and invalidation are unchanged.
+    // A policy refusal before the request is unsent; a response from an admitted mutation remains authoritative.
     func fetch(request: NetRequest, context: NetworkOperationContext) async throws -> NetResponse {
+        try Task.checkCancellation()
+        if let contexts { try NetworkRequestAuthority(contexts: contexts, context: context).check() }
         guard isTrustCurrent else { throw PluginCompletionExecutionFailure.configurationChanged }
         let urlRequest = try Self.makeRequest(from: request, cookies: cookies)
         let refusal = RedirectRefusal(pluginID: trust?.pluginID, trustStore: trust?.store, recordsPending: false)
@@ -116,6 +121,7 @@ nonisolated final class PluginCompletionNetModule: NetModule, Sendable {
             if Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled {
                 throw CancellationError()
             }
+            if (error as? URLError)?.code == .timedOut { throw ItoError.hostCallTimedOut(.net) }
             throw error
         }
     }

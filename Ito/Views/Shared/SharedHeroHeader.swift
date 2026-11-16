@@ -4,6 +4,13 @@ import NukeUI
 import Combine
 
 public struct SharedHeroHeader: View {
+    @Environment(\.sourceCoverRequests) private var coverRequests
+    private let imageSourceID: String?
+
+    private func imageRequest(_ url: URL) -> ImageRequest? {
+        guard let imageSourceID else { return ImageRequest(url: url) }
+        return coverRequests.request(url, pluginID: imageSourceID)
+    }
     public let title: String
     public let backdropURL: String?
     public let coverURL: String?
@@ -13,8 +20,9 @@ public struct SharedHeroHeader: View {
     public let sourceLabel: String
     public var onImageLoaded: ((UIImage) -> Void)?
 
-    public init(title: String, backdropURL: String? = nil, coverURL: String?, authorOrStudio: String?, statusLabel: String?, sourceLabel: String, onImageLoaded: ((UIImage) -> Void)? = nil) {
+    public init(title: String, backdropURL: String? = nil, coverURL: String?, authorOrStudio: String?, statusLabel: String?, sourceLabel: String, sourcePluginID: String? = nil, onImageLoaded: ((UIImage) -> Void)? = nil) {
         self.title = title
+        self.imageSourceID = sourcePluginID
         self.backdropURL = backdropURL
         self.coverURL = coverURL
         self.authorOrStudio = authorOrStudio
@@ -57,7 +65,7 @@ public struct SharedHeroHeader: View {
     private var coverBackground: some View {
         let backgroundURL = backdropURL ?? coverURL
         if let bgURL = backgroundURL, let url = URL(string: bgURL) {
-            LazyImage(url: url) { state in
+            LazyImage(request: imageRequest(url)) { state in
                 if let image = state.image {
                     Color.clear
                         .overlay(image.resizable().scaledToFill())
@@ -84,7 +92,7 @@ public struct SharedHeroHeader: View {
     private var sharpCoverView: some View {
         Group {
             if let coverURL = coverURL, let url = URL(string: coverURL) {
-                LazyImage(url: url) { state in
+                LazyImage(request: imageRequest(url)) { state in
                     if let image = state.image {
                         Color.clear
                             .overlay(image.resizable().scaledToFill())

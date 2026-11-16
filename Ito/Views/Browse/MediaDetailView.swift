@@ -16,8 +16,11 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     private let trackingViewFactory: TrackingViewFactory
     private let readerViewFactory: MediaDetailReaderViewFactory
     private let categoryHistoryViewFactory: CategoryHistoryViewFactory
+    @Environment(\.sourceCoverRequests) private var coverRequests
 
     @State private var showNavTitle = false
+    /// The saved-copy presentation the download sheet actually displayed, so its dismissal reports that one.
+    @State private var displayedAlternativeID: UUID?
     @State private var replacementPreview: DownloadReplacementPreview?
     @Environment(\.scenePhase) private var scenePhase
 
@@ -35,6 +38,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
 
     var body: some View {
         lifecycleContent
+            .environment(\.imageSourceID, viewModel.pluginID)
     }
 
     private var lifecycleContent: some View {
@@ -59,7 +63,10 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 }
             }
             .onChange(of: scenePhase) { phase in
-                if phase != .active { viewModel.cancelGroupSwitch() }
+                if phase != .active {
+                    viewModel.cancelGroupSwitch()
+                    viewModel.cancelDownloadedAlternatives()
+                }
             }
     }
 
@@ -77,10 +84,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             .sheet(item: relinkPresentationBinding) { _ in
                 relinkSearchSheet
             }
-            .sheet(item: downloadSheetBinding, onDismiss: {
-                // Reports the end of the dismissal, so a metered prompt held behind this sheet can be shown.
-                viewModel.downloadBatch.downloadSheetDidDismiss()
-            }) { sheet in
+            .sheet(item: downloadSheetBinding, onDismiss: downloadSheetDidDismiss) { sheet in
                 downloadSheetContent(sheet)
                     // Only a sheet that was shown reports its dismissal; the model waits for that and no other.
                     .onAppear { viewModel.downloadBatch.downloadSheetDidAppear() }
@@ -179,6 +183,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 ?? viewModel.media.authors?.joined(separator: ", "),
             statusLabel: viewModel.media.displayStatus,
             sourceLabel: viewModel.sourceName,
+            sourcePluginID: viewModel.pluginID,
             onImageLoaded: viewModel.heroImageLoaded
         )
         .background(
@@ -231,9 +236,19 @@ struct MediaDetailView<M: MediaDisplayable>: View {
 
     private var downloadSheetBinding: Binding<DownloadSheet?> {
         Binding(
-            get: { viewModel.downloadBatch.sheet },
-            set: { if $0 == nil { viewModel.downloadBatch.dismissDownloadSheet() } }
+            get: { viewModel.downloadSheet },
+            set: { if $0 == nil { viewModel.dismissDownloadSheet() } }
         )
+    }
+
+    /// The download sheet has finished closing. A saved-copy hand-off opens its reader now, never in the same
+    /// callback that closed the sheet; the presentation reported is the one the sheet displayed.
+    private func downloadSheetDidDismiss() {
+        // Reports the end of the dismissal, so a metered prompt held behind this sheet can be shown.
+        viewModel.downloadBatch.downloadSheetDidDismiss()
+        guard let id = displayedAlternativeID else { return }
+        displayedAlternativeID = nil
+        viewModel.downloadedAlternativeSheetDidDismiss(presentationID: id)
     }
 
     /// The one download sheet: the scanlator chooser, then the preview, in the same presentation.
@@ -276,6 +291,26 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 onCancel: viewModel.downloadBatch.dismissDownloadSheet,
                 onEditFallback: { viewModel.downloadBatch.editFallbackOrder(previewID: preview.id) }
             )
+        case .downloadedAlternatives(let id):
+            downloadedAlternativeContent(id: id)
+        }
+    }
+
+    /// The saved-copy chooser, only while the model's state is the presentation this sheet was asked for. A
+    /// marker without its state belongs to a sheet that is closing and shows nothing.
+    @ViewBuilder
+    private func downloadedAlternativeContent(id: UUID) -> some View {
+        if viewModel.downloadedAlternativeState.context?.id == id {
+            DownloadedAlternativeSheet(
+                state: viewModel.downloadedAlternativeState,
+                onSelect: { viewModel.selectDownloadedAlternative($0, presentationID: $1) },
+                onConfirm: { viewModel.confirmDownloadedAlternative(presentationID: $0) },
+                onCancel: viewModel.cancelDownloadedAlternatives
+            )
+            .onAppear { displayedAlternativeID = id }
+            .onChange(of: id) { displayedAlternativeID = $0 }
+        } else {
+            Color.clear
         }
     }
 
@@ -500,9 +535,9 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                     DownloadPresetMenu(
                         isEnabled: !viewModel.downloadBatch.isEnqueuing,
                         customPresets: viewModel.downloadBatch.customPresets,
-                        onSelect: { viewModel.downloadBatch.startDownload($0) },
-                        onDownloadMore: { viewModel.downloadBatch.presentDownloadMore() },
-                        onChooseScanlators: { viewModel.downloadBatch.openEditionChooser() }
+                        onSelect: { viewModel.startDownload($0) },
+                        onDownloadMore: { viewModel.presentDownloadMore() },
+                        onChooseScanlators: { viewModel.openEditionChooser() }
                     )
                     .padding(.trailing, 8)
                 }
@@ -738,7 +773,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             } label: {
                 HStack(spacing: 12) {
                     // The app's image pipeline, so plugin (`ito://`) covers load too.
-                    LazyImage(url: URL(string: result.cover ?? "")) { state in
+                    LazyImage(request: coverRequests.request(URL(string: result.cover ?? ""), pluginID: viewModel.pluginID)) { state in
                         if let image = state.image {
                             image.resizable().scaledToFill()
                         } else {

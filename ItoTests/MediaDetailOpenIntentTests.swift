@@ -284,7 +284,8 @@ final class MediaDetailOpenIntentTests: XCTestCase {
                 searchForRelink: { _, _ in [] },
                 makeReaderDestination: { parent, selected in
                     .pages(id: UUID(), content: ReaderContentSource(remote: runner), pluginID: "plugin.test", entry: .manga(parent), chapter: selected)
-                }
+                },
+                makeDownloadedAlternativeDestination: { _, _, _ in throw UnexpectedDownloadedAlternativeOpening() }
             ),
             dependencies: PreparedMediaDetailDependencies(
                 library: MediaDetailLibraryFake(),
@@ -295,7 +296,8 @@ final class MediaDetailOpenIntentTests: XCTestCase {
                 baseline: MediaDetailBaselineFake(),
                 settings: MediaDetailSettingsFake(),
                 pluginMetadata: MediaDetailPluginMetadataFake(),
-                discord: MediaDetailDiscordFake()
+                discord: MediaDetailDiscordFake(),
+                downloads: UnavailableMediaDetailDownloads()
             ),
             messagePresenter: messages,
             presentationLogger: PresentationEventCaptureSpy(),

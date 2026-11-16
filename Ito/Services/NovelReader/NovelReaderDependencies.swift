@@ -245,7 +245,7 @@ struct PreparedNovelReaderDependencies {
     let pluginMetadata: any NovelReaderPluginMetadataProviding
     let presentationLogger: any PresentationEventLogging
     /// The reader's page-image session. Production passes one that can show offline pages.
-    let makeImageSession: () -> ReaderPageImageSession
+    let makeImageSession: (String) -> ReaderPageImageSession
 
     static func production(
         readProgressManager: ReadProgressManager,
@@ -265,7 +265,13 @@ struct PreparedNovelReaderDependencies {
             presence: discordRPCManager,
             pluginMetadata: pluginManager,
             presentationLogger: presentationLogger,
-            makeImageSession: { ReaderPageImageSession(offlinePipeline: offlinePipeline) }
+            makeImageSession: { pluginID in
+                ReaderPageImageSession.sourceBound(
+                    pluginID: pluginID,
+                    contexts: pluginManager.pluginSettingsStore.networkContexts,
+                    offlinePipeline: offlinePipeline
+                )
+            }
         )
     }
 
@@ -279,7 +285,7 @@ struct PreparedNovelReaderDependencies {
             presence: unavailable,
             pluginMetadata: unavailable,
             presentationLogger: OSLogPresentationEventLogger(),
-            makeImageSession: { ReaderPageImageSession() }
+            makeImageSession: { _ in ReaderPageImageSession() }
         )
     }
 }

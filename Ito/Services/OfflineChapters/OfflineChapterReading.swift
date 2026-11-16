@@ -8,6 +8,10 @@ nonisolated enum OfflineReadError: Error, Equatable, LocalizedError, Sendable {
     case notDownloaded
     /// The copy exists but the device's data is locked, so its bytes cannot be read yet.
     case protectedDataUnavailable
+    /// The selected saved copy could not be opened or verified; this consent never permits source fallback.
+    case localCopyUnavailable
+    /// The selected saved copy failed integrity verification; this consent never permits source fallback.
+    case localCopyDamaged
 
     var errorDescription: String? {
         switch self {
@@ -21,7 +25,39 @@ nonisolated enum OfflineReadError: Error, Equatable, LocalizedError, Sendable {
                 localized: "Unlock your device to read this chapter.",
                 comment: "Reader failure: the offline copy is stored under data protection and the device is locked."
             )
+        case .localCopyUnavailable:
+            String(
+                localized: "This saved copy is no longer available.",
+                comment: "Reader failure after choosing a specific downloaded alternative that became unavailable."
+            )
+        case .localCopyDamaged:
+            String(
+                localized: "This saved copy is damaged and can't be read.",
+                comment: "Reader failure after integrity verification fails for a specifically chosen downloaded alternative."
+            )
         }
+    }
+}
+
+nonisolated extension OfflineReadError {
+    /// What reading one explicitly selected saved copy reports for a failure. Cancellation stays
+    /// cancellation and an already typed selection error is kept. A failed copy never becomes
+    /// `notDownloaded`, since that reads as permission to ask a source.
+    static func selectedCopy(from error: Error) -> Error {
+        if error is CancellationError { return error }
+        if error is DownloadedAlternativeError { return error }
+        if let readError = error as? OfflineReadError { return readError }
+        if let storeError = error as? OfflineStoreError {
+            switch storeError {
+            case .protectedDataUnavailable: return OfflineReadError.protectedDataUnavailable
+            case .damaged: return OfflineReadError.localCopyDamaged
+            default: return OfflineReadError.localCopyUnavailable
+            }
+        }
+        if let fileError = error as? OfflineFileSystemError, fileError == .permissionDenied {
+            return OfflineReadError.protectedDataUnavailable
+        }
+        return OfflineReadError.localCopyUnavailable
     }
 }
 

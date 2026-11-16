@@ -1,32 +1,141 @@
-import OSLog
+import Combine
 import Foundation
 import UIKit
 import WebKit
 import ito_runner
 
-actor AppWebviewModule: WebviewModule {
-    // The host context is accepted for the runner's contract and is not read yet.
+/// The web view a plugin drives. With a live network policy every runner operation owns its own page, so
+/// cancelling or replacing one operation's load never settles another's. Each page is bound to its source's
+/// website data for the current authorization scope, never to a host shared across sources. Without a policy
+/// (tests, previews) one unbound page serves every call.
+@MainActor final class AppWebviewModule: WebviewModule {
+    private let contexts: PluginNetworkContexts?
+    private let websites: SourceWebsiteContexts
+    private var pages: [(operationID: UUID, page: WebviewManager)] = []
+    private var unboundPage: WebviewManager?
+#if DEBUG
+    var retainedPageCount: Int { pages.count }
+#endif
+
+    init(contexts: PluginNetworkContexts? = nil, websites: SourceWebsiteContexts) {
+        self.contexts = contexts
+        self.websites = websites
+    }
+
+    private func page(for context: NetworkOperationContext) throws -> WebviewManager {
+        guard let contexts else {
+            if let unboundPage { return unboundPage }
+            let created = WebviewManager(websites: websites)
+            unboundPage = created
+            return created
+        }
+        let authority = NetworkRequestAuthority(contexts: contexts, context: context)
+        try Task.checkCancellation()
+        // A background or bulk operation never gets a page: it is told it needs the user, and no view is built.
+        try authority.checkInteractive()
+        var live: [(operationID: UUID, page: WebviewManager)] = []
+        for entry in pages {
+            if !entry.page.isRetired { live.append(entry) }
+        }
+        pages = live
+        if let index = pages.firstIndex(where: { $0.operationID == context.operationID }) {
+            let entry = pages.remove(at: index)
+            pages.append(entry)
+            try entry.page.validate(authority)
+            return entry.page
+        }
+        let created = WebviewManager(authority: authority, websites: websites)
+        pages.append((context.operationID, created))
+        return created
+    }
+
+    /// Idle pages are bounded, least recently used first. Several operations of one plugin may interleave their
+    /// calls, and a page dropped between calls loses the document its operation loaded, so the bound is not one.
+    private static let maximumIdlePages = 3
+
+    private func evictIdlePages() {
+        var keptIdle = 0
+        pages = pages.reversed().filter { entry in
+            guard entry.page.isIdle else { return true }
+            if keptIdle < Self.maximumIdlePages { keptIdle += 1; return true }
+            entry.page.retire(with: CancellationError())
+            return false
+        }.reversed()
+    }
+
     func loadUrl(request: WebviewRequest, context: NetworkOperationContext) async throws -> WebviewResponse {
-        AppLogger.network.debug("AppWebviewModule: loadUrl called for \(request.url)")
-        return try await WebviewManager.shared.loadUrl(request: request)
+        defer { evictIdlePages() }
+        return try await page(for: context).loadUrl(request: request)
     }
 
     func executeJs(script: String, context: NetworkOperationContext) async throws -> String {
-        AppLogger.network.debug("AppWebviewModule: executeJs called")
-        return try await WebviewManager.shared.executeJs(script: script)
+        defer { evictIdlePages() }
+        return try await page(for: context).executeJs(script: script)
     }
+
+    // A runner may drop its module from a background executor; release its WebKit pages on MainActor too.
+    isolated deinit {}
 }
 
 @MainActor
 class WebviewManager: NSObject, WKNavigationDelegate {
-    static let shared = WebviewManager()
     /// The error a script ends with when the user closes the page (see `closeByUser`).
     static let closedByUser: Error = ItoError.hostModuleError(domain: "webview", message: "Verification was closed.")
 
     /// How long a page may take to load before the plugin gets a timeout.
     private let pageLoadDeadline: TimeInterval
+    /// How long a plain script may take to answer: the page deadline unless a test shortens it.
+    private let plainScriptDeadline: TimeInterval
     /// Whether the user can see the app, so a page may be shown to them. Injected so tests can refuse.
     private let isInteractive: @MainActor () -> Bool
+    /// The authority of the operation that owns this page; nil for the unbound page.
+    private let authority: NetworkRequestAuthority?
+    private let websites: SourceWebsiteContexts
+    private var policyObservation: AnyCancellable?
+    var isIdle: Bool { pendingLoad == nil && pendingScripts.isEmpty }
+    private var retirement: UUID?
+    private(set) var isRetired = false
+
+    /// Whether `incoming` is the operation that owns this page, and is still admitted.
+    func validate(_ incoming: NetworkRequestAuthority) throws {
+        guard !isRetired, let authority,
+              authority.context.authorizationScope == incoming.context.authorizationScope,
+              authority.context.sourceID == incoming.context.sourceID,
+              authority.context.operationID == incoming.context.operationID else {
+            throw HostNetworkPolicyOutcome.sourceAuthorizationFailure
+        }
+        try checkAdmission()
+    }
+
+    private func checkAdmission() throws {
+        guard !isRetired else { throw HostNetworkPolicyOutcome.sourceAuthorizationFailure }
+        guard !websites.isClearing else { throw CancellationError() }
+        try authority?.checkInteractive()
+    }
+
+    private var isAdmitted: Bool {
+        do { try checkAdmission(); return true } catch { return false }
+    }
+
+    /// Ends this page: its pending load and scripts settle with `error` once, and the web view goes away. Only
+    /// this page's waiters are affected.
+    func retire(with error: Error) {
+        guard !isRetired else { return }
+        isRetired = true
+        policyObservation?.cancel()
+        policyObservation = nil
+        if let retirement { websites.removeObserver(retirement) }
+        retirement = nil
+        finishLoad(with: .failure(error))
+        invalidatePendingScripts(with: error)
+        presentation?.end()
+        presentation = nil
+        webView?.stopLoading()
+        webView?.navigationDelegate = nil
+        webView?.removeFromSuperview()
+        webView = nil
+    }
+
     /// The origins the user closed a page for. A closed origin isn't shown again until the app becomes active.
     private var declinedOrigins: Set<String> = []
     private(set) var webView: WKWebView?
@@ -41,31 +150,113 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     private var pendingLoad: PendingLoad?
     /// The first line that makes a script an async function body (see `executeJs`).
     private static let asyncScriptMarker = "//# ito-async\n"
-    /// The async scripts still waiting on the page, by ID. Each is resumed exactly once: by its
-    /// completion, by its cancellation, or by a navigation that replaces the page.
-    private var pendingScripts: [UUID: CheckedContinuation<String, Error>] = [:]
-    /// The page shown to the user while a script waits on it. It exists only while `pendingScripts` isn't empty.
+
+    /// How a script runs on the page, which decides whether it may put the page in front of the user.
+    enum ScriptKind: Equatable {
+        /// A script evaluated in its own turn. It is tracked and settled like any native work, but it
+        /// never authorizes a page presentation.
+        case plain
+        /// An async function body the plugin waits on. Only this kind authorizes `itoShowPage`.
+        case waitingAsync
+    }
+
+    /// Sends a script to the web view; `completion` reports its result once, on the main actor. The default
+    /// is WebKit itself. Tests hold the callback to order it against cancellation, deadlines and retirement.
+    typealias ScriptEvaluator = @MainActor (
+        _ webView: WKWebView,
+        _ script: String,
+        _ kind: ScriptKind,
+        _ completion: @escaping @MainActor (Any?, Error?) -> Void
+    ) -> Void
+
+    private let evaluator: ScriptEvaluator
+
+    private static let webKitEvaluator: ScriptEvaluator = { webView, script, kind, completion in
+        switch kind {
+        case .plain:
+            webView.evaluateJavaScript(script) { result, error in completion(result, error) }
+        case .waitingAsync:
+            // WebKit's Objective-C entry point, not the Swift overlay: it needs no
+            // libswiftWebKit symbol on older systems, reports `undefined` as nil rather than
+            // unwrapping it, and completes on the main actor, so the script ends in this turn.
+            webView.__callAsyncJavaScript(script, arguments: [:], inFrame: nil, in: .page) { value, error in
+                completion(value, error)
+            }
+        }
+    }
+
+    /// A script still waiting on the page. It is resumed exactly once: by its completion, its
+    /// cancellation, its deadline, or a lifecycle change that ends the page or replaces its document.
+    private struct PendingScript {
+        let continuation: CheckedContinuation<String, Error>
+        let kind: ScriptKind
+        /// Fails a plain script whose native work never answers. A waiting script has none: the user may take
+        /// as long as a verification needs, and the runner's own watchdog bounds the plugin call.
+        let deadline: Task<Void, Never>?
+    }
+    /// The scripts still waiting on the page, by ID, plain and async.
+    private var pendingScripts: [UUID: PendingScript] = [:]
+    /// Whether a script the plugin waits on is pending: the only state in which a page may be shown.
+    private var hasWaitingScript: Bool { pendingScripts.values.contains { $0.kind == .waitingAsync } }
+    /// The page shown to the user while a script waits on it. It exists only while `hasWaitingScript`.
     private var presentation: PagePresentation?
 #if DEBUG
     /// Test hook: called right after an async script is sent to the page.
     var onAsyncScriptSent: (() -> Void)?
     /// Test hook: called with the reply to each `itoShowPage` message.
     var onShowPageDecision: ((Bool) -> Void)?
+    var onPolicyEvaluation: (() -> Void)?
 #endif
 
-    init(pageLoadDeadline: TimeInterval = 45, isInteractive: @escaping @MainActor () -> Bool = { PagePresentation.foregroundScene != nil }) {
+    init(
+        pageLoadDeadline: TimeInterval = 45,
+        isInteractive: @escaping @MainActor () -> Bool = { PagePresentation.foregroundScene != nil },
+        authority: NetworkRequestAuthority? = nil,
+        websites: SourceWebsiteContexts,
+        scriptEvaluator: ScriptEvaluator? = nil,
+        plainScriptDeadline: TimeInterval? = nil
+    ) {
+        self.authority = authority
+        self.websites = websites
         self.pageLoadDeadline = pageLoadDeadline
+        self.plainScriptDeadline = plainScriptDeadline ?? pageLoadDeadline
         self.isInteractive = isInteractive
+        self.evaluator = scriptEvaluator ?? WebviewManager.webKitEvaluator
         super.init()
+        if let authority {
+            retirement = websites.observeRetirement { [weak self] in
+                self?.retire(with: CancellationError())
+            }
+            // A live change that no longer admits this operation ends only this page.
+            policyObservation = authority.changes.sink { @Sendable [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+#if DEBUG
+                    defer { self.onPolicyEvaluation?() }
+#endif
+                    do {
+                        try authority.checkLiveSurface()
+                    } catch {
+                        self.retire(with: error)
+                    }
+                }
+            }
+        }
         NotificationCenter.default.addObserver(
             self, selector: #selector(applicationDidBecomeActive),
             name: UIApplication.didBecomeActiveNotification, object: nil)
     }
 
-    private func setupWebView() {
+    isolated deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    private func setupWebView() throws {
         if webView == nil {
             let config = WKWebViewConfiguration()
-            config.websiteDataStore = WKWebsiteDataStore.default()
+            // A page owned by an operation uses its source's website data for the current scope; the unbound page
+            // keeps the app's default store.
+            config.websiteDataStore = try authority.map { try websites.store(for: $0.context) } ?? .default()
             let prefs = WKWebpagePreferences()
             prefs.allowsContentJavaScript = true
             config.defaultWebpagePreferences = prefs
@@ -92,14 +283,14 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     /// A newer load replaces this one (it fails with `URLError(.cancelled)`); cancelling the
     /// caller or passing the deadline stops the page and fails the load.
     func loadUrl(request: WebviewRequest) async throws -> WebviewResponse {
-        AppLogger.network.debug("WebviewManager: loadUrl requested")
         try Task.checkCancellation()
+        try checkAdmission()
         finishLoad(with: .failure(URLError(.cancelled)))
         invalidatePendingScripts(with: URLError(.cancelled))
         guard let url = URL(string: request.url) else {
             throw URLError(.badURL)
         }
-        setupWebView()
+        try setupWebView()
 
         let id = UUID()
         let deadlineNanoseconds = UInt64(pageLoadDeadline * 1_000_000_000)
@@ -107,7 +298,7 @@ class WebviewManager: NSObject, WKNavigationDelegate {
             try await withCheckedThrowingContinuation { continuation in
                 let deadline = Task { [weak self] in
                     guard (try? await Task.sleep(nanoseconds: deadlineNanoseconds)) != nil else { return }
-                    self?.finishLoad(id, with: .failure(URLError(.timedOut)))
+                    self?.finishLoad(id, with: .failure(ItoError.hostCallTimedOut(.webview)))
                 }
                 pendingLoad = PendingLoad(id: id, continuation: continuation, deadline: deadline)
                 pendingLoad?.navigation = webView?.load(URLRequest(url: url))
@@ -134,51 +325,28 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     /// Runs `script` in the page. A script that starts with the `//# ito-async` line is an async
     /// function body: it must `return` a value, and a Promise it returns is awaited. Any other
     /// script is evaluated with `evaluateJavaScript`. Either way the result is a string.
+    ///
+    /// Both kinds are registered before they are sent, so the completion, cancellation, deadline or
+    /// lifecycle change that ends one always finds it; whichever arrives first removes it, and every later
+    /// callback for it is ignored. Only an async script can authorize a page presentation (see `showPage`).
     func executeJs(script: String) async throws -> String {
-        AppLogger.network.debug("WebviewManager: executing js script of length \(script.count)")
-        if script.hasPrefix(WebviewManager.asyncScriptMarker) {
-            return try await executeAsyncJs(script: script)
-        }
-        return try await withCheckedThrowingContinuation { continuation in
-            guard let wv = webView else {
-                AppLogger.network.debug("WebviewManager: webView is nil")
-                continuation.resume(throwing: URLError(.badURL))
-                return
-            }
-            wv.evaluateJavaScript(script) { result, error in
-                if let error = error {
-                    AppLogger.network.error("WebviewManager: evaluateJavaScript error: \(error)")
-                    continuation.resume(throwing: error)
-                } else {
-                    // `undefined` arrives as nil and `null` as NSNull: both are an empty result.
-                    let resultStr = result.flatMap { $0 is NSNull ? nil : String(describing: $0) } ?? ""
-                    AppLogger.network.debug("WebviewManager: evaluateJavaScript success, result length: \(resultStr.count)")
-                    continuation.resume(returning: resultStr)
-                }
-            }
-        }
-    }
-
-    /// Runs an async script. Its continuation is registered before the script is sent, so the
-    /// completion or the cancellation that ends it always finds it; whichever arrives first removes it.
-    private func executeAsyncJs(script: String) async throws -> String {
+        try Task.checkCancellation()
+        try checkAdmission()
+        let kind: ScriptKind = script.hasPrefix(WebviewManager.asyncScriptMarker) ? .waitingAsync : .plain
         guard let wv = webView else {
-            AppLogger.network.debug("WebviewManager: webView is nil")
             throw URLError(.badURL)
         }
-        try Task.checkCancellation()
         let id = UUID()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
-                pendingScripts[id] = continuation
-                // WebKit's Objective-C entry point, not the Swift overlay: it needs no
-                // libswiftWebKit symbol on older systems, reports `undefined` as nil rather than
-                // unwrapping it, and completes on the main actor, so the script ends in this turn.
-                wv.__callAsyncJavaScript(script, arguments: [:], inFrame: nil, in: .page) { [weak self] value, error in
+                guard !Task.isCancelled else { continuation.resume(throwing: CancellationError()); return }
+                pendingScripts[id] = PendingScript(
+                    continuation: continuation, kind: kind, deadline: kind == .plain ? startScriptDeadline(for: id) : nil)
+                evaluator(wv, script, kind) { [weak self] value, error in
                     self?.finishScript(id, with: error.map { .failure($0) } ?? .success(WebviewManager.scriptResult(value)))
                 }
 #if DEBUG
-                onAsyncScriptSent?()
+                if kind == .waitingAsync { onAsyncScriptSent?() }
 #endif
             }
         } onCancel: {
@@ -186,28 +354,47 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         }
     }
 
-    /// Ends the async script `id` with `result`, if it is still waiting. A late completion for a
-    /// script that was cancelled or invalidated finds no entry and is ignored.
-    private func finishScript(_ id: UUID, with result: Result<String, Error>) {
-        guard let continuation = pendingScripts.removeValue(forKey: id) else { return }
-        endPresentationIfIdle()
-        continuation.resume(with: result)
-    }
-
-    /// Fails every async script still waiting on the page. Their late completions are then ignored.
-    private func invalidatePendingScripts(with error: Error) {
-        let scripts = pendingScripts.values
-        pendingScripts.removeAll()
-        endPresentationIfIdle()
-        for continuation in scripts {
-            continuation.resume(throwing: error)
+    /// The native work timeout of a plain script, the same typed timeout a page load gets.
+    private func startScriptDeadline(for id: UUID) -> Task<Void, Never> {
+        let nanoseconds = UInt64(plainScriptDeadline * 1_000_000_000)
+        return Task { [weak self] in
+            guard (try? await Task.sleep(nanoseconds: nanoseconds)) != nil else { return }
+            self?.finishScript(id, with: .failure(ItoError.hostCallTimedOut(.webview)))
         }
     }
 
-    /// Hides the page once no script waits on it. This runs before the waiting scripts resume, so the
+    /// Ends the script `id` with `result`, if it is still waiting. A late completion for a
+    /// script that was cancelled, timed out or invalidated finds no entry and is ignored. A result is
+    /// published only while the operation is still admitted.
+    private func finishScript(_ id: UUID, with resultFromCallback: Result<String, Error>) {
+        guard let script = pendingScripts.removeValue(forKey: id) else { return }
+        script.deadline?.cancel()
+        let result: Result<String, Error>
+        if case .success = resultFromCallback {
+            do { try authority?.checkLiveSurface(); result = resultFromCallback } catch { result = .failure(error) }
+        } else {
+            result = resultFromCallback
+        }
+        endPresentationIfIdle()
+        script.continuation.resume(with: result)
+    }
+
+    /// Fails the scripts still waiting on the page, or only those the plugin waits on. Their late
+    /// completions are then ignored.
+    private func invalidatePendingScripts(with error: Error, waitingOnly: Bool = false) {
+        let ended = pendingScripts.filter { !waitingOnly || $0.value.kind == .waitingAsync }
+        for id in ended.keys { pendingScripts.removeValue(forKey: id) }
+        endPresentationIfIdle()
+        for script in ended.values {
+            script.deadline?.cancel()
+            script.continuation.resume(throwing: error)
+        }
+    }
+
+    /// Hides the page once no waiting script remains. This runs before the waiting scripts resume, so the
     /// page is back home by the time they do.
     private func endPresentationIfIdle() {
-        guard pendingScripts.isEmpty, let ended = presentation else { return }
+        guard !hasWaitingScript, let ended = presentation else { return }
         presentation = nil
         ended.end()
     }
@@ -218,8 +405,9 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         let origin = WebviewManager.originKey(message.frameInfo.securityOrigin)
         let accepted = message.webView === webView
             && message.frameInfo.isMainFrame
-            && !pendingScripts.isEmpty
+            && hasWaitingScript
             && isInteractive()
+            && isAdmitted
             && !declinedOrigins.contains(origin)
         if accepted, presentation == nil, let webView {
             presentation = PagePresentation(
@@ -238,7 +426,7 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     private func closeByUser() {
         guard let presentation else { return }
         declinedOrigins.insert(presentation.origin)
-        invalidatePendingScripts(with: WebviewManager.closedByUser)
+        invalidatePendingScripts(with: WebviewManager.closedByUser, waitingOnly: true)
     }
 
     /// Forgets the declined origins: the user may be shown a page again once they return to the app.
@@ -265,6 +453,30 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     }
 
     // MARK: - WKNavigationDelegate
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
+    ) {
+        // A navigation of an operation's page is a network request: it is decided against the live policy, and
+        // one that is no longer admitted ends this page. Local schemes (data, about) are not network.
+        guard authority != nil, let target = navigationAction.request.url,
+              target.scheme == "https" || target.scheme == "http" else {
+            decisionHandler(.allow)
+            return
+        }
+        do {
+            try checkAdmission()
+            decisionHandler(.allow)
+        } catch HostNetworkPolicyOutcome.foregroundPermissionRequired {
+            // Refuse this navigation without destroying the verification the user left open.
+            decisionHandler(.cancel)
+        } catch {
+            decisionHandler(.cancel)
+            retire(with: error)
+        }
+    }
+
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         // A committed navigation replaces the document, so scripts still awaiting the old one can't
         // finish. Same-document changes (pushState, fragment) don't commit and keep their scripts.
@@ -282,7 +494,6 @@ class WebviewManager: NSObject, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         guard let id = loadID(for: navigation) else { return }
-        AppLogger.network.error("WebviewManager: navigation failed: \(error.localizedDescription)")
         finishLoad(id, with: .failure(error))
     }
 

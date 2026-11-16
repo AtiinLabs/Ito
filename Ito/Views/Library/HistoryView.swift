@@ -300,6 +300,7 @@ struct HistoryView: View {
 
 /// A series' most recent chapter: tapping it opens the series, Continue resumes reading.
 private struct HistorySeriesRow: View {
+    @Environment(\.sourceCoverRequests) private var coverRequests
     static let coverSize = CGSize(width: 50, height: 75)
     static let textInset: CGFloat = coverSize.width + 12
 
@@ -378,7 +379,7 @@ private struct HistorySeriesRow: View {
     @ViewBuilder
     private var cover: some View {
         if let coverURL = series.coverURL, let url = URL(string: coverURL) {
-            LazyImage(url: url) { state in
+            LazyImage(request: coverRequests.request(url, pluginID: series.key.pluginId)) { state in
                 if let image = state.image {
                     image.resizable().scaledToFill()
                 } else if state.error != nil {

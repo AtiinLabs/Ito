@@ -1,4 +1,5 @@
 import AVFoundation
+import Combine
 import Foundation
 import ito_runner
 
@@ -29,7 +30,13 @@ final class ItoRunnerVideoStreamLoader: VideoStreamLoading {
 
 @MainActor
 protocol VideoSubtitleTextLoading: AnyObject {
-    func text(from urlString: String) async throws -> String
+    func text(from urlString: String, authority: NetworkRequestAuthority?) async throws -> String
+}
+
+extension VideoSubtitleTextLoading {
+    func text(from urlString: String) async throws -> String {
+        try await text(from: urlString, authority: nil)
+    }
 }
 
 enum VideoSubtitleLoaderError: Error {
@@ -40,16 +47,21 @@ enum VideoSubtitleLoaderError: Error {
 @MainActor
 final class URLSessionVideoSubtitleLoader: VideoSubtitleTextLoading {
     private let session: URLSession
+    /// Where the subtitle download gets its authority. A subtitle is part of what the viewer asked to watch, so it
+    /// is foreground reading; without a provider (tests) the request is not gated.
+    private let authorities: AppNetworkAuthorityProvider?
 
-    init(session: URLSession = URLSession(configuration: .default)) {
+    init(session: URLSession = URLSession(configuration: .default), authorities: AppNetworkAuthorityProvider? = nil) {
         self.session = session
+        self.authorities = authorities
     }
 
-    func text(from urlString: String) async throws -> String {
+    func text(from urlString: String, authority: NetworkRequestAuthority?) async throws -> String {
         guard let url = URL(string: urlString) else {
             throw VideoSubtitleLoaderError.invalidURL
         }
-        let (data, _) = try await session.data(from: url)
+        let transport = PolicyHTTPTransport(session: session, authority: authority ?? authorities?.authority(purpose: .foregroundReading))
+        let (data, _) = try await transport.data(for: URLRequest(url: url))
         guard let text = String(data: data, encoding: .utf8) else {
             throw VideoSubtitleLoaderError.nonUTF8Data
         }
@@ -67,7 +79,12 @@ protocol VideoPlaybackPreparation: AnyObject {}
 protocol VideoPlaybackCoordinating: AnyObject {
     var surface: (any VideoPlaybackSurface)? { get }
 
-    func prepare(video: Anime.Video) async -> (any VideoPlaybackPreparation)?
+    /// Called when a live policy change stops admitting the playing stream, after playback was stopped.
+    var networkRefusalHandler: (@MainActor (HostNetworkPolicyOutcome) -> Void)? { get set }
+
+    /// Admits and prepares `video`. A refusal by the network policy is thrown as its typed outcome before any
+    /// remote asset exists; a nil result is a video that cannot be played for another reason.
+    func prepare(video: Anime.Video, authority: NetworkRequestAuthority?) async throws -> (any VideoPlaybackPreparation)?
     /// Starts playing `preparation`, from `startTime` seconds when given.
     func activate(
         _ preparation: any VideoPlaybackPreparation,
@@ -89,31 +106,65 @@ final class AVPlayerVideoPlaybackSurface: VideoPlaybackSurface {
 }
 
 @MainActor
-private final class AVPlayerVideoPlaybackPreparation: VideoPlaybackPreparation {
+final class AVPlayerVideoPlaybackPreparation: VideoPlaybackPreparation {
     let item: AVPlayerItem
+    let authority: NetworkRequestAuthority?
 
-    init(item: AVPlayerItem) {
+    init(item: AVPlayerItem, authority: NetworkRequestAuthority?) {
         self.item = item
+        self.authority = authority
     }
 }
 
+extension VideoPlaybackCoordinating {
+    func prepare(video: Anime.Video) async throws -> (any VideoPlaybackPreparation)? {
+        try await prepare(video: video, authority: nil)
+    }
+}
+
+/// Plays through `AVPlayer`.
+///
+/// What the network policy can enforce here is limited by AVFoundation. It is decided before the asset is
+/// constructed and again when playback is activated; the system's expensive and constrained network flags are
+/// set on the asset from the same decision; and a later policy change that stops admitting the stream stops it
+/// at once. AVFoundation fetches HLS playlists, segments, keys and their adaptive retries internally, without a
+/// per-request or redirect hook, so none of those individual requests is checked. The two flags are the only
+/// per-request control, and they are the system's rule, not the host's policy. Video playback is therefore
+/// outside any strict offline guarantee.
 @MainActor
 final class AVPlayerVideoPlaybackCoordinator: VideoPlaybackCoordinating {
     private(set) var surface: (any VideoPlaybackSurface)?
+    var networkRefusalHandler: (@MainActor (HostNetworkPolicyOutcome) -> Void)?
 
     private var player: AVPlayer?
     private var periodicObserverToken: Any?
     private var observerGeneration: UInt64 = 0
     private var timeUpdate: (@MainActor (Double, Double) -> Void)?
     private var readyObservation: NSKeyValueObservation?
+    private var policyObservation: AnyCancellable?
+    private var networkObservationID: UUID?
+#if DEBUG
+    var onPolicyEvaluation: (() -> Void)?
+#endif
     /// True from activation until the seek to the start time finishes: until then the player
     /// reports 0:00, which must not reach (and be saved by) the caller.
     private var isSeekingToStart = false
 
-    func prepare(video: Anime.Video) async -> (any VideoPlaybackPreparation)? {
+    func prepare(video: Anime.Video, authority: NetworkRequestAuthority?) async throws -> (any VideoPlaybackPreparation)? {
         guard let url = URL(string: video.url) else { return nil }
-        let asset = AVURLAsset(url: url, options: Self.assetOptions(for: video))
-        return AVPlayerVideoPlaybackPreparation(item: AVPlayerItem(asset: asset))
+        var options = Self.assetOptions(for: video)
+        let scheme = url.scheme?.lowercased()
+        let remoteAuthority = scheme == "http" || scheme == "https" ? authority : nil
+        if let authority = remoteAuthority {
+            // Refused before an asset exists: nothing of this stream is requested.
+            try authority.check()
+            options[AVURLAssetAllowsExpensiveNetworkAccessKey] = authority.admitsExpensivePath
+            options[AVURLAssetAllowsConstrainedNetworkAccessKey] = authority.admitsConstrainedPath
+        }
+        let asset = AVURLAsset(url: url, options: options)
+        let item = AVPlayerItem(asset: asset)
+        item.canUseNetworkResourcesForLiveStreamingWhilePaused = false
+        return AVPlayerVideoPlaybackPreparation(item: item, authority: remoteAuthority)
     }
 
     static func assetOptions(for video: Anime.Video) -> [String: Any] {
@@ -128,6 +179,20 @@ final class AVPlayerVideoPlaybackCoordinator: VideoPlaybackCoordinating {
     ) -> Bool {
         guard let preparation = preparation as? AVPlayerVideoPlaybackPreparation else {
             return false
+        }
+        // Decided again at activation: the path or the settings may have changed since preparation.
+        if let authority = preparation.authority {
+            do {
+                try authority.check()
+            } catch let outcome as HostNetworkPolicyOutcome {
+                networkRefusalHandler?(outcome)
+                return false
+            } catch {
+                return false
+            }
+            observePolicy(authority)
+        } else {
+            policyObservation = nil
         }
 
         timeUpdate = onTimeUpdate
@@ -179,8 +244,39 @@ final class AVPlayerVideoPlaybackCoordinator: VideoPlaybackCoordinating {
         player?.pause()
     }
 
-    func shutdown() {
+    /// Best-effort stop of this stream on a source, revision or path refusal. Internal AVFoundation requests
+    /// already in flight are outside the delegate boundary.
+    private func observePolicy(_ authority: NetworkRequestAuthority) {
+        let id = UUID()
+        networkObservationID = id
+        policyObservation = authority.changes.sink { @Sendable [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.networkObservationID == id else { return }
+#if DEBUG
+                defer { self.onPolicyEvaluation?() }
+#endif
+                do {
+                    try authority.checkLiveSurface()
+                } catch let outcome as HostNetworkPolicyOutcome {
+                    self.stopForRefusal(outcome)
+                } catch {}
+            }
+        }
+    }
+
+    private func stopForRefusal(_ outcome: HostNetworkPolicyOutcome) {
+        policyObservation = nil
+        networkObservationID = nil
         player?.pause()
+        player?.replaceCurrentItem(with: nil)
+        networkRefusalHandler?(outcome)
+    }
+
+    func shutdown() {
+        policyObservation = nil
+        networkObservationID = nil
+        player?.pause()
+        player?.replaceCurrentItem(with: nil)
         timeUpdate = nil
         readyObservation = nil
         observerGeneration &+= 1
@@ -333,6 +429,8 @@ struct PreparedVideoPlayerDependencies {
     let subtitleLoader: any VideoSubtitleTextLoading
     let makePlaybackCoordinator: () -> any VideoPlaybackCoordinating
     let presentationLogger: any PresentationEventLogging
+    /// The authority for one playback operation of a source, or nil where no network policy exists (tests, previews).
+    var playbackAuthority: @MainActor (String, PluginNetworkOperation) -> NetworkRequestAuthority? = { _, _ in nil }
 
     static func production(
         readProgressManager: ReadProgressManager,
@@ -342,15 +440,21 @@ struct PreparedVideoPlayerDependencies {
         pluginManager: PluginManager,
         presentationLogger: any PresentationEventLogging
     ) -> Self {
-        Self(
+        let contexts = pluginManager.pluginSettingsStore.networkContexts
+        let authorities = AppNetworkAuthorityProvider()
+        authorities.set(contexts)
+        return Self(
             progress: readProgressManager,
             history: historyManager,
             tracker: trackerManager,
             presence: discordRPCManager,
             pluginMetadata: pluginManager,
-            subtitleLoader: URLSessionVideoSubtitleLoader(),
+            subtitleLoader: URLSessionVideoSubtitleLoader(authorities: authorities),
             makePlaybackCoordinator: { AVPlayerVideoPlaybackCoordinator() },
-            presentationLogger: presentationLogger
+            presentationLogger: presentationLogger,
+            playbackAuthority: { pluginID, operation in
+                NetworkRequestAuthority(contexts: contexts, context: contexts.context(pluginID: pluginID, operation))
+            }
         )
     }
 
@@ -433,7 +537,7 @@ private final class UnavailableVideoPlayerDependencies:
         return nil
     }
 
-    func text(from urlString: String) async throws -> String {
+    func text(from urlString: String, authority: NetworkRequestAuthority?) async throws -> String {
         _ = urlString
         throw VideoSubtitleLoaderError.invalidURL
     }
@@ -442,9 +546,11 @@ private final class UnavailableVideoPlayerDependencies:
 @MainActor
 private final class UnavailableVideoPlaybackCoordinator: VideoPlaybackCoordinating {
     var surface: (any VideoPlaybackSurface)? { nil }
+    var networkRefusalHandler: (@MainActor (HostNetworkPolicyOutcome) -> Void)?
 
-    func prepare(video: Anime.Video) async -> (any VideoPlaybackPreparation)? {
+    func prepare(video: Anime.Video, authority: NetworkRequestAuthority?) async throws -> (any VideoPlaybackPreparation)? {
         _ = video
+        _ = authority
         return nil
     }
 

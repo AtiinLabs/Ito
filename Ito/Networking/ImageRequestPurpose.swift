@@ -1,3 +1,4 @@
+import Nuke
 import Foundation
 import ito_runner
 
@@ -8,9 +9,8 @@ import ito_runner
 /// message, and `unmarked(_:)` removes it from every request handed to a network loader, so the
 /// transport never receives it.
 ///
-/// Nuke coalesces requests for one URL into one data task, and that task keeps the purpose of the first
-/// request that started it. A later request for the same URL shares that purpose. No behaviour depends on the
-/// purpose yet, so this is accepted rather than worked around.
+/// Network task coalescing is disabled in the shared pipeline: equal URLs are not equal authority.
+/// Cache hits remain local; source-owned requests use source/epoch-partitioned caches.
 nonisolated enum ImageRequestPurpose: String, Sendable {
     case foregroundReading
     case prefetch
@@ -45,5 +45,120 @@ nonisolated enum ImageRequestPurpose: String, Sendable {
         }
         URLProtocol.removeProperty(forKey: propertyKey, in: mutable)
         return mutable as URLRequest
+    }
+}
+
+/// Host-only source binding. Neither plugin headers nor an HTTP URL can create this authority.
+nonisolated enum ImageRequestSourceAuthority {
+    private static let propertyKey = "ito.imageRequestSourceAuthority"
+
+    private final class Box: NSObject, @unchecked Sendable {
+        let authority: NetworkRequestAuthority
+        /// The request fields the partition was computed from. A request edited after binding (a header
+        /// added, a body changed) no longer matches them, and its partition is computed again.
+        private let fields: RequestFields
+        let cachePartition: String
+
+        init(_ authority: NetworkRequestAuthority, request: URLRequest) {
+            self.authority = authority
+            fields = RequestFields(request)
+            cachePartition = Self.partition(authority, fields)
+        }
+
+        func partition(for request: URLRequest) -> String {
+            let current = RequestFields(request)
+            return current == fields ? cachePartition : Self.partition(authority, current)
+        }
+
+        private static func partition(_ authority: NetworkRequestAuthority, _ fields: RequestFields) -> String {
+            let headers: [[String]] = fields.headers
+                .map { [$0.key.lowercased(), $0.value] }
+                .sorted { $0[0] == $1[0] ? $0[1] < $1[1] : $0[0] < $1[0] }
+            let values: [String] = [
+                authority.context.sourceID, authority.context.authorizationScope.uuidString,
+                fields.scheme, fields.method, String(fields.cachePolicy), fields.body?.base64EncodedString() ?? ""
+            ]
+            guard let encoded = try? JSONEncoder().encode(values + headers.flatMap { $0 }) else {
+                preconditionFailure("Unable to encode source image cache partition")
+            }
+            return OfflineDigest.sha256Hex(encoded)
+        }
+    }
+
+    private struct RequestFields: Equatable {
+        let scheme: String
+        let method: String
+        let cachePolicy: UInt
+        let body: Data?
+        let headers: [String: String]
+
+        init(_ request: URLRequest) {
+            scheme = request.url?.scheme?.lowercased() ?? ""
+            method = request.httpMethod ?? "GET"
+            cachePolicy = request.cachePolicy.rawValue
+            body = request.httpBody
+            headers = request.allHTTPHeaderFields ?? [:]
+        }
+    }
+
+    static func applied(_ authority: NetworkRequestAuthority, to request: URLRequest) -> URLRequest {
+        guard let mutable = (request as NSURLRequest).mutableCopy() as? NSMutableURLRequest else {
+            preconditionFailure("Unable to bind image request authority")
+        }
+        URLProtocol.setProperty(Box(authority, request: request), forKey: propertyKey, in: mutable)
+        return mutable as URLRequest
+    }
+
+    static func marked(on request: URLRequest) -> NetworkRequestAuthority? {
+        (URLProtocol.property(forKey: propertyKey, in: request) as? Box)?.authority
+    }
+
+    /// Reuses the partition computed when host authority was attached while the request is unchanged, so a
+    /// cache lookup does not hash headers; a request edited since then gets the partition of its own fields.
+    static func cachePartition(on request: URLRequest) -> String? {
+        (URLProtocol.property(forKey: propertyKey, in: request) as? Box)?.partition(for: request)
+    }
+
+    static func unmarked(_ request: URLRequest) -> URLRequest {
+        guard marked(on: request) != nil else { return request }
+        guard let mutable = (request as NSURLRequest).mutableCopy() as? NSMutableURLRequest else {
+            preconditionFailure("Unable to remove image request authority")
+        }
+        URLProtocol.removeProperty(forKey: propertyKey, in: mutable)
+        return mutable as URLRequest
+    }
+
+    static func capture(pluginID: String, contexts: PluginNetworkContexts) -> NetworkRequestAuthority {
+        NetworkRequestAuthority(
+            contexts: contexts,
+            context: contexts.context(pluginID: pluginID, PluginNetworkOperation(purpose: .coverImage, operationID: UUID()))
+        )
+    }
+
+    /// Freeze source scope and operation, but capture current policy for each newly started page.
+    static func withPurpose(_ purpose: ImageRequestPurpose, authority: NetworkRequestAuthority) -> NetworkRequestAuthority {
+        let context = authority.context
+        return NetworkRequestAuthority(contexts: authority.contexts, context: NetworkOperationContext(
+            purpose: purpose.networkPurpose,
+            sourceID: context.sourceID,
+            authorizationScope: context.authorizationScope,
+            operationID: context.operationID,
+            batchID: context.batchID,
+            policyRevision: authority.contexts.policy.revision,
+            generation: context.generation,
+            scopedGrant: context.scopedGrant
+        ))
+    }
+}
+
+/// Prepared by host composition, with the source identity supplied by the initiating screen.
+/// A missing factory cannot silently turn plugin content into app-owned traffic.
+nonisolated struct SourceCoverRequests: Sendable {
+    let contexts: PluginNetworkContexts?
+
+    func request(_ url: URL?, pluginID: String?) -> ImageRequest? {
+        guard let url, let pluginID, let contexts else { return nil }
+        let authority = ImageRequestSourceAuthority.capture(pluginID: pluginID, contexts: contexts)
+        return ImageRequest(urlRequest: ImageRequestSourceAuthority.applied(authority, to: URLRequest(url: url)))
     }
 }

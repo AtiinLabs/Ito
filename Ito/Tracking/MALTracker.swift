@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import OSLog
 import mal
+import ito_runner
 
 /// A MyAnimeList work id as stored in `trackerLink.remoteMediaId`: `anime:<id>` or `manga:<id>`.
 /// MyAnimeList numbers anime and manga separately, so the kind is part of the id. Novels and
@@ -215,6 +216,7 @@ public final class MALTracker: TrackerProvider, TrackerScoreEditing {
     private let credentialRepository: MALCredentialRepository
     private let oauth: MALOAuth
     private let session: URLSession
+    private let authorities: AppNetworkAuthorityProvider?
     private let usernameDefaults: UserDefaults
     private var writeChains: [MALMediaID: Task<Void, any Error>] = [:]
     var scoreIdentity: TrackerScoreIdentity { credentialRepository.scoreIdentity }
@@ -224,12 +226,14 @@ public final class MALTracker: TrackerProvider, TrackerScoreEditing {
         credentialRepository: MALCredentialRepository,
         oauth: MALOAuth,
         usernameDefaults: UserDefaults,
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        authorities: AppNetworkAuthorityProvider? = nil
     ) {
         self.credentialRepository = credentialRepository
         self.oauth = oauth
         self.usernameDefaults = usernameDefaults
         self.session = session
+        self.authorities = authorities
         self.username = usernameDefaults.string(forKey: usernameKey)
     }
 
@@ -243,9 +247,11 @@ public final class MALTracker: TrackerProvider, TrackerScoreEditing {
     }
 
     public func authenticate(using oauthManager: OAuthManager) async throws {
+        try authorities?.admit(.trackerWrite)
         let request = oauth.authorizationRequest()
         let callbackURL = try await oauthManager.authenticate(url: request.url, callbackScheme: "ito")
         let code = try oauth.authorizationCode(from: callbackURL, matching: request)
+        try authorities?.admit(.trackerWrite)
         let token = try await oauth.exchangeCode(code, for: request)
         scoreIdentity.rotate()
         await credentialRepository.persist(token)
@@ -555,6 +561,8 @@ public final class MALTracker: TrackerProvider, TrackerScoreEditing {
             let token = try await credentialRepository.validAccessToken()
             try await validate(scoreSession)
             do {
+                // Checked before every request, so a refusal always means nothing was sent.
+                try authorities?.admit(.trackerWrite)
                 let response = try await client(token).execute(request)
                 try await validate(scoreSession)
                 return response
@@ -562,6 +570,7 @@ public final class MALTracker: TrackerProvider, TrackerScoreEditing {
                 try await validate(scoreSession)
                 let replacement = try await credentialRepository.accessToken(replacing: token)
                 try await validate(scoreSession)
+                try authorities?.admit(.trackerWrite)
                 let response = try await client(replacement).execute(request)
                 try await validate(scoreSession)
                 return response
