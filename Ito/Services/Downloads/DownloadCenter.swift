@@ -572,6 +572,8 @@ final class DownloadCenter: ObservableObject {
 /// center commits it through the store, then wakes the worker when the commit queued jobs.
 extension DownloadCenter: SubscriptionCatalogSink {
     func begin(media: MediaIdentity) async -> SubscriptionCheckTicket? {
+        // A series without an enabled rule costs one read off the main actor: no epoch is captured and nothing is written.
+        guard (try? await store.hasEnabledSubscription(for: media)) == true else { return nil }
         guard let epoch = try? captureEpoch(media.pluginId) else { return nil }
         return try? await store.beginSubscriptionCheck(media: media, capturedEpoch: epoch)
     }

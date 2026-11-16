@@ -49,6 +49,12 @@ private final class SchedulerHarness {
     let settings: AppSettingsStore
     let updates: UpdateManager
     let spy: SpySink
+    /// Replaces how the scheduler reads the rules, for a test that needs a snapshot taken at a chosen moment.
+    @MainActor
+    final class RowsBox {
+        var provider: (@MainActor () async throws -> [SubscriptionScheduleRow])?
+    }
+    let rowsBox = RowsBox()
     let scheduler: SubscriptionCheckScheduler
     /// The kind of every run that ended, in order.
     private(set) var finished: [UpdateRunKind] = []
@@ -82,7 +88,11 @@ private final class SchedulerHarness {
         scheduler = SubscriptionCheckScheduler(
             store: fixture.store, center: fixture.center, coordinator: fixture.coordinator, updates: updates,
             dbPool: pool, interval: { Self.interval }, limitsChanged: limitsChanged.eraseToAnyPublisher(),
-            now: { clock.date }
+            now: { clock.date },
+            scheduleRows: { [box = rowsBox, rowStore = fixture.store] in
+                if let provider = box.provider { return try await provider() }
+                return try await rowStore.subscriptionScheduleRows()
+            }
         )
         updates.runFinished.sink { [weak self] kind in self?.finished.append(kind) }.store(in: &subscriptions)
     }
@@ -594,5 +604,221 @@ struct SubscriptionCheckSchedulerTests {
         #expect(applied == .applied(configGeneration: generation + 1))
         await h.scheduler.untilIdle()
         #expect(h.spy.begins.map(\.canonicalMediaId) == ["fresh", "fresh"])
+    }
+
+    // MARK: - Fairness: rules a pass cannot check never take the place of rules it can
+
+    @Test func rulesOfAnUninstalledSourceNeverTakeThePlaceOfRulesThatCanBeChecked() async throws {
+        let h = try await SchedulerHarness()
+        for index in 0..<25 {
+            let rule = try await h.subscribe(String(format: "gone%02d", index), plugin: SchedulerHarness.otherPlugin)
+            try await h.markAttempted(rule, .advanced, ago: 10 * 86_400)
+        }
+        for index in 0..<5 { try await h.subscribe("ok\(index)") }
+        // The source was uninstalled: its rules stay, and are the oldest due.
+        h.source.installedPluginIDs = ["plugin.test"]
+
+        h.scheduler.setActive(true)
+        await h.scheduler.untilIdle()
+
+        #expect(Set(h.source.checkedItemIDs) == ["ok0", "ok1", "ok2", "ok3", "ok4"])
+        #expect(h.spy.begins.count == 5)
+    }
+
+    @Test func aSourceThatNeedsASignInEndsItsQueueAndTheHealthyRulesAreCheckedInTheSameActivation() async throws {
+        let h = try await SchedulerHarness()
+        for index in 0..<25 {
+            let id = String(format: "login%02d", index)
+            let rule = try await h.subscribe(id, plugin: SchedulerHarness.otherPlugin)
+            try await h.markAttempted(rule, .advanced, ago: 10 * 86_400)
+            h.source.errorsByItemID[id] = PluginCallError(kind: .needsLogin, message: "Sign in")
+        }
+        for index in 0..<5 { try await h.subscribe("ok\(index)") }
+
+        h.scheduler.setActive(true)
+        await h.scheduler.untilIdle()
+
+        let healthy = h.source.checkedItemIDs.filter { $0.hasPrefix("ok") }
+        #expect(Set(healthy) == ["ok0", "ok1", "ok2", "ok3", "ok4"])
+        // The blocked source was asked once, and the rest of its queue was left alone.
+        #expect(h.source.checkedItemIDs.filter { $0.hasPrefix("login") }.count == 1)
+        #expect(h.finished == [.subscriptions, .subscriptions])
+
+        // Becoming active again forgets what was blocked: the source is asked once more.
+        h.scheduler.setActive(false)
+        h.scheduler.setActive(true)
+        await h.scheduler.untilIdle()
+        #expect(h.source.checkedItemIDs.filter { $0.hasPrefix("login") }.count == 2)
+    }
+
+    // MARK: - A request is never lost
+
+    @Test func aRunTheCancelledPolicyWaitEndedStillGoesOnForARequestMadeMeanwhile() {
+        var cancelled = SubscriptionCheckRunResult()
+        cancelled.stoppedByPolicy = true
+        cancelled.cancelled = true
+        #expect(SubscriptionCheckScheduler.goesOn(after: cancelled, rerunRequested: true))
+        #expect(!SubscriptionCheckScheduler.goesOn(after: cancelled, rerunRequested: false))
+
+        var refused = SubscriptionCheckRunResult()
+        refused.stoppedByPolicy = true
+        #expect(!SubscriptionCheckScheduler.goesOn(after: refused, rerunRequested: true))
+
+        var blocked = SubscriptionCheckRunResult()
+        blocked.blockedSources = ["p"]
+        #expect(SubscriptionCheckScheduler.goesOn(after: blocked, rerunRequested: false))
+        #expect(!SubscriptionCheckScheduler.goesOn(after: SubscriptionCheckRunResult(), rerunRequested: false))
+    }
+
+    @Test func anEnableWhoseSnapshotWasReadBeforeItCommittedIsStillCheckedInTheSameActivation() async throws {
+        let h = try await SchedulerHarness()
+        let facade = AutomaticDownloads(center: h.fixture.center, scheduler: h.scheduler)
+        try await h.pool.write { db in
+            try LibraryItem(
+                id: "late", title: "Late", coverUrl: nil, pluginId: "plugin.test", isAnime: false, pluginType: .manga,
+                rawPayload: Data(), anilistId: nil
+            ).insert(db)
+        }
+        try h.script("late", chapters: 1...2)
+        // The first read of the pass returns the rules as they were, and the enable commits right after it.
+        var reads = 0
+        h.rowsBox.provider = { [store = h.fixture.store] in
+            let snapshot = try await store.subscriptionScheduleRows()
+            reads += 1
+            if reads == 1 {
+                _ = try await facade.enable(SubscriptionEnableRequest(
+                    media: h.media("late"), reviewedSourceEpoch: OfflineStoreFixture.epoch,
+                    configuration: SubscriptionConfiguration()
+                ))
+            }
+            return snapshot
+        }
+
+        h.scheduler.setActive(true)
+        await h.scheduler.untilIdle()
+
+        #expect(reads == 2)
+        #expect(h.spy.begins.map(\.canonicalMediaId) == ["late"])
+        #expect(try await h.row("late").lastAttemptOutcome == .baselineEstablished)
+    }
+
+    @Test func aFailedReadWithARequestMadeDuringItIsReadAgain() async throws {
+        let h = try await SchedulerHarness()
+        try await h.subscribe("a")
+        struct ReadFailure: Error {}
+        var reads = 0
+        h.rowsBox.provider = { [store = h.fixture.store, scheduler = h.scheduler] in
+            reads += 1
+            if reads == 1 {
+                scheduler.request(.libraryRunFinished)
+                throw ReadFailure()
+            }
+            return try await store.subscriptionScheduleRows()
+        }
+
+        h.scheduler.setActive(true)
+        await h.scheduler.untilIdle()
+
+        #expect(reads == 2)
+        #expect(h.spy.begins.map(\.canonicalMediaId) == ["a"])
+    }
+
+    // MARK: - A refresh over series without rules writes nothing for the ledger
+
+    private final class CallCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var calls = 0
+
+        var count: Int { lock.withLock { calls } }
+        func increment() { lock.withLock { calls += 1 } }
+    }
+
+    @Test func aLibraryRefreshOverSeriesWithoutRulesCapturesNoEpochAndBeginsNothing() async throws {
+        let h = try await SchedulerHarness()
+        let epochCaptures = CallCounter()
+        // The production sink, with its epoch capture (a main-thread write in production) counted.
+        let counting = DownloadCenter(
+            dbPool: h.pool, store: h.fixture.store, coordinator: h.fixture.coordinator, progress: h.fixture.progress,
+            contexts: h.fixture.networkContexts, observedPath: { [path = h.path] in path.current },
+            captureEpoch: { _ in
+                epochCaptures.increment()
+                return OfflineStoreFixture.epoch
+            },
+            automaticLimits: { SchedulerHarness.roomy }
+        )
+        h.updates.configure(subscriptionSink: counting)
+        for index in 0..<5 {
+            try await h.pool.write { db in
+                try LibraryItem(
+                    id: "plain\(index)", title: "Plain", coverUrl: nil, pluginId: "plugin.test", isAnime: false,
+                    pluginType: .manga, rawPayload: Data(), anilistId: nil
+                ).insert(db)
+            }
+        }
+
+        try await h.updates.checkForUpdates()
+        #expect(h.source.checkedItemIDs.count == 5)
+        #expect(epochCaptures.count == 0)
+
+        // A series with a rule still gets its ticket, and so one capture.
+        try await h.subscribe("ruled")
+        try await h.updates.checkForUpdates()
+        #expect(epochCaptures.count == 1)
+        #expect(try await h.row("ruled").lastAttemptOutcome == .baselineEstablished)
+    }
+
+    // MARK: - Smaller fixes
+
+    @Test func aRuleAManualRefreshCheckedIsNotForcedAgainAfterIt() async throws {
+        let h = try await SchedulerHarness()
+        try await h.subscribe("a")
+        let b = try await h.subscribe("b")
+        try await h.markAttempted(b, .advanced)
+        let gate = DownloadTestGate()
+        h.source.cancellableGate = gate
+
+        h.scheduler.setActive(true)
+        await gate.awaitArrival()
+        // "b" was changed while the pass was in "a"; then a refresh checks everything.
+        h.scheduler.request(.ruleChanged(b))
+        let manual = Task { try await h.updates.checkForUpdates() }
+        await gate.awaitCancellation()
+        await gate.release()
+        try await manual.value
+        await h.scheduler.untilIdle()
+
+        // One cut-short check of "a" and the refresh's two: "b" was not fetched a fourth time.
+        #expect(h.source.checkedItemIDs.count == 3)
+    }
+
+    @Test func roomThatCameFreeDrainsWaitingEventsButLeavesMaintainRulesToTheReaderAndActivation() async throws {
+        let h = try await SchedulerHarness()
+        _ = try await h.subscribeMaintainWithBaseline()
+        h.scheduler.setActive(true)
+        await h.scheduler.untilIdle()
+        #expect(try await h.jobKeys() == ["c3", "c4"])
+        // The reader moved on, but no read-state observation is running.
+        try await h.read(["c1", "c2", "c3"], last: "c3")
+
+        h.limitsChanged.send(())
+        await h.scheduler.untilIdle()
+        #expect(try await h.jobKeys() == ["c3", "c4"])
+
+        h.scheduler.requestDrain(.all)
+        await h.scheduler.untilIdle()
+        #expect(try await h.jobKeys() == ["c3", "c4", "c5"])
+    }
+
+    @Test func theProductionLimitsPublisherAnnouncesAStoredChangeAndNotTheCurrentValues() async throws {
+        let h = try await SchedulerHarness()
+        var announced = 0
+        let subscription = h.settings.automaticDownloadLimitsChanged.sink { announced += 1 }
+        defer { subscription.cancel() }
+        #expect(announced == 0)
+
+        try await h.settings.set(200, for: AppPreferenceCatalog.automaticDownloadQueueLimit)
+
+        #expect(announced >= 1)
+        #expect(h.settings.automaticDownloadLimits.queueLimit == 200)
     }
 }

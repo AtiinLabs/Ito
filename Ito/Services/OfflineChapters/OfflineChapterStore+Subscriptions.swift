@@ -192,6 +192,15 @@ extension OfflineChapterStore {
         try await database.read { db in try SeriesSubscriptionRecord.forMedia(media).fetchOne(db) }
     }
 
+    /// Whether the series has an enabled rule. A plain read, so a Library check of a series without one costs no write.
+    func hasEnabledSubscription(for media: MediaIdentity) async throws -> Bool {
+        try await database.read { db in
+            try SeriesSubscriptionRecord.forMedia(media)
+                .filter(Column("state") == SubscriptionState.enabled.rawValue)
+                .fetchCount(db) > 0
+        }
+    }
+
     // MARK: - Checks
 
     /// The enabled rules and when each was last attempted, for the scheduler. No evidence table is read.
@@ -211,15 +220,16 @@ extension OfflineChapterStore {
     }
 
     /// The enabled rules a drain can act on, in id order: an open undecided event, a pending event that waits for queue
-    /// or disk room, or Maintain Next N, whose window follows what was read.
-    func drainableSubscriptionIds() async throws -> [String] {
+    /// or disk room, or (with `includingMaintain`) Maintain Next N, whose window follows what was read. A drain for room
+    /// that came free leaves Maintain Next N rules to the read-state and activation drains.
+    func drainableSubscriptionIds(includingMaintain: Bool = true) async throws -> [String] {
         try await database.read { db in
             try String.fetchAll(
                 db,
                 sql: """
                     SELECT s.id FROM seriesSubscription s
                     WHERE s.state = 'enabled'
-                      AND (s.mode = 'maintainNextUnread'
+                      AND (\(includingMaintain ? "s.mode = 'maintainNextUnread'" : "0")
                            OR EXISTS (
                                SELECT 1 FROM subscriptionEvent e
                                WHERE e.subscriptionId = s.id

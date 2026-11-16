@@ -54,7 +54,10 @@ final class SubscriptionCheckScheduler {
     }
 
     enum DrainScope: Sendable, Equatable {
+        /// Every rule that can have work: waiting events and the windows of Maintain Next N. Activation drains this.
         case all
+        /// The rules whose events wait for queue or disk room, after room came free. Maintain Next N follows the reader.
+        case room
         case subscription(String)
     }
 
@@ -64,6 +67,7 @@ final class SubscriptionCheckScheduler {
     private let dbPool: DatabasePool
     private let interval: @MainActor () -> TimeInterval
     private let now: () -> Date
+    private let readRows: @MainActor () async throws -> [SubscriptionScheduleRow]
 
     private(set) var isActive = false
     private var isReconciled: Bool
@@ -77,11 +81,17 @@ final class SubscriptionCheckScheduler {
     private var waitingForRun = false
     /// A request arrived before the store was reconciled; the pass starts when it is.
     private var pendingAfterReconcile = false
+    /// Sources that need the person (a sign-in, settings, a trust decision). They are left out of every pass until the
+    /// scheduler becomes active again: asking again changes nothing, and their rules must not hold back the others.
+    private var blockedSources = Set<String>()
+    /// What a manual refresh covered: the rules forced at that time and the series it attempted.
+    private var manualCover: (forced: Set<String>, media: Set<MediaIdentity>)?
 
     private var drainTask: Task<Void, Never>?
     /// How many coalesced drain batches have started: one however many requests were merged into it. For tests.
     private(set) var drainBatches = 0
     private var drainAll = false
+    private var drainRoom = false
     private var drainIds = Set<String>()
 
     private var readStateObservation: DatabaseCancellable?
@@ -101,7 +111,8 @@ final class SubscriptionCheckScheduler {
         dbPool: DatabasePool,
         interval: @escaping @MainActor () -> TimeInterval,
         limitsChanged: AnyPublisher<Void, Never>,
-        now: @escaping () -> Date
+        now: @escaping () -> Date,
+        scheduleRows: (@MainActor () async throws -> [SubscriptionScheduleRow])? = nil
     ) {
         self.store = store
         self.center = center
@@ -109,6 +120,7 @@ final class SubscriptionCheckScheduler {
         self.dbPool = dbPool
         self.interval = interval
         self.now = now
+        self.readRows = scheduleRows ?? { try await store.subscriptionScheduleRows() }
         isReconciled = coordinator.isReconciled
 
         coordinator.reconciled
@@ -118,9 +130,9 @@ final class SubscriptionCheckScheduler {
             .sink { @MainActor [weak self] kind in self?.runFinished(kind) }
             .store(in: &subscriptions)
         limitsChanged
-            .sink { @MainActor [weak self] in self?.requestDrain(.all) }
+            .sink { @MainActor [weak self] in self?.requestDrain(.room) }
             .store(in: &subscriptions)
-        center.onAutomaticCapacityChanged = { [weak self] in self?.requestDrain(.all) }
+        center.onAutomaticCapacityChanged = { [weak self] in self?.requestDrain(.room) }
     }
 
     // MARK: - Lifecycle
@@ -132,6 +144,7 @@ final class SubscriptionCheckScheduler {
         guard active != isActive else { return }
         isActive = active
         if active {
+            blockedSources = []
             request(.activation)
             requestDrain(.all)
         } else {
@@ -140,6 +153,7 @@ final class SubscriptionCheckScheduler {
             waitingForRun = false
             pendingAfterReconcile = false
             drainAll = false
+            drainRoom = false
             drainIds = []
             runTask?.cancel()
         }
@@ -165,6 +179,7 @@ final class SubscriptionCheckScheduler {
         guard isActive else { return }
         switch scope {
         case .all: drainAll = true
+        case .room: drainRoom = true
         case .subscription(let id): drainIds.insert(id)
         }
         startDrainIfNeeded()
@@ -218,6 +233,9 @@ final class SubscriptionCheckScheduler {
     private func runFinished(_ kind: UpdateRunKind) {
         // A refresh the person asked for counts as a check, so what it left due is checked now. A pass that could not
         // start because a run held the manager starts when that run ends, whichever kind it was.
+        if kind == .manual, !forced.isEmpty {
+            manualCover = (forced, Set(updates.lastRunAttempted))
+        }
         guard kind == .manual || waitingForRun else { return }
         waitingForRun = false
         request(.libraryRunFinished)
@@ -229,6 +247,16 @@ final class SubscriptionCheckScheduler {
         passTask = Task { [weak self] in await self?.runPass() }
     }
 
+    /// Whether the pass goes on after a run. A run the policy refused would be refused again at once, unless it was
+    /// refused only because it was cancelled: then a request made meanwhile (a reactivation) must not be lost. A source
+    /// that needed the person ended its queue early, so the other rules still due are checked now; each such round
+    /// blocks one more source, so the rounds are bounded by the number of sources.
+    nonisolated static func goesOn(after result: SubscriptionCheckRunResult, rerunRequested: Bool) -> Bool {
+        if result.stoppedByPolicy && !result.cancelled { return false }
+        if rerunRequested { return true }
+        return !result.cancelled && !result.blockedSources.isEmpty
+    }
+
     private func runPass() async {
         defer {
             passTask = nil
@@ -237,9 +265,22 @@ final class SubscriptionCheckScheduler {
         }
         while isActive {
             rerunRequested = false
-            guard let rows = try? await store.subscriptionScheduleRows(), isActive else { return }
-            let due = SubscriptionSchedule.duePass(rows, forced: forced, interval: interval(), now: now())
-            guard !due.isEmpty else { return }
+            // A read that fails is a pass with nothing due; a request that arrived during it still gets its look.
+            let rows = (try? await readRows()) ?? []
+            guard isActive else { return }
+            if let cover = manualCover {
+                manualCover = nil
+                forced.subtract(rows.filter { cover.forced.contains($0.id) && cover.media.contains($0.media) }.map(\.id))
+            }
+            let installed = updates.installedPluginIDs
+            let blocked = blockedSources
+            let due = SubscriptionSchedule.duePass(rows, forced: forced, interval: interval(), now: now()) { row in
+                installed.contains(row.media.pluginId) && !blocked.contains(row.media.pluginId)
+            }
+            guard !due.isEmpty else {
+                if rerunRequested { continue }
+                return
+            }
             guard let run = updates.startSubscriptionChecks(due.map(\.media)) else {
                 waitingForRun = true
                 return
@@ -250,16 +291,15 @@ final class SubscriptionCheckScheduler {
             // A forced rule is forgotten once it was attempted; one the pass did not reach is still due.
             let attempted = Set(result.attempted)
             forced.subtract(due.filter { attempted.contains($0.media) }.map(\.id))
-            // A pass the policy refused would be refused again at once; the next trigger tries again. One a library run
-            // cancelled goes on only for a request that arrived meanwhile, and then waits for that run to end.
-            guard isActive, !result.stoppedByPolicy, rerunRequested else { return }
+            blockedSources.formUnion(result.blockedSources)
+            guard isActive, Self.goesOn(after: result, rerunRequested: rerunRequested) else { return }
         }
     }
 
     // MARK: - Drains
 
     private func startDrainIfNeeded() {
-        guard isActive, isReconciled, drainTask == nil, drainAll || !drainIds.isEmpty else { return }
+        guard isActive, isReconciled, drainTask == nil, drainAll || drainRoom || !drainIds.isEmpty else { return }
         drainTask = Task { [weak self] in await self?.runDrains() }
     }
 
@@ -268,13 +308,15 @@ final class SubscriptionCheckScheduler {
             drainTask = nil
             settleIfIdle()
         }
-        while isActive, drainAll || !drainIds.isEmpty {
+        while isActive, drainAll || drainRoom || !drainIds.isEmpty {
             drainBatches += 1
             var ids = drainIds
             let all = drainAll
+            let room = drainRoom
             drainAll = false
+            drainRoom = false
             drainIds = []
-            if all, let drainable = try? await store.drainableSubscriptionIds() {
+            if all || room, let drainable = try? await store.drainableSubscriptionIds(includingMaintain: all) {
                 ids.formUnion(drainable)
             }
             for id in ids.sorted() {

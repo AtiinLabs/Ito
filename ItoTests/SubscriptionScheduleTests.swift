@@ -67,10 +67,27 @@ struct SubscriptionScheduleTests {
         #expect(SubscriptionSchedule.dueDate(Self.row("a"), interval: interval, now: Self.now) == Self.now)
         let future = Self.now.addingTimeInterval(5_000)
         for outcome in SubscriptionCheckOutcome.allCases {
-            #expect(SubscriptionSchedule.dueDate(
+            let due = SubscriptionSchedule.dueDate(
                 Self.row("a", last: future, outcome: outcome), interval: interval, now: Self.now
-            ) == Self.now)
+            )
+            // A rule the ledger cannot act on waits for an edit, whatever the clock says.
+            #expect(due == (SubscriptionSchedule.blockedOutcomes.contains(outcome) ? nil : Self.now))
         }
+    }
+
+    @Test func aRuleThePassCannotCheckNeverTakesThePlaceOfOneItCan() {
+        let interval = 4 * Self.hour
+        var rows = (0..<25).map { index in
+            Self.row(String(format: "gone%02d", index), source: "gone", last: Self.now.addingTimeInterval(-50 * Self.day), outcome: .advanced)
+        }
+        let healthy = (0..<5).map { Self.row("ok\($0)", source: "p", last: Self.now.addingTimeInterval(-Self.day), outcome: .advanced) }
+        rows += healthy
+
+        #expect(SubscriptionSchedule.duePass(rows, forced: [], interval: interval, now: Self.now).allSatisfy { $0.media.pluginId == "gone" })
+        let taken = SubscriptionSchedule.duePass(rows, forced: ["gone00"], interval: interval, now: Self.now) {
+            $0.media.pluginId != "gone"
+        }
+        #expect(Set(taken.map(\.id)) == Set(healthy.map(\.id)))
     }
 
     @Test func aRuleThatIsNotEnabledIsNeverDue() {

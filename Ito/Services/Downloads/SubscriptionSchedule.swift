@@ -24,14 +24,16 @@ nonisolated enum SubscriptionSchedule {
     /// checking cannot fix) or it is not enabled.
     ///
     /// - A rule never attempted (new, re-enabled, resumed after review, restored) is due now.
-    /// - A last attempt in the future (the clock moved back) is due now.
+    /// - A rule the ledger cannot act on (unsupported kind, series not saved, unreadable selection) waits for an edit,
+    ///   whatever its last attempt's time says.
+    /// - Otherwise a last attempt in the future (the clock moved back) is due now.
     /// - A check that read a catalog waits one interval.
     /// - A failure, or a catalog the ledger could not accept, waits twice the interval, at most a day and at least
     ///   one interval, so a source that keeps failing is asked less often.
-    /// - A rule the ledger cannot act on (unsupported kind, series not saved, unreadable selection) waits for an edit.
     static func dueDate(_ row: SubscriptionScheduleRow, interval: TimeInterval, now: Date) -> Date? {
         guard row.state == .enabled else { return nil }
         guard let last = row.lastAttemptAt, let outcome = row.lastAttemptOutcome else { return now }
+        if blockedOutcomes.contains(outcome) { return nil }
         guard last <= now else { return now }
         switch outcome {
         case .unsupportedKind, .seriesNotSaved, .selectionUnreadable:
@@ -44,13 +46,19 @@ nonisolated enum SubscriptionSchedule {
         }
     }
 
+    /// The outcomes more checking cannot fix: the rule waits for an edit.
+    static let blockedOutcomes: Set<SubscriptionCheckOutcome> = [.unsupportedKind, .seriesNotSaved, .selectionUnreadable]
+
     /// The rules one pass checks: those due now and those a rule change `forced`, forced ones first, then the oldest due,
-    /// ties by id, at most `passLimit`. A forced rule is taken even when it is not due, or is blocked.
+    /// ties by id, at most `passLimit`. A forced rule is taken even when it is not due, or is blocked. A rule the pass
+    /// cannot check (`isEligible` false: its source is not installed, or needs the person) is left out before the limit
+    /// is applied, so it never takes the place of one that can be checked.
     static func duePass(
         _ rows: [SubscriptionScheduleRow],
         forced: Set<String>,
         interval: TimeInterval,
-        now: Date
+        now: Date,
+        isEligible: (SubscriptionScheduleRow) -> Bool = { _ in true }
     ) -> [SubscriptionScheduleRow] {
         struct Candidate {
             let row: SubscriptionScheduleRow
@@ -58,7 +66,7 @@ nonisolated enum SubscriptionSchedule {
             let due: Date
         }
         var candidates: [Candidate] = []
-        for row in rows where row.state == .enabled {
+        for row in rows where row.state == .enabled && isEligible(row) {
             let isForced = forced.contains(row.id)
             let due = dueDate(row, interval: interval, now: now)
             if let due, due <= now {

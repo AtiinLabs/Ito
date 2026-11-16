@@ -214,6 +214,9 @@ nonisolated struct SubscriptionCheckRunResult: Sendable, Equatable {
     /// The series the pass attempted. A series it did not reach (the policy stopped it, its source needs the person,
     /// the pass was cancelled) is not listed and stays due.
     var attempted: [MediaIdentity] = []
+    /// The sources whose failure shows they need the person (settings, a sign-in, a trust decision). The rest of their
+    /// series were not asked, and asking again changes nothing until the person acts.
+    var blockedSources: Set<String> = []
 }
 
 @MainActor
@@ -272,6 +275,14 @@ public class UpdateManager: ObservableObject {
     var subscriptionSinkIdentity: ObjectIdentifier? {
         subscriptionSink.map { ObjectIdentifier($0) }
     }
+
+    /// The sources that can be checked now.
+    var installedPluginIDs: Set<String> {
+        updateSource?.installedPluginIDs ?? []
+    }
+
+    /// The series the last manual or background run attempted, for the scheduler to know which rules it covered.
+    private(set) var lastRunAttempted: [MediaIdentity] = []
 
     /// - Parameters:
     ///   - updateSource: Where series are checked; without one, checks do nothing.
@@ -384,6 +395,7 @@ public class UpdateManager: ObservableObject {
         let walk = await check(Self.sourceQueues(batch), operation: operation, kind: .subscriptions)
         result.checked = walk.checked
         result.attempted = walk.attempted
+        result.blockedSources = walk.blockedSources
         result.stoppedByPolicy = walk.stoppedByPolicy
         result.cancelled = Task.isCancelled
         return result
@@ -447,7 +459,9 @@ public class UpdateManager: ObservableObject {
             purpose: isBackground ? .automaticLibraryUpdate : .manualCatalogRefresh,
             operationID: UUID()
         )
-        let updated = await check(Self.sourceQueues(batch), operation: operation, kind: kind).updated
+        let walk = await check(Self.sourceQueues(batch), operation: operation, kind: kind)
+        lastRunAttempted = walk.attempted
+        let updated = walk.updated
         AppLogger.update.debug("🔄 [UpdateManager] Finished: \(updated.count) series have new chapters.")
         return updated
     }
@@ -515,6 +529,7 @@ public class UpdateManager: ObservableObject {
         var updated: [(LibraryItem, Int)] = []
         var checked = 0
         var attempted: [MediaIdentity] = []
+        var blockedSources: Set<String> = []
         /// The automatic-network rule refused the rest of a queue.
         var stoppedByPolicy = false
 
@@ -522,6 +537,7 @@ public class UpdateManager: ObservableObject {
             updated += other.updated
             checked += other.checked
             attempted += other.attempted
+            blockedSources.formUnion(other.blockedSources)
             stoppedByPolicy = stoppedByPolicy || other.stoppedByPolicy
         }
     }
@@ -596,7 +612,10 @@ public class UpdateManager: ObservableObject {
             if kind != .subscriptions { itemsCheckedCurrentRun += 1 }
             // A source that needs the person (settings, a sign-in, a trust decision) is not asked again this pass. The
             // rest of its series stay due. A library run keeps going, as it always did.
-            if kind == .subscriptions, single.sourceNeedsAttention { break }
+            if kind == .subscriptions, single.sourceNeedsAttention {
+                walk.blockedSources.insert(item.pluginId)
+                break
+            }
         }
         return walk
     }

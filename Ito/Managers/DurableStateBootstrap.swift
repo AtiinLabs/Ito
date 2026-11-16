@@ -493,11 +493,7 @@ public final class DurableStateBootstrap: ObservableObject {
                 updates: updates,
                 dbPool: dbPool,
                 interval: { TimeInterval(settings.updateInterval.rawValue) * 3_600 },
-                limitsChanged: settings.$automaticDownloadQueueLimit
-                    .combineLatest(settings.$automaticDownloadQuotaGiB)
-                    .dropFirst()
-                    .map { _, _ in () }
-                    .eraseToAnyPublisher(),
+                limitsChanged: settings.automaticDownloadLimitsChanged,
                 now: Date.init
             )
             scheduler.startObservingReadState(scheduling: DelayedMainActorValueObservationScheduler.mainActor)
