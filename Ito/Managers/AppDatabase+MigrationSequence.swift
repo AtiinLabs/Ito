@@ -15,6 +15,7 @@ extension AppDatabase {
         registerDownloadReplacementMigration(&migrator)
         registerPortableThumbnailsMigration(&migrator)
         registerDownloadPresetsMigration(&migrator)
+        registerSubscriptionLedgerMigration(&migrator)
     }
 
     nonisolated private static func registerMultiKindSourceMappingMigration(_ migrator: inout DatabaseMigrator) {

@@ -202,6 +202,7 @@ actor OfflineChapterStore {
             try fileSystem.createDirectory(stagingRoot)
             try fileSystem.createDirectory(trashDirectory)
             try await bindInstallation(&details)
+            try await sweepOwnerlessJobs(&details)
             try await settleDownloadingJobs(commitGuard: rollForwardGuard, &details)
             try await sweepOrphanBatches(&details)
             try await reconcileInventory(&details)
@@ -281,6 +282,9 @@ actor OfflineChapterStore {
 
     private func pauseJobsAfterRestore(now: Date) async throws -> Int {
         try await database.write { db -> Int in
+            // The subscriptions of another installation are quarantined first: their baselines and the jobs only
+            // they asked for are not portable. What is left is paused for review.
+            try Self.quarantineSubscriptionsAfterRestore(now: now, in: db)
             let jobs = try DownloadJobRecord.fetchAll(db)
             for var job in jobs {
                 job.state = .waiting
@@ -490,12 +494,18 @@ actor OfflineChapterStore {
     @discardableResult
     func cancel(jobIDs: [String]) async throws -> [String] {
         let removed = try await removeJobs(ids: jobIDs)
-        for versionId in removed.compactMap(\.stagingVersionId) {
+        discardStaging(versionIds: removed.compactMap(\.stagingVersionId))
+        return removed.map(\.id)
+    }
+
+    /// Ends the live attempts that staged these versions and removes their staging directories. Run after the
+    /// transaction that removed their jobs, so a late commit finds no job and is refused.
+    func discardStaging(versionIds: [String]) {
+        for versionId in versionIds {
             liveAttemptVersions.remove(versionId)
             replacementConfirmations[versionId] = nil
             try? fileSystem.removeItem(at: stagingDirectory(versionId))
         }
-        return removed.map(\.id)
     }
 
     /// Re-queues a failed or waiting job and re-freezes the source epoch the caller now reads.
@@ -730,6 +740,11 @@ actor OfflineChapterStore {
         let now = clock()
         let settled = try await database.write { db -> DownloadFailureReason? in
             guard var job = try DownloadJobRecord.fetchOne(db, key: jobID), job.state == .queued else {
+                throw OfflineStoreError.jobUnavailable
+            }
+            // A job starts only while one of its owners may start it. Quota is the dequeue gate's decision; here
+            // an enabled subscription is enough. A paused or released subscription's job stays queued, untouched.
+            guard try Self.hasEligibleOwner(jobId: jobID, automaticAdmitted: true, in: db) else {
                 throw OfflineStoreError.jobUnavailable
             }
             // A replacement starts only while its confirmation still applies. That is decided in this same

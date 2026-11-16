@@ -14,50 +14,85 @@ extension OfflineChapterStore {
     /// are never touched.
     func enqueueReplacement(_ request: DownloadReplacementRequest) async throws -> DownloadEnqueueOutcome {
         guard isReconciled else { throw OfflineStoreError.reconciliationPending }
-        let target = request.download
+        let now = clock()
+        let requestId = UUID().uuidString
+        return try await database.write { db -> DownloadEnqueueOutcome in
+            try Self.insertReplacementJob(
+                target: request.download,
+                expectedVersionId: request.expectedVersionId,
+                expectedRevision: request.expectedRevision,
+                authorizationId: request.authorizationId,
+                provenance: .single,
+                owner: .manual(requestId: requestId),
+                now: now,
+                in: db
+            )
+        }
+    }
+
+    /// The one insertion of a replacement job, for a manual request and for a subscription's rule alike, in the
+    /// caller's transaction. Every guard is read here: the installed copy must be the verified one the approval
+    /// names, under the current source epoch, with the revision the approval saw, and the edition must not be
+    /// suppressed. A job that already exists for the edition gains `owner` and wins, except a terminal replacement
+    /// record, which is replaced. A manual request's batch is its request; a subscription's gets a new one.
+    nonisolated static func insertReplacementJob(
+        target: DownloadEnqueueRequest,
+        expectedVersionId: String,
+        expectedRevision: String?,
+        authorizationId: String,
+        provenance: DownloadBatchProvenance,
+        owner: DownloadRequestOwner,
+        now: Date,
+        in db: Database
+    ) throws -> DownloadEnqueueOutcome {
         guard target.mediaKind == .manga || target.mediaKind == .novel else { return .refused(.unsupportedKind) }
         guard target.chapter.paywalled != true else { return .refused(.paywalled) }
         guard let epoch = target.sourceEpoch else { return .refused(.unavailable) }
+        guard provenance.isConsistent else { return .refused(.unavailable) }
         let entry = try JSONEncoder().encode(target.entry)
         let chapter = try JSONEncoder().encode(target.chapter)
-        let batchID = UUID().uuidString
+        let batchID: String
+        if case .manual(let requestId) = owner { batchID = requestId } else { batchID = UUID().uuidString }
         let jobID = UUID().uuidString
-        let now = clock()
-        return try await database.write { db -> DownloadEnqueueOutcome in
-            guard try PluginCompletionScope.current(pluginID: target.pluginId, in: db) == epoch,
-                  let old = try DownloadedChapterRecord.filter(target.edition.predicate).fetchOne(db),
-                  old.state == .verified, old.versionId == request.expectedVersionId,
-                  old.manifestIdentity == target.edition,
-                  old.sourceEpoch == epoch,
-                  try Self.installedRevision(old) == request.expectedRevision,
-                  try DownloadSuppressionRecord.filter(target.edition.predicate).fetchCount(db) == 0 else {
-                return .refused(.unavailable)
-            }
-            if let existing = try DownloadJobRecord.filter(target.edition.predicate).fetchOne(db) {
-                guard existing.failureReason?.endsReplacement == true else { return .alreadyQueued }
-                try Self.deleteJob(id: existing.id, batchId: existing.batchId, in: db)
-            }
-            try DownloadBatchRecord(
-                id: batchID, pluginId: target.pluginId, mediaKind: target.mediaKind,
-                canonicalMediaId: target.canonicalMediaId, preset: .single,
-                selection: DownloadBatchRecord.sourceListSelection, catalogDigest: nil,
-                entrySnapshot: entry, createdAt: now
-            ).insert(db)
-            try DownloadJobRecord(
-                id: jobID, batchId: batchID, sequence: 0, pluginId: target.pluginId,
-                mediaKind: target.mediaKind, canonicalMediaId: target.canonicalMediaId,
-                chapterKey: target.chapter.key, authorityScope: target.edition.authorityScope,
-                chapterSnapshot: chapter, seriesTitle: target.seriesTitle, sourceEpoch: epoch,
-                state: .queued, waitingReason: nil, failureReason: nil, stagingVersionId: nil,
-                attemptCount: 0, createdAt: now, updatedAt: now
-            ).insert(db)
-            try DownloadReplacementIntent(
-                jobId: jobID, expectedVersionId: old.versionId, expectedRevision: request.expectedRevision,
-                targetRevision: DownloadReplacementIntent.revision(target.chapter), sourceEpoch: epoch,
-                authorizationId: request.authorizationId
-            ).insert(db)
-            return .queued
+        guard try PluginCompletionScope.current(pluginID: target.pluginId, in: db) == epoch,
+              let old = try DownloadedChapterRecord.filter(target.edition.predicate).fetchOne(db),
+              old.state == .verified, old.versionId == expectedVersionId,
+              old.manifestIdentity == target.edition,
+              old.sourceEpoch == epoch,
+              try Self.installedRevision(old) == expectedRevision,
+              try DownloadSuppressionRecord.filter(target.edition.predicate).fetchCount(db) == 0 else {
+            return .refused(.unavailable)
         }
+        if let existing = try DownloadJobRecord.filter(target.edition.predicate).fetchOne(db) {
+            guard existing.failureReason?.endsReplacement == true else {
+                try attachOwner(owner, toJob: existing.id, now: now, in: db)
+                return .alreadyQueued
+            }
+            try Self.deleteJob(id: existing.id, batchId: existing.batchId, in: db)
+        }
+        try DownloadBatchRecord(
+            id: batchID, pluginId: target.pluginId, mediaKind: target.mediaKind,
+            canonicalMediaId: target.canonicalMediaId, preset: provenance.preset,
+            selection: DownloadBatchRecord.sourceListSelection, catalogDigest: nil,
+            entrySnapshot: entry, createdAt: now,
+            windowKind: provenance.windowKind, positionCount: provenance.positionCount,
+            customPresetId: provenance.customPresetId
+        ).insert(db)
+        try DownloadJobRecord(
+            id: jobID, batchId: batchID, sequence: 0, pluginId: target.pluginId,
+            mediaKind: target.mediaKind, canonicalMediaId: target.canonicalMediaId,
+            chapterKey: target.chapter.key, authorityScope: target.edition.authorityScope,
+            chapterSnapshot: chapter, seriesTitle: target.seriesTitle, sourceEpoch: epoch,
+            state: .queued, waitingReason: nil, failureReason: nil, stagingVersionId: nil,
+            attemptCount: 0, createdAt: now, updatedAt: now
+        ).insert(db)
+        try DownloadReplacementIntent(
+            jobId: jobID, expectedVersionId: old.versionId, expectedRevision: expectedRevision,
+            targetRevision: DownloadReplacementIntent.revision(target.chapter), sourceEpoch: epoch,
+            authorizationId: authorizationId
+        ).insert(db)
+        try attachOwner(owner, toJob: jobID, now: now, in: db)
+        return .queued
     }
 
     /// Ends a queued or waiting replacement whose confirmation no longer applies. A replacement cannot follow

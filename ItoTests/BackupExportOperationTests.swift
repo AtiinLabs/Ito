@@ -601,6 +601,39 @@ struct BackupExportOperationTests {
                 authorityScope: .publicUnscoped,
                 suppressedAt: date
             ).insert(db)
+            // The automatic-download ledger: a rule, its baseline, a seen key, an event and a job owner.
+            let subscriptionId = UUID().uuidString
+            try SeriesSubscriptionRecord(
+                id: subscriptionId, pluginId: "plugin.test", mediaKind: .manga, canonicalMediaId: "series-1",
+                state: .enabled, pauseReason: nil, mode: .newReleases, windowSize: nil, perRunPositionCap: 5,
+                selection: Data("{}".utf8), replacementRule: .off, incarnation: 1, configGeneration: 1,
+                nextCheckTicket: 2, lastAttemptAt: nil, lastAttemptOutcome: nil, lastSuccessAt: nil,
+                createdAt: date, updatedAt: date
+            ).insert(db)
+            try SubscriptionBaselineRecord(
+                subscriptionId: subscriptionId, incarnation: 1, revision: 1, acceptedTicket: 1, scopeGeneration: 1,
+                acquisition: .mediaUpdate, sourceEpoch: String(repeating: "a", count: 32), pluginVersion: "1.0.0",
+                chapterABI: 3, catalogScope: .allEligible, catalogDigest: String(repeating: "d", count: 64), rowCount: 1,
+                orderConfidence: .ambiguous, highWaterKind: nil, highWaterValue: nil, maxDateUpdated: nil,
+                tombstonesTruncated: false, entrySnapshot: Data("{}".utf8), acceptedAt: date
+            ).insert(db)
+            try SubscriptionSeenKeyRecord(
+                subscriptionId: subscriptionId, chapterKey: "chapter-2", positionKind: .exact, positionValue: "chapter-2",
+                lastRevision: nil, presentInAccepted: true, acceptedRank: nil, firstSeenScopeGeneration: 1,
+                firstSeenAt: date
+            ).insert(db)
+            try SubscriptionEventRecord(
+                id: UUID().uuidString, subscriptionId: subscriptionId, incarnation: 1, kind: .newPosition,
+                identityKind: .exact, identityValue: "chapter-2", qualifier: nil, decision: .undecided,
+                pendingReason: nil, reviewReason: nil, candidateKeys: SubscriptionEventRecord.encode(keys: ["chapter-2"]),
+                candidateRevision: 1, approvedKeys: nil, decidedKeys: nil, previousRevision: nil, targetRevision: nil,
+                ordinal: 0, observedCatalogDigest: String(repeating: "d", count: 64), configGeneration: 1,
+                scopeGeneration: 1, createdAt: date, decidedAt: nil
+            ).insert(db)
+            try db.execute(sql: """
+                INSERT INTO downloadJobOwner (jobId, ownerKind, subscriptionId, subscriptionIncarnation, eventId, attachedAt)
+                SELECT id, 'subscription', ?, 1, ?, 0 FROM downloadJob
+                """, arguments: [subscriptionId, UUID().uuidString])
         }
         let destination = try ExportDestination()
         defer { destination.cleanup() }
@@ -615,15 +648,18 @@ struct BackupExportOperationTests {
 
         let exported = try DatabaseQueue(path: destination.url.path)
         defer { try? exported.close() }
-        let tables = ["downloadedChapter", "downloadJob", "downloadBatch", "downloadSuppression", "downloadStore"]
+        let tables = [
+            "downloadedChapter", "downloadJob", "downloadBatch", "downloadSuppression", "downloadStore",
+            "downloadJobOwner", "seriesSubscription", "subscriptionBaseline", "subscriptionSeenKey", "subscriptionEvent"
+        ]
         let exportedCounts = try await exported.read { db in
             try tables.map { try rowCount($0, in: db) }
         }
-        #expect(exportedCounts == [0, 0, 0, 0, 0])
+        #expect(exportedCounts == Array(repeating: 0, count: tables.count))
         let sourceCounts = try await database.dbPool.read { db in
             try tables.map { try rowCount($0, in: db) }
         }
-        #expect(sourceCounts == [1, 1, 1, 1, 1])
+        #expect(sourceCounts == Array(repeating: 1, count: tables.count))
     }
 
     private func rowCount(_ table: String, in db: Database) throws -> Int {

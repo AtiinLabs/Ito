@@ -21,6 +21,12 @@ extension OfflineChapterStore {
               job.stagingVersionId == versionId else {
             return try refusal(.jobGone, versionId: versionId, in: db)
         }
+        // The request must still stand. A job whose last owner was released (a subscription disabled or deleted)
+        // is removed here, so the attempt that was running for it cannot publish. A paused owner keeps its intent.
+        guard try hasLiveOwner(jobId: jobID, in: db) else {
+            try deleteJob(id: jobID, batchId: job.batchId, in: db)
+            return try refusal(.jobGone, versionId: versionId, in: db)
+        }
         let replacement = try DownloadReplacementIntent.fetchOne(db, key: jobID)
         let installed = try DownloadedChapterRecord.filter(job.edition.predicate).fetchOne(db)
         let currentEpoch = try PluginCompletionScope.current(pluginID: job.pluginId, in: db)
