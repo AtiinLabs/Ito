@@ -24,6 +24,16 @@
       "versions": [
         {
           "version": "1.5.0",
+          "buildVersion": "250",
+          "date": "2026-11-16T02:30:03Z",
+          "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/dev-250/Ito-1.5.0-dev.250-unsigned.ipa",
+          "size": 14541247,
+          "sha256": "7ed4d2e8354d0d3a4de503bbfce3dbb72bc9f55d45f2bbee398ab469cf605eb1",
+          "localizedDescription": "Ito 1.5.0-dev.250 (build 250). Automated unsigned dev build from main at 38c1228. This build may be unstable.",
+          "minOSVersion": "15.4"
+        },
+        {
+          "version": "1.5.0",
           "buildVersion": "249",
           "date": "2026-11-15T20:48:37Z",
           "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/dev-249/Ito-1.5.0-dev.249-unsigned.ipa",
@@ -151,25 +161,15 @@
           "sha256": "16063decd7c441f05e86a76e91202de6cf9c718e1018c86f8e73814fa0f2164e",
           "localizedDescription": "Ito 1.5.0-dev.235 (build 235). Automated unsigned dev build from main at 820cfbc. This build may be unstable.",
           "minOSVersion": "15.4"
-        },
-        {
-          "version": "1.5.0",
-          "buildVersion": "234",
-          "date": "2026-11-12T06:30:06Z",
-          "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/dev-234/Ito-1.5.0-dev.234-unsigned.ipa",
-          "size": 13901723,
-          "sha256": "7b66a6e6a488f0ee454eb41e6eff85e4462b7243bab1ec968c3d91025054fc6f",
-          "localizedDescription": "Ito 1.5.0-dev.234 (build 234). Automated unsigned dev build from main at 659a8d1. This build may be unstable.",
-          "minOSVersion": "15.4"
         }
       ],
       "version": "1.5.0",
-      "buildVersion": "249",
-      "date": "2026-11-15T20:48:37Z",
-      "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/dev-249/Ito-1.5.0-dev.249-unsigned.ipa",
-      "size": 14437879,
+      "buildVersion": "250",
+      "date": "2026-11-16T02:30:03Z",
+      "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/dev-250/Ito-1.5.0-dev.250-unsigned.ipa",
+      "size": 14541247,
       "minOSVersion": "15.4",
-      "versionDescription": "Ito 1.5.0-dev.249 (build 249). Automated unsigned dev build from main at 74b26e3. This build may be unstable."
+      "versionDescription": "Ito 1.5.0-dev.250 (build 250). Automated unsigned dev build from main at 38c1228. This build may be unstable."
     }
   ],
   "news": []
