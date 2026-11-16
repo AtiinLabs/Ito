@@ -39,7 +39,7 @@ func boundaryLabel(_ boundary: ReaderChapterBoundary<Chapter>) -> String {
     case .chapter(let chapter): "chapter:\(chapter.key)"
     case .end: "end"
     case .locked(let chapter): "locked:\(chapter.key)"
-    case .otherReader(let chapter): "otherReader:\(chapter.key)"
+    case .handoff(let chapter, let requiresGroupConsent): "handoff:\(chapter.key)\(requiresGroupConsent ? ":consent" : "")"
     case .notAvailableOffline(let chapter): "notAvailableOffline:\(chapter.key)"
     case .groupConsent(let chapter): "groupConsent:\(chapter.key)"
     }
@@ -112,8 +112,8 @@ struct ReaderChapterBoundaryTests {
         #expect(label(viewModel.boundaryBefore(Self.p1)) == "end")
         #expect(label(viewModel.boundaryAfter(Self.t2)) == "locked:p3")
         #expect(label(viewModel.boundaryBefore(Self.p4)) == "locked:p3")
-        #expect(label(viewModel.boundaryAfter(Self.p1)) == "otherReader:t2")
-        #expect(label(viewModel.boundaryBefore(Self.p3)) == "otherReader:t2")
+        #expect(label(viewModel.boundaryAfter(Self.p1)) == "handoff:t2")
+        #expect(label(viewModel.boundaryBefore(Self.p3)) == "handoff:t2")
         // The ordinary navigation answers keep their behavior.
         #expect(viewModel.chapterAfter(Self.p1) == nil)
         #expect(viewModel.chapterAfter(Self.p4)?.key == "p5")
@@ -133,7 +133,7 @@ struct ReaderChapterBoundaryTests {
         #expect(label(viewModel.boundaryAfter(Self.p4)) == "chapter:p5")
         // A lock and the other reader are reported as themselves, not as a missing download.
         #expect(label(viewModel.boundaryAfter(Self.t2)) == "locked:p3")
-        #expect(label(viewModel.boundaryAfter(Self.p1)) == "otherReader:t2")
+        #expect(label(viewModel.boundaryAfter(Self.p1)) == "notAvailableOffline:t2")
     }
 
     @Test func pageReaderStopsAtAnUnstoredNeighborWhileOfflineAndResumesOnline() {
@@ -148,7 +148,7 @@ struct ReaderChapterBoundaryTests {
         #expect(label(viewModel.boundaryAfter(Self.p3)) == "notAvailableOffline:p4")
         #expect(label(viewModel.boundaryAfter(Self.p4)) == "chapter:p5")
         #expect(label(viewModel.boundaryAfter(Self.t2)) == "locked:p3")
-        #expect(label(viewModel.boundaryAfter(Self.p1)) == "otherReader:t2")
+        #expect(label(viewModel.boundaryAfter(Self.p1)) == "notAvailableOffline:t2")
 
         availability.isOffline = false
         #expect(label(viewModel.boundaryAfter(Self.p3)) == "chapter:p4")
@@ -171,7 +171,7 @@ struct ReaderChapterBoundaryTests {
         for viewModel in [savedOnly, offline] {
             #expect(label(viewModel.boundaryBefore(Self.p5)) == "notAvailableOffline:p4")
             #expect(label(viewModel.boundaryBefore(Self.p4)) == "locked:p3")
-            #expect(label(viewModel.boundaryBefore(Self.p3)) == "otherReader:t2")
+            #expect(label(viewModel.boundaryBefore(Self.p3)) == "notAvailableOffline:t2")
             #expect(label(viewModel.boundaryBefore(Self.p1)) == "end")
         }
         availability.isOffline = false
@@ -201,12 +201,15 @@ struct ReaderChapterBoundaryTests {
             preference: .remoteThisTime(chapterKey: "p5")
         )
         let viewModel = MangaReaderViewModel(
-            pageLoader: loader,
+            chapterPreparer: LoaderBackedChapterPreparer(manga: loader),
+            routeSession: base.session,
+            routeVisitID: UUID(),
+            presentationMode: .live,
             pluginID: "plugin.test",
             entry: entry,
             initialChapter: Self.p4,
             dependencies: base.dependencies,
-            offline: ReaderOfflineContext(availability: availability, downloadedCopy: loader)
+            offline: ReaderOfflineContext(availability: availability)
         )
 
         // Chosen to read online this time: offline that cannot work, so the reader stops instead.
@@ -216,13 +219,19 @@ struct ReaderChapterBoundaryTests {
         let pinned = ResolvingMangaPageLoader(pluginID: "plugin.test", local: store, remote: SourceOnlyPages())
         _ = try await pinned.pages(for: entry, chapter: Self.p5, operation: makeTestNetworkOperation())
         let pinnedModel = MangaReaderViewModel(
-            pageLoader: pinned,
+            chapterPreparer: LoaderBackedChapterPreparer(manga: pinned),
+            routeSession: base.session,
+            routeVisitID: UUID(),
+            presentationMode: .live,
             pluginID: "plugin.test",
             entry: entry,
-            initialChapter: Self.p4,
+            initialChapter: Self.p5,
             dependencies: base.dependencies,
-            offline: ReaderOfflineContext(availability: availability, downloadedCopy: pinned)
+            offline: ReaderOfflineContext(availability: availability)
         )
+        // The reader that loaded the chapter holds what pins it.
+        pinnedModel.start()
+        await pinnedModel.waitForTestingOperations()
         #expect(label(pinnedModel.boundaryAfter(Self.p4)) == "notAvailableOffline:p5")
         availability.isOffline = false
         #expect(label(pinnedModel.boundaryAfter(Self.p4)) == "chapter:p5")
@@ -352,8 +361,8 @@ struct ReaderChapterBoundaryTests {
         #expect(label(viewModel.boundaryBefore(Self.x1)) == "end")
         #expect(label(viewModel.boundaryAfter(Self.i2)) == "locked:x3")
         #expect(label(viewModel.boundaryBefore(Self.x4)) == "locked:x3")
-        #expect(label(viewModel.boundaryAfter(Self.x1)) == "otherReader:i2")
-        #expect(label(viewModel.boundaryBefore(Self.x3)) == "otherReader:i2")
+        #expect(label(viewModel.boundaryAfter(Self.x1)) == "handoff:i2")
+        #expect(label(viewModel.boundaryBefore(Self.x3)) == "handoff:i2")
         #expect(viewModel.chapterAfter(Self.x1) == nil)
         #expect(viewModel.chapterAfter(Self.x4)?.key == "x5")
     }
@@ -371,7 +380,8 @@ struct ReaderChapterBoundaryTests {
         #expect(label(viewModel.boundaryAfter(Self.x3)) == "notAvailableOffline:x4")
         #expect(label(viewModel.boundaryAfter(Self.x4)) == "chapter:x5")
         #expect(label(viewModel.boundaryAfter(Self.i2)) == "locked:x3")
-        #expect(label(viewModel.boundaryAfter(Self.x1)) == "otherReader:i2")
+        // No exact verified copy on a saved-only route: not available, whatever the format.
+        #expect(label(viewModel.boundaryAfter(Self.x1)) == "notAvailableOffline:i2")
     }
 
     @Test func textReaderStopsAtAnUnstoredNeighborWhileOffline() {
@@ -537,24 +547,25 @@ struct ReaderChapterBoundaryTests {
 
     @Test func promptsUseTheExactWordsOfEachBoundary() {
         let locked = ReaderChapterBoundary.locked(Self.p3)
-        let other = ReaderChapterBoundary.otherReader(Self.t2)
+        let other = ReaderChapterBoundary.handoff(Self.t2, requiresGroupConsent: false)
         let missing = ReaderChapterBoundary.notAvailableOffline(Self.p4)
 
         #expect(ReaderBoundaryNotice.pages(for: locked, isNext: true)?.text == "Next chapter is locked")
-        #expect(ReaderBoundaryNotice.pages(for: other, isNext: true)?.text == "Next chapter opens in the text reader")
+        #expect(ReaderBoundaryNotice.pages(for: other, isNext: true)?.text == "Next chapter opens in the text reader. Tap to continue")
         #expect(ReaderBoundaryNotice.pages(for: missing, isNext: true)?.text == "Next chapter isn't downloaded")
         #expect(ReaderBoundaryNotice.pages(for: locked, isNext: false)?.text == "Previous chapter is locked")
-        #expect(ReaderBoundaryNotice.pages(for: other, isNext: false)?.text == "Previous chapter opens in the text reader")
+        #expect(ReaderBoundaryNotice.pages(for: other, isNext: false)?.text == "Previous chapter opens in the text reader. Tap to continue")
         #expect(ReaderBoundaryNotice.pages(for: missing, isNext: false)?.text == "Previous chapter isn't downloaded")
 
-        #expect(ReaderBoundaryNotice.textAfterLast(for: locked)?.text == "Next chapter is locked")
-        #expect(ReaderBoundaryNotice.textAfterLast(for: ReaderChapterBoundary.otherReader(Self.p1))?.text
-            == "Next chapter opens in the page reader")
-        #expect(ReaderBoundaryNotice.textAfterLast(for: missing)?.text == "Next chapter isn't downloaded")
+        #expect(ReaderBoundaryNotice.text(for: locked, isNext: true)?.text == "Next chapter is locked")
+        #expect(ReaderBoundaryNotice.text(for: ReaderChapterBoundary.handoff(Self.p1, requiresGroupConsent: false), isNext: true)?.text
+            == "Next chapter opens in the page reader. Tap to continue")
+        #expect(ReaderBoundaryNotice.text(for: ReaderChapterBoundary.handoff(Self.p1, requiresGroupConsent: false), isNext: true)?.requestsHandoff == true)
+        #expect(ReaderBoundaryNotice.text(for: missing, isNext: true)?.text == "Next chapter isn't downloaded")
 
         #expect(ReaderBoundaryNotice.pages(for: ReaderChapterBoundary<Chapter>.end, isNext: true) == nil)
         #expect(ReaderBoundaryNotice.pages(for: ReaderChapterBoundary.chapter(Self.p4), isNext: true) == nil)
-        #expect(ReaderBoundaryNotice.textAfterLast(for: ReaderChapterBoundary.chapter(Self.x4)) == nil)
+        #expect(ReaderBoundaryNotice.text(for: ReaderChapterBoundary.chapter(Self.x4), isNext: true) == nil)
     }
 
     // MARK: - Availability seam
@@ -611,24 +622,29 @@ struct ReaderChapterBoundaryTests {
             connectivity: ConnectivityFake(isOffline: true),
             networkContexts: PluginNetworkContexts(policy: NetworkPolicyCenter())
         )
-        let pages = factory.makeMangaViewModel(
-            content: ReaderContentSource(remote: ItoRunner()),
-            pluginID: "plugin.test",
-            entry: .manga(Manga(key: "m", title: "M", chapters: Self.all)),
-            chapter: Self.p4
-        )
-        let savedOnlyPages = factory.makeMangaViewModel(
-            content: ReaderContentSource(remote: nil),
-            pluginID: "plugin.test",
-            entry: .manga(Manga(key: "m", title: "M", chapters: Self.all)),
-            chapter: Self.p4
-        )
-        let text = factory.makeNovelViewModel(
+        func pagesModel(remote: ItoRunner?) -> MangaReaderViewModel? {
+            let route = factory.makeRoute(
+                content: ReaderContentSource(remote: remote),
+                pluginID: "plugin.test",
+                entry: .manga(Manga(key: "m", title: "M", chapters: Self.all)),
+                chapter: Self.p4,
+                format: .pages
+            )
+            if case .pages(_, let model)? = route.active { return model }
+            return nil
+        }
+        let textRoute = factory.makeRoute(
             content: ReaderContentSource(remote: ItoRunner()),
             pluginID: "plugin.test",
             entry: .novel(Novel(key: "n", title: "N", chapters: Self.allText)),
-            chapter: Self.x4
+            chapter: Self.x4,
+            format: .text
         )
+        guard let pages = pagesModel(remote: ItoRunner()), let savedOnlyPages = pagesModel(remote: nil),
+              case .text(_, let text)? = textRoute.active else {
+            Issue.record("The routes start in their own readers")
+            return
+        }
 
         for viewModel in [pages, savedOnlyPages] {
             // A neighbor that was not downloaded is still opened: the source is asked, as ever.
@@ -637,19 +653,19 @@ struct ReaderChapterBoundaryTests {
             // Locks remain explicit source-access boundaries even without download support.
             #expect(label(viewModel.boundaryAfter(Self.t2)) == "locked:p3")
             #expect(label(viewModel.boundaryBefore(Self.p4)) == "locked:p3")
-            // The other reader retains the unavailable-runtime end behavior.
-            #expect(label(viewModel.boundaryAfter(Self.p1)) == "end")
-            #expect(label(viewModel.boundaryBefore(Self.p3)) == "end")
+            // The other reader continues the route: absent download support cannot disable it.
+            #expect(label(viewModel.boundaryAfter(Self.p1)) == "handoff:t2")
+            #expect(label(viewModel.boundaryBefore(Self.p3)) == "handoff:t2")
             #expect(viewModel.chapterAfter(Self.p4)?.key == "p5")
         }
         #expect(label(text.boundaryAfter(Self.x3)) == "chapter:x4")
         #expect(label(text.boundaryAfter(Self.i2)) == "locked:x3")
         #expect(label(text.boundaryBefore(Self.x4)) == "locked:x3")
-        #expect(label(text.boundaryAfter(Self.x1)) == "end")
+        #expect(label(text.boundaryAfter(Self.x1)) == "handoff:i2")
         #expect(text.nextChapter?.key == "x5")
         #expect(ReaderBoundaryNotice.pages(for: pages.boundaryAfter(Self.t2), isNext: true)?.text == "Next chapter is locked")
-        #expect(ReaderBoundaryNotice.pages(for: pages.boundaryAfter(Self.p1), isNext: true) == nil)
-        #expect(ReaderBoundaryNotice.textAfterLast(for: text.boundaryAfter(Self.x1)) == nil)
+        #expect(ReaderBoundaryNotice.pages(for: pages.boundaryAfter(Self.p1), isNext: true)?.requestsHandoff == true)
+        #expect(ReaderBoundaryNotice.text(for: text.boundaryAfter(Self.x1), isNext: true)?.requestsHandoff == true)
     }
 
     @Test func whereDownloadsExistTheFactoryBuildsReadersThatShowBoundaries() {
@@ -661,17 +677,24 @@ struct ReaderChapterBoundaryTests {
             connectivity: connectivity,
             networkContexts: PluginNetworkContexts(policy: NetworkPolicyCenter())
         )
-        let viewModel = factory.makeMangaViewModel(
+        let route = factory.makeRoute(
             content: ReaderContentSource(remote: ItoRunner()),
             pluginID: "plugin.test",
             entry: .manga(Manga(key: "m", title: "M", chapters: Self.all)),
-            chapter: Self.p4
+            chapter: Self.p4,
+            format: .pages
         )
+        guard case .pages(_, let viewModel)? = route.active else {
+            Issue.record("A pages opening starts in the page reader")
+            return
+        }
 
         #expect(label(viewModel.boundaryAfter(Self.p3)) == "notAvailableOffline:p4")
         #expect(label(viewModel.boundaryAfter(Self.t2)) == "locked:p3")
-        #expect(label(viewModel.boundaryAfter(Self.p1)) == "otherReader:t2")
+        // Not stored and no network: offline precedence holds whatever the neighbor's format, then it continues.
+        #expect(label(viewModel.boundaryAfter(Self.p1)) == "notAvailableOffline:t2")
         connectivity.set(isOffline: false)
+        #expect(label(viewModel.boundaryAfter(Self.p1)) == "handoff:t2")
         #expect(label(viewModel.boundaryAfter(Self.p3)) == "chapter:p4")
     }
 

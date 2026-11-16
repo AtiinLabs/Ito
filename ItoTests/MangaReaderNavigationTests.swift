@@ -100,7 +100,10 @@ extension MangaReaderViewModelTests {
         let subject = makeSubject(chapters: [makeChapter("a", number: 1)])
         subject.progress.savedViewer = .Webtoon
         let reopened = MangaReaderViewModel(
-            pageLoader: subject.loader,
+            chapterPreparer: subject.preparer,
+            routeSession: subject.session,
+            routeVisitID: UUID(),
+            presentationMode: .live,
             pluginID: subject.viewModel.pluginID,
             entry: subject.viewModel.entry,
             initialChapter: makeChapter("a", number: 1),

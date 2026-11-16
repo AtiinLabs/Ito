@@ -583,6 +583,8 @@ final class NovelReaderPluginMetadataFake: NovelReaderPluginMetadataProviding {
 struct NovelReaderTestSubject {
     let viewModel: NovelReaderViewModel
     let loader: NovelChapterLoaderFake
+    let preparer: LoaderBackedChapterPreparer
+    let session: ReaderRouteSession
     let events: NovelReaderEventRecorder
     let progress: NovelReaderProgressFake
     let history: NovelReaderHistoryFake
@@ -631,7 +633,10 @@ func makeNovelReaderSubject(
         prefetchChapters: true
     ),
     offlineAvailability: any ReaderOfflineAvailability = UnavailableReaderOfflineAvailability(),
-    isSavedOnly: Bool = false
+    isSavedOnly: Bool = false,
+    session: ReaderRouteSession? = nil,
+    visitID: UUID = UUID(),
+    mode: ReaderPresentationMode = .live
 ) -> NovelReaderTestSubject {
     let events = NovelReaderEventRecorder()
     let loader = NovelChapterLoaderFake()
@@ -652,8 +657,13 @@ func makeNovelReaderSubject(
         presentationLogger: logger,
         makeImageSession: { _ in ReaderPageImageSession() }
     )
+    let preparer = LoaderBackedChapterPreparer(novel: loader)
+    let routeSession = session ?? makeReaderRouteSession(entry: entry, scope: progress)
     let viewModel = NovelReaderViewModel(
-        chapterLoader: loader,
+        chapterPreparer: preparer,
+        routeSession: routeSession,
+        routeVisitID: visitID,
+        presentationMode: mode,
         pluginID: "plugin.test",
         entry: entry,
         initialChapter: initialChapter,
@@ -663,6 +673,8 @@ func makeNovelReaderSubject(
     return NovelReaderTestSubject(
         viewModel: viewModel,
         loader: loader,
+        preparer: preparer,
+        session: routeSession,
         events: events,
         progress: progress,
         history: history,

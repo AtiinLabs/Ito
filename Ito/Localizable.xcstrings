@@ -1542,6 +1542,12 @@
     "Couldn't load trending titles: %@" : {
 
     },
+    "Couldn't open the next chapter." : {
+      "comment" : "Reader: the next chapter, made for the other reader, could not be opened; the current chapter stays"
+    },
+    "Couldn't open the previous chapter." : {
+      "comment" : "Reader: the previous chapter, made for the other reader, could not be opened; the current chapter stays"
+    },
     "Couldn't read the saved scanlator choice" : {
       "comment" : "Series details: reading the scanlators remembered for this series failed this time. The choice itself may be fine."
     },
@@ -2778,11 +2784,11 @@
     "Next chapter isn't downloaded" : {
       "comment" : "Reader: the next chapter has no saved copy and the source cannot be reached"
     },
-    "Next chapter opens in the page reader" : {
-      "comment" : "Reader: the next chapter is made of pages; go back to the series to open it"
+    "Next chapter opens in the page reader. Tap to continue" : {
+      "comment" : "Reader boundary: the next chapter is made of pages; tapping opens it in the page reader without leaving the series"
     },
-    "Next chapter opens in the text reader" : {
-      "comment" : "Reader: the next chapter is text; go back to the series to open it"
+    "Next chapter opens in the text reader. Tap to continue" : {
+      "comment" : "Reader boundary: the next chapter is text; tapping opens it in the text reader without leaving the series"
     },
     "No Custom Presets" : {
       "comment" : "Download presets settings empty state title."
@@ -3029,6 +3035,12 @@
     "Open This Upload" : {
       "comment" : "Reader consent alert button: opens the one upload from another translation group, for this reading only"
     },
+    "Opening the next chapter…" : {
+      "comment" : "Reader: shown over the current chapter while the next one, made for the other reader, is being prepared"
+    },
+    "Opening the previous chapter…" : {
+      "comment" : "Reader: shown over the current chapter while the previous one, made for the other reader, is being prepared"
+    },
     "Opening the saved copy…" : {
       "comment" : "Downloaded versions sheet: the chosen saved copy is being opened"
     },
@@ -3211,8 +3223,11 @@
     "Previous chapter isn't downloaded" : {
       "comment" : "Reader: the previous chapter has no saved copy and the source cannot be reached"
     },
-    "Previous chapter opens in the text reader" : {
-      "comment" : "Reader: the previous chapter is text; go back to the series to open it"
+    "Previous chapter opens in the page reader. Tap to continue" : {
+      "comment" : "Reader boundary: the previous chapter is made of pages; tapping opens it in the page reader without leaving the series"
+    },
+    "Previous chapter opens in the text reader. Tap to continue" : {
+      "comment" : "Reader boundary: the previous chapter is text; tapping opens it in the text reader without leaving the series"
     },
     "Privacy" : {
 
@@ -4501,6 +4516,9 @@
     },
     "This chapter isn't downloaded." : {
       "comment" : "Shown when a chapter has no offline copy and cannot be loaded: no installed source can load it, or the device is offline. Used as the reader's load-failure text and as a notice on the series details screen.\nShown when a chapter has no offline copy and no installed source can load it. Used as the reader's load-failure text and as a notice on the series details screen."
+    },
+    "This chapter opens in the other reader." : {
+      "comment" : "Reader failure: the chapter is made for the other reader, but this reader has no route to hand it to."
     },
     "This control type (%u) is not supported." : {
 

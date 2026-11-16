@@ -255,7 +255,7 @@ nonisolated enum OfflineChapterPages {
 final class ResolvingMangaPageLoader: MangaPageLoading, DownloadedCopyReopening {
     /// The installed source's loader, or nil on saved-only routes.
     let remote: (any MangaPageLoading)?
-    private let resolver: OfflineChapterSourceResolver
+    let resolver: OfflineChapterSourceResolver
 
     init(
         pluginID: String,
@@ -270,6 +270,12 @@ final class ResolvingMangaPageLoader: MangaPageLoading, DownloadedCopyReopening 
             hasRemote: remote != nil,
             preference: preference
         )
+    }
+
+    /// Reads through a resolver that already pins its chapters, such as the one a prepared chapter owns.
+    init(resolver: OfflineChapterSourceResolver, remote: (any MangaPageLoading)?) {
+        self.remote = remote
+        self.resolver = resolver
     }
 
     func isReadingRemoteThisTime(chapterKey: String) -> Bool {
@@ -299,7 +305,7 @@ final class ResolvingMangaPageLoader: MangaPageLoading, DownloadedCopyReopening 
 final class ResolvingNovelChapterLoader: NovelChapterLoading, DownloadedCopyReopening {
     /// The installed source's loader, or nil on saved-only routes.
     let remote: (any NovelChapterLoading)?
-    private let resolver: OfflineChapterSourceResolver
+    let resolver: OfflineChapterSourceResolver
 
     init(
         pluginID: String,
@@ -314,6 +320,12 @@ final class ResolvingNovelChapterLoader: NovelChapterLoading, DownloadedCopyReop
             hasRemote: remote != nil,
             preference: preference
         )
+    }
+
+    /// Reads through a resolver that already pins its chapters, such as the one a prepared chapter owns.
+    init(resolver: OfflineChapterSourceResolver, remote: (any NovelChapterLoading)?) {
+        self.remote = remote
+        self.resolver = resolver
     }
 
     func isReadingRemoteThisTime(chapterKey: String) -> Bool {

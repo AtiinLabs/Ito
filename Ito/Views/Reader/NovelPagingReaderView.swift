@@ -22,8 +22,18 @@ struct NovelPagingReaderView: View {
     let onRestoreAnchorApplied: (NovelReadingAnchor) -> Void
     /// Called with the chapter, offset and whether the page is the chapter's last.
     let onPositionChanged: (UUID, Int, Bool) -> Void
-    /// Asked when the reader's notice offers consent for the next chapter's group.
+    /// Why reading stops before the first loaded chapter, when the previous one cannot be opened here.
+    var previousBoundaryNotice: ReaderBoundaryNotice?
+    /// Asked when the reader's notice offers consent for, or continuing in the other reader with, the next chapter.
     var onBoundaryNoticeTap: () -> Void = {}
+    var onPreviousBoundaryNoticeTap: () -> Void = {}
+    /// Told with the paginated layout's generation and the chapter shown once pages are laid out and the
+    /// requested place applied.
+    let onInitialLayoutApplied: (Int, UUID) -> Void
+    /// Told when laying the pages out produced no result and was not replaced.
+    let onLayoutFailed: () -> Void
+    /// Told with the request's key whenever an illustration page holds a visible lease on its image.
+    let onInitialImageVisibleLease: (ReaderPageImageKey) -> Void
 
     @State private var paginatedCache: [UUID: [NovelPaginationPage]] = [:]
     @State private var flattenedPages: [NovelPaginationPage] = []
@@ -52,6 +62,7 @@ struct NovelPagingReaderView: View {
                         currentPage: $currentPageIndex,
                         maxWidth: max(0, size.width - 32),
                         textColor: theme.textColor,
+                        onImageVisibleLease: onInitialImageVisibleLease,
                         onPageChanged: { newIndex in
                             if newIndex >= 0 && newIndex < flattenedPages.count {
                                 let newChap = flattenedPages[newIndex].chapter
@@ -87,27 +98,11 @@ struct NovelPagingReaderView: View {
                     .allowsHitTesting(false)
 
                     if let boundaryNotice, currentPageIndex == flattenedPages.count - 1 {
-                        VStack {
-                            Spacer()
-                            HStack(spacing: 8) {
-                                Image(systemName: boundaryNotice.systemImage)
-                                    .accessibilityHidden(true)
-                                Text(boundaryNotice.text)
-                            }
-                            .accessibilityElement(children: .combine)
-                            .accessibilityAddTraits(boundaryNotice.requestsGroupConsent ? .isButton : [])
-                            .font(.footnote)
-                            .foregroundColor(theme.textColor)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(theme.backgroundColor.opacity(0.95), in: Capsule())
-                            .overlay(Capsule().stroke(theme.textColor.opacity(0.2), lineWidth: 1))
-                            .padding(.bottom, 32)
-                            .onTapGesture {
-                                if boundaryNotice.requestsGroupConsent { onBoundaryNoticeTap() }
-                            }
-                        }
-                        .allowsHitTesting(boundaryNotice.requestsGroupConsent)
+                        noticeCapsule(boundaryNotice, onTap: onBoundaryNoticeTap)
+                    }
+
+                    if let previousBoundaryNotice, currentPageIndex == 0 {
+                        noticeCapsule(previousBoundaryNotice, onTap: onPreviousBoundaryNoticeTap, atTop: true)
                     }
 
                     if appendFailed, boundaryNotice == nil, currentPageIndex >= flattenedPages.count - 3 {
@@ -166,6 +161,35 @@ struct NovelPagingReaderView: View {
         }
     }
 
+    /// The notice at a loaded chapter's edge. One that offers consent or a continuation is a button.
+    private func noticeCapsule(
+        _ notice: ReaderBoundaryNotice,
+        onTap: @escaping () -> Void,
+        atTop: Bool = false
+    ) -> some View {
+        let isAction = notice.requestsGroupConsent || notice.requestsHandoff
+        return VStack {
+            if !atTop { Spacer() }
+            HStack(spacing: 8) {
+                Image(systemName: notice.systemImage)
+                    .accessibilityHidden(true)
+                Text(notice.text)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(isAction ? .isButton : [])
+            .font(.footnote)
+            .foregroundColor(theme.textColor)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(theme.backgroundColor.opacity(0.95), in: Capsule())
+            .overlay(Capsule().stroke(theme.textColor.opacity(0.2), lineWidth: 1))
+            .padding(atTop ? .top : .bottom, 32)
+            .onTapGesture { if isAction { onTap() } }
+            if atTop { Spacer() }
+        }
+        .allowsHitTesting(isAction)
+    }
+
     private func configuration(
         size: CGSize? = nil,
         fontSize: Double? = nil,
@@ -211,7 +235,12 @@ struct NovelPagingReaderView: View {
         layoutTask = layout
         paginationTask = Task { @MainActor in
             let pages = await layout.value
-            guard generation == paginationGeneration, let pages else { return }
+            guard generation == paginationGeneration else { return }
+            guard let pages else {
+                // A layout that produced nothing and was not replaced failed; a replaced one is not a result.
+                if !Task.isCancelled { onLayoutFailed() }
+                return
+            }
             let byChapter = Dictionary(grouping: pages, by: \.chapterID)
             for chapter in missing {
                 paginatedCache[chapter.id] = byChapter[chapter.id] ?? []
@@ -245,6 +274,10 @@ struct NovelPagingReaderView: View {
         flattenedPages = pages
         currentPageIndex = newIndex
         reportPosition(of: pages, at: newIndex)
+        if pages.indices.contains(newIndex) {
+            // The pages are laid out and the requested place is the one shown.
+            onInitialLayoutApplied(paginationGeneration, pages[newIndex].chapterID)
+        }
         // Opening or restoring near the end loads the next chapter, as a swipe there would.
         if prefetchChapters && newIndex >= pages.count - 3 {
             onLoadNextChapter()
@@ -283,6 +316,8 @@ struct PageViewController: UIViewControllerRepresentable {
     let maxWidth: CGFloat
     /// For image pages' loading and error content.
     let textColor: Color
+    /// Told with the request's key whenever an illustration page holds a visible lease on its image.
+    let onImageVisibleLease: (ReaderPageImageKey) -> Void
     let onPageChanged: (Int) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -354,6 +389,7 @@ struct PageViewController: UIViewControllerRepresentable {
             vc.maxWidth = parent.maxWidth
             vc.imageSession = parent.imageSession
             vc.foreground = parent.textColor
+            vc.onImageVisibleLease = parent.onImageVisibleLease
             return vc
         }
 
@@ -410,6 +446,7 @@ class PageContentViewController: UIViewController {
     var page: NovelPaginationPage?
     var maxWidth: CGFloat = 0
     var foreground: Color = .primary
+    var onImageVisibleLease: ((ReaderPageImageKey) -> Void)?
 
     private let textView = UITextView()
 
@@ -460,7 +497,8 @@ class PageContentViewController: UIViewController {
                 session: imageSession,
                 pageID: "novel-paged-\(page?.chapterID.uuidString ?? "")-\(index)",
                 foreground: foreground,
-                interaction: .passive
+                interaction: .passive,
+                onVisibleLeaseAcquired: onImageVisibleLease
             )
         )
         host.view.backgroundColor = .clear

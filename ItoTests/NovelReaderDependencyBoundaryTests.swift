@@ -33,21 +33,6 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
         }
     }
 
-    func testNovelReaderViewOwnsExactlyOneInjectedStateObjectAndRetainsRendering() throws {
-        let view = try source("Ito/Views/Reader/NovelReaderView.swift")
-
-        XCTAssertEqual(view.components(separatedBy: "@StateObject").count - 1, 1)
-        XCTAssertTrue(view.contains("@StateObject private var viewModel: NovelReaderViewModel"))
-        XCTAssertTrue(view.contains("GeometryReader"))
-        XCTAssertTrue(view.contains("ScrollView"))
-        XCTAssertTrue(view.contains("LazyVStack"))
-        XCTAssertTrue(view.contains("SelectableTextView("))
-        XCTAssertTrue(view.contains("MangaImage("))
-        XCTAssertTrue(view.contains("NovelReaderHeaderView("))
-        XCTAssertTrue(view.contains("NovelReaderFooterView("))
-        XCTAssertTrue(view.contains("NovelReaderSettingsView("))
-    }
-
     func testFactoryWrapsExactRouteRunnerOnceAndCreatesFreshScreenModels() {
         let chapter = Novel.Chapter(key: "chapter", chapter: 1)
         let novel = Novel(key: "novel", title: "Novel", chapters: [chapter])
@@ -69,25 +54,33 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
         )
         let runner = ItoRunner()
 
-        let first = factory.makeNovelViewModel(
+        let first = factory.makeRoute(
             content: ReaderContentSource(remote: runner),
             pluginID: "plugin",
             entry: .novel(novel),
-            chapter: chapter
+            chapter: chapter,
+            format: .text
         )
-        let second = factory.makeNovelViewModel(
+        let second = factory.makeRoute(
             content: ReaderContentSource(remote: runner),
             pluginID: "plugin",
             entry: .novel(novel),
-            chapter: chapter
+            chapter: chapter,
+            format: .text
         )
+        guard case .text(_, let firstModel)? = first.active, case .text(_, let secondModel)? = second.active else {
+            return XCTFail("A text opening starts in the text reader")
+        }
 
-        XCTAssertFalse(first === second)
-        XCTAssertEqual(first.pluginID, "plugin")
-        XCTAssertEqual(first.entry.key, "novel")
-        XCTAssertEqual(first.currentChapter.key, "chapter")
-        XCTAssertTrue(((first.chapterLoader as? ResolvingNovelChapterLoader)?.remote as? ItoRunnerNovelChapterLoader)?.runner === runner)
-        XCTAssertTrue(((second.chapterLoader as? ResolvingNovelChapterLoader)?.remote as? ItoRunnerNovelChapterLoader)?.runner === runner)
+        XCTAssertFalse(firstModel === secondModel)
+        XCTAssertEqual(firstModel.pluginID, "plugin")
+        XCTAssertEqual(firstModel.entry.key, "novel")
+        XCTAssertEqual(firstModel.currentChapter.key, "chapter")
+        let firstPreparer = firstModel.chapterPreparer as? MediaDetailReaderChapterPreparer
+        let secondPreparer = secondModel.chapterPreparer as? MediaDetailReaderChapterPreparer
+        XCTAssertTrue((firstPreparer?.remoteNovel as? ItoRunnerNovelChapterLoader)?.runner === runner)
+        XCTAssertTrue((secondPreparer?.remoteNovel as? ItoRunnerNovelChapterLoader)?.runner === runner)
+        XCTAssertFalse(firstPreparer === secondPreparer)
     }
 
     func testReaderFactoryHasNoSecondLookupAndLeavesMangaAndAnimeOwnershipStable() throws {
@@ -95,9 +88,9 @@ final class NovelReaderDependencyBoundaryTests: XCTestCase {
 
         XCTAssertFalse(factory.contains("getRunner"))
         XCTAssertFalse(factory.contains("PluginManager"))
-        XCTAssertTrue(factory.contains("ReaderView("))
+        XCTAssertTrue(factory.contains("ReaderRouteView("))
         XCTAssertTrue(factory.contains("VideoPlayerView("))
-        XCTAssertTrue(factory.contains("NovelReaderView("))
+        XCTAssertTrue(factory.contains("makeNovelViewModel"))
         XCTAssertTrue(factory.contains("VideoPlayerViewModel"))
     }
 

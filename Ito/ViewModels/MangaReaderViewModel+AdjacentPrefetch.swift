@@ -12,7 +12,7 @@ extension MangaReaderViewModel {
         let candidates = adjacentPrefetchCandidates(for: reference)
         adjacentPrefetchKeys = Set(candidates.map(\.key))
         let missing = candidates.filter { prefetchedChapters[$0.key] == nil }
-        guard !missing.isEmpty, isActive, isPaged else {
+        guard !missing.isEmpty, isActive, isPaged, presentationMode.isLive else {
             adjacentPrefetchTask = nil
             adjacentPrefetchOperationID = nil
             return
@@ -21,14 +21,14 @@ extension MangaReaderViewModel {
         let operationID = UUID()
         let session = sessionID
         let generation = contentGeneration
-        let loader = pageLoader
+        let preparer = chapterPreparer
         let entry = entry
         adjacentPrefetchEpoch = dependencies.settings.mangaReaderPrefetchEpoch
         adjacentPrefetchOperationID = operationID
         logStarted(kind: .chapterPrefetch, operationID: operationID)
         let operation = PluginNetworkOperation(purpose: .prefetch, operationID: operationID)
 
-        adjacentPrefetchTask = Task { @MainActor [weak self, loader, entry] in
+        adjacentPrefetchTask = Task { @MainActor [weak self, preparer, entry] in
             var hadFailure = false
             for chapter in missing {
                 guard self?.isCurrentAdjacentPrefetch(
@@ -45,7 +45,7 @@ extension MangaReaderViewModel {
                     return
                 }
                 do {
-                    let pages = try await loader.pages(for: entry, chapter: chapter, operation: operation)
+                    let prepared = try await preparer.prepareChapter(entry: entry, chapter: chapter, operation: operation)
                     guard self?.isCurrentAdjacentPrefetch(
                         reference: referenceToken,
                         operationID: operationID,
@@ -59,7 +59,7 @@ extension MangaReaderViewModel {
                         )
                         return
                     }
-                    self?.cachePrefetchedChapter(ReaderPageOrdering.ascending(pages), for: chapter.key)
+                    self?.storePrefetched(prepared)
                 } catch {
                     hadFailure = true
                 }

@@ -40,7 +40,11 @@ extension MangaReaderViewModel {
               let candidate = groupConsentCandidate(after: origin, direction: consent.direction),
               ChapterToken(candidate) == ChapterToken(consent.chapter) else { return }
         // This exact transition only: subsequent neighbors are checked again.
-        openApprovedGroupSwitch(candidate, opensAtEnd: consent.direction == .previous && consent.opensAtEnd)
+        openApprovedGroupSwitch(
+            candidate,
+            opensAtEnd: consent.direction == .previous && consent.opensAtEnd,
+            direction: consent.direction == .next ? .next : .previous
+        )
     }
 
     /// A read of the source's current scope; nil when it cannot be verified.

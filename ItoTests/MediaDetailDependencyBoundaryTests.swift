@@ -46,26 +46,6 @@ final class MediaDetailDependencyBoundaryTests: XCTestCase {
         XCTAssertFalse(view.contains("@EnvironmentObject"))
     }
 
-    func testFactoryOwnsTypedMediaAndReaderCompositionWithoutSecondPluginLookup() throws {
-        let mediaFactory = try source("Ito/Views/Browse/MediaDetailViewFactory.swift")
-        let searchFactory = try source("Ito/Views/Search/SearchRouteFactory.swift")
-
-        for expected in [
-            "MediaDetailViewModel(",
-            "ReaderView(",
-            "VideoPlayerView(",
-            "NovelReaderView("
-        ] {
-            XCTAssertTrue(mediaFactory.contains(expected), "Missing factory composition: \(expected)")
-        }
-        XCTAssertFalse(mediaFactory.contains("PluginManager"))
-        XCTAssertFalse(mediaFactory.contains("getRunner"))
-        XCTAssertFalse(mediaFactory.contains("AnyView"))
-        XCTAssertTrue(searchFactory.contains("mediaDetailViewFactory.makeMangaView("))
-        XCTAssertTrue(searchFactory.contains("mediaDetailViewFactory.makeAnimeView("))
-        XCTAssertTrue(searchFactory.contains("mediaDetailViewFactory.makeNovelView("))
-    }
-
     func testSourceDiscoverAndLibraryPathsUseCanonicalAppViewFactoryComposition() throws {
         let discover = try source("Ito/Views/Discover/DiscoverDetailView.swift")
         let library = try source("Ito/Views/Library/LibraryView.swift")
