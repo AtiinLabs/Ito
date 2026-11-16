@@ -339,7 +339,8 @@ struct OfflineChapterStoreQueueTests {
 
         // Neither a later event nor a different pause reason replaces a retry-required reason.
         try await store.setWaiting(jobID: jobID, reason: .noConnection)
-        try await store.readmitWaiting([.sourceUnavailable, .noConnection])
+        let cleared: Set<DownloadWaitingReason> = [.sourceUnavailable, .noConnection]
+        try await store.readmitWaiting(manual: cleared, automaticOnly: cleared)
 
         let job = try #require(try await store.job(id: jobID))
         #expect(job.state == .waiting)
@@ -354,7 +355,8 @@ struct OfflineChapterStoreQueueTests {
         try await store.setWaiting(jobID: storageJob, reason: .insufficientStorage)
         try await store.setWaiting(jobID: sourceJob, reason: .sourceUnavailable)
 
-        try await store.readmitWaiting([.insufficientStorage, .sourceUnavailable])
+        let storageCleared: Set<DownloadWaitingReason> = [.insufficientStorage, .sourceUnavailable]
+        try await store.readmitWaiting(manual: storageCleared, automaticOnly: storageCleared)
 
         #expect(try await store.job(id: storageJob)?.state == .queued)
         #expect(try await store.job(id: sourceJob)?.waitingReason == .sourceUnavailable)

@@ -354,6 +354,9 @@ nonisolated struct BackupMergeOperation: Sendable {
             if try AppPreference.fetchCount(db) > 0 {
                 try NetworkPreferenceMigration.insertMissing(in: db)
             }
+            // A wipe deletes every item. No rule may outlive its series; a merge never deletes one, so this changes
+            // nothing there.
+            try OfflineChapterStore.releaseSubscriptionsOfUnsavedSeries(in: db)
 
             let result = BackupMergeResult(
                 insertedItemCount: insertedItemCount,

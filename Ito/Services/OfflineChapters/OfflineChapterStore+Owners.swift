@@ -225,6 +225,15 @@ extension OfflineChapterStore {
         """
     }
 
+    /// SQL that is true when `jobColumn` names a job no person asked for: it has no manual owner, only rules.
+    nonisolated static func automaticOnlySQL(jobColumn: String) -> String {
+        """
+        NOT EXISTS (
+            SELECT 1 FROM downloadJobOwner o WHERE o.jobId = \(jobColumn) AND o.ownerKind = 'manual'
+        )
+        """
+    }
+
     /// Whether a job has an owner that may start it. Read in the transaction that starts the attempt.
     nonisolated static func hasEligibleOwner(jobId: String, automaticAdmitted: Bool, in db: Database) throws -> Bool {
         try Bool.fetchOne(

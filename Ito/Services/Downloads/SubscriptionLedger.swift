@@ -355,8 +355,15 @@ nonisolated enum SubscriptionLedger {
         try updated.update(db)
     }
 
-    /// Keeps at most `terminalEventLimit` terminal events, dropping the oldest by decision time.
-    static func pruneTerminalEvents(of subscriptionId: String, in db: Database) throws {
+    /// Keeps at most `terminalEventLimit` terminal events, dropping the oldest by decision time. The window events of
+    /// the current anchor are never dropped: their identity is what keeps a position the person cancelled from being
+    /// queued again, so it must not depend on how many other events were raised since. They are bounded by the window
+    /// size plus the review rows. Window events of an anchor that has moved on are pruned like any other.
+    static func pruneTerminalEvents(
+        of subscriptionId: String,
+        protectingWindowQualifier qualifier: String?,
+        in db: Database
+    ) throws {
         try db.execute(
             sql: """
                 DELETE FROM subscriptionEvent
@@ -364,11 +371,12 @@ nonisolated enum SubscriptionLedger {
                     SELECT id FROM subscriptionEvent
                     WHERE subscriptionId = ?
                       AND decision NOT IN (\(openDecisionsSQL))
+                      AND NOT (kind = 'window' AND ifnull(qualifier, '') = ifnull(?, ''))
                     ORDER BY ifnull(decidedAt, createdAt) DESC, createdAt DESC, id DESC
                     LIMIT -1 OFFSET ?
                 )
                 """,
-            arguments: [subscriptionId, terminalEventLimit]
+            arguments: [subscriptionId, qualifier, terminalEventLimit]
         )
     }
 

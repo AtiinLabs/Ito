@@ -143,6 +143,33 @@ nonisolated enum SubscriptionEditOutcome: Equatable, Sendable {
     case invalidConfiguration
 }
 
+/// What resuming a paused rule asks. A rule paused by a restore or a source change has no baseline, no events and no
+/// owners: the person reviews it first, so the review (the configuration shown and the source epoch it was shown under)
+/// is part of the request. A rule the person paused is resumed as it was.
+nonisolated struct SubscriptionResumeRequest: Sendable {
+    let subscriptionId: String
+    /// The generation the person saw; a restore, an edit or a disable since then makes the request stale.
+    let expectedConfigGeneration: Int64
+    /// Required for a rule paused by a restore or a source change; the store verifies it in its write transaction.
+    let reviewedSourceEpoch: String?
+    /// Required for a rule paused by a restore or a source change: the reviewed rule. Nil for a rule the person paused.
+    let configuration: SubscriptionConfiguration?
+}
+
+nonisolated enum SubscriptionResumeOutcome: Equatable, Sendable {
+    /// The rule is enabled. A reviewed rule starts over, waiting for its first baseline, under the new generation.
+    case resumed(configGeneration: Int64)
+    case stale
+    /// A rule paused by a restore or a source change needs the configuration and the epoch of a review; a rule the
+    /// person paused is edited by an edit, not by a resume.
+    case reviewRequired
+    case sourceChanged
+    case seriesNotSaved
+    case invalidConfiguration
+    /// The rule is missing or is not paused.
+    case unavailable
+}
+
 nonisolated struct SubscriptionEventResolution: Sendable {
     enum Action: Sendable, Equatable {
         case approve(keys: [String])

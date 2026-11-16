@@ -180,7 +180,8 @@ struct OfflineChapterStoreCrashTests {
             through: .all
         )
 
-        try await store.readmitWaiting([.insufficientStorage, .protectedDataUnavailable])
+        let reasons: Set<DownloadWaitingReason> = [.insufficientStorage, .protectedDataUnavailable]
+        try await store.readmitWaiting(manual: reasons, automaticOnly: reasons)
         #expect(try await store.job(id: jobID)?.state == .failed)
 
         try await store.retry(jobID: jobID, currentEpoch: OfflineStoreFixture.epoch)

@@ -14,6 +14,8 @@ final class FakeLibraryUpdateSource: LibraryUpdateSource {
     var freshCounts: [String: Int] = [:]
     /// Every check waits here when set, so a test can look at a run while it is in flight.
     var gate: AsyncTestGate?
+    /// Every check waits here when set, and ends as cancelled when its run is cancelled, as a real fetch does.
+    var cancellableGate: DownloadTestGate?
     /// Runs at the start of every check, for example to move a test clock.
     var onCheck: (() -> Void)?
     private(set) var checkedItemIDs: [String] = []
@@ -38,6 +40,7 @@ final class FakeLibraryUpdateSource: LibraryUpdateSource {
         frozenScopes.append(frozenScope)
         onCheck?()
         await gate?.enter()
+        try await cancellableGate?.pass()
         if cancelledItemIDs.contains(item.id) { throw CancellationError() }
         if let error = errorsByItemID[item.id] { throw error }
         if failingItemIDs.contains(item.id) {

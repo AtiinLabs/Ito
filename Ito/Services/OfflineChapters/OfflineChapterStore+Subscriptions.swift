@@ -100,18 +100,43 @@ extension OfflineChapterStore {
         }
     }
 
-    /// Enables a paused rule again. Its baseline is kept, so what was released during the pause is classified by the
-    /// next check.
-    func resumeSubscription(id: String) async throws {
+    /// Enables a paused rule again. A rule the person paused keeps its baseline, so what was released during the pause
+    /// is classified by the next check, and its configuration generation does not change. A rule a restore or a source
+    /// change paused has no baseline, events or owners, so it needs a review: it is enabled only with the reviewed
+    /// configuration, while the source epoch it was reviewed under is current and the series is in the Library. It then
+    /// starts over, waiting for its first baseline, under a new generation. A resume never creates an event or a job.
+    func resumeSubscription(_ request: SubscriptionResumeRequest) async throws -> SubscriptionResumeOutcome {
         guard isReconciled else { throw OfflineStoreError.reconciliationPending }
         let now = clock()
-        try await database.write { db in
-            guard var subscription = try SubscriptionLedger.subscription(id: id, in: db),
-                  subscription.state == .paused else { return }
+        return try await database.write { db -> SubscriptionResumeOutcome in
+            guard var subscription = try SubscriptionLedger.subscription(id: request.subscriptionId, in: db),
+                  subscription.state == .paused, let reason = subscription.pauseReason else { return .unavailable }
+            guard subscription.configGeneration == request.expectedConfigGeneration else { return .stale }
+            switch reason {
+            case .restored, .sourceRemapped:
+                guard let epoch = request.reviewedSourceEpoch, let configuration = request.configuration else {
+                    return .reviewRequired
+                }
+                guard try PluginCompletionScope.current(pluginID: subscription.pluginId, in: db) == epoch else {
+                    return .sourceChanged
+                }
+                guard try Self.libraryItemExists(for: subscription.media, in: db) else { return .seriesNotSaved }
+                guard configuration.isValid, let selection = try? configuration.selection.storageData() else {
+                    return .invalidConfiguration
+                }
+                subscription.apply(configuration, selection: selection)
+                subscription.configGeneration += 1
+                subscription.lastAttemptAt = nil
+                subscription.lastAttemptOutcome = nil
+                subscription.lastSuccessAt = nil
+            case .user:
+                guard request.configuration == nil else { return .reviewRequired }
+            }
             subscription.state = .enabled
             subscription.pauseReason = nil
             subscription.updatedAt = now
             try subscription.update(db)
+            return .resumed(configGeneration: subscription.configGeneration)
         }
     }
 
@@ -168,6 +193,43 @@ extension OfflineChapterStore {
     }
 
     // MARK: - Checks
+
+    /// The enabled rules and when each was last attempted, for the scheduler. No evidence table is read.
+    func subscriptionScheduleRows() async throws -> [SubscriptionScheduleRow] {
+        try await database.read { db in
+            try SeriesSubscriptionRecord
+                .filter(Column("state") == SubscriptionState.enabled.rawValue)
+                .order(Column("id"))
+                .fetchAll(db)
+                .map { rule in
+                    SubscriptionScheduleRow(
+                        id: rule.id, media: rule.media, state: rule.state,
+                        lastAttemptAt: rule.lastAttemptAt, lastAttemptOutcome: rule.lastAttemptOutcome
+                    )
+                }
+        }
+    }
+
+    /// The enabled rules a drain can act on, in id order: an open undecided event, a pending event that waits for queue
+    /// or disk room, or Maintain Next N, whose window follows what was read.
+    func drainableSubscriptionIds() async throws -> [String] {
+        try await database.read { db in
+            try String.fetchAll(
+                db,
+                sql: """
+                    SELECT s.id FROM seriesSubscription s
+                    WHERE s.state = 'enabled'
+                      AND (s.mode = 'maintainNextUnread'
+                           OR EXISTS (
+                               SELECT 1 FROM subscriptionEvent e
+                               WHERE e.subscriptionId = s.id
+                                 AND (e.decision = 'undecided'
+                                      OR (e.decision = 'pending' AND e.pendingReason IN ('queueCap', 'quota')))))
+                    ORDER BY s.id
+                    """
+            )
+        }
+    }
 
     /// Allocates the ticket of one check of an enabled rule, when the epoch the caller captured is still the
     /// source's. The fetch then freezes `ticket.sourceEpoch`; only the newest ticket can move the baseline.
@@ -385,7 +447,7 @@ extension OfflineChapterStore {
             trigger: .check(runCap: subscription.perRunPositionCap),
             limits: limits, now: now, in: db, into: &outcome
         )
-        try SubscriptionLedger.pruneTerminalEvents(of: subscription.id, in: db)
+        try pruneTerminalEvents(of: subscription, catalog: catalog, in: db)
         try SubscriptionLedger.recordAttempt(subscription.id, outcome: attempt, success: true, now: now, in: db)
         outcome.outcome = attempt
         return outcome
@@ -422,7 +484,7 @@ extension OfflineChapterStore {
             subscription: subscription, catalog: catalog, trigger: .drain,
             limits: limits, now: now, in: db, into: &outcome
         )
-        try SubscriptionLedger.pruneTerminalEvents(of: subscription.id, in: db)
+        try pruneTerminalEvents(of: subscription, catalog: catalog, in: db)
         if outcome.queuedJobs + outcome.attachedJobs == 0, outcome.createdEventIds.isEmpty { outcome.outcome = .unchanged }
         return outcome
     }
@@ -474,7 +536,7 @@ extension OfflineChapterStore {
                 subscription: subscription, catalog: catalog, trigger: .events([event.id]),
                 limits: limits, now: now, in: db, into: &outcome
             )
-            try SubscriptionLedger.pruneTerminalEvents(of: subscription.id, in: db)
+            try pruneTerminalEvents(of: subscription, catalog: catalog, in: db)
             return outcome
         }
     }
@@ -560,7 +622,7 @@ extension OfflineChapterStore {
             subscription: subscription, catalog: catalog, trigger: .events(Set(inserted.map(\.id))),
             limits: limits, now: now, in: db, into: &outcome
         )
-        try SubscriptionLedger.pruneTerminalEvents(of: subscription.id, in: db)
+        try pruneTerminalEvents(of: subscription, catalog: catalog, in: db)
         return outcome
     }
 }

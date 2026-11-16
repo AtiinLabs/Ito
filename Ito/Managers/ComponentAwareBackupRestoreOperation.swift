@@ -244,6 +244,9 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         try restoreDownloadPresets(plan, db: db, outcomes: &outcomes)
 
         try restoreArchives(plan, db: db, outcomes: &outcomes)
+        // The Library is final. A rule must not outlive its series, whatever the restore kept or removed, so its
+        // owners are released and the jobs only it asked for are removed in this transaction.
+        try OfflineChapterStore.releaseSubscriptionsOfUnsavedSeries(in: db)
 
         let report = try makeReport(plan: plan, outcomes: outcomes)
         let journal = BackupRestoreJournalRecord(

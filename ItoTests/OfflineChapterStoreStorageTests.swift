@@ -70,7 +70,7 @@ struct OfflineChapterStoreStorageTests {
         }
 
         fixture.fileSystem.setCapacity(OfflineChapterStore.reserveBytes * 4)
-        try await store.readmitWaiting([.insufficientStorage])
+        try await store.readmitWaiting(manual: [.insufficientStorage], automaticOnly: [.insufficientStorage])
         _ = try await store.beginAttempt(jobID: jobID)
 
         #expect(try await store.job(id: jobID)?.state == .downloading)
@@ -111,7 +111,7 @@ struct OfflineChapterStoreStorageTests {
         #expect(try await store.job(id: jobID)?.waitingReason == .protectedDataUnavailable)
         #expect(try await store.verifiedEdition(for: OfflineStoreFixture.mangaEdition) != nil)
 
-        try await store.readmitWaiting([.protectedDataUnavailable])
+        try await store.readmitWaiting(manual: [.protectedDataUnavailable], automaticOnly: [.protectedDataUnavailable])
         #expect(try await store.job(id: jobID)?.state == .queued)
         try await fixture.assertInvariants(store)
     }

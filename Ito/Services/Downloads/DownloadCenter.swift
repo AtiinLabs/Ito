@@ -59,6 +59,9 @@ final class DownloadCenter: ObservableObject {
     private let captureEpoch: @Sendable (String) throws -> String
     private let automaticLimits: @Sendable () -> AutomaticDownloadLimits
     private var snapshot = DownloadTableSnapshot()
+    /// Called when automatic work may have room it did not have: the queue got shorter or the stored bytes fewer. The
+    /// scheduler drains the events that wait for room from it. It carries nothing and starts no network work.
+    var onAutomaticCapacityChanged: (@MainActor () -> Void)?
     private var observation: DatabaseCancellable?
     private var progressSubscription: AnyCancellable?
 
@@ -326,9 +329,12 @@ final class DownloadCenter: ObservableObject {
         }
     }
 
-    func resumeSubscription(id: String) async throws {
-        try await store.resumeSubscription(id: id)
-        coordinator.wake()
+    /// Enables a paused rule again; see `OfflineChapterStore.resumeSubscription`. A rule the person paused may own queued
+    /// jobs, which can start again, so the worker looks at the queue.
+    func resumeSubscription(_ request: SubscriptionResumeRequest) async throws -> SubscriptionResumeOutcome {
+        let outcome = try await store.resumeSubscription(request)
+        if case .resumed = outcome { coordinator.wake() }
+        return outcome
     }
 
     /// Applies an edit. Events that waited are decided again at once under the new configuration.
@@ -463,7 +469,11 @@ final class DownloadCenter: ObservableObject {
         for batchID in before.subtracting(after) {
             contexts.policy.revokeConsent(forBatch: batchID)
         }
+        let capacityGrew = current.jobs.count < snapshot.jobs.count
+            || current.copies.reduce(into: Int64(0), { $0 += $1.byteCount })
+            < snapshot.copies.reduce(into: Int64(0), { $0 += $1.byteCount })
         snapshot = current
+        if capacityGrew { onAutomaticCapacityChanged?() }
         // A running job the observation does not list was cancelled, deleted or moved away: stop its attempt
         // now instead of at the next gate. The commit's job check still decides correctness.
         if let runningID = coordinator.runningJobID, !current.jobs.contains(where: { $0.id == runningID }) {

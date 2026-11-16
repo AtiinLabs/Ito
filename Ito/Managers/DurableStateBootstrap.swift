@@ -100,6 +100,8 @@ public final class DurableStateBootstrap: ObservableObject {
     private var completionRestoreBlocked = false
     private var completionForeground = UIApplication.shared.applicationState != .background
     private var downloadCoordinator: DownloadQueueCoordinator?
+    /// The foreground scheduler of automatic downloads, running only while the app is ready and in the foreground.
+    private(set) var subscriptionScheduler: SubscriptionCheckScheduler?
     /// What a cleared runtime's download worker is still finishing.
     private var retiredDownloadWork: Task<Void, Never>?
 
@@ -124,6 +126,9 @@ public final class DurableStateBootstrap: ObservableObject {
         let recentSearchDefaults: UserDefaults
         let completionCoordinator: PluginCompletionCoordinator
         let downloads: DownloadStack?
+        /// The command facade of automatic downloads and the foreground scheduler behind it; nil without an offline store.
+        let automaticDownloads: AutomaticDownloads?
+        let subscriptionScheduler: SubscriptionCheckScheduler?
         /// The one in-memory durable-cover service, shared by the Library screens and the restore refresh.
         let coverThumbnails: LibraryCoverThumbnails
     }
@@ -477,6 +482,27 @@ public final class DurableStateBootstrap: ObservableObject {
                 automaticLimits: { automaticLimits.current }
             )
         }
+        // The one production caller of the catalog sink: from here a Library check of a subscribed series is also its
+        // rule's check, in the same fetch. The scheduler never runs until the foreground gate below starts it.
+        let automatic = downloads.map { stack -> (AutomaticDownloads, SubscriptionCheckScheduler) in
+            updates.configure(subscriptionSink: stack.center)
+            let scheduler = SubscriptionCheckScheduler(
+                store: stack.store,
+                center: stack.center,
+                coordinator: stack.coordinator,
+                updates: updates,
+                dbPool: dbPool,
+                interval: { TimeInterval(settings.updateInterval.rawValue) * 3_600 },
+                limitsChanged: settings.$automaticDownloadQueueLimit
+                    .combineLatest(settings.$automaticDownloadQuotaGiB)
+                    .dropFirst()
+                    .map { _, _ in () }
+                    .eraseToAnyPublisher(),
+                now: Date.init
+            )
+            scheduler.startObservingReadState(scheduling: DelayedMainActorValueObservationScheduler.mainActor)
+            return (AutomaticDownloads(center: stack.center, scheduler: scheduler), scheduler)
+        }
         return Runtime(
             settingsStore: settings,
             pluginSettingsStore: pluginSettings,
@@ -498,6 +524,8 @@ public final class DurableStateBootstrap: ObservableObject {
             recentSearchDefaults: usernameDefaults,
             completionCoordinator: completionCoordinator,
             downloads: downloads,
+            automaticDownloads: automatic?.0,
+            subscriptionScheduler: automatic?.1,
             coverThumbnails: coverThumbnails
         )
     }
@@ -562,6 +590,7 @@ public final class DurableStateBootstrap: ObservableObject {
         librarySourceRemapper = runtime.librarySourceRemapper
         completionCoordinator = runtime.completionCoordinator
         downloadCoordinator = runtime.downloads?.coordinator
+        subscriptionScheduler = runtime.subscriptionScheduler
         appScope = AppScope.prepared(
             pluginManager: runtime.pluginManager,
             repoManager: runtime.repoManager,
@@ -585,6 +614,7 @@ public final class DurableStateBootstrap: ObservableObject {
             browsePluginsDirectory: installedPluginsDirectory,
             completionRecovery: runtime.completionCoordinator,
             downloads: runtime.downloads,
+            automaticDownloads: runtime.automaticDownloads,
             connectivity: NetworkPathConnectivity(observer: networkPath),
             coverThumbnails: runtime.coverThumbnails
         )
@@ -598,6 +628,10 @@ public final class DurableStateBootstrap: ObservableObject {
         // for it, so two workers never run attempts at once on the shared store. A runtime cleared
         // before install still holds the chain: its unstarted worker hands back its own predecessor.
         let worker = downloadCoordinator ?? runtime?.downloads?.coordinator
+        // The scheduler stops with the runtime: nothing it started may outlive it.
+        let scheduler = subscriptionScheduler ?? runtime?.subscriptionScheduler
+        scheduler?.setActive(false)
+        subscriptionScheduler = nil
         retiredDownloadWork = worker?.retire() ?? retiredDownloadWork
         downloadCoordinator = nil
         runtime = nil
@@ -651,8 +685,10 @@ public final class DurableStateBootstrap: ObservableObject {
         if state == .ready, completionForeground, !completionRestoreBlocked {
             completionCoordinator.start()
             downloadCoordinator?.start()
+            subscriptionScheduler?.setActive(true)
         } else {
             completionCoordinator.suspend()
+            subscriptionScheduler?.setActive(false)
             if finishingInFlightDownload {
                 downloadCoordinator?.suspend(allowingInFlightCompletion: backgroundGranting)
             } else {
