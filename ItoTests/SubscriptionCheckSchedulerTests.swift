@@ -821,4 +821,108 @@ struct SubscriptionCheckSchedulerTests {
         #expect(announced >= 1)
         #expect(h.settings.automaticDownloadLimits.queueLimit == 200)
     }
+
+    // MARK: - Follow-up fixes
+
+    @Test func aRunThatEndsEarlyDoesNotLeaveThePreviousRunsListsBehind() async throws {
+        let h = try await SchedulerHarness()
+        try await h.subscribe("a")
+        try await h.updates.checkForUpdates()
+        #expect(h.updates.lastRunAttempted == [h.media("a")])
+        #expect(h.updates.lastRunSucceeded == [h.media("a")])
+
+        // A background run the policy refuses ends right after claiming the manager.
+        try await h.settings.set(true, for: AppPreferenceCatalog.wifiOnlyUpdates)
+        h.path.set(NetworkPathSnapshot(status: .satisfied, isExpensive: true))
+        _ = await h.updates.checkForUpdatesInBackground()
+
+        #expect(h.updates.lastRunAttempted.isEmpty)
+        #expect(h.updates.lastRunSucceeded.isEmpty)
+    }
+
+    @Test func aRuleChangedDuringARefreshAfterItsSeriesWasFetchedKeepsItsImmediateCheck() async throws {
+        let h = try await SchedulerHarness()
+        let a = try await h.subscribe("a")
+        let b = try await h.subscribe("b")
+        try await h.markAttempted(b, .advanced)
+        try await h.markAttempted(a, .advanced)
+        h.scheduler.setActive(true)
+        await h.scheduler.untilIdle()
+        #expect(h.source.checkedItemIDs.isEmpty)
+        let gate = AsyncTestGate()
+        h.source.gate = gate
+
+        let manual = Task { try await h.updates.checkForUpdates() }
+        await gate.waitForAdmissions(1)
+        // The refresh is in its first fetch; "b" is changed meanwhile.
+        h.scheduler.request(.ruleChanged(b))
+        await gate.open()
+        try await manual.value
+        await h.scheduler.untilIdle()
+
+        // The refresh checked both, and the change still got its own check afterwards.
+        #expect(h.source.checkedItemIDs.count == 3)
+        #expect(h.source.checkedItemIDs.last == "b")
+    }
+
+    @Test func deactivatingForgetsWhatARefreshCovered() async throws {
+        let h = try await SchedulerHarness()
+        let a = try await h.subscribe("a")
+        try await h.markAttempted(a, .advanced)
+        h.scheduler.setActive(true)
+        await h.scheduler.untilIdle()
+        let gate = AsyncTestGate()
+        h.source.gate = gate
+
+        let manual = Task { try await h.updates.checkForUpdates() }
+        await gate.waitForAdmissions(1)
+        #expect(h.scheduler.manualStartForced != nil)
+        h.scheduler.setActive(false)
+        #expect(h.scheduler.manualStartForced == nil && h.scheduler.manualCover == nil)
+        await gate.open()
+        try await manual.value
+
+        #expect(h.scheduler.manualCover == nil)
+    }
+
+    @Test func aBlockedSourceIsAskedAgainWhenOneOfItsRulesChanges() async throws {
+        let h = try await SchedulerHarness()
+        let x1 = try await h.subscribe("x1", plugin: SchedulerHarness.otherPlugin)
+        h.source.errorsByItemID["x1"] = PluginCallError(kind: .needsLogin, message: "Sign in")
+        h.scheduler.setActive(true)
+        await h.scheduler.untilIdle()
+        #expect(h.source.checkedItemIDs == ["x1"])
+
+        // The person signed in. A new rule of that source waits while the source is blocked...
+        h.source.errorsByItemID["x1"] = nil
+        try await h.subscribe("x2", plugin: SchedulerHarness.otherPlugin)
+        h.scheduler.request(.libraryRunFinished)
+        await h.scheduler.untilIdle()
+        #expect(h.source.checkedItemIDs == ["x1"])
+
+        // ...until one of that source's rules is changed: then it is asked again, and so is everything due behind it.
+        h.scheduler.request(.ruleChanged(x1))
+        await h.scheduler.untilIdle()
+        #expect(h.source.checkedItemIDs.filter { $0 == "x1" }.count == 2)
+        #expect(h.source.checkedItemIDs.contains("x2"))
+    }
+
+    @Test func aRefreshThatChecksABlockedSourceSuccessfullyUnblocksIt() async throws {
+        let h = try await SchedulerHarness()
+        try await h.subscribe("x1", plugin: SchedulerHarness.otherPlugin)
+        h.source.errorsByItemID["x1"] = PluginCallError(kind: .needsLogin, message: "Sign in")
+        h.scheduler.setActive(true)
+        await h.scheduler.untilIdle()
+        #expect(h.source.checkedItemIDs == ["x1"])
+
+        h.source.errorsByItemID["x1"] = nil
+        try await h.updates.checkForUpdates()
+        await h.scheduler.untilIdle()
+        // A rule added afterwards is checked: the source is no longer left out.
+        try await h.subscribe("x3", plugin: SchedulerHarness.otherPlugin)
+        h.scheduler.request(.libraryRunFinished)
+        await h.scheduler.untilIdle()
+
+        #expect(h.source.checkedItemIDs.contains("x3"))
+    }
 }

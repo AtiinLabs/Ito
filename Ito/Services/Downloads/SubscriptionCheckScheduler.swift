@@ -73,6 +73,9 @@ final class SubscriptionCheckScheduler {
     private var isReconciled: Bool
     /// Rules a person just changed, checked in the next pass whatever their due time. In memory only.
     private var forced = Set<String>()
+    /// How many times each rule was forced. A refresh covers a forced rule only if it was not forced again since the
+    /// refresh began: a rule changed after its series was fetched keeps its immediate check.
+    private var forceGeneration: [String: Int] = [:]
     private var passTask: Task<Void, Never>?
     private var runTask: Task<SubscriptionCheckRunResult, Never>?
     /// A request arrived during the pass: one more pass runs when it ends.
@@ -84,8 +87,10 @@ final class SubscriptionCheckScheduler {
     /// Sources that need the person (a sign-in, settings, a trust decision). They are left out of every pass until the
     /// scheduler becomes active again: asking again changes nothing, and their rules must not hold back the others.
     private var blockedSources = Set<String>()
-    /// What a manual refresh covered: the rules forced at that time and the series it attempted.
-    private var manualCover: (forced: Set<String>, media: Set<MediaIdentity>)?
+    /// What a manual refresh covered: the generation of each rule forced when it began, and the series it attempted.
+    private(set) var manualCover: (forced: [String: Int], media: Set<MediaIdentity>)?
+    /// The forced rules, as they were when the running manual refresh began.
+    private(set) var manualStartForced: [String: Int]?
 
     private var drainTask: Task<Void, Never>?
     /// How many coalesced drain batches have started: one however many requests were merged into it. For tests.
@@ -126,6 +131,9 @@ final class SubscriptionCheckScheduler {
         coordinator.reconciled
             .sink { @MainActor [weak self] in self?.didReconcile() }
             .store(in: &subscriptions)
+        updates.runStarted
+            .sink { @MainActor [weak self] kind in self?.runStarted(kind) }
+            .store(in: &subscriptions)
         updates.runFinished
             .sink { @MainActor [weak self] kind in self?.runFinished(kind) }
             .store(in: &subscriptions)
@@ -149,6 +157,8 @@ final class SubscriptionCheckScheduler {
             requestDrain(.all)
         } else {
             forced = []
+            manualCover = nil
+            manualStartForced = nil
             rerunRequested = false
             waitingForRun = false
             pendingAfterReconcile = false
@@ -162,7 +172,10 @@ final class SubscriptionCheckScheduler {
     /// Asks for a pass over the rules that are due. Dropped while inactive.
     func request(_ trigger: Trigger) {
         guard isActive else { return }
-        if case .ruleChanged(let id) = trigger { forced.insert(id) }
+        if case .ruleChanged(let id) = trigger {
+            forced.insert(id)
+            forceGeneration[id, default: 0] += 1
+        }
         guard isReconciled else {
             pendingAfterReconcile = true
             return
@@ -230,11 +243,21 @@ final class SubscriptionCheckScheduler {
         startDrainIfNeeded()
     }
 
+    private func runStarted(_ kind: UpdateRunKind) {
+        guard kind == .manual else { return }
+        manualStartForced = Dictionary(uniqueKeysWithValues: forced.map { ($0, forceGeneration[$0] ?? 0) })
+    }
+
     private func runFinished(_ kind: UpdateRunKind) {
         // A refresh the person asked for counts as a check, so what it left due is checked now. A pass that could not
         // start because a run held the manager starts when that run ends, whichever kind it was.
-        if kind == .manual, !forced.isEmpty {
-            manualCover = (forced, Set(updates.lastRunAttempted))
+        if kind == .manual {
+            // A refresh that checked a source successfully shows it no longer needs the person.
+            blockedSources.subtract(updates.lastRunSucceeded.map(\.pluginId))
+            if let start = manualStartForced {
+                manualCover = (start, Set(updates.lastRunAttempted))
+            }
+            manualStartForced = nil
         }
         guard kind == .manual || waitingForRun else { return }
         waitingForRun = false
@@ -270,8 +293,14 @@ final class SubscriptionCheckScheduler {
             guard isActive else { return }
             if let cover = manualCover {
                 manualCover = nil
-                forced.subtract(rows.filter { cover.forced.contains($0.id) && cover.media.contains($0.media) }.map(\.id))
+                let covered = rows.filter { row in
+                    guard let generation = cover.forced[row.id] else { return false }
+                    return cover.media.contains(row.media) && forceGeneration[row.id] == generation
+                }
+                forced.subtract(covered.map(\.id))
             }
+            // A rule that was changed is a reason to ask its source again, whatever it said before.
+            for row in rows where forced.contains(row.id) { blockedSources.remove(row.media.pluginId) }
             let installed = updates.installedPluginIDs
             let blocked = blockedSources
             let due = SubscriptionSchedule.duePass(rows, forced: forced, interval: interval(), now: now()) { row in

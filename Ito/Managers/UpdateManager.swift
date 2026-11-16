@@ -265,10 +265,16 @@ public class UpdateManager: ObservableObject {
     /// between: a person's refresh never fails with `alreadyRunning` because of one.
     private var libraryRunPending = false
     private let runFinishedSubject = PassthroughSubject<UpdateRunKind, Never>()
+    private let runStartedSubject = PassthroughSubject<UpdateRunKind, Never>()
 
     /// Emits after every run, of any kind, has fully ended.
     var runFinished: AnyPublisher<UpdateRunKind, Never> {
         runFinishedSubject.eraseToAnyPublisher()
+    }
+
+    /// Emits when a manual or background run has claimed the manager, before it checks anything.
+    var runStarted: AnyPublisher<UpdateRunKind, Never> {
+        runStartedSubject.eraseToAnyPublisher()
     }
 
     /// Which sink the manager hands catalogs to, for the composition root's test.
@@ -283,6 +289,8 @@ public class UpdateManager: ObservableObject {
 
     /// The series the last manual or background run attempted, for the scheduler to know which rules it covered.
     private(set) var lastRunAttempted: [MediaIdentity] = []
+    /// The series the last manual or background run checked successfully.
+    private(set) var lastRunSucceeded: [MediaIdentity] = []
 
     /// - Parameters:
     ///   - updateSource: Where series are checked; without one, checks do nothing.
@@ -425,6 +433,10 @@ public class UpdateManager: ObservableObject {
         }
         let kind: UpdateRunKind = isBackground ? .background : .manual
         activeRun = kind
+        // What the run reports is its own: a run that ends early must not leave the previous run's lists behind.
+        lastRunAttempted = []
+        lastRunSucceeded = []
+        runStartedSubject.send(kind)
         isRefreshing = true
         let started = now()
         runDeadline = budget.map { started.addingTimeInterval($0) }
@@ -461,6 +473,7 @@ public class UpdateManager: ObservableObject {
         )
         let walk = await check(Self.sourceQueues(batch), operation: operation, kind: kind)
         lastRunAttempted = walk.attempted
+        lastRunSucceeded = walk.succeeded
         let updated = walk.updated
         AppLogger.update.debug("🔄 [UpdateManager] Finished: \(updated.count) series have new chapters.")
         return updated
@@ -529,6 +542,7 @@ public class UpdateManager: ObservableObject {
         var updated: [(LibraryItem, Int)] = []
         var checked = 0
         var attempted: [MediaIdentity] = []
+        var succeeded: [MediaIdentity] = []
         var blockedSources: Set<String> = []
         /// The automatic-network rule refused the rest of a queue.
         var stoppedByPolicy = false
@@ -537,6 +551,7 @@ public class UpdateManager: ObservableObject {
             updated += other.updated
             checked += other.checked
             attempted += other.attempted
+            succeeded += other.succeeded
             blockedSources.formUnion(other.blockedSources)
             stoppedByPolicy = stoppedByPolicy || other.stoppedByPolicy
         }
@@ -607,7 +622,10 @@ public class UpdateManager: ObservableObject {
             }
             walk.checked += 1
             // A check the run's cancellation cut short committed nothing, so it did not happen as far as the rule goes.
-            if !Task.isCancelled { walk.attempted.append(item.mediaIdentity) }
+            if !Task.isCancelled {
+                walk.attempted.append(item.mediaIdentity)
+                if single.delta != nil { walk.succeeded.append(item.mediaIdentity) }
+            }
             // A subscription pass keeps to the user-visible counters of a library run: it never lights them up.
             if kind != .subscriptions { itemsCheckedCurrentRun += 1 }
             // A source that needs the person (settings, a sign-in, a trust decision) is not asked again this pass. The
