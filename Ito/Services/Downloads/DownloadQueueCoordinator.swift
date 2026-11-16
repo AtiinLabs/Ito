@@ -75,7 +75,13 @@ final class DownloadQueueCoordinator {
     /// The queue and disk limits automatic work runs under, read each time the queue head is looked at.
     private let automaticLimits: @Sendable () -> AutomaticDownloadLimits
 
-    private var reconciled = false
+    /// Whether the store has been brought into agreement with the offline directory. Checks that read the queue wait
+    /// for it.
+    private(set) var isReconciled = false
+    private let reconciledSubject = PassthroughSubject<Void, Never>()
+    /// Sends once, on the main actor, when `reconcile()` completes. A consumer that must not touch the queue before then
+    /// waits for it; nothing polls.
+    var reconciled: AnyPublisher<Void, Never> { reconciledSubject.eraseToAnyPublisher() }
     private var loopTask: Task<Void, Never>?
     /// Identifies the loop that may take work. A suspended loop sees a newer generation and stops.
     private var loopGeneration = 0
@@ -142,12 +148,16 @@ final class DownloadQueueCoordinator {
     /// Brings the store into agreement with the offline directory, once. A deferred run is retried when
     /// the worker next wakes and when protected data returns. Launch never waits for this.
     func reconcile() async {
-        guard !reconciled else { return }
+        guard !isReconciled else { return }
         // The store's default refuses a roll-forward: a version renamed into place before a crash has no
         // trust or publication baseline after the relaunch, so the chapter is requeued and fetched again.
         let report = await store.reconcile()
         if case .completed = report {
-            reconciled = true
+            // Two overlapping reconciliations may both complete; the signal is sent once.
+            if !isReconciled {
+                isReconciled = true
+                reconciledSubject.send(())
+            }
             wake()
         }
     }
@@ -325,17 +335,17 @@ final class DownloadQueueCoordinator {
     }
 
     private func protectedDataChanged() {
-        if !reconciled {
+        if !isReconciled {
             Task { await self.reconcile() }
         }
         wake()
     }
 
     private func drain(generation: Int) async {
-        if !reconciled {
+        if !isReconciled {
             await reconcile()
         }
-        guard reconciled else { return }
+        guard isReconciled else { return }
         await readmitClearedWaits()
         while isCurrent(generation) {
             guard let work = await nextQueuedJob() else { return }
@@ -343,24 +353,34 @@ final class DownloadQueueCoordinator {
         }
     }
 
-    /// The gate that decides one job's transfers: the live policy, the observed path and, for the job's batch, its
-    /// consent. Every admission reads the consent again, so one that expired stops the next transfer.
-    private func admissionGate(for job: DownloadJobRecord, operation: PluginNetworkOperation) -> NetworkPathAdmissionGate {
+    /// The gate that decides one job's transfers: the live policy, the observed path and, for a job a person asked for,
+    /// its batch's consent. Every admission reads the consent again, so one that expired stops the next transfer. A job
+    /// only rules asked for has no consent to read: it is decided as automatic work and never holds, mints or borrows one.
+    private func admissionGate(
+        for job: DownloadJobRecord,
+        operation: PluginNetworkOperation,
+        intent: NetworkIntent
+    ) -> NetworkPathAdmissionGate {
         NetworkPathAdmissionGate(
             observer: path,
             policy: contexts.policy,
-            intent: .manualBulkDownload,
-            consent: UUID(uuidString: job.batchId).map { contexts.consentBinding(batchID: $0, pluginID: job.pluginId) },
+            intent: intent,
+            consent: intent == .automaticBulkDownload
+                ? nil
+                : UUID(uuidString: job.batchId).map { contexts.consentBinding(batchID: $0, pluginID: job.pluginId) },
             operation: operation,
             authorizationScope: job.sourceEpoch.flatMap(PluginNetworkScopeID.uuid(epoch:))
         )
     }
 
     /// Moves waiting chapters back to the queue when the condition that paused them has cleared. Reasons
-    /// that need an explicit Retry are never listed here. A path that waits only for a batch's consent readmits
-    /// the metered waits too: each job's own admission then decides whether its batch holds one.
+    /// that need an explicit Retry are never listed here. The jobs a person asked for and the jobs only rules asked for
+    /// are decided by different network rules, so each set of reasons is cleared by its own rule: a path that waits only
+    /// for a batch's consent readmits the metered waits of the first (each job's own admission then decides whether its
+    /// batch holds one), and never those of the second, which no consent can clear.
     private func readmitClearedWaits() async {
         var cleared: Set<DownloadWaitingReason> = [.appInBackground]
+        var automaticCleared: Set<DownloadWaitingReason> = [.appInBackground]
         switch contexts.policy.decide(.manualBulkDownload, path: path.current) {
         case .allow:
             cleared.formUnion(NetworkDeferral.networkWaitingReasons)
@@ -369,13 +389,18 @@ final class DownloadQueueCoordinator {
         case .wait:
             break
         }
+        if case .allow = contexts.policy.decide(.automaticBulkDownload, path: path.current) {
+            automaticCleared.formUnion(NetworkDeferral.networkWaitingReasons)
+        }
         if await protectedData.isProtectedDataAvailable() {
             cleared.insert(.protectedDataUnavailable)
+            automaticCleared.insert(.protectedDataUnavailable)
         }
         if (try? await store.ensureCapacityForNextAsset()) != nil {
             cleared.insert(.insufficientStorage)
+            automaticCleared.insert(.insufficientStorage)
         }
-        try? await store.readmitWaiting(cleared)
+        try? await store.readmitWaiting(manual: cleared, automaticOnly: automaticCleared)
     }
 
     /// The next queued job, under the automatic quota: while the bytes already stored fill it, only jobs a person asked
@@ -391,17 +416,22 @@ final class DownloadQueueCoordinator {
     private func runOne(_ work: DownloadJobWork, generation: Int) async -> Step {
         let job = work.job
         guard isCurrent(generation) else { return .blocked }
+        // Who asked is read now and holds for the whole attempt: it never changes purpose mid-flight. A job only rules
+        // asked for is automatic: no batch, no grant, and no consent lookup is even possible.
+        let automatic = work.ownership.manualRequestIds.isEmpty
         var operation = PluginNetworkOperation(
-            purpose: .manualBulkDownload, operationID: UUID(), batchID: UUID(uuidString: job.batchId),
+            purpose: automatic ? .automaticBulkDownload : .manualBulkDownload,
+            operationID: UUID(),
+            batchID: automatic ? nil : UUID(uuidString: job.batchId),
             policyRevision: contexts.policy.revision
         )
-        if let batchID = operation.batchID,
+        if !automatic, let batchID = operation.batchID,
            job.sourceEpoch.flatMap(PluginNetworkScopeID.uuid(epoch:)) == contexts.liveScope(pluginID: job.pluginId) {
             operation.scopedGrant = contexts.policy.authorizeBatchOperation(
                 contexts.consentBinding(batchID: batchID, pluginID: job.pluginId), operationID: operation.operationID
             )
         }
-        let gate = admissionGate(for: job, operation: operation)
+        let gate = admissionGate(for: job, operation: operation, intent: automatic ? .automaticBulkDownload : .manualBulkDownload)
         let current = RunningAttempt(jobID: job.id, edition: job.edition, gate: gate)
         running = current
         defer {
@@ -426,16 +456,29 @@ final class DownloadQueueCoordinator {
         // A network condition holds every queued chapter. One write marks them all and the pass stops. A path that
         // clears wakes the worker, and the next pass readmits the chapters in queue order. A condition that is this
         // batch's own, a metered-data consent it lacks, holds only this batch and the pass goes on to the next one.
+        // One that is the rules' own, their use of a path a person's batch could still use, holds only the jobs no person
+        // asked for, so a rule waiting for an unmetered path never blocks the head of the queue.
         if case .wait(let wait) = gate.admission() {
+            var scope = QueuedJobScope.all
+            var step = Step.blocked
+            if wait.isBatchSpecific {
+                scope = .batch(job.batchId)
+                step = .proceeded
+            } else if automatic {
+                switch contexts.policy.decide(.manualBulkDownload, path: path.current) {
+                case .allow, .wait(.meteredConsentRequired):
+                    scope = .automaticOnly
+                    step = .proceeded
+                case .wait:
+                    break
+                }
+            }
             do {
-                try await store.setWaitingForQueuedJobs(
-                    reason: wait.waitingReason,
-                    batchId: wait.isBatchSpecific ? job.batchId : nil
-                )
+                try await store.setWaitingForQueuedJobs(reason: wait.waitingReason, scope: scope)
             } catch {
                 return .blocked
             }
-            return wait.isBatchSpecific ? .proceeded : .blocked
+            return step
         }
 
         let runtime: DownloadPluginRuntime

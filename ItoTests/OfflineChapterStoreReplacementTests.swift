@@ -298,11 +298,11 @@ struct OfflineChapterStoreReplacementTests {
         }
 
         // The base reserve is back, but the room for the old copy it replaces is not.
-        try await store.readmitWaiting([.insufficientStorage])
+        try await store.readmitWaiting(manual: [.insufficientStorage], automaticOnly: [.insufficientStorage])
         #expect(try await store.job(id: job.id)?.state == .waiting)
 
         fixture.fileSystem.setCapacity(OfflineChapterStore.reserveBytes + oldBytes)
-        try await store.readmitWaiting([.insufficientStorage])
+        try await store.readmitWaiting(manual: [.insufficientStorage], automaticOnly: [.insufficientStorage])
         #expect(try await store.job(id: job.id)?.state == .queued)
     }
 

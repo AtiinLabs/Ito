@@ -71,6 +71,22 @@ extension OfflineChapterStore {
         return try deleteSubscription(subscription, in: db)
     }
 
+    /// A restore can remove series from the Library without going through `removeItemsDurably`. Every rule whose series
+    /// no longer has a Library item is released and deleted, so no job it asked for outlives it. The caller runs it
+    /// last in the restore transaction, after the Library is final. A running attempt of a removed job ends through the
+    /// publication check (`jobGone`) and the center's absence cancel; its unreferenced staging is collected later.
+    @discardableResult
+    nonisolated static func releaseSubscriptionsOfUnsavedSeries(in db: Database) throws -> SubscriptionRelease {
+        var release = SubscriptionRelease()
+        for subscription in try SeriesSubscriptionRecord.order(Column("id")).fetchAll(db) {
+            guard try !libraryItemExists(for: subscription.media, in: db) else { continue }
+            let released = try deleteSubscription(subscription, in: db)
+            release.removedJobIds += released.removedJobIds
+            release.stagingVersionIds += released.stagingVersionIds
+        }
+        return release
+    }
+
     /// A database that came from another installation: every rule that was running or paused is quarantined. It is
     /// paused for review as a new incarnation, its baseline, seen keys and open events are gone, its owners are
     /// released and the jobs only it asked for are removed. Runtime baselines and grants are not portable. Disabled

@@ -243,6 +243,16 @@ public final class AppSettingsStore: ObservableObject {
         AutomaticDownloadLimits(queueLimit: automaticDownloadQueueLimit, quotaGiB: automaticDownloadQuotaGiB)
     }
 
+    /// Fires after the store has published a new automatic queue limit or quota, which may make room for automatic work.
+    /// The values current at subscription are not announced.
+    var automaticDownloadLimitsChanged: AnyPublisher<Void, Never> {
+        $automaticDownloadQueueLimit
+            .combineLatest($automaticDownloadQuotaGiB)
+            .dropFirst()
+            .map { _, _ in () }
+            .eraseToAnyPublisher()
+    }
+
     /// The same limits for readers off the main actor (the download worker). It changes only when a stored
     /// configuration is published, exactly as the published properties do.
     nonisolated let automaticDownloadLimitsMirror = AutomaticDownloadLimitsMirror()

@@ -185,6 +185,23 @@ extension OfflineChapterStore {
         outcome.needsAttentionEventIds += inserted.filter { $0.decision == .needsReview }.map(\.id)
     }
 
+    /// Prunes the terminal events of a rule, keeping the window events of the anchor the catalog and the read state have
+    /// now. The anchor is read in the caller's transaction, so what is protected is what the next pass would recompute.
+    nonisolated static func pruneTerminalEvents(
+        of subscription: SeriesSubscriptionRecord,
+        catalog: SubscriptionAcceptedCatalog,
+        in db: Database
+    ) throws {
+        var qualifier: String?
+        if subscription.mode == .maintainNextUnread {
+            let readState = try SubscriptionLedger.readState(for: subscription.media, in: db)
+            qualifier = SubscriptionWindowPlanner.anchorQualifier(
+                SubscriptionWindowPlanner.anchorKey(in: catalog.rows, readState: readState)
+            )
+        }
+        try SubscriptionLedger.pruneTerminalEvents(of: subscription.id, protectingWindowQualifier: qualifier, in: db)
+    }
+
     // MARK: - Admission pass
 
     /// Decides the open events the trigger names, in the order they were raised, and acts on each decision in the

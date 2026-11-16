@@ -562,16 +562,22 @@ actor OfflineChapterStore {
         }
     }
 
-    /// Marks every queued job waiting for `reason`, in one transaction, as a network condition does. Waiting jobs
-    /// (including those that need a Retry) and jobs in an attempt are left alone, so one condition costs one write
-    /// however long the queue is. With `batchId`, only that batch's queued jobs wait: a condition that depends on
-    /// the batch, such as a metered-data consent it lacks, must not hold the batches behind it.
-    func setWaitingForQueuedJobs(reason: DownloadWaitingReason, batchId: String? = nil) async throws {
+    /// Marks every queued job in `scope` waiting for `reason`, in one transaction, as a network condition does. Waiting
+    /// jobs (including those that need a Retry) and jobs in an attempt are left alone, so one condition costs one write
+    /// however long the queue is. A condition that depends on the batch, such as a metered-data consent it lacks, holds
+    /// only that batch's jobs; one that depends on who asked, such as a rule's use of a metered path, holds only the
+    /// jobs no person asked for. Neither may hold the work behind it.
+    func setWaitingForQueuedJobs(reason: DownloadWaitingReason, scope: QueuedJobScope = .all) async throws {
         let now = clock()
         try await database.write { db in
             var request = DownloadJobRecord.filter(Column("state") == DownloadJobState.queued.rawValue)
-            if let batchId {
+            switch scope {
+            case .all:
+                break
+            case .batch(let batchId):
                 request = request.filter(Column("batchId") == batchId)
+            case .automaticOnly:
+                request = request.filter(sql: Self.automaticOnlySQL(jobColumn: "downloadJob.id"))
             }
             for var job in try request.fetchAll(db) {
                 job.state = .waiting
@@ -582,11 +588,14 @@ actor OfflineChapterStore {
         }
     }
 
-    /// Re-queues waiting jobs whose reason has cleared. Reasons that need a user Retry are never
-    /// cleared here, even when listed.
-    func readmitWaiting(_ reasons: Set<DownloadWaitingReason>) async throws {
-        let clearable = reasons.subtracting(DownloadWaitingReason.requiringRetry)
-        guard !clearable.isEmpty else { return }
+    /// Re-queues waiting jobs whose reason has cleared. A job some person asked for is readmitted when its reason is in
+    /// `manual`; a job only rules asked for, when its reason is in `automaticOnly`: the two are decided by different
+    /// network rules, so one clearing must not wake the other. Reasons that need a user Retry are never cleared here,
+    /// even when listed.
+    func readmitWaiting(manual: Set<DownloadWaitingReason>, automaticOnly: Set<DownloadWaitingReason>) async throws {
+        let manualClearable = manual.subtracting(DownloadWaitingReason.requiringRetry)
+        let automaticClearable = automaticOnly.subtracting(DownloadWaitingReason.requiringRetry)
+        guard !manualClearable.isEmpty || !automaticClearable.isEmpty else { return }
         let now = clock()
         // Room is read once, outside the transaction. A replacement needs room for its old copy as well.
         let capacity = try? fileSystem.availableCapacity(at: root)
@@ -594,8 +603,13 @@ actor OfflineChapterStore {
             let waiting = try DownloadJobRecord
                 .filter(Column("state") == DownloadJobState.waiting.rawValue)
                 .fetchAll(db)
-            for var job in waiting where job.waitingReason.map({ clearable.contains($0) }) == true {
-                if job.waitingReason == .insufficientStorage {
+            let withManualOwner = Set(try String.fetchAll(
+                db, sql: "SELECT DISTINCT jobId FROM downloadJobOwner WHERE ownerKind = 'manual'"
+            ))
+            for var job in waiting {
+                let clearable = withManualOwner.contains(job.id) ? manualClearable : automaticClearable
+                guard let reason = job.waitingReason, clearable.contains(reason) else { continue }
+                if reason == .insufficientStorage {
                     let needed = try Self.replacementBytes(for: job, in: db)
                     let hasRoom = capacity.map { $0 - Self.reserveBytes >= needed } ?? false
                     if needed > 0, !hasRoom { continue }

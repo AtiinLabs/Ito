@@ -33,6 +33,17 @@ nonisolated enum OfflinePublishError: Error, Equatable, Sendable {
     case integrityMismatch
 }
 
+/// Which queued jobs a network condition holds.
+nonisolated enum QueuedJobScope: Sendable, Equatable {
+    /// Every queued job: the condition is the same for all of them.
+    case all
+    /// The queued jobs of one batch, which lacks something only that batch can have (its metered-data consent).
+    case batch(String)
+    /// The queued jobs no person asked for, which only rules asked for. A rule's use of the path is decided by its own
+    /// rule, so it must not hold the jobs a person asked for.
+    case automaticOnly
+}
+
 /// One page to store. `text` is UTF-8 data; `image` is complete image bytes; `imageFile` is a temp
 /// file the store moves into the staging directory.
 nonisolated struct OfflinePageInput: Sendable {

@@ -272,7 +272,11 @@ struct SubscriptionLedgerOwnershipTests {
         let baseline = try #require(try await f.baseline())
         #expect(try await f.store.beginSubscriptionCheck(media: f.media, capturedEpoch: OfflineStoreFixture.epoch) == nil)
 
-        try await f.store.resumeSubscription(id: id)
+        let generation = try await f.subscription().configGeneration
+        let outcome = try await f.store.resumeSubscription(SubscriptionResumeRequest(
+            subscriptionId: id, expectedConfigGeneration: generation, reviewedSourceEpoch: nil, configuration: nil
+        ))
+        #expect(outcome == .resumed(configGeneration: generation))
         #expect(try await f.subscription().state == .enabled)
         #expect(try await f.baseline() == baseline)
         #expect(try await f.store.nextQueuedJob(automaticAdmitted: true)?.job.id == job.id)

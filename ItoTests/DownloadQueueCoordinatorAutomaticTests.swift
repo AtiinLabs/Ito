@@ -160,7 +160,11 @@ struct DownloadQueueCoordinatorAutomaticTests {
         #expect(try await fixture.job(chapterKey: "c3")?.state == .queued)
         #expect(try await fixture.copy(chapterKey: "c3") == nil)
 
-        try await fixture.center.resumeSubscription(id: id)
+        let generation = try #require(try await fixture.store.subscription(for: Self.media)).configGeneration
+        let outcome = try await fixture.center.resumeSubscription(SubscriptionResumeRequest(
+            subscriptionId: id, expectedConfigGeneration: generation, reviewedSourceEpoch: nil, configuration: nil
+        ))
+        #expect(outcome == .resumed(configGeneration: generation))
         await fixture.coordinator.untilIdle()
         #expect(try await fixture.copy(chapterKey: "c3") != nil)
         #expect(try await fixture.job(chapterKey: "c3") == nil)

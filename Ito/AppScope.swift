@@ -35,6 +35,8 @@ struct PreparedApplicationDependencies {
     let downloadsOverview: (any DownloadsOverviewServing)?
     let downloadsThumbnails: any DownloadsThumbnailServing
     let downloadPresets: DownloadPresetStore?
+    /// The commands of automatic downloads; unavailable when there is no offline store.
+    let automaticDownloads: any AutomaticDownloadServing
 
     init(
         settings: PreparedSettingsDependencies,
@@ -68,7 +70,8 @@ struct PreparedApplicationDependencies {
         offlineReading: any OfflineChapterReading = UnavailableOfflineChapterReading(),
         downloadsOverview: (any DownloadsOverviewServing)? = nil,
         downloadsThumbnails: any DownloadsThumbnailServing = UnavailableDownloadsThumbnails(),
-        downloadPresets: DownloadPresetStore? = nil
+        downloadPresets: DownloadPresetStore? = nil,
+        automaticDownloads: any AutomaticDownloadServing = UnavailableAutomaticDownloads()
     ) {
         self.settings = settings
         self.tracking = tracking ?? .unavailable()
@@ -102,6 +105,7 @@ struct PreparedApplicationDependencies {
         self.downloadsOverview = downloadsOverview
         self.downloadsThumbnails = downloadsThumbnails
         self.downloadPresets = downloadPresets
+        self.automaticDownloads = automaticDownloads
     }
 
     static func production(
@@ -128,6 +132,8 @@ struct PreparedApplicationDependencies {
         completionRecovery: (any PluginCompletionRecovering)? = nil,
         /// The offline store, worker and download center, composed together or not at all.
         downloads: DownloadStack? = nil,
+        /// The commands of automatic downloads, composed with the download stack; none without it.
+        automaticDownloads: (any AutomaticDownloadServing)? = nil,
         /// Whether the device is offline; never offline when not composed.
         connectivity: (any ConnectivityServing)? = nil,
         /// Durable Library covers; none when not composed.
@@ -274,7 +280,8 @@ struct PreparedApplicationDependencies {
             offlineReading: downloads?.store ?? UnavailableOfflineChapterReading(),
             downloadsOverview: downloads.map { LiveDownloadsOverview(center: $0.center, store: $0.store) },
             downloadsThumbnails: LibraryDownloadsThumbnails(covers: covers),
-            downloadPresets: downloads?.presets
+            downloadPresets: downloads?.presets,
+            automaticDownloads: automaticDownloads ?? UnavailableAutomaticDownloads()
         )
     }
 }
@@ -609,6 +616,7 @@ final class AppScope {
         browsePluginsDirectory: URL? = nil,
         completionRecovery: (any PluginCompletionRecovering)? = nil,
         downloads: DownloadStack? = nil,
+        automaticDownloads: (any AutomaticDownloadServing)? = nil,
         connectivity: (any ConnectivityServing)? = nil,
         coverThumbnails: (any LibraryCoverThumbnailServing)? = nil
     ) -> AppScope {
@@ -636,6 +644,7 @@ final class AppScope {
                 browsePluginsDirectory: browsePluginsDirectory,
                 completionRecovery: completionRecovery,
                 downloads: downloads,
+                automaticDownloads: automaticDownloads,
                 connectivity: connectivity,
                 coverThumbnails: coverThumbnails
             )
