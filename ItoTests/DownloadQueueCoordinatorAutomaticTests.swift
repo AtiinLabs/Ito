@@ -31,7 +31,10 @@ struct DownloadQueueCoordinatorAutomaticTests {
     }
 
     /// An enabled rule on the saved series with its baseline accepted from chapters 1...2, through the center.
-    private func subscribe(_ fixture: DownloadWorkerFixture) async throws -> String {
+    private func subscribe(
+        _ fixture: DownloadWorkerFixture,
+        configuration: SubscriptionConfiguration = SubscriptionConfiguration()
+    ) async throws -> String {
         await fixture.coordinator.reconcile()
         try await fixture.offline.database.dbPool.write { db in
             try LibraryItem(
@@ -40,7 +43,7 @@ struct DownloadQueueCoordinatorAutomaticTests {
             ).insert(db)
         }
         let outcome = try await fixture.center.enableSubscription(SubscriptionEnableRequest(
-            media: Self.media, reviewedSourceEpoch: OfflineStoreFixture.epoch, configuration: SubscriptionConfiguration()
+            media: Self.media, reviewedSourceEpoch: OfflineStoreFixture.epoch, configuration: configuration
         ))
         guard case .enabled(let id, _) = outcome else { throw SubscriptionLedgerFixtureError.notEnabled }
         try await commit(fixture, numbered(1...2), through: fixture.center)
@@ -162,5 +165,36 @@ struct DownloadQueueCoordinatorAutomaticTests {
         #expect(try await fixture.copy(chapterKey: "c3") != nil)
         #expect(try await fixture.job(chapterKey: "c3") == nil)
         try await fixture.offline.assertInvariants(fixture.store)
+    }
+
+    @Test func anEditNeverBypassesTheRunCapAndOnlyTheNextCheckAdmitsTheHeldPositions() async throws {
+        let fixture = try DownloadWorkerFixture(automaticLimits: { Self.roomy })
+        let id = try await subscribe(fixture, configuration: SubscriptionConfiguration(perRunPositionCap: 1))
+        // Three forward positions under a cap of one: one job, two events held by the run cap.
+        try await commit(fixture, numbered(1...5), through: fixture.center)
+        #expect(try await fixture.store.jobs().count == 1)
+        let held = try await fixture.offline.database.dbPool.read { db in
+            try SubscriptionEventRecord.filter(Column("decision") == "pending").fetchAll(db)
+        }
+        #expect(held.count == 2 && held.allSatisfy { $0.pendingReason == .runCap })
+        let record = try #require(try await fixture.offline.database.dbPool.read { db in
+            try SeriesSubscriptionRecord.fetchOne(db, key: id)
+        })
+
+        // The edit decides waiting events again, but the held ones stay held: no new job.
+        let outcome = try await fixture.center.editSubscription(SubscriptionEdit(
+            subscriptionId: id, expectedConfigGeneration: record.configGeneration,
+            configuration: SubscriptionConfiguration(perRunPositionCap: 1, selection: .allUploads)
+        ))
+        #expect(outcome == .applied(configGeneration: record.configGeneration + 1))
+        #expect(try await fixture.store.jobs().count == 1)
+        let stillHeld = try await fixture.offline.database.dbPool.read { db in
+            try SubscriptionEventRecord.filter(Column("decision") == "pending").fetchCount(db)
+        }
+        #expect(stillHeld == 2)
+
+        // The next check commit admits exactly one more position.
+        try await commit(fixture, numbered(1...5), through: fixture.center)
+        #expect(try await fixture.store.jobs().count == 2)
     }
 }

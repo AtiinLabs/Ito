@@ -264,7 +264,7 @@ struct SubscriptionLedgerOwnershipTests {
         // The caller cancels the attempt: the job goes back to the queue.
         try await f.store.abandonAttempt(jobID: job.id, versionId: attempt.versionId, outcome: .queued)
         #expect(try await f.store.job(id: job.id)?.state == .queued)
-        #expect(try await f.store.nextQueuedJob() == nil)
+        #expect(try await f.store.nextQueuedJob(automaticAdmitted: true) == nil)
         await #expect(throws: OfflineStoreError.self) { try await f.store.beginAttempt(jobID: job.id) }
         #expect(try await f.store.job(id: job.id)?.state == .queued)
 
@@ -275,7 +275,7 @@ struct SubscriptionLedgerOwnershipTests {
         try await f.store.resumeSubscription(id: id)
         #expect(try await f.subscription().state == .enabled)
         #expect(try await f.baseline() == baseline)
-        #expect(try await f.store.nextQueuedJob()?.job.id == job.id)
+        #expect(try await f.store.nextQueuedJob(automaticAdmitted: true)?.job.id == job.id)
     }
 
     @Test func c21_aLateCommitOfAPausedSubscriptionWritesNothing() async throws {
@@ -403,7 +403,7 @@ struct SubscriptionLedgerOwnershipTests {
         #expect(try await f.jobs().map(\.id) == [job.id])
         #expect(try await f.owners(of: job.id).compactMap(\.subscriptionId) == [second])
         // And the remaining owner may start it.
-        #expect(try await f.store.nextQueuedJob()?.job.id == job.id)
+        #expect(try await f.store.nextQueuedJob(automaticAdmitted: true)?.job.id == job.id)
 
         // Deleting the other one removes the job it alone holds now, and the rows with it.
         let deleted = try await f.store.deleteSubscription(id: second)
@@ -890,5 +890,24 @@ struct SubscriptionLedgerOwnershipTests {
         await #expect(throws: OfflineStoreError.reconciliationPending) { try await store.pauseSubscription(id: UUID().uuidString) }
         await #expect(throws: OfflineStoreError.reconciliationPending) { try await store.disableSubscription(id: UUID().uuidString) }
         #expect(try await fixture.rowCount("seriesSubscription") == 0)
+    }
+
+    @Test func aFailureOfAPausedRuleOrOfACheckOlderThanTheBaselineRecordsNothing() async throws {
+        let f = try await Fixture()
+        let id = try await f.enable().id
+        let older = try await f.begin()
+        try await f.check(numbered(1...3))
+        let attempt = try await f.subscription().lastAttemptAt
+
+        // The baseline already accepted a newer check: this one proves nothing about it.
+        try await f.store.recordSubscriptionCheckFailure(older, .fetchFailed)
+        #expect(try await f.subscription().lastAttemptOutcome == .baselineEstablished)
+        #expect(try await f.subscription().lastAttemptAt == attempt)
+
+        // A paused rule is not checked, so a late failure writes nothing either.
+        let newer = try await f.begin()
+        _ = try await f.store.pauseSubscription(id: id)
+        try await f.store.recordSubscriptionCheckFailure(newer, .fetchFailed)
+        #expect(try await f.subscription().lastAttemptOutcome == .baselineEstablished)
     }
 }

@@ -97,7 +97,7 @@ nonisolated enum SubscriptionWindowPlanner {
                 kind: .window,
                 identity: identity,
                 qualifier: qualifier,
-                candidateKeys: Array((keys[position] ?? []).prefix(SubscriptionEventRecord.candidateKeyLimit)),
+                candidateKeys: Array((keys[position] ?? []).prefix(SubscriptionCatalogClassifier.candidateKeyLimit)),
                 previousRevision: nil,
                 targetRevision: nil,
                 ordinal: ordinal,

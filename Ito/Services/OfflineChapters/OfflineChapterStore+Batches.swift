@@ -168,7 +168,7 @@ extension OfflineChapterStore {
     /// without an owner that may start it. A manual owner always may; a subscription may only while it is enabled
     /// and `automaticAdmitted` says the automatic quota has room. Paused and quota-blocked automatic jobs stay
     /// queued and are simply not started.
-    func nextQueuedJob(automaticAdmitted: Bool = true) async throws -> DownloadJobWork? {
+    func nextQueuedJob(automaticAdmitted: Bool) async throws -> DownloadJobWork? {
         try await database.read { db in
             guard let row = try Row.fetchOne(
                 db,

@@ -44,7 +44,7 @@ struct DownloadReplacementWorkerTests {
         #expect(try await fixture.offline.rowCount("downloadReplacementIntent") == 0)
         #expect(fixture.offline.fileSystem.exists(fixture.offline.versionURL(old)))
         #expect(try await fixture.copy(chapterKey: "chapter-2") != nil)
-        #expect(try await fixture.store.nextQueuedJob() == nil)
+        #expect(try await fixture.store.nextQueuedJob(automaticAdmitted: true) == nil)
         try await fixture.offline.assertInvariants(fixture.store)
     }
 

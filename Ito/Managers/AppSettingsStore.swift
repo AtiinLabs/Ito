@@ -231,6 +231,7 @@ public final class AppSettingsStore: ObservableObject {
         adjacentChapterPrefetchCount = snapshot.adjacentChapterPrefetchCount
         automaticDownloadQueueLimit = snapshot.automaticDownloadQueueLimit
         automaticDownloadQuotaGiB = snapshot.automaticDownloadQuotaGiB
+        automaticDownloadLimitsMirror.set(automaticDownloadLimits)
         loadIssues = issues
         // The configuration is published only here, after persistence acknowledged it, so the live policy
         // revision never runs ahead of what is stored.
@@ -242,9 +243,23 @@ public final class AppSettingsStore: ObservableObject {
         AutomaticDownloadLimits(queueLimit: automaticDownloadQueueLimit, quotaGiB: automaticDownloadQuotaGiB)
     }
 
+    /// The same limits for readers off the main actor (the download worker). It changes only when a stored
+    /// configuration is published, exactly as the published properties do.
+    nonisolated let automaticDownloadLimitsMirror = AutomaticDownloadLimitsMirror()
+
     public func setAskBeforeSwitchingGroups(_ value: Bool) async throws {
         try await set(value, for: AppPreferenceCatalog.askBeforeSwitchingGroups)
     }
+}
+
+/// A lock-guarded copy of the automatic download limits, so the worker reads the last published value from any thread.
+nonisolated final class AutomaticDownloadLimitsMirror: @unchecked Sendable {
+    private let lock = NSLock()
+    private var limits = AutomaticDownloadLimits.standard
+
+    var current: AutomaticDownloadLimits { lock.withLock { limits } }
+
+    func set(_ new: AutomaticDownloadLimits) { lock.withLock { limits = new } }
 }
 
 public enum AppSettingsStoreError: Error, Equatable {

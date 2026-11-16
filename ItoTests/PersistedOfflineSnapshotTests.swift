@@ -169,13 +169,19 @@ struct PersistedOfflineSnapshotTests {
                 entrySnapshot: entry, createdAt: OfflineStoreFixture.fixedDate
             ).insert(db)
             for (index, expected) in fixture.queuedChapters.enumerated() {
+                let jobId = UUID().uuidString
                 try DownloadJobRecord(
-                    id: UUID().uuidString, batchId: batchId, sequence: index, pluginId: pluginId,
+                    id: jobId, batchId: batchId, sequence: index, pluginId: pluginId,
                     mediaKind: fixture.kind, canonicalMediaId: fixture.seriesKey, chapterKey: expected.key,
                     authorityScope: .publicUnscoped, chapterSnapshot: snapshots[index], seriesTitle: "Series",
                     sourceEpoch: OfflineStoreFixture.epoch, state: .queued, waitingReason: nil, failureReason: nil,
                     stagingVersionId: nil, attemptCount: 0, createdAt: OfflineStoreFixture.fixedDate,
                     updatedAt: OfflineStoreFixture.fixedDate
+                ).insert(db)
+                // A persisted job was always requested by a person: its batch is its request.
+                try DownloadJobOwnerRecord(
+                    jobId: jobId, ownerKind: .manual, manualRequestId: batchId, subscriptionId: nil,
+                    subscriptionIncarnation: nil, eventId: nil, attachedAt: OfflineStoreFixture.fixedDate
                 ).insert(db)
             }
         }

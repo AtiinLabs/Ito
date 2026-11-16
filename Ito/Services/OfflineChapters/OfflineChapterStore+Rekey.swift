@@ -51,7 +51,7 @@ extension OfflineChapterStore {
         in db: Database,
         from: MediaIdentity,
         to: MediaIdentity,
-        now: Date = Date()
+        now: Date
     ) throws -> [String] {
         guard from != to else { return [] }
         let fromArguments: StatementArguments = [from.pluginId, from.mediaKind.rawValue, from.canonicalMediaId]

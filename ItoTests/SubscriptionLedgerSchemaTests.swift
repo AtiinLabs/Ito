@@ -421,14 +421,24 @@ struct SubscriptionLedgerSchemaTests {
 
     // MARK: - Backup classification
 
-    @Test func theNewTablesAreExcludedFromBackupWithAReasonAndSanitizedChildFirst() {
+    @Test func theNewTablesAreExcludedFromBackupAndSanitizedChildFirst() throws {
         let tables = [
             "downloadJobOwner", "seriesSubscription", "subscriptionBaseline", "subscriptionSeenKey", "subscriptionEvent"
         ]
         for table in tables {
-            let reason = BackupExportOperation.excludedTableReasons[table]
-            #expect(reason?.isEmpty == false, "\(table) needs a backup policy")
+            #expect(BackupExportOperation.excludedTableReasons[table] != nil, "\(table) needs a backup policy")
+            #expect(BackupExportOperation.sanitizedTables.contains(table), "\(table) must be sanitized")
         }
-        #expect(BackupExportOperation.excludedTableReasons["seriesSubscription"]?.contains("restored rules start paused") == true)
+        func index(_ table: String) throws -> Int {
+            try #require(BackupExportOperation.sanitizedTables.firstIndex(of: table))
+        }
+        // A row is deleted before the rows it references: owners before jobs and subscriptions, jobs before batches,
+        // and a subscription's events, seen keys and baseline before the subscription.
+        #expect(try index("downloadJobOwner") < index("downloadJob"))
+        #expect(try index("downloadJob") < index("downloadBatch"))
+        #expect(try index("downloadJobOwner") < index("seriesSubscription"))
+        for child in ["subscriptionEvent", "subscriptionSeenKey", "subscriptionBaseline"] {
+            #expect(try index(child) < index("seriesSubscription"))
+        }
     }
 }

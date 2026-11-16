@@ -75,7 +75,7 @@ final class DownloadCenter: ObservableObject {
         contexts: PluginNetworkContexts,
         observedPath: @escaping @Sendable () -> NetworkPathSnapshot,
         captureEpoch: @escaping @Sendable (String) throws -> String,
-        automaticLimits: @escaping @Sendable () -> AutomaticDownloadLimits = { .standard }
+        automaticLimits: @escaping @Sendable () -> AutomaticDownloadLimits
     ) {
         self.dbPool = dbPool
         self.store = store

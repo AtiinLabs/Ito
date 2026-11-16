@@ -213,9 +213,6 @@ nonisolated struct SubscriptionEventRecord: Codable, Sendable, Equatable, Fetcha
     var createdAt: Date
     var decidedAt: Date?
 
-    /// The most keys one event holds.
-    static let candidateKeyLimit = 64
-
     var candidates: [String] { Self.keys(candidateKeys) }
     var approved: [String]? { approvedKeys.map(Self.keys) }
     var decided: [String]? { decidedKeys.map(Self.keys) }

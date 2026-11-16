@@ -36,7 +36,7 @@ nonisolated public struct BackupExportOperation: Sendable {
 
     private static let databaseArtifactSuffixes = ["", "-wal", "-shm", "-journal"]
     private static let destinationSidecarSuffixes = ["-wal", "-shm", "-journal"]
-    private static let sanitizedTables: [String] = [
+    static let sanitizedTables: [String] = [
         LegacyDefaultsOutcomeRecord.databaseTableName,
         LegacyDefaultsInboxRecord.databaseTableName,
         LegacyStateMigrationRecord.databaseTableName,
@@ -113,7 +113,7 @@ nonisolated public struct BackupExportOperation: Sendable {
     ]
 
     private static let automaticDownloadRuleReason =
-        "Installation-local automatic download rules and catalog evidence; restored rules start paused (S6b capability)."
+        "Installation-local automatic download rules and catalog evidence; a rule never carries over from a backup."
 
     static let durableTablesByComponent: [BackupComponent: [String]] = [
         .libraryCore: [

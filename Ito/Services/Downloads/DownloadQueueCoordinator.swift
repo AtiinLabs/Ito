@@ -105,7 +105,7 @@ final class DownloadQueueCoordinator {
         contexts: PluginNetworkContexts,
         progress: DownloadProgressBoard,
         predecessor: Task<Void, Never>? = nil,
-        automaticLimits: @escaping @Sendable () -> AutomaticDownloadLimits = { .standard }
+        automaticLimits: @escaping @Sendable () -> AutomaticDownloadLimits
     ) {
         self.store = store
         self.runtimes = runtimes

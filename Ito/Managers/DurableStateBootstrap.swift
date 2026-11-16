@@ -463,6 +463,7 @@ public final class DurableStateBootstrap: ObservableObject {
 
         let predecessor = retiredDownloadWork
         retiredDownloadWork = nil
+        let automaticLimits = settings.automaticDownloadLimitsMirror
         let downloads = offlineChapterStore.map { store in
             DownloadStack(
                 store: store,
@@ -470,7 +471,8 @@ public final class DurableStateBootstrap: ObservableObject {
                 pluginManager: plugins,
                 pluginSettings: pluginSettings,
                 path: networkPath,
-                predecessor: predecessor
+                predecessor: predecessor,
+                automaticLimits: { automaticLimits.current }
             )
         }
         return Runtime(

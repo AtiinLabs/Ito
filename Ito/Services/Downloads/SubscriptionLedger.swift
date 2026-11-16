@@ -13,7 +13,9 @@ nonisolated enum SubscriptionLedger {
     static let tombstoneLimit = 20_000
 
     /// The decisions an event can still leave.
-    private static let openDecisions: [SubscriptionDecision] = SubscriptionDecision.allCases.filter(\.isOpen)
+    static let openDecisions: [SubscriptionDecision] = SubscriptionDecision.allCases.filter(\.isOpen)
+    /// The open decisions as a SQL list of quoted constants.
+    static var openDecisionsSQL: String { openDecisions.map { "'\($0.rawValue)'" }.joined(separator: ",") }
 
     // MARK: - Reads
 
@@ -284,7 +286,7 @@ nonisolated enum SubscriptionLedger {
                 .fetchAll(db)
             for var holder in holders {
                 var keys = holder.candidates
-                guard keys.count < SubscriptionEventRecord.candidateKeyLimit,
+                guard keys.count < SubscriptionCatalogClassifier.candidateKeyLimit,
                       !keys.contains(where: { ScanlatorUTF8.bytesEqual($0, alternate.identityValue) }) else { continue }
                 keys.append(alternate.identityValue)
                 holder.candidateKeys = SubscriptionEventRecord.encode(keys: keys)
@@ -296,14 +298,16 @@ nonisolated enum SubscriptionLedger {
         }
     }
 
-    /// Edits and scope changes decide again: events that were waiting for capacity, a group, a choice or an unlocked row
-    /// start over under the new configuration. A review stays a review.
+    /// Edits and scope changes decide again: events that were waiting for queue or disk room, a group, a choice or an
+    /// unlocked row start over under the new configuration. A review stays a review. An event held by the per-run cap
+    /// stays held: only the next check commit admits it, so an edit never bypasses the cap.
     static func reopenWaitingEvents(of subscriptionId: String, in db: Database) throws {
         let waiting: [SubscriptionDecision] = [.pending, .awaitingEdition, .needsChoice, .locked]
         try db.execute(
             sql: """
                 UPDATE subscriptionEvent SET decision = 'undecided', pendingReason = NULL
                 WHERE subscriptionId = ? AND decision IN (\(waiting.map { "'\($0.rawValue)'" }.joined(separator: ",")))
+                  AND NOT (decision = 'pending' AND pendingReason = 'runCap')
                 """,
             arguments: [subscriptionId]
         )
@@ -321,7 +325,7 @@ nonisolated enum SubscriptionLedger {
                 UPDATE subscriptionEvent
                 SET decision = 'superseded', pendingReason = NULL, decidedAt = ?
                 WHERE subscriptionId = ? AND kind = 'window' AND ifnull(qualifier, '') != ifnull(?, '')
-                  AND decision IN (\(openDecisions.map { "'\($0.rawValue)'" }.joined(separator: ",")))
+                  AND decision IN (\(openDecisionsSQL))
                 """,
             arguments: [now, subscriptionId, qualifier]
         )
@@ -359,7 +363,7 @@ nonisolated enum SubscriptionLedger {
                 WHERE id IN (
                     SELECT id FROM subscriptionEvent
                     WHERE subscriptionId = ?
-                      AND decision NOT IN (\(openDecisions.map { "'\($0.rawValue)'" }.joined(separator: ",")))
+                      AND decision NOT IN (\(openDecisionsSQL))
                     ORDER BY ifnull(decidedAt, createdAt) DESC, createdAt DESC, id DESC
                     LIMIT -1 OFFSET ?
                 )
@@ -377,7 +381,7 @@ nonisolated enum SubscriptionLedger {
             sql: """
                 UPDATE subscriptionEvent
                 SET decision = 'revoked', pendingReason = NULL, decidedAt = ?
-                WHERE subscriptionId = ? AND decision IN (\(openDecisions.map { "'\($0.rawValue)'" }.joined(separator: ",")))
+                WHERE subscriptionId = ? AND decision IN (\(openDecisionsSQL))
                 """,
             arguments: [now, subscriptionId]
         )

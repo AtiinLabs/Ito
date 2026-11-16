@@ -51,9 +51,12 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
     }
 
     let dbPool: DatabasePool
+    /// The time the moved series' automatic rules are stamped with.
+    private let clock: @Sendable () -> Date
 
-    public init(dbPool: DatabasePool) {
+    public init(dbPool: DatabasePool, clock: @escaping @Sendable () -> Date = { Date() }) {
         self.dbPool = dbPool
+        self.clock = clock
     }
 
     /// Moves each item to the new plugin. The offline state of every item moves with it
@@ -65,7 +68,8 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
         newPluginId: String,
         affectedItemIds: [String]
     ) async throws -> Result {
-        try await dbPool.write { db in
+        let now = clock()
+        return try await dbPool.write { db in
             var mappings: [Mapping] = []
             mappings.reserveCapacity(affectedItemIds.count)
 
@@ -271,7 +275,8 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
                             itemId: mapping.destinationId, pluginId: newPluginId, mediaKind: kind
                         ),
                         mediaKind: kind
-                    )
+                    ),
+                    now: now
                 )
                 cancelledJobCount += cancelled.count
             }
@@ -375,7 +380,8 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
         coverUrl: String?,
         rawPayload: Data
     ) async throws -> Result {
-        try await dbPool.write { db in
+        let now = clock()
+        return try await dbPool.write { db in
             guard let source = try possibleSourceItemIds.lazy.compactMap({
                 try LibraryItem.fetchOne(db, key: $0)
             }).first(where: { $0.effectiveType == mediaKind }) else {
@@ -479,7 +485,8 @@ public final class LibrarySourceRemapper: ObservableObject, @unchecked Sendable 
             let cancelledJobIDs = try OfflineChapterStore.rekeyMedia(
                 in: db,
                 from: MediaIdentity(pluginId: pluginId, canonicalMediaId: sourceCanonicalMediaId, mediaKind: mediaKind),
-                to: MediaIdentity(pluginId: pluginId, canonicalMediaId: destinationCanonicalMediaId, mediaKind: mediaKind)
+                to: MediaIdentity(pluginId: pluginId, canonicalMediaId: destinationCanonicalMediaId, mediaKind: mediaKind),
+                now: now
             )
 
             _ = try LibraryItem.deleteOne(db, key: source.id)

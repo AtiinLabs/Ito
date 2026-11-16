@@ -48,7 +48,7 @@ struct DownloadStack {
         pluginSettings: PluginSettingsStore,
         path: any NetworkPathObserving,
         predecessor: Task<Void, Never>?,
-        automaticLimits: @escaping @Sendable () -> AutomaticDownloadLimits = { .standard }
+        automaticLimits: @escaping @Sendable () -> AutomaticDownloadLimits
     ) {
         let progress = DownloadProgressBoard()
         let completion = pluginSettings.completionStore

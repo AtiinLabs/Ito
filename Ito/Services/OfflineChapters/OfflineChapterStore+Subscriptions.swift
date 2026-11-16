@@ -210,7 +210,10 @@ extension OfflineChapterStore {
         let now = clock()
         try await database.write { db in
             guard let subscription = try SubscriptionLedger.subscription(id: ticket.subscriptionId, in: db),
-                  subscription.state != .disabled, subscription.incarnation == ticket.incarnation else { return }
+                  subscription.state == .enabled, subscription.incarnation == ticket.incarnation else { return }
+            // A check older than the baseline already accepted proves nothing about it.
+            if let accepted = try SubscriptionLedger.baselineRecord(of: subscription.id, in: db),
+               accepted.acceptedTicket >= ticket.ticket { return }
             try SubscriptionLedger.recordAttempt(subscription.id, outcome: outcome, success: false, now: now, in: db)
         }
     }
@@ -506,7 +509,7 @@ extension OfflineChapterStore {
         // Every reviewed key must be listed by the accepted catalog, and the keys of one position must share it.
         var events: [ClassifiedEvent] = []
         for (ordinal, keys) in approval.positions.enumerated() {
-            guard !keys.isEmpty, keys.count <= SubscriptionEventRecord.candidateKeyLimit else {
+            guard !keys.isEmpty, keys.count <= SubscriptionCatalogClassifier.candidateKeyLimit else {
                 return refused(.invalidKeys)
             }
             var position: SubscriptionPositionID?
@@ -538,7 +541,7 @@ extension OfflineChapterStore {
                     DELETE FROM subscriptionEvent
                     WHERE subscriptionId = ? AND incarnation = ? AND kind = 'backfill'
                       AND identityKind = ? AND identityValue = ?
-                      AND decision NOT IN ('undecided','pending','awaitingEdition','needsChoice','needsReview','locked')
+                      AND decision NOT IN (\(SubscriptionLedger.openDecisionsSQL))
                     """,
                 arguments: [subscription.id, subscription.incarnation, event.identity.kind.rawValue, event.identity.value]
             )
