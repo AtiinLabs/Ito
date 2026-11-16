@@ -647,6 +647,43 @@ struct AutomaticDownloadRulesBackupTests {
         #expect(try Self.rule(database.dbPool, Self.media("missing")) == nil)
     }
 
+    /// The rule restore runs before the final release, inside the one transaction: the rule of a series the wipe
+    /// removed does not survive the backup naming it (its restored twin is skipped, its local rule is released), a
+    /// local rule the backup does not carry is deleted with its Library item, and no job is left without an owner.
+    @Test func b6_aWipeReleasesEveryRuleWhoseSeriesItRemovedWhetherOrNotTheBackupCarriesARuleForIt() async throws {
+        let f = try await Fixture()
+        let second = Self.media("series-2")
+        let kept = Self.media("kept")
+        try await f.enable()
+        try await f.check(Fixture.numbered(1...2))
+        try await f.check(Fixture.numbered(1...4))
+        try await f.enable(media: second)
+        for chapters in [Fixture.numbered(1...2), Fixture.numbered(1...3)] {
+            let ticket = try await f.begin(media: second)
+            let observation = try Fixture.observation(chapters, media: second, epoch: ticket.sourceEpoch)
+            _ = try await f.store.commitSubscriptionObservation(ticket, observation, limits: Fixture.roomy)
+        }
+        #expect(try await f.jobs().count == 3)
+        // The backup's Library holds only `kept`; it carries rules for `kept`, for `series-1` (removed by the wipe)
+        // and for `ghost` (never in any Library). `series-2`'s local rule is not carried at all.
+        let backup = Self.backup(
+            [Self.portable("kept"), Self.portable("series-1"), Self.portable("ghost")],
+            items: [Self.item("kept")]
+        )
+
+        let report = try await Self.operation(f.pool).restore(backup, mode: .wipe)
+
+        let outcome = try Self.outcome(report)
+        #expect(outcome.inserted == 1 && outcome.skipped == 2)
+        let rules = try await f.pool.read { db in try SeriesSubscriptionRecord.fetchAll(db) }
+        #expect(rules.map(\.media) == [kept])
+        #expect(rules.first?.state == .paused && rules.first?.pauseReason == .restored)
+        #expect(try await f.pool.read { db in try LibraryItem.fetchAll(db).map(\.id) } == ["kept"])
+        #expect(try await f.jobs().isEmpty)
+        #expect(try Self.count(f.pool, "downloadJobOwner") == 0)
+        try await f.expectEveryJobHasAnOwner()
+    }
+
     // MARK: - B7: nothing else is touched
 
     private static func snapshot(_ pool: DatabasePool, _ tables: [String]) throws -> [String: [String]] {
@@ -728,13 +765,26 @@ struct AutomaticDownloadRulesBackupTests {
         for table in Self.evidenceTables {
             #expect(try Self.count(destination.pool, table) == 0, "\(table)")
         }
-        // A reviewed resume is the stand-in here (the store's resume review ships with the scheduler slice): the rule
-        // is enabled again. It has no baseline, so its first check only establishes one and creates no event or job.
-        try await destination.write { db in
-            try db.execute(
-                sql: "UPDATE seriesSubscription SET state = 'enabled', pauseReason = NULL WHERE canonicalMediaId = 'series-1'"
-            )
-        }
+        // Only the store's reviewed resume enables a restored rule again: without the review it is refused and the
+        // rule stays paused; with the current epoch, the Library item and the reviewed rule it starts over. It has no
+        // baseline, so its first check only establishes one and creates no event or job.
+        let restoredRule = try #require(try await destination.store.subscription(for: Self.media("series-1")))
+        let refused = try await destination.store.resumeSubscription(SubscriptionResumeRequest(
+            subscriptionId: restoredRule.id, expectedConfigGeneration: restoredRule.configGeneration,
+            reviewedSourceEpoch: nil, configuration: nil
+        ))
+        #expect(refused == .reviewRequired)
+        let stillPaused = try #require(try await destination.store.subscription(for: Self.media("series-1")))
+        #expect(stillPaused.state == .paused && stillPaused.pauseReason == .restored)
+        #expect(stillPaused.configGeneration == restoredRule.configGeneration)
+        let resumed = try await destination.store.resumeSubscription(SubscriptionResumeRequest(
+            subscriptionId: restoredRule.id, expectedConfigGeneration: restoredRule.configGeneration,
+            reviewedSourceEpoch: OfflineStoreFixture.epoch, configuration: configurations[0].1
+        ))
+        #expect(resumed == .resumed(configGeneration: restoredRule.configGeneration + 1))
+        let enabled = try await destination.store.subscription(for: Self.media("series-1"))
+        #expect(enabled?.state == .enabled && enabled?.pauseReason == nil)
+        #expect(try await destination.store.subscription(for: Self.media("series-2"))?.state == .paused)
         let outcome = try await destination.check(Fixture.numbered(1...5))
         #expect(outcome.outcome == .baselineEstablished)
         #expect(outcome.createdEventIds.isEmpty && outcome.queuedJobs == 0)
