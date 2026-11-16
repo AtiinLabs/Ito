@@ -235,7 +235,12 @@ struct ReaderView: View {
     /// Handles every tap itself: a SwiftUI tap gesture around a UIKit view would also fire for
     /// taps the pages already handle.
     private var continuousReader: some View {
-        MangaContinuousReaderView(viewModel: viewModel, onToggleUI: toggleUI, onInitialLayout: reportInitialContinuousLayout)
+        MangaContinuousReaderView(
+            viewModel: viewModel,
+            onToggleUI: toggleUI,
+            onInitialLayout: reportInitialContinuousLayout,
+            onImageVisibleLease: reportRendererImageLease
+        )
     }
 
     /// The continuous renderer applied the destination's first position.
@@ -338,9 +343,15 @@ struct ReaderView: View {
 
     /// The first image holds a lease of this renderer now, which is when the route's own lease can go.
     private func reportInitialImage(_ key: ReaderPageImageKey, position: Int) {
+        reportRendererImageLease(key)
+        reportInitialLayout(position: position)
+    }
+
+    /// This renderer holds a visible lease on the image `key`; if it is the first image the route proved, the
+    /// route's own lease can go once that image is ready.
+    private func reportRendererImageLease(_ key: ReaderPageImageKey) {
         guard let requestID = viewModel.arrivalRequestID, key == viewModel.preparedImageKey else { return }
         onInitialImageVisibleLeaseAcquired(requestID, viewModel.routeVisitID)
-        reportInitialLayout(position: position)
     }
 
     private func toggleUI() {

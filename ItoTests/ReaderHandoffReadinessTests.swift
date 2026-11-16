@@ -101,8 +101,9 @@ final class ReaderHandoffReadinessTests: XCTestCase {
         destination.imageSession.release(rendererLease)
     }
 
-    /// The continuous renderer never reports a lease of its own; the route's hold must not outlive the swap.
-    func testACommitReleasesTheHoldWhenTheRendererNeverReportsALease() async throws {
+    /// The renderer's own lease may arrive only after the swap (the continuous renderer creates its cells
+    /// late): the route's hold stays until then, so the ready image is neither reset nor fetched again.
+    func testTheHoldOutlivesTheCommitUntilTheRendererReportsItsLease() async throws {
         let (fixture, data) = await imageRoute()
         try XCTUnwrap(fixture.textModel).goToNextChapter()
         await fixture.route.waitForPreparationForTesting()
@@ -122,7 +123,42 @@ final class ReaderHandoffReadinessTests: XCTestCase {
         fixture.route.presentationReady(requestID: request.id, visitID: staged.visitID)
 
         XCTAssertTrue(fixture.pagesModel === destination)
-        XCTAssertEqual(fixture.route.stagedImageHoldCountForTesting, 0, "The commit let it go: no lease leaks")
+        XCTAssertEqual(fixture.route.stagedImageHoldCountForTesting, 1, "The commit does not let it go")
+        if case .ready = destination.imageSession.state(for: key).phase {} else { XCTFail("The image was reset") }
+
+        // The live renderer takes its lease and reports it, as the arrival request still allows.
+        let rendererLease = destination.imageSession.acquire(
+            try XCTUnwrap(destination.preparedInitialImageDescriptor()), consumer: .visible
+        )
+        fixture.route.initialImageVisibleLeaseAcquired(requestID: request.id, visitID: staged.visitID)
+
+        XCTAssertEqual(fixture.route.stagedImageHoldCountForTesting, 0)
+        if case .ready = destination.imageSession.state(for: key).phase {} else { XCTFail("The image was reset") }
+        XCTAssertEqual(data.requestCount(for: Self.imageURL), 1, "The image was never fetched again")
+        destination.imageSession.release(rendererLease)
+    }
+
+    func testClosingTheRouteReleasesAHoldTheRendererNeverReported() async throws {
+        let (fixture, data) = await imageRoute()
+        try XCTUnwrap(fixture.textModel).goToNextChapter()
+        await fixture.route.waitForPreparationForTesting()
+        guard case .staging(let request, let staged) = fixture.route.phase, case .pages(_, let destination) = staged else {
+            return XCTFail("Staged as pages")
+        }
+        let key = try XCTUnwrap(destination.preparedImageKey)
+        let ready = expectation(description: "the first image is ready")
+        let observation = destination.imageSession.observe(key) { state in
+            if case .ready = state.phase { ready.fulfill() }
+        }
+        data.releaseLoads()
+        await fulfillment(of: [ready], timeout: 5)
+        observation.cancel()
+        fixture.route.presentationReady(requestID: request.id, visitID: staged.visitID)
+        XCTAssertEqual(fixture.route.stagedImageHoldCountForTesting, 1)
+
+        fixture.route.close()
+
+        XCTAssertEqual(fixture.route.stagedImageHoldCountForTesting, 0, "No lease outlives the route")
     }
 
     // MARK: - A text chapter that opens on an illustration

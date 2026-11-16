@@ -9,16 +9,20 @@ struct MangaContinuousReaderView: UIViewControllerRepresentable {
     let viewModel: MangaReaderViewModel
     let onToggleUI: () -> Void
     let onInitialLayout: () -> Void
+    /// Told with the request's key each time an image of the renderer holds a visible lease.
+    let onImageVisibleLease: (ReaderPageImageKey) -> Void
 
     func makeUIViewController(context: Context) -> MangaContinuousCollectionViewController {
         let controller = MangaContinuousCollectionViewController(viewModel: viewModel, onToggleUI: onToggleUI)
         controller.onInitialLayout = onInitialLayout
+        controller.onImageVisibleLease = onImageVisibleLease
         return controller
     }
 
     func updateUIViewController(_ controller: MangaContinuousCollectionViewController, context: Context) {
         controller.onToggleUI = onToggleUI
         controller.onInitialLayout = onInitialLayout
+        controller.onImageVisibleLease = onImageVisibleLease
     }
 
     static func dismantleUIViewController(_ controller: MangaContinuousCollectionViewController, coordinator: ()) {
@@ -83,6 +87,8 @@ final class MangaContinuousCollectionViewController: UIViewController,
     private var isInvalidated = false
     /// Called once, when the first position the view model asked for is on screen.
     var onInitialLayout: (() -> Void)?
+    /// Told with the request's key each time an image of this renderer holds a visible lease.
+    var onImageVisibleLease: ((ReaderPageImageKey) -> Void)?
     private var initialLayoutReported = false
 
 #if DEBUG
@@ -838,7 +844,8 @@ final class MangaContinuousCollectionViewController: UIViewController,
                 pageID: page.id,
                 fillsRowWidth: true,
                 interaction: .continuous(onTap: { [weak self] in self?.onToggleUI() }),
-                imageLabel: String(localized: "Page \(page.chapterPosition + 1)", comment: "Accessibility label of a manga page; number is its position in the chapter")
+                imageLabel: String(localized: "Page \(page.chapterPosition + 1)", comment: "Accessibility label of a manga page; number is its position in the chapter"),
+                onVisibleLeaseAcquired: { [weak self] key in self?.onImageVisibleLease?(key) }
             ))
         case .text(let text):
             return AnyView(MangaContinuousTextPage(text: text))

@@ -692,9 +692,9 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
         phase = .idle
         staged.model.setPresentationMode(.live)
         staged.model.activatePreparedPresentation()
-        // The destination is live and holds its own leases; the route's proof of the image goes now.
-        imageHold?.release()
-        imageHold = nil
+        // The route's proof of the image stays until the renderer reports a lease of its own (the report
+        // still works once the destination is live), so the first image is never reset to idle and fetched
+        // again. A renderer that never reports one is released by the next preparation or by `close()`.
     }
 
     // MARK: Format correction
