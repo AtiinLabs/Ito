@@ -70,6 +70,16 @@ Downloads that only rules asked for run as automatic bulk work: they never mint,
 and wait under "Ask" on a metered path without holding back a person's batches. This slice adds no screen, string or
 notification: the commands exist behind `AutomaticDownloads`, and no rule can be created from the app yet.
 
+Automatic checks of subscribed series run in the foreground only. The scheduler starts when the app is ready and active,
+when a Library refresh ends, and when a rule is enabled, edited or resumed; a rule is due one update interval after its
+last check, longer after a failure, and a refresh counts as a check. Checks follow the automatic-metadata network
+policy (Wi-Fi only, Low Data Mode, unknown path) before every series, and a source that needs a sign-in or settings is
+not asked again in that pass. The one background refresh, when the user opted into it, feeds subscribed series through
+the same single fetch; the scheduler never runs in the background and nothing here promises background immediacy.
+Downloads that only rules asked for run as automatic bulk work: they never mint, borrow or hold a metered-data consent
+and wait under "Ask" on a metered path without holding back a person's batches. This slice adds no screen, string or
+notification: the commands exist behind `AutomaticDownloads`, and no rule can be created from the app yet.
+
 ## One-time repository setup
 
 1. Copy this starter kit into the Ito repository.
