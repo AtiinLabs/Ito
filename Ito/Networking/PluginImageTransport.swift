@@ -1,4 +1,5 @@
 import Foundation
+import ito_runner
 
 nonisolated enum PluginImageTransportError: LocalizedError, Equatable, Sendable {
     case invalidURL
@@ -175,8 +176,11 @@ nonisolated final class PluginImageTransport: Sendable {
         url: URL,
         headers: [String: String]?,
         allowedOrigins: [String],
-        pluginID: String? = nil
+        pluginID: String? = nil,
+        authority: NetworkRequestAuthority? = nil
     ) async throws -> (Data, HTTPURLResponse) {
+        try Task.checkCancellation()
+        try authority?.check()
         let initialOrigin = try Self.parseAndNormalizeOrigin(from: url)
 
         var normalizedAllowedOrigins = Set<NormalizedOrigin>()
@@ -196,17 +200,29 @@ nonisolated final class PluginImageTransport: Sendable {
         for (key, val) in validatedHeaders {
             request.setValue(val, forHTTPHeaderField: key)
         }
+        let wireRequest = request
 
         let delegate = RedirectDelegate(
             originalOrigin: initialOrigin,
             explicitHeaders: validatedHeaders,
             pluginID: pluginID,
-            trust: trust
+            trust: trust,
+            authority: authority
         )
 
         do {
-            let (data, response) = try await sessions.withSession(for: pluginID) { session in
-                try await session.data(for: request, delegate: delegate)
+            let sessions = self.sessions
+            let transfer: @Sendable () async throws -> (Data, URLResponse) = {
+                try await sessions.withSession(for: pluginID) { session in
+                    try await session.data(for: wireRequest, delegate: delegate)
+                }
+            }
+            let data: Data
+            let response: URLResponse
+            if let authority {
+                (data, response) = try await authority.perform(transfer)
+            } else {
+                (data, response) = try await transfer()
             }
 
             if let redirectError = delegate.redirectError {
@@ -223,6 +239,7 @@ nonisolated final class PluginImageTransport: Sendable {
 
             return (data, httpResponse)
         } catch {
+            if !Task.isCancelled, let refusal = delegate.policyRefusal { throw refusal }
             if !Task.isCancelled, let trustError = delegate.trustError { throw trustError }
             if let redirectError = delegate.redirectError {
                 throw redirectError
@@ -230,9 +247,12 @@ nonisolated final class PluginImageTransport: Sendable {
             if let safeError = error as? PluginImageTransportError {
                 throw safeError
             }
+            // A typed host outcome is the answer, never a generic download failure.
+            if error is HostNetworkPolicyOutcome { throw error }
             if Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled {
                 throw CancellationError()
             }
+            if (error as? URLError)?.code == .timedOut { throw ItoError.hostCallTimedOut(.net) }
             // Foundation errors can retain signed URLs in userInfo, including when their
             // localized description looks harmless. Do not let that request material escape.
             throw PluginImageTransportError.downloadFailed
@@ -245,15 +265,19 @@ private final class RedirectDelegate: PluginTrustDelegate, @unchecked Sendable {
     private let explicitHeaders: [String: String]
     private let lock = NSLock()
     private var _redirectError: Error?
+    private var _policyRefusal: Error?
+    private let authority: NetworkRequestAuthority?
 
     init(
         originalOrigin: PluginImageTransport.NormalizedOrigin,
         explicitHeaders: [String: String],
         pluginID: String?,
-        trust: PluginTrustStore?
+        trust: PluginTrustStore?,
+        authority: NetworkRequestAuthority? = nil
     ) {
         self.originalOrigin = originalOrigin
         self.explicitHeaders = explicitHeaders
+        self.authority = authority
         super.init(pluginID: pluginID, trustStore: trust)
     }
 
@@ -261,6 +285,12 @@ private final class RedirectDelegate: PluginTrustDelegate, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return _redirectError
+    }
+
+    var policyRefusal: Error? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _policyRefusal
     }
 
     private func setRedirectError(_ error: Error) {
@@ -276,6 +306,16 @@ private final class RedirectDelegate: PluginTrustDelegate, @unchecked Sendable {
         newRequest request: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
+        do {
+            try authority?.check()
+        } catch {
+            lock.lock()
+            _policyRefusal = error
+            lock.unlock()
+            completionHandler(nil)
+            task.cancel()
+            return
+        }
         guard let newURL = request.url else {
             setRedirectError(PluginImageTransportError.invalidURL)
             completionHandler(nil)

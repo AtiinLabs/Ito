@@ -214,6 +214,8 @@ public class RepoManager: ObservableObject {
     private let packageFetcher: @Sendable (URLRequest) async throws -> Data
     private let configuredPluginsDirectory: URL?
     private let repositoryMutationGate = RepositoryMutationGate()
+    /// Where the app-owned fetchers read the live network policy from. Empty until composition provides it.
+    private let policy: AppNetworkAuthorityProvider
     /// The plugin directory gate of the owning `PluginManager`, or a private one when there is none.
     private let directoryGate: PluginDirectoryGate
     /// Where a downloaded package is copied to be checked. The system temporary directory unless a caller points it
@@ -256,6 +258,8 @@ public class RepoManager: ObservableObject {
         scratchDirectory: URL? = nil,
         supportedABI: ClosedRange<Int>? = nil
     ) {
+        let policy = AppNetworkAuthorityProvider()
+        self.policy = policy
         self.dbPool = dbPool
         self.pluginStatePublisher = pluginManager
         self.directoryGate = pluginManager?.directoryGate ?? PluginDirectoryGate()
@@ -267,7 +271,8 @@ public class RepoManager: ObservableObject {
             self.packageFetcher = packageFetcher
         } else {
             self.packageFetcher = { request in
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let transport = PolicyHTTPTransport(session: .shared, authority: policy.authority(purpose: .manualCatalogRefresh))
+                let (data, response) = try await transport.data(for: request)
                 if let response = response as? HTTPURLResponse,
                    !(200...299).contains(response.statusCode) {
                     if response.statusCode == 404 || response.statusCode == 410 {
@@ -293,7 +298,8 @@ public class RepoManager: ObservableObject {
                 // Skip the local HTTP cache. GitHub Pages sends max-age=600, so a cached
                 // index hid newly published versions for up to ten minutes after refresh.
                 let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let transport = PolicyHTTPTransport(session: .shared, authority: policy.authority(purpose: .manualCatalogRefresh))
+                let (data, response) = try await transport.data(for: request)
                 if let response = response as? HTTPURLResponse,
                    !(200...299).contains(response.statusCode) {
                     throw URLError(URLError.Code(rawValue: response.statusCode))
@@ -301,6 +307,12 @@ public class RepoManager: ObservableObject {
                 return data
             }
         }
+    }
+
+    /// Gives repository fetches the live network policy. Index refreshes and package downloads are explicit user
+    /// actions, so the policy only refuses them when no usable path exists.
+    func configure(networkContexts: PluginNetworkContexts) {
+        policy.set(networkContexts)
     }
 
     public func reload() async throws {

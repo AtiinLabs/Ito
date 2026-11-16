@@ -117,6 +117,8 @@ public class PluginManager: ObservableObject {
         _ settingsStore: PluginSettingsStore
     ) async throws -> ItoRunner
     public let pluginSettingsStore: PluginSettingsStore
+    let websiteContexts: SourceWebsiteContexts
+    let cloudflareManager: CloudflareManager
     private weak var completionCoordinator: PluginCompletionCoordinator?
     private let downloadRunnerLoader: DownloadRunnerLoader
     private let publicationMirror = PluginPublicationRevisionMirror()
@@ -146,11 +148,20 @@ public class PluginManager: ObservableObject {
         downloadRunnerLoader: DownloadRunnerLoader? = nil,
         directoryGate: PluginDirectoryGate? = nil,
         packageReader: PluginPackageReader? = nil,
-        supportedABI: ClosedRange<Int> = ItoRunner.supportedABIVersions
+        supportedABI: ClosedRange<Int> = ItoRunner.supportedABIVersions,
+        websiteContexts: SourceWebsiteContexts = SourceWebsiteContexts()
     ) {
         self.pluginSettingsStore = pluginSettingsStore
         self.pluginsDirectory = pluginsDirectory
-        self.runnerLoader = runnerLoader ?? Self.loadRunner
+        self.websiteContexts = websiteContexts
+        let cloudflare = CloudflareManager(websites: websiteContexts)
+        cloudflareManager = cloudflare
+        self.runnerLoader = runnerLoader ?? { pluginID, pluginURL, settingsStore in
+            try await Self.loadRunner(
+                pluginID: pluginID, pluginURL: pluginURL, settingsStore: settingsStore,
+                websites: websiteContexts, cloudflare: cloudflare
+            )
+        }
         self.downloadRunnerLoader = downloadRunnerLoader ?? Self.loadDownloadRunner
         self.directoryGate = directoryGate ?? PluginDirectoryGate()
         self.supportedABI = supportedABI
@@ -345,7 +356,9 @@ public class PluginManager: ObservableObject {
     private static func loadRunner(
         pluginID: String,
         pluginURL: URL,
-        settingsStore: PluginSettingsStore
+        settingsStore: PluginSettingsStore,
+        websites: SourceWebsiteContexts,
+        cloudflare: CloudflareManager
     ) async throws -> ItoRunner {
         try await load(
             pluginID: pluginID,
@@ -355,8 +368,11 @@ public class PluginManager: ObservableObject {
             frozenScope: nil
         ) {
             PluginRunnerHostModules(
-                net: AppNetModule(pluginID: pluginID, cookieJar: settingsStore.cookies, trust: settingsStore.trust),
-                webview: AppWebviewModule()
+                net: AppNetModule(
+                    pluginID: pluginID, cookieJar: settingsStore.cookies, trust: settingsStore.trust,
+                    contexts: settingsStore.networkContexts, cloudflare: cloudflare
+                ),
+                webview: AppWebviewModule(contexts: settingsStore.networkContexts, websites: websites)
             )
         }
     }

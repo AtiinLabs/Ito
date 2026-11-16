@@ -16,6 +16,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     private let trackingViewFactory: TrackingViewFactory
     private let readerViewFactory: MediaDetailReaderViewFactory
     private let categoryHistoryViewFactory: CategoryHistoryViewFactory
+    @Environment(\.sourceCoverRequests) private var coverRequests
 
     @State private var showNavTitle = false
     /// The saved-copy presentation the download sheet actually displayed, so its dismissal reports that one.
@@ -37,6 +38,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
 
     var body: some View {
         lifecycleContent
+            .environment(\.imageSourceID, viewModel.pluginID)
     }
 
     private var lifecycleContent: some View {
@@ -181,6 +183,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 ?? viewModel.media.authors?.joined(separator: ", "),
             statusLabel: viewModel.media.displayStatus,
             sourceLabel: viewModel.sourceName,
+            sourcePluginID: viewModel.pluginID,
             onImageLoaded: viewModel.heroImageLoaded
         )
         .background(
@@ -770,7 +773,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             } label: {
                 HStack(spacing: 12) {
                     // The app's image pipeline, so plugin (`ito://`) covers load too.
-                    LazyImage(url: URL(string: result.cover ?? "")) { state in
+                    LazyImage(request: coverRequests.request(URL(string: result.cover ?? ""), pluginID: viewModel.pluginID)) { state in
                         if let image = state.image {
                             image.resizable().scaledToFill()
                         } else {

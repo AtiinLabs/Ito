@@ -39,28 +39,27 @@ struct AppNetCloudflareResolution: @unchecked Sendable {
 
 nonisolated protocol AppNetCloudflareHandling: Sendable {
     nonisolated func cachedUserAgent(for host: String) async -> String
-    nonisolated func resolveChallenge(for url: URL) async throws -> AppNetCloudflareResolution
+    nonisolated func resolveChallenge(for url: URL, authority: NetworkRequestAuthority?) async throws -> AppNetCloudflareResolution
 }
 
 struct LiveAppNetCloudflareHandler: AppNetCloudflareHandling {
-    nonisolated func cachedUserAgent(for host: String) async -> String {
-        await MainActor.run {
-            CloudflareManager.shared.getCachedUserAgent(for: host)
-        }
+    let manager: CloudflareManager?
+
+    init(manager: CloudflareManager? = nil) {
+        self.manager = manager
     }
 
-    nonisolated func resolveChallenge(for url: URL) async throws -> AppNetCloudflareResolution {
-        let result = try await CloudflareManager.shared.resolveChallenge(for: url)
-        return AppNetCloudflareResolution(
-            userAgent: result.userAgent,
-            cookies: result.cookies
-        )
+    nonisolated func cachedUserAgent(for host: String) async -> String {
+        CloudflareManager.defaultUserAgent
+    }
+
+    nonisolated func resolveChallenge(for url: URL, authority: NetworkRequestAuthority?) async throws -> AppNetCloudflareResolution {
+        guard let authority, let manager else { throw HostNetworkPolicyOutcome.foregroundPermissionRequired }
+        return try await manager.resolveChallenge(for: url, authority: authority)
     }
 }
 
-/// Network for one plugin's runner. Requests carry the shared store's cookies (Cloudflare
-/// clearance) and then this plugin's own cookies; cookies the site sets are kept for this plugin
-/// only.
+/// Network for one plugin's runner. Site cookies are stored for this plugin only.
 actor AppNetModule: NetModule {
     /// Replaced when this plugin's trust changes; see `PluginSessionPool`.
     private let sessions: PluginSessionPool
@@ -69,18 +68,22 @@ actor AppNetModule: NetModule {
     private let pluginID: String
     private let cookieJar: PluginCookieJar
     private let trust: PluginTrustStore?
+    private let contexts: PluginNetworkContexts?
+    private let admitContext: @Sendable (NetworkOperationContext) throws -> Void
 
-    init(pluginID: String, cookieJar: PluginCookieJar, trust: PluginTrustStore) {
+    init(pluginID: String, cookieJar: PluginCookieJar, trust: PluginTrustStore, contexts: PluginNetworkContexts? = nil, cloudflare: CloudflareManager? = nil) {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
         config.urlCredentialStorage = nil
         self.sessions = PluginSessionPool(configuration: Self.uncached(config), trust: trust)
-        self.cloudflare = LiveAppNetCloudflareHandler()
+        self.cloudflare = LiveAppNetCloudflareHandler(manager: cloudflare)
         self.retryLogger = OSLogAppNetRetryLogger()
         self.pluginID = pluginID
         self.cookieJar = cookieJar
         self.trust = trust
+        self.contexts = contexts
+        self.admitContext = { _ in }
     }
 
     init(
@@ -89,7 +92,9 @@ actor AppNetModule: NetModule {
         retryLogger: any AppNetRetryLogging,
         pluginID: String,
         cookieJar: PluginCookieJar,
-        trust: PluginTrustStore? = nil
+        trust: PluginTrustStore? = nil,
+        contexts: PluginNetworkContexts? = nil,
+        admitContext: @escaping @Sendable (NetworkOperationContext) throws -> Void = { _ in }
     ) {
         self.sessions = PluginSessionPool(configuration: Self.uncached(configuration), trust: trust)
         self.cloudflare = cloudflare
@@ -97,6 +102,8 @@ actor AppNetModule: NetModule {
         self.pluginID = pluginID
         self.cookieJar = cookieJar
         self.trust = trust
+        self.contexts = contexts
+        self.admitContext = admitContext
     }
 
     /// A cached answer skips the TLS handshake, so a changed or revoked pin would never be
@@ -108,12 +115,16 @@ actor AppNetModule: NetModule {
         return config
     }
 
-    // The host context is accepted for the runner's contract and is not read yet: it is never logged.
     func fetch(request: NetRequest, context: NetworkOperationContext) async throws -> NetResponse {
-        return try await fetchInternal(request: request, isRetry: false)
+        return try await fetchInternal(request: request, context: context, isRetry: false)
     }
 
-    private func fetchInternal(request: NetRequest, isRetry: Bool) async throws -> NetResponse {
+    private func fetchInternal(request: NetRequest, context: NetworkOperationContext, isRetry: Bool) async throws -> NetResponse {
+        try Task.checkCancellation()
+        try admitContext(context)
+        let authority = contexts.map { NetworkRequestAuthority(contexts: $0, context: context) }
+        try authority?.check()
+        let cookieGeneration = cookieJar.captureWriteGeneration()
         guard let url = URL(string: request.url) else {
             throw URLError(.badURL)
         }
@@ -125,7 +136,7 @@ actor AppNetModule: NetModule {
         var updatedHeaders = request.headers
 
         // Always apply the cached User-Agent for this host if we have one
-        if let host = url.host {
+        if !isRetry, let host = url.host {
             let cachedUA = await cloudflare.cachedUserAgent(for: host)
             if !cachedUA.isEmpty {
                 // If Cloudflare manager has a specific UA for this host, we must use it
@@ -155,30 +166,51 @@ actor AppNetModule: NetModule {
         let sessions = self.sessions
         let cookieJar = self.cookieJar
         let pluginID = self.pluginID
+        let admitContext = self.admitContext
         let redirects = AppNetCookieRedirects(
             originalHost: url.host,
             explicitCookies: explicitCookies,
             storedCookies: { url in Self.storedCookies(for: url, pluginID: pluginID, in: cookieJar) },
-            keep: { response in Self.keepSetCookies(of: response, pluginID: pluginID, in: cookieJar) },
+            keep: { response in
+                Self.keepSetCookies(of: response, pluginID: pluginID, in: cookieJar, generation: cookieGeneration)
+            },
             pluginID: pluginID,
-            trust: trust
+            trust: trust,
+            admission: {
+                try admitContext(context)
+                try authority?.check()
+            }
         )
 
         let data: Data
         let response: URLResponse
+        let wireRequest = urlRequest
+        let method = request.method.uppercased()
+        let refusesLateResult = ["GET", "HEAD", "OPTIONS"].contains(method)
         do {
-            (data, response) = try await sessions.withSession(for: pluginID) { session in
-                try await session.data(for: urlRequest, delegate: redirects)
+            let transfer: @Sendable () async throws -> (Data, URLResponse) = {
+                try await sessions.withSession(for: pluginID) { session in
+                    try await session.data(for: wireRequest, delegate: redirects)
+                }
+            }
+
+            if let authority {
+                (data, response) = try await authority.perform(refusesLateResult: refusesLateResult, transfer)
+            } else {
+                (data, response) = try await transfer()
             }
         } catch {
             if Task.isCancelled { throw CancellationError() }
-            throw redirects.trustError ?? error
+            if refusesLateResult, let refusal = redirects.policyError { throw refusal }
+            if let trustError = redirects.trustError { throw trustError }
+            if (error as? URLError)?.code == .timedOut { throw ItoError.hostCallTimedOut(.net) }
+            throw error
         }
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
-        Self.keepSetCookies(of: httpResponse, pluginID: pluginID, in: cookieJar)
+        Self.keepSetCookies(of: httpResponse, pluginID: pluginID, in: cookieJar, generation: cookieGeneration)
 
         // --- Cloudflare challenge interception ---
         // Cloudflare marks every challenge page with `cf-mitigated: challenge`. A block page
@@ -193,10 +225,16 @@ actor AppNetModule: NetModule {
 
             if isChallenge {
                 retryLogger.log(.challengeDetected)
+                try authority?.checkInteractive()
 
                 // The live handler routes through CloudflareManager on MainActor.
-                let bypassResult = try await cloudflare.resolveChallenge(for: url)
+                let bypassResult = try await cloudflare.resolveChallenge(for: url, authority: authority)
 
+                try Task.checkCancellation()
+                try authority?.check()
+                guard try cookieJar.store(bypassResult.cookies, pluginID: pluginID, ifCurrent: cookieGeneration) else {
+                    throw CancellationError()
+                }
                 var retriedRequest = request
                 var retriedHeaders = request.headers
 
@@ -216,7 +254,7 @@ actor AppNetModule: NetModule {
                 retriedRequest.headers = retriedHeaders
 
                 retryLogger.log(.retryStarted)
-                let retriedResponse = try await fetchInternal(request: retriedRequest, isRetry: true)
+                let retriedResponse = try await fetchInternal(request: retriedRequest, context: context, isRetry: true)
                 retryLogger.log(.retryCompleted(status: retriedResponse.status))
                 return retriedResponse
             }
@@ -240,13 +278,13 @@ actor AppNetModule: NetModule {
         )
     }
 
-    /// The shared store's cookies for `url` (Cloudflare clearance), then this plugin's own.
+    /// Cookies belong to this source. Shared browser clearance is never source authorization.
     nonisolated static func storedCookies(for url: URL, pluginID: String, in cookieJar: PluginCookieJar) -> [HTTPCookie] {
-        (HTTPCookieStorage.shared.cookies(for: url) ?? []) + cookieJar.cookies(pluginID: pluginID, for: url)
+        cookieJar.cookies(pluginID: pluginID, for: url)
     }
 
-    /// The Cookie header for a request: the shared store's cookies (Cloudflare clearance), then this
-    /// plugin's own, then those the plugin set itself; later layers win on the same name.
+    /// The Cookie header for a request: this plugin's stored cookies, then those the plugin set itself;
+    /// later layers win on the same name.
     nonisolated static func cookieHeader(stored: [HTTPCookie], explicit: String?) -> String? {
         var names: [String] = []
         var values: [String: String] = [:]
@@ -268,25 +306,31 @@ actor AppNetModule: NetModule {
 
     /// Keeps the cookies `response` sets, for the URL that actually answered. A Keychain failure
     /// loses only this update; the response still reaches the plugin.
-    nonisolated static func keepSetCookies(of response: HTTPURLResponse, pluginID: String, in cookieJar: PluginCookieJar) {
+    nonisolated static func keepSetCookies(
+        of response: HTTPURLResponse, pluginID: String, in cookieJar: PluginCookieJar, generation: UInt64
+    ) {
         guard let url = response.url else { return }
         let fields = response.allHeaderFields.reduce(into: [String: String]()) { fields, field in
             fields[String(describing: field.key)] = String(describing: field.value)
         }
         let cookies = HTTPCookie.cookies(withResponseHeaderFields: fields, for: url)
         guard !cookies.isEmpty else { return }
-        try? cookieJar.store(cookies, pluginID: pluginID)
+        _ = try? cookieJar.store(cookies, pluginID: pluginID, ifCurrent: generation)
     }
 }
 
 /// Follows a request's redirects with the right cookies: each redirect's Set-Cookie is kept for
 /// the URL that sent it, and the next request carries only the cookies stored for its own URL.
 /// The plugin's own Cookie header goes along only while the host stays the same.
-private nonisolated final class AppNetCookieRedirects: PluginTrustDelegate, @unchecked Sendable {
+nonisolated final class AppNetCookieRedirects: PluginTrustDelegate, @unchecked Sendable {
     private let originalHost: String?
     private let explicitCookies: String?
     private let storedCookies: @Sendable (URL) -> [HTTPCookie]
     private let keep: @Sendable (HTTPURLResponse) -> Void
+    private let admission: @Sendable () throws -> Void
+    private let policyLock = NSLock()
+    private var refusal: Error?
+    var policyError: Error? { policyLock.withLock { refusal } }
 
     init(
         originalHost: String?,
@@ -294,12 +338,14 @@ private nonisolated final class AppNetCookieRedirects: PluginTrustDelegate, @unc
         storedCookies: @escaping @Sendable (URL) -> [HTTPCookie],
         keep: @escaping @Sendable (HTTPURLResponse) -> Void,
         pluginID: String,
-        trust: PluginTrustStore?
+        trust: PluginTrustStore?,
+        admission: @escaping @Sendable () throws -> Void = {}
     ) {
         self.originalHost = originalHost?.lowercased()
         self.explicitCookies = explicitCookies
         self.storedCookies = storedCookies
         self.keep = keep
+        self.admission = admission
         super.init(pluginID: pluginID, trustStore: trust)
     }
 
@@ -310,6 +356,12 @@ private nonisolated final class AppNetCookieRedirects: PluginTrustDelegate, @unc
         newRequest request: URLRequest,
         completionHandler: @escaping @Sendable (URLRequest?) -> Void
     ) {
+        do { try admission() } catch {
+            policyLock.withLock { refusal = error }
+            completionHandler(nil)
+            task.cancel()
+            return
+        }
         keep(response)
         guard let url = request.url else {
             completionHandler(request)

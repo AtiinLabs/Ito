@@ -229,7 +229,7 @@ struct PreparedMangaReaderDependencies {
     let settings: any MangaReaderSettingsAccessing
     let presence: any MangaReaderPresencePresenting
     let pluginMetadata: any MangaReaderPluginMetadataProviding
-    let makeImagePrefetcher: () -> any MangaReaderImagePrefetching
+    let makeImagePrefetcher: (String) -> any MangaReaderImagePrefetching
     let presentationLogger: any PresentationEventLogging
 
     static func production(
@@ -249,8 +249,12 @@ struct PreparedMangaReaderDependencies {
             settings: settingsStore,
             presence: discordRPCManager,
             pluginMetadata: pluginManager,
-            makeImagePrefetcher: {
-                NukeMangaReaderImagePrefetcher(session: ReaderPageImageSession(offlinePipeline: offlinePipeline))
+            makeImagePrefetcher: { pluginID in
+                NukeMangaReaderImagePrefetcher(session: ReaderPageImageSession.sourceBound(
+                    pluginID: pluginID,
+                    contexts: pluginManager.pluginSettingsStore.networkContexts,
+                    offlinePipeline: offlinePipeline
+                ))
             },
             presentationLogger: presentationLogger
         )
@@ -265,7 +269,7 @@ struct PreparedMangaReaderDependencies {
             settings: unavailable,
             presence: unavailable,
             pluginMetadata: unavailable,
-            makeImagePrefetcher: { unavailable },
+            makeImagePrefetcher: { _ in unavailable },
             presentationLogger: OSLogPresentationEventLogger()
         )
     }

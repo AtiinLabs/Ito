@@ -4,6 +4,8 @@ import NukeUI
 import ito_runner
 
 public struct MediaCardView<M: MediaDisplayable, Destination: View>: View {
+    @Environment(\.sourceCoverRequests) private var coverRequests
+    @Environment(\.imageSourceID) private var imageSourceID
     let media: M
     let destination: () -> Destination
 
@@ -16,7 +18,7 @@ public struct MediaCardView<M: MediaDisplayable, Destination: View>: View {
         NavigationLink(destination: destination()) {
             VStack(alignment: .leading, spacing: 4) {
                 if let coverURL = media.cover, let url = URL(string: coverURL) {
-                    LazyImage(url: url) { state in
+                    LazyImage(request: coverRequests.request(url, pluginID: imageSourceID)) { state in
                         if let image = state.image {
                             image
                                 .resizable()

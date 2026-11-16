@@ -1,227 +1,191 @@
-import OSLog
 import Foundation
 import WebKit
 import Combine
-import SwiftUI
 import UIKit
+import ito_runner
 
 @MainActor
-class CloudflareManager: NSObject, ObservableObject {
-    static let shared = CloudflareManager()
+final class CloudflareManager: NSObject, ObservableObject {
+    nonisolated static let defaultUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
+    private var challenges: [UUID: CloudflareChallenge] = [:]
+    private let websites: SourceWebsiteContexts
 
-    // Using a hidden WKWebView to silently process challenges
-    private var webView: WKWebView?
-    private var resolveContinuation: CheckedContinuation<(userAgent: String, cookies: [HTTPCookie]), Error>?
-    private var targetURL: URL?
-    private var isResolving = false
-    private let clearanceCookieName = "cf_clearance"
-
-    public static let defaultUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
-
-    // We cache the valid UA and cookies per host
-    private var cachedUserAgents: [String: String] = [:]
-
-    private var timeoutTask: Task<Void, Never>?
-    private var pollingTask: Task<Void, Never>?
-
-    override private init() {
+    init(websites: SourceWebsiteContexts) {
+        self.websites = websites
         super.init()
     }
 
-    func getCachedUserAgent(for host: String) -> String {
-        return cachedUserAgents[host] ?? cachedUserAgents[host.replacingOccurrences(of: "www.", with: "")] ?? Self.defaultUserAgent
-    }
-
-    func clearCachedUserAgents() {
-        cachedUserAgents.removeAll()
-    }
-
-    /// Resolves the Cloudflare challenge for the given URL and returns the solved User-Agent and Cookies.
-    func resolveChallenge(for url: URL) async throws -> (userAgent: String, cookies: [HTTPCookie]) {
-        // If an existing challenge is being solved, cancel it and start new one
-        if isResolving {
-            finish(with: URLError(.cancelled))
-        }
-
-        isResolving = true
-
-        return try await withCheckedThrowingContinuation { continuation in
-            self.resolveContinuation = continuation
-            self.targetURL = url
-
-            self.setupAndLoadWebView(with: url)
-
-            // Add a 30 second hard timeout
-            self.timeoutTask = Task {
-                do {
-                    try await Task.sleep(nanoseconds: 30_000_000_000)
-                    if self.isResolving {
-                        AppLogger.network.debug("[CloudflareManager] Hard timeout reached.")
-                        self.finish(with: URLError(.timedOut))
-                    }
-                } catch { }
-            }
-
-            // If not solved in 5 seconds, present the WebView interactively
-            Task {
-                do {
-                    try await Task.sleep(nanoseconds: 5_000_000_000)
-                    if self.isResolving {
-                        AppLogger.network.debug("[CloudflareManager] Falling back to interactive challenge...")
-                        self.presentInteractiveWebView()
-                    }
-                } catch { }
-            }
-
-            // Poll for cookies every 2 seconds
-            self.pollingTask = Task {
-                while !Task.isCancelled && self.isResolving {
-                    do {
-                        try await Task.sleep(nanoseconds: 2_000_000_000)
-                    } catch { break }
-
-                    guard let host = self.targetURL?.host else { continue }
-                    let baseHost = host.replacingOccurrences(of: "www.", with: "")
-
-                    let cookies = await self.fetchCookies()
-                    if cookies.contains(where: { $0.name == self.clearanceCookieName && $0.domain.contains(baseHost) }) {
-                        AppLogger.network.debug("[CloudflareManager] Polled and found cf_clearance cookie! Domain: \(baseHost)")
-                        self.extractClearanceAndComplete()
-                        break
-                    }
+    func resolveChallenge(for url: URL, authority: NetworkRequestAuthority) async throws -> AppNetCloudflareResolution {
+        try Task.checkCancellation()
+        try authority.checkInteractive()
+        guard !websites.isClearing else { throw CancellationError() }
+        let id = UUID()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard !Task.isCancelled else {
+                    continuation.resume(throwing: CancellationError())
+                    return
                 }
+                let challenge = CloudflareChallenge(url: url, authority: authority, websites: websites) { [weak self] result in
+                    self?.challenges[id] = nil
+                    continuation.resume(with: result)
+                }
+                challenges[id] = challenge
+                challenge.start()
             }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.challenges[id]?.finish(.failure(CancellationError())) }
         }
-    }
-
-    private func fetchCookies() async -> [HTTPCookie] {
-        return await withCheckedContinuation { continuation in
-            WKWebsiteDataStore.default().httpCookieStore.getAllCookies { cookies in
-                continuation.resume(returning: cookies)
-            }
-        }
-    }
-
-    private func setupAndLoadWebView(with url: URL) {
-        if webView == nil {
-            let config = WKWebViewConfiguration()
-            config.websiteDataStore = WKWebsiteDataStore.default()
-            config.preferences.javaScriptCanOpenWindowsAutomatically = false
-
-            let prefs = WKWebpagePreferences()
-            prefs.allowsContentJavaScript = true
-            config.defaultWebpagePreferences = prefs
-
-            // Removed naive JS evasions and auto-clickers because Cloudflare Turnstile explicitly
-            // detects simulated .click() events (isTrusted = false) and bad navigator mocks,
-            // which causes the infinite reload/challenge loop block.
-            let wv = WKWebView(frame: UIScreen.main.bounds, configuration: config)
-            wv.customUserAgent = Self.defaultUserAgent
-            wv.navigationDelegate = self
-            wv.alpha = 0.01
-            wv.isUserInteractionEnabled = false
-
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-               let window = windowScene.windows.first {
-                window.insertSubview(wv, at: 0)
-            }
-
-            self.webView = wv
-        }
-
-        let request = URLRequest(url: url)
-        webView?.load(request)
-    }
-
-    private func presentInteractiveWebView() {
-        guard let wv = webView else { return }
-        wv.alpha = 1.0
-        wv.isUserInteractionEnabled = true
-        wv.backgroundColor = .systemBackground
-
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first {
-            wv.frame = window.bounds
-            window.bringSubviewToFront(wv)
-        }
-    }
-
-    private func extractClearanceAndComplete() {
-        guard let wv = webView, let host = targetURL?.host else {
-            finish(with: URLError(.badURL))
-            return
-        }
-
-        wv.evaluateJavaScript("navigator.userAgent") { [weak self] result, _ in
-            guard let self = self else { return }
-
-            let userAgent = (result as? String) ?? wv.customUserAgent ?? ""
-            self.cachedUserAgents[host] = userAgent
-
-            WKWebsiteDataStore.default().httpCookieStore.getAllCookies { cookies in
-                let baseHost = host.replacingOccurrences(of: "www.", with: "")
-                let domainCookies = cookies.filter { $0.domain.contains(baseHost) }
-                self.finish(with: (userAgent, domainCookies))
-            }
-        }
-    }
-
-    private func cleanupWebView() {
-        webView?.removeFromSuperview()
-        webView = nil
-    }
-
-    private func finish(with result: (String, [HTTPCookie])) {
-        guard isResolving else { return }
-        for cookie in result.1 {
-            HTTPCookieStorage.shared.setCookie(cookie)
-        }
-        isResolving = false
-        timeoutTask?.cancel()
-        pollingTask?.cancel()
-
-        cleanupWebView()
-
-        resolveContinuation?.resume(returning: result)
-        resolveContinuation = nil
-        targetURL = nil
-    }
-
-    private func finish(with error: Error) {
-        guard isResolving else { return }
-        isResolving = false
-        timeoutTask?.cancel()
-        pollingTask?.cancel()
-
-        cleanupWebView()
-
-        resolveContinuation?.resume(throwing: error)
-        resolveContinuation = nil
-        targetURL = nil
     }
 }
 
-extension CloudflareManager: WKNavigationDelegate {
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        // Polling and injected scripts handle the solving
-        AppLogger.network.debug("[CloudflareManager] didFinish navigation.")
+/// Each waiter owns its own page, deadline and continuation. No late callback can settle a newer challenge.
+@MainActor
+final class CloudflareChallenge: NSObject, WKNavigationDelegate, WKHTTPCookieStoreObserver {
+    private let url: URL
+    private let authority: NetworkRequestAuthority
+    private let websites: SourceWebsiteContexts
+    private var completion: ((Result<AppNetCloudflareResolution, Error>) -> Void)?
+    private(set) var webView: WKWebView?
+    private var presentation: PagePresentation?
+    private var deadline: Task<Void, Never>?
+    private var observation: AnyCancellable?
+    private var retirement: UUID?
+    private let presentsPage: Bool
+    private let loadPage: @MainActor (WKWebView, URL) -> Void
+#if DEBUG
+    var onPolicyEvaluation: (() -> Void)?
+#endif
+
+    init(
+        url: URL, authority: NetworkRequestAuthority, websites: SourceWebsiteContexts,
+        presentsPage: Bool = true,
+        loadPage: @escaping @MainActor (WKWebView, URL) -> Void = { page, url in page.load(URLRequest(url: url)) },
+        completion: @escaping (Result<AppNetCloudflareResolution, Error>) -> Void
+    ) {
+        self.url = url
+        self.authority = authority
+        self.websites = websites
+        self.completion = completion
+        self.presentsPage = presentsPage
+        self.loadPage = loadPage
+    }
+
+    func start() {
+        do { try authority.checkInteractive() } catch { finish(.failure(error)); return }
+        guard let host = url.host, !presentsPage || PagePresentation.foregroundScene != nil else {
+            finish(.failure(HostNetworkPolicyOutcome.foregroundPermissionRequired)); return
+        }
+        let configuration = WKWebViewConfiguration()
+        do {
+            configuration.websiteDataStore = try websites.store(for: authority.context)
+        } catch { finish(.failure(error)); return }
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        let page = WKWebView(frame: UIScreen.main.bounds, configuration: configuration)
+        page.customUserAgent = CloudflareManager.defaultUserAgent
+        page.navigationDelegate = self
+        webView = page
+        configuration.websiteDataStore.httpCookieStore.add(self)
+        retirement = websites.observeRetirement { [weak self] in self?.finish(.failure(CancellationError())) }
+        let authority = self.authority
+        observation = authority.changes.sink { @Sendable [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+#if DEBUG
+                defer { self.onPolicyEvaluation?() }
+#endif
+                do {
+                    try authority.checkLiveSurface()
+                } catch {
+                    self.finish(.failure(error))
+                }
+            }
+        }
+        if presentsPage {
+            presentation = PagePresentation(webView: page, origin: "\(url.scheme ?? "https")://\(host)", host: host,
+                                            onClose: { [weak self] in self?.finish(.failure(CancellationError())) })
+            guard presentation != nil else { finish(.failure(HostNetworkPolicyOutcome.foregroundPermissionRequired)); return }
+        }
+        // This is a request deadline, not an ordering or cookie-polling mechanism.
+        deadline = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: 30_000_000_000) } catch { return }
+            self?.finish(.failure(ItoError.hostCallTimedOut(.webview)))
+        }
+        loadPage(page, url)
+    }
+
+    nonisolated func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
+        Task { @MainActor [weak self] in self?.inspectCookies() }
+    }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { inspectCookies() }
+
+    private func inspectCookies() {
+        guard completion != nil, let page = webView, let host = url.host?.lowercased() else { return }
+        page.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self, weak page] cookies in
+            guard let self, let page, self.webView === page, self.completion != nil else { return }
+            let matching = cookies.filter { cookie in
+                let domain = cookie.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+                return host == domain || host.hasSuffix("." + domain)
+            }
+            guard matching.contains(where: { $0.name == "cf_clearance" }) else { return }
+            do { try self.authority.checkLiveSurface() } catch { self.finish(.failure(error)); return }
+            self.finish(.success(AppNetCloudflareResolution(userAgent: page.customUserAgent ?? CloudflareManager.defaultUserAgent, cookies: matching)))
+        }
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
+        guard self.webView === webView else { decisionHandler(.cancel); return }
+        decisionHandler(decideNavigation(to: navigationAction.request.url))
+    }
+
+    /// The policy for one navigation of the challenge page, in any frame. Local `about:`, `blob:` and `data:`
+    /// documents make no HTTP request and need no network admission; an HTTP(S) request needs the interactive
+    /// admission, and a downgrade or credentials in the URL end the challenge. Any other scheme is cancelled.
+    func decideNavigation(to target: URL?) -> WKNavigationActionPolicy {
+        guard completion != nil, let target, let scheme = target.scheme?.lowercased() else { return .cancel }
+        if ["about", "blob", "data"].contains(scheme) { return .allow }
+        guard scheme == "https" || scheme == "http" else { return .cancel }
+        do {
+            try authority.checkInteractive()
+            guard target.user == nil, target.password == nil,
+                  !(url.scheme == "https" && scheme == "http") else { throw URLError(.unsupportedURL) }
+            return .allow
+        } catch HostNetworkPolicyOutcome.foregroundPermissionRequired {
+            return .cancel
+        } catch {
+            finish(.failure(error))
+            return .cancel
+        }
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        let nsError = error as NSError
-        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
-            return
-        }
-        AppLogger.network.error("[CloudflareManager] didFail navigation: \(error.localizedDescription)")
-        finish(with: error)
+        finishNavigation(error)
+    }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        finishNavigation(error)
     }
 
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        let nsError = error as NSError
-        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
-            return
-        }
-        AppLogger.network.error("[CloudflareManager] didFailProvisionalNavigation: \(error.localizedDescription)")
-        finish(with: error)
+    private func finishNavigation(_ error: Error) {
+        // WebKit may cancel an old provisional navigation while following a redirect. Owner cancellation is
+        // delivered separately through the token-matched cancellation handler.
+        guard (error as? URLError)?.code != .cancelled else { return }
+        finish(.failure(error))
+    }
+
+    func finish(_ result: Result<AppNetCloudflareResolution, Error>) {
+        guard let completion else { return }
+        self.completion = nil
+        deadline?.cancel()
+        observation?.cancel()
+        if let retirement { websites.removeObserver(retirement) }
+        webView?.configuration.websiteDataStore.httpCookieStore.remove(self)
+        webView?.navigationDelegate = nil
+        webView?.stopLoading()
+        presentation?.end()
+        presentation = nil
+        webView?.removeFromSuperview()
+        webView = nil
+        completion(result)
     }
 }

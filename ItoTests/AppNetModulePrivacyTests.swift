@@ -571,7 +571,7 @@ private final class StubCloudflareHandler: AppNetCloudflareHandling, @unchecked 
     }
 
     nonisolated func resolveChallenge(
-        for url: URL
+        for url: URL, authority: NetworkRequestAuthority?
     ) async throws -> AppNetCloudflareResolution {
         lock.withLock {
             storedResolvedURLs.append(url)

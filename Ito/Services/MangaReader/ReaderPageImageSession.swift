@@ -1,6 +1,8 @@
+import Combine
 import Foundation
 import Nuke
 import UIKit
+import ito_runner
 
 struct ReaderPageImageKey: Hashable {
     private struct Header: Hashable {
@@ -98,6 +100,14 @@ final class ReaderPageImageSession {
     }
 
     private let pipelineOverride: ImagePipeline?
+    private let sourceAuthority: NetworkRequestAuthority?
+    private var authorityObservation: AnyCancellable?
+    private var sourceRevoked = false
+    private var isSourceRevoked: Bool {
+        sourceRevoked || sourceAuthority.map {
+            $0.context.authorizationScope != $0.contexts.liveScope(pluginID: $0.context.sourceID)
+        } == true
+    }
     /// Serves `ito-offline://` pages. Without one, those requests fail and never reach the shared pipeline.
     private let offlinePipeline: ImagePipeline?
     private var entries: [ReaderPageImageKey: Entry] = [:]
@@ -108,9 +118,41 @@ final class ReaderPageImageSession {
     /// of a cancelled task never matches a request that was forgotten and added again.
     private var lastTaskGeneration: UInt64 = 0
 
-    init(pipeline: ImagePipeline? = nil, offlinePipeline: ImagePipeline? = nil) {
+    init(pipeline: ImagePipeline? = nil, offlinePipeline: ImagePipeline? = nil, sourceAuthority: NetworkRequestAuthority? = nil) {
         pipelineOverride = pipeline
         self.offlinePipeline = offlinePipeline
+        self.sourceAuthority = sourceAuthority
+        authorityObservation = sourceAuthority?.changes.sink { @Sendable [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let authority = self.sourceAuthority,
+                      authority.context.authorizationScope != authority.contexts.liveScope(pluginID: authority.context.sourceID) else { return }
+                self.sourceRevoked = true
+                self.deactivate()
+            }
+        }
+    }
+
+    /// A session whose page requests are bound to `pluginID`'s current source authority. Every reader of a
+    /// source's images (manga, novel) is made here, so none can load source images as app-owned traffic.
+    static func sourceBound(
+        pluginID: String,
+        contexts: PluginNetworkContexts,
+        pipeline: ImagePipeline? = nil,
+        offlinePipeline: ImagePipeline? = nil
+    ) -> ReaderPageImageSession {
+        ReaderPageImageSession(
+            pipeline: pipeline,
+            offlinePipeline: offlinePipeline,
+            sourceAuthority: ImageRequestSourceAuthority.capture(pluginID: pluginID, contexts: contexts)
+        )
+    }
+
+    private func boundRequest(_ request: URLRequest, purpose: ImageRequestPurpose) -> URLRequest {
+        let marked = purpose.applied(to: request)
+        guard let sourceAuthority else { return marked }
+        return ImageRequestSourceAuthority.applied(
+            ImageRequestSourceAuthority.withPurpose(purpose, authority: sourceAuthority), to: marked
+        )
     }
 
     /// The pipeline for `request`. Offline copies use only the offline pipeline and never reach the
@@ -135,7 +177,7 @@ final class ReaderPageImageSession {
     func knownPixelSize(for descriptor: ReaderPageImageDescriptor) -> CGSize? {
         if let size = entries[descriptor.key]?.pixelSize { return size }
         guard let pipeline = imagePipeline(for: descriptor.request) else { return nil }
-        let request = ImageRequest(urlRequest: descriptor.request)
+        let request = ImageRequest(urlRequest: boundRequest(descriptor.request, purpose: .foregroundReading))
         guard let image = pipeline.cache.cachedImage(for: request, caches: [.memory])?.image else { return nil }
         return CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
     }
@@ -151,6 +193,17 @@ final class ReaderPageImageSession {
             prefetchOrder.removeAll { $0 == key }
         }
         entries[key] = entry
+        if consumer == .visible, entry.taskIsPrefetch, let cancelTask = entry.cancelTask {
+            // A foreground read never rides on speculative work: that transfer was admitted, and may be refused,
+            // as a prefetch. Replace it with a task started under foreground authority.
+            entry.generation &+= 1
+            runningPrefetches = max(0, runningPrefetches - 1)
+            cancelTask()
+            entry.cancelTask = nil
+            entry.taskIsPrefetch = false
+            entry.phase = .idle
+            entries[key] = entry
+        }
         if case .idle = entry.phase {
             switch consumer {
             case .visible: start(key)
@@ -260,7 +313,7 @@ final class ReaderPageImageSession {
     }
 
     private func start(_ key: ReaderPageImageKey) {
-        guard var entry = entries[key], entry.cancelTask == nil, let request = entry.request else { return }
+        guard !isSourceRevoked, var entry = entries[key], entry.cancelTask == nil, let request = entry.request else { return }
         if case .failed = entry.phase { return }
         entry.isPrefetchQueued = false
         prefetchOrder.removeAll { $0 == key }
@@ -275,7 +328,7 @@ final class ReaderPageImageSession {
         // otherwise it is a prefetch. The mark is in memory only; it never changes the key or the cache identity.
         let countsAsPrefetch = !entry.leases.values.contains(where: { $0 == .visible })
         let purpose: ImageRequestPurpose = countsAsPrefetch ? .prefetch : .foregroundReading
-        let imageRequest = ImageRequest(urlRequest: purpose.applied(to: request))
+        let imageRequest = ImageRequest(urlRequest: boundRequest(request, purpose: purpose))
         // An image still in memory needs no request: a page shown again appears at once, and a
         // prefetch that precedes the page's view does not turn that into a spinner.
         if let image = pipeline.cache.cachedImage(for: imageRequest, caches: [.memory])?.image {
@@ -306,7 +359,7 @@ final class ReaderPageImageSession {
     }
 
     private func complete(_ key: ReaderPageImageKey, generation: UInt64, response: ImageResponse) {
-        guard var entry = entries[key], entry.generation == generation else { startQueuedPrefetches(); return }
+        guard !isSourceRevoked, var entry = entries[key], entry.generation == generation else { startQueuedPrefetches(); return }
         if entry.taskIsPrefetch { runningPrefetches = max(0, runningPrefetches - 1) }
         entry.cancelTask = nil
         entry.taskIsPrefetch = false
@@ -328,7 +381,9 @@ final class ReaderPageImageSession {
         if entry.taskIsPrefetch { runningPrefetches = max(0, runningPrefetches - 1) }
         entry.cancelTask = nil
         entry.taskIsPrefetch = false
-        if !entry.leases.isEmpty { entry.phase = .failed } else { entry.phase = .idle }
+        // A refused or failed prefetch is silent: only a page someone is looking at shows a failure, and the
+        // entry stays startable so a later foreground read is admitted on its own authority.
+        if entry.leases.values.contains(.visible) { entry.phase = .failed } else { entry.phase = .idle }
         entries[key] = entry
         publish(key)
         startQueuedPrefetches()

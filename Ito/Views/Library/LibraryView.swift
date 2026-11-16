@@ -522,6 +522,7 @@ struct SectionHeaderView: View {
 }
 
 struct LibraryItemView: View {
+    @Environment(\.sourceCoverRequests) private var coverRequests
     let item: LibraryItem
     let badgeCount: Int
     /// Verified saved chapters; the card shows nothing for zero.
@@ -678,7 +679,7 @@ struct LibraryItemView: View {
     @ViewBuilder
     private func coverContent(width: CGFloat, targetSize: CGSize) -> some View {
         if let coverURL = item.coverUrl, let url = URL(string: coverURL) {
-            LazyImage(url: url) { state in
+            LazyImage(request: coverRequests.request(url, pluginID: item.pluginId)) { state in
                 if let image = state.image {
                     image
                         .resizable()
@@ -787,6 +788,7 @@ private struct DeferredFailureAction {
 }
 
 struct DeferredPluginView: View {
+    @Environment(\.sourceCoverRequests) private var coverRequests
     @StateObject private var viewModel: DeferredPluginViewModel
     let viewFactory: AppViewFactory
 
@@ -1021,7 +1023,7 @@ struct DeferredPluginView: View {
     private func savedCover(_ savedFields: DeferredSavedFields) -> some View {
         let loadKey = "\(viewModel.item.id)\u{1F}\(viewModel.item.coverUrl ?? "")"
         if let url = savedFields.coverURL {
-            LazyImage(url: url) { state in
+            LazyImage(request: coverRequests.request(url, pluginID: viewModel.item.pluginId)) { state in
                 if let image = state.image {
                     image.resizable().scaledToFill()
                 } else {

@@ -3,12 +3,13 @@ import Nuke
 import NukeUI
 
 struct SearchCardView: View {
+    @Environment(\.sourceCoverRequests) private var coverRequests
     let result: PluginSearchResult
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let coverURL = result.cover, let url = URL(string: coverURL) {
-                LazyImage(url: url) { state in
+                LazyImage(request: coverRequests.request(url, pluginID: result.destination.pluginID)) { state in
                     if let image = state.image {
                         image
                             .resizable()

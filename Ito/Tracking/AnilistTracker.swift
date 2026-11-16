@@ -2,6 +2,7 @@ import OSLog
 import Foundation
 import Combine
 import anilist
+import ito_runner
 
 @MainActor
 public class AnilistTracker: TrackerProvider {
@@ -25,14 +26,17 @@ public class AnilistTracker: TrackerProvider {
     private let usernameDefaults: UserDefaults
 
     private let session: URLSession
+    private let authorities: AppNetworkAuthorityProvider?
     init(
         credentialRepository: AniListCredentialRepository,
         usernameDefaults: UserDefaults,
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        authorities: AppNetworkAuthorityProvider? = nil
     ) {
         self.credentialRepository = credentialRepository
         self.usernameDefaults = usernameDefaults
         self.session = session
+        self.authorities = authorities
         self.anilistToken = nil
         self.username = usernameDefaults.string(forKey: usernameKey)
     }
@@ -134,19 +138,21 @@ public class AnilistTracker: TrackerProvider {
             return listStatus
         }
 
-        if let progress = progress {
+        if let progress {
             do {
                 if let entry = try await getMediaListEntry(mediaId: mediaId),
-                   let currentProgress = entry.progress {
-                    if currentProgress >= progress && (status == nil || entry.status == status) {
-                        return
-                    }
+                   let currentProgress = entry.progress,
+                   currentProgress >= progress && (status == nil || entry.status == status) {
+                    return
                 }
+            } catch let outcome as HostNetworkPolicyOutcome {
+                throw outcome
             } catch {
-                AppLogger.auth.error("Failed to fetch existing entry before updating, proceeding with update.")
+                AppLogger.auth.error("Failed to fetch existing entry before updating.")
             }
         }
 
+        try authorities?.admit(.trackerWrite)
         _ = try await client.execute(SaveMediaListEntryMutation(mediaId: idInt, status: listStatus, progress: progress))
     }
 
@@ -285,6 +291,7 @@ public class AnilistTracker: TrackerProvider {
     }
 
     private func fetchAnilistViewer(token: String) async throws {
+        try authorities?.admit(.trackerWrite)
         let viewer = try await AniListClient(session: session) { token }.execute(AniListQueries.ViewerQuery()).viewer
         guard let name = viewer?.name else {
             throw URLError(.cannotParseResponse)
@@ -297,6 +304,8 @@ public class AnilistTracker: TrackerProvider {
 
     private func client() throws -> AniListClient {
         guard let token = anilistToken else { throw URLError(.userAuthenticationRequired) }
+        // Checked before every request, so a refusal always means nothing was sent.
+        try authorities?.admit(.trackerWrite)
         return AniListClient(session: session) { token }
     }
 

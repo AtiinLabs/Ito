@@ -231,6 +231,8 @@ Speculative reader work (image preload, adjacent manga chapters and novel prefet
 
 Backups written by this build carry the new `Ito.NetworkDownloadMode` and `Ito.AdjacentChapterPrefetchCount` keys. Older app versions require an exact scalar-key catalog and reject backups containing these new keys; restore them only on a current build.
 
+Source transport enforcement (see `docs/NETWORK_TRANSPORT_ENFORCEMENT.md`) changes two things users notice once after upgrading. Source covers and images cached by earlier builds are not reused: they download again the first time they are shown, under the network policy. Source website data now lives in nonpersistent per-source stores, so earlier Cloudflare clearance cookies are not used and a protected source shows its verification page again. Before shipping, observe a real WebKit challenge (including `about:blank` frames and a backgrounded challenge) and AVPlayer playback across Low Data Mode and cellular changes on a physical device.
+
 For custom download presets, verify native import rejects physical preset rows without a represented
 capability before loading their payloads, and invalid definitions cannot be exported. Editing or
 deleting a definition must not alter an open chooser or preview, even after a chapter catalog refresh:

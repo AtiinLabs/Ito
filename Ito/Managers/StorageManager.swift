@@ -64,7 +64,8 @@ public class StorageManager: ObservableObject {
         let controller = PluginImagePipelineController(
             dataCache: dataCache,
             dataLoader: loader,
-            diagnostics: NukeDiagnosticDelegate.shared
+            diagnostics: NukeDiagnosticDelegate.shared,
+            contexts: pluginManager.pluginSettingsStore.networkContexts
         )
         imagePipelineController = controller
         do {

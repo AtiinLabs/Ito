@@ -42,28 +42,44 @@ public final class TrackerManager: ObservableObject {
         legacyTokenStore: any LegacyTokenStoring,
         usernameDefaults: UserDefaults,
         backgroundExecution: BackgroundExecution = .none,
-        malSession: URLSession = .shared,
-        mangaBakaSession: URLSession = .shared
+        malSession: URLSession? = nil,
+        mangaBakaSession: URLSession? = nil,
+        networkContexts: PluginNetworkContexts? = nil
     ) {
         self.dbPool = dbPool
+        // One authority provider for the three trackers. Without a live policy (tests, previews) they keep the
+        // plain shared session and are not gated.
+        let authorities = AppNetworkAuthorityProvider()
+        let gatedSession: URLSession
+        if let networkContexts {
+            authorities.set(networkContexts)
+            gatedSession = PolicyRedirectDelegate.session(authorities: authorities, purpose: .trackerWrite)
+        } else {
+            gatedSession = .shared
+        }
+        let malSession = malSession ?? gatedSession
+        let mangaBakaSession = mangaBakaSession ?? gatedSession
         let credentialRepository = AniListCredentialRepository(
             secureStore: credentialStore,
             legacyStore: legacyTokenStore
         )
         let tracker = AnilistTracker(
             credentialRepository: credentialRepository,
-            usernameDefaults: usernameDefaults
+            usernameDefaults: usernameDefaults,
+            session: gatedSession,
+            authorities: authorities
         )
         let malOAuth = MALOAuth(clientID: MALTracker.clientID, session: malSession)
         let malTracker = MALTracker(
             credentialRepository: MALCredentialRepository(
                 store: malCredentialStore,
-                refresher: malOAuth,
+                refresher: PolicyMALTokenRefresher(inner: malOAuth, authorities: authorities),
                 backgroundExecution: backgroundExecution
             ),
             oauth: malOAuth,
             usernameDefaults: usernameDefaults,
-            session: malSession
+            session: malSession,
+            authorities: authorities
         )
         anilistTracker = tracker
         self.malTracker = malTracker
@@ -75,12 +91,13 @@ public final class TrackerManager: ObservableObject {
         mangaBakaTracker = MangaBakaTracker(
             credentialRepository: MangaBakaCredentialRepository(
                 store: mangaBakaCredentialStore,
-                refresher: mangaBakaOAuth,
+                refresher: PolicyMangaBakaTokenRefresher(inner: mangaBakaOAuth, authorities: authorities),
                 backgroundExecution: backgroundExecution
             ),
             oauth: mangaBakaOAuth,
             usernameDefaults: usernameDefaults,
-            session: mangaBakaSession
+            session: mangaBakaSession,
+            authorities: authorities
         )
         providers = [tracker, malTracker, mangaBakaTracker]
     }
@@ -262,6 +279,7 @@ public final class TrackerManager: ObservableObject {
         providers.filter(\.isAuthenticated)
     }
 
+    /// Automatic progress writes have no durable retry queue; each invocation reports only to diagnostics.
     public func updateProgress(media: MediaIdentity, progress: Int) async {
         let mappings = trackerMappings[media] ?? [:]
         for provider in authenticatedProviders {
@@ -269,9 +287,11 @@ public final class TrackerManager: ObservableObject {
             do {
                 try await provider.updateProgress(mediaId: remoteMediaId, progress: progress, status: nil)
             } catch {
-                AppLogger.auth.error(
-                    "Failed to update progress on \(provider.name): \(error.localizedDescription)"
-                )
+                if error is HostNetworkPolicyOutcome {
+                    AppLogger.auth.info("Tracker progress update deferred by network policy.")
+                } else {
+                    AppLogger.auth.error("Tracker progress update was not acknowledged.")
+                }
             }
         }
     }

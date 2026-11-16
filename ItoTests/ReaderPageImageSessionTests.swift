@@ -205,7 +205,8 @@ final class ReaderPageImageSessionTests: XCTestCase {
         loader.finishAll(with: URLError(.cancelled))
         session.deactivate()
     }
-    func testPrefetchFailureIsSharedWithVisibleLease() async throws {
+
+    func testAFailedPrefetchIsSilentAndAVisibleReadIsAdmittedOnItsOwn() async throws {
         let host = "reader-prefetch-session.test"
         ReaderSessionURLProtocol.register(host: host)
         let configuration = URLSessionConfiguration.ephemeral
@@ -220,20 +221,30 @@ final class ReaderPageImageSessionTests: XCTestCase {
             pageID: "prefetched-page",
             request: URLRequest(url: try XCTUnwrap(URL(string: "https://\(host)/page.png")))
         )
-        let failure = expectation(description: "prefetch reaches terminal failure")
+        var sawLoading = false
+        let prefetchSettled = expectation(description: "the failed prefetch settles back to idle")
+        let visibleFailed = expectation(description: "the visible read fails on its own request")
         let observation = session.observe(descriptor.key) { state in
-            if case .failed = state.phase { failure.fulfill() }
+            switch state.phase {
+            case .loading: sawLoading = true
+            case .idle where sawLoading: sawLoading = false; prefetchSettled.fulfill()
+            case .failed: visibleFailed.fulfill()
+            default: break
+            }
         }
 
         session.setPrefetch([descriptor])
-        await fulfillment(of: [failure], timeout: 5)
-        let visibleLease = session.acquire(descriptor, consumer: .visible)
+        await fulfillment(of: [prefetchSettled], timeout: 5)
+        // Speculative work is silent: no one is looking at the page, so its failure is not shown or kept.
         XCTAssertEqual(ReaderSessionURLProtocol.requestCount(for: host), 1)
-        if case .failed = session.state(for: descriptor.key).phase {
-            // A visible remount reuses the prefetch's terminal result.
-        } else {
-            XCTFail("The shared request failure should remain terminal.")
+        if case .idle = session.state(for: descriptor.key).phase {} else {
+            XCTFail("A failed prefetch leaves the page startable.")
         }
+
+        // A page the user reaches is read under foreground authority, never from the prefetch's outcome.
+        let visibleLease = session.acquire(descriptor, consumer: .visible)
+        await fulfillment(of: [visibleFailed], timeout: 5)
+        XCTAssertEqual(ReaderSessionURLProtocol.requestCount(for: host), 2)
         session.release(visibleLease)
         observation.cancel()
         session.deactivate()

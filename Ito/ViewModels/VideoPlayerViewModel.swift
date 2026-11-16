@@ -36,6 +36,7 @@ final class VideoPlayerViewModel: ObservableObject {
     private let completionContext: PluginCompletionContext
 
     private var isActive = true
+    private var streamAuthority: NetworkRequestAuthority?
     private var hasPresentedPresence = false
     private var sessionID = UUID()
     private var preparationGeneration: UInt64 = 0
@@ -89,6 +90,9 @@ final class VideoPlayerViewModel: ObservableObject {
             mediaKey: anime.key
         )
         playbackCoordinator = dependencies.makePlaybackCoordinator()
+        playbackCoordinator.networkRefusalHandler = { [weak self] outcome in
+            self?.playbackWasRefused(outcome)
+        }
     }
 
     // MARK: - Presentation lifecycle
@@ -214,6 +218,7 @@ final class VideoPlayerViewModel: ObservableObject {
         loadPhase = .loading
         logStarted(kind: .streamLoad, operationID: operationID)
         let operation = PluginNetworkOperation(purpose: .foregroundReading, operationID: operationID)
+        streamAuthority = dependencies.playbackAuthority(pluginID, operation)
 
         let task = Task { @MainActor [weak self, loader, anime, episode] in
             defer { self?.finishTestingOperation(operationID) }
@@ -310,19 +315,30 @@ final class VideoPlayerViewModel: ObservableObject {
         let operationID = UUID()
         let session = sessionID
         let coordinator = playbackCoordinator
+        let authority = streamAuthority
         preparationOperationID = operationID
         logStarted(kind: .playerPreparation, operationID: operationID)
 
         let task = Task { @MainActor [weak self, coordinator] in
             defer { self?.finishTestingOperation(operationID) }
-            let preparation = await coordinator.prepare(video: video)
-            self?.completePreparation(
-                preparation,
-                operationID: operationID,
-                session: session,
-                generation: generation,
-                completesInitialLoad: completesInitialLoad
-            )
+            do {
+                let preparation = try await coordinator.prepare(video: video, authority: authority)
+                self?.completePreparation(
+                    preparation,
+                    operationID: operationID,
+                    session: session,
+                    generation: generation,
+                    completesInitialLoad: completesInitialLoad
+                )
+            } catch {
+                self?.failPreparation(
+                    error,
+                    operationID: operationID,
+                    session: session,
+                    generation: generation,
+                    completesInitialLoad: completesInitialLoad
+                )
+            }
         }
         preparationTask = task
         retainTestingOperation(task, operationID: operationID)
@@ -370,7 +386,8 @@ final class VideoPlayerViewModel: ObservableObject {
             activated = false
         }
 
-        if completesInitialLoad {
+        // A refusal at activation already showed itself as the failure; only a load still in progress completes.
+        if completesInitialLoad, loadPhase == .loading {
             loadPhase = .content
         }
         logFinishedOnce(
@@ -378,6 +395,63 @@ final class VideoPlayerViewModel: ObservableObject {
             operationID: operationID,
             outcome: activated ? .succeeded : .failed(.unknown)
         )
+    }
+
+    /// A preparation the network policy or the system refused. The refusal is shown as what it is, not as a
+    /// generic playback failure, and no player is created for it.
+    private func failPreparation(
+        _ error: any Error,
+        operationID: UUID,
+        session: UUID,
+        generation: UInt64,
+        completesInitialLoad: Bool
+    ) {
+        guard isCurrentPreparation(
+            operationID: operationID,
+            session: session,
+            generation: generation
+        ) else {
+            logFinishedOnce(kind: .playerPreparation, operationID: operationID, outcome: .ignoredStale)
+            return
+        }
+        preparationTask = nil
+        preparationOperationID = nil
+        if completesInitialLoad || error is HostNetworkPolicyOutcome {
+            loadPhase = .failure(Self.message(for: error))
+        }
+        logFinishedOnce(
+            kind: .playerPreparation,
+            operationID: operationID,
+            outcome: error is CancellationError ? .cancelled : .failed(.network)
+        )
+    }
+
+    /// The playing stream was stopped because the network policy no longer admits it.
+    private func playbackWasRefused(_ outcome: HostNetworkPolicyOutcome) {
+        guard isActive else { return }
+        playbackSurface = nil
+        loadPhase = .failure(Self.message(for: outcome))
+    }
+
+    static func message(for error: any Error) -> String {
+        guard let outcome = error as? HostNetworkPolicyOutcome else { return error.localizedDescription }
+        switch outcome {
+        case .deferred(.offline), .deferred(.unknownPath):
+            return String(
+                localized: "You're offline. Connect to the internet to play this episode.",
+                comment: "Video player error when playback needs a network connection that is not available."
+            )
+        case .deferred(.policyChanged), .sourceAuthorizationFailure:
+            return String(
+                localized: "Playback stopped because the source or network settings changed. Try again.",
+                comment: "Video player error when settings changed while an episode was loading or playing."
+            )
+        case .deferred(.expensivePath), .deferred(.constrainedPath), .foregroundPermissionRequired, .hardUserBlocked:
+            return String(
+                localized: "Your network settings don't allow this episode to play right now.",
+                comment: "Video player error when the network policy refuses to start or continue playback."
+            )
+        }
     }
 
     private func activate(
@@ -455,6 +529,7 @@ final class VideoPlayerViewModel: ObservableObject {
         cancelSubtitleLoad(outcome: .cancelled)
         let operationID = UUID()
         let session = sessionID
+        let authority = streamAuthority
         let loader = dependencies.subtitleLoader
         activeSubtitleToken = token
         subtitleOperationID = operationID
@@ -463,7 +538,7 @@ final class VideoPlayerViewModel: ObservableObject {
         let task = Task { @MainActor [weak self, loader] in
             defer { self?.finishTestingOperation(operationID) }
             do {
-                let text = try await loader.text(from: subtitle.url)
+                let text = try await loader.text(from: subtitle.url, authority: authority)
                 self?.completeSubtitleLoad(
                     VTTParser.parse(text),
                     token: token,

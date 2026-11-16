@@ -234,7 +234,7 @@ struct DownloadNetModuleTests {
         #expect(await handler.cachedUserAgent(for: "source.test") == "Cleared-Agent")
         #expect(await handler.cachedUserAgent(for: "other.test").isEmpty)
         await #expect(throws: HostNetworkPolicyOutcome.foregroundPermissionRequired) {
-            try await handler.resolveChallenge(for: URL(string: "https://source.test/")!)
+            try await handler.resolveChallenge(for: URL(string: "https://source.test/")!, authority: nil)
         }
         #expect(recorder.firstDenial == .foregroundPermissionRequired)
     }

@@ -28,40 +28,6 @@ final class PluginDataLoaderFallbackTests: XCTestCase {
         handle.cancel()
         XCTAssertEqual(inner.cancelCount, 1)
     }
-
-    func testCustomItoSchemeFallbackCancellationLatch() async throws {
-        // Direct test of the CancellationLatch state machine
-        let cancelledLatch = CancellationLatch()
-        XCTAssertFalse(cancelledLatch.isCancelled)
-
-        var cancelCalled = false
-        let dummyCancellable = AnyCancellable {
-            cancelCalled = true
-        }
-
-        // When latch is cancelled before underlying cancellable is set:
-        cancelledLatch.cancel()
-        XCTAssertTrue(cancelledLatch.isCancelled)
-
-        // Setting underlying on an already-cancelled latch must immediately cancel it:
-        cancelledLatch.setUnderlying(dummyCancellable)
-        XCTAssertTrue(cancelCalled, "Underlying cancellable must be immediately cancelled when latch is cancelled")
-    }
-
-    func testCancellationLatchActiveCancellation() async throws {
-        let latch = CancellationLatch()
-        var cancelCalled = false
-        let dummyCancellable = AnyCancellable {
-            cancelCalled = true
-        }
-
-        latch.setUnderlying(dummyCancellable)
-        XCTAssertFalse(cancelCalled)
-
-        latch.cancel()
-        XCTAssertTrue(cancelCalled)
-        XCTAssertTrue(latch.isCancelled)
-    }
 }
 
 private final class AnyCancellable: Cancellable, @unchecked Sendable {

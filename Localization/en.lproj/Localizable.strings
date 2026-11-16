@@ -1161,6 +1161,9 @@ Manga format */
 
 "Network" = "Network";
 
+/* A request was stopped because its captured network policy is no longer current. */
+"Network settings changed. Try again." = "Network settings changed. Try again.";
+
 "New List" = "New List";
 
 /* Download preset editor title when adding a preset. */
@@ -1251,6 +1254,9 @@ Downloads manager empty inventory */
 /* Downloaded versions sheet: the source named no translation group for this upload
 Scanlator choice: the chapters whose source names no scanlator. */
 "No group listed" = "No group listed";
+
+/* A request was not sent because the device is offline. */
+"No internet connection. Try again when connected." = "No internet connection. Try again when connected.";
 
 "No items in %@." = "No items in %@.";
 
@@ -1399,6 +1405,9 @@ Manga format: light novel */
 /* Reader consent alert button: opens the one upload from another translation group, for this reading only */
 "Open This Upload" = "Open This Upload";
 
+/* A source needs user interaction that background work cannot perform. */
+"Open this source to continue in the foreground." = "Open this source to continue in the foreground.";
+
 /* Downloaded versions sheet: the chosen saved copy is being opened */
 "Opening the saved copy…" = "Opening the saved copy…";
 
@@ -1458,6 +1467,9 @@ History: the page a chapter was left on */
 "Personal Access Token" = "Personal Access Token";
 
 "Planning" = "Planning";
+
+/* Video player error when settings changed while an episode was loading or playing. */
+"Playback stopped because the source or network settings changed. Try again." = "Playback stopped because the source or network settings changed. Try again.";
 
 "Please drop a valid .ito plugin file." = "Please drop a valid .ito plugin file.";
 
@@ -2321,6 +2333,9 @@ Reading font: the system font */
 /* Series details: detail when the preferred group is absent from the current chapter list; the user may change the group in the scanlator choice. */
 "The source's current list has no chapters from it. Choose another group to continue." = "The source's current list has no chapters from it. Choose another group to continue.";
 
+/* The request belongs to a source authorization scope that is no longer current. */
+"The source's sign-in or settings changed. Review them and try again." = "The source's sign-in or settings changed. Review them and try again.";
+
 "The source's web page failed: %@" = "The source's web page failed: %@";
 
 /* Error: a web page the source loaded did not respond in time */
@@ -2412,6 +2427,15 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 "This repository and all its associated data will be removed." = "This repository and all its associated data will be removed.";
 
 "This repository is already in your list." = "This repository is already in your list.";
+
+/* An explicit user network restriction blocks the request. */
+"This request is blocked by your network settings." = "This request is blocked by your network settings.";
+
+/* Network policy refuses a request on a constrained connection. */
+"This request is paused while Low Data Mode is enabled." = "This request is paused while Low Data Mode is enabled.";
+
+/* Network policy refuses a request on a metered connection. */
+"This request is waiting for an unmetered network." = "This request is waiting for an unmetered network.";
 
 /* Reader failure after integrity verification fails for a specifically chosen downloaded alternative. */
 "This saved copy is damaged and can't be read." = "This saved copy is damaged and can't be read.";
@@ -2645,6 +2669,9 @@ Reader consent: shown in place of the group name when the source supplies none *
 Effective network policy refusal */
 "Waiting for a connection" = "Waiting for a connection";
 
+/* A request is waiting until the network path is known. */
+"Waiting for a network connection." = "Waiting for a network connection.";
+
 /* No path observation yet */
 "Waiting for a network reading" = "Waiting for a network reading";
 
@@ -2719,6 +2746,9 @@ Effective network policy refusal */
 
 "You stopped this episode at %@." = "You stopped this episode at %@.";
 
+/* Video player error when playback needs a network connection that is not available. */
+"You're offline. Connect to the internet to play this episode." = "You're offline. Connect to the internet to play this episode.";
+
 "Your Library is Empty" = "Your Library is Empty";
 
 "Your Lists" = "Your Lists";
@@ -2737,6 +2767,9 @@ Effective network policy refusal */
 "Your list couldn't be renamed. Please try again." = "Your list couldn't be renamed. Please try again.";
 
 "Your list order couldn't be saved. Please try again." = "Your list order couldn't be saved. Please try again.";
+
+/* Video player error when the network policy refuses to start or continue playback. */
+"Your network settings don't allow this episode to play right now." = "Your network settings don't allow this episode to play right now.";
 
 "Your restored data is saved. Refresh must finish before a report can be shown." = "Your restored data is saved. Refresh must finish before a report can be shown.";
 
