@@ -347,6 +347,7 @@ final class ReaderRouteCoordinatorTests: XCTestCase {
         source.goToNextChapter()
         await fixture.preparer.waitForPending(1)
         let firstID = try XCTUnwrap(fixture.requestID)
+        let firstTask = try XCTUnwrap(fixture.route.operationTaskForTesting)
         fixture.route.cancelHandoff()
         source.goToNextChapter()
         await fixture.preparer.waitForPending(2)
@@ -355,7 +356,8 @@ final class ReaderRouteCoordinatorTests: XCTestCase {
 
         // The first answer arrives: it belongs to a cancelled operation and changes nothing.
         fixture.preparer.resolveFirst()
-        await Task.yield()
+        // The cancelled operation unwinds completely before anything is asserted: no scheduling guess.
+        await firstTask.value
         guard case .preparing(let current) = fixture.route.phase else { return XCTFail("The newer operation stays") }
         XCTAssertEqual(current.id, secondID)
 
@@ -457,25 +459,20 @@ final class ReaderRouteCoordinatorTests: XCTestCase {
         XCTAssertTrue(fixture.pagesModel != nil)
     }
 
-    func testANewCatalogOrANavigatedSourceInvalidatesThePendingRequest() async throws {
+    func testANavigatedSourceInvalidatesThePendingRequest() async throws {
         let fixture = await pagesRoute()
         let source = try XCTUnwrap(fixture.pagesModel)
         source.goToNextChapter()
         await fixture.preparer.waitForPending(1)
 
-        fixture.route.catalogDidChange()
-        fixture.preparer.resolveFirst()
-        await fixture.route.waitForPreparationForTesting()
-        XCTAssertEqual(fixture.presentations.created.count, 1)
-
-        source.goToNextChapter()
-        await fixture.preparer.waitForPending(1)
         // The reader moved on (its content generation changed): the old crossing no longer describes it.
         source.disappear()
         source.appear()
         fixture.preparer.resolveFirst()
         await fixture.route.waitForPreparationForTesting()
+
         XCTAssertEqual(fixture.presentations.created.count, 1)
+        guard case .idle = fixture.route.phase else { return XCTFail("The stale crossing leaves nothing pending") }
     }
 
     // MARK: - Network
@@ -724,7 +721,7 @@ final class ReaderRouteCoordinatorTests: XCTestCase {
         let session = makeReaderRouteSession(entry: Self.mangaEntry, scope: manga.progress)
         let route = ReaderRouteCoordinator(
             rootID: UUID(), pluginID: "plugin.test", entry: Self.mangaEntry, chapter: Self.p1, format: .pages,
-            content: ReaderContentSource(remote: nil), session: session, preparer: preparer,
+            session: session, preparer: preparer,
             presentations: RoutePresentationFake(manga: manga, novel: novel), settings: manga.settings,
             network: RouteNetworkFake()
         )

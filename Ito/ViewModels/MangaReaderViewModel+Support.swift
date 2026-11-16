@@ -74,7 +74,7 @@ extension MangaReaderViewModel {
     /// consent expiring, does not touch it. When prefetching is allowed and none is running, it starts again for
     /// the neighbours still missing.
     func networkPolicyDidChange() {
-        guard isActive else { return }
+        guard isActive, presentationMode.isLive else { return }
         let settings = dependencies.settings
         if settings.mangaReaderEffectivePreloadImageCount == 0 {
             imagePrefetcher.stopPrefetching()

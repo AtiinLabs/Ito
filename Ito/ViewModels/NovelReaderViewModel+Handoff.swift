@@ -64,7 +64,16 @@ extension NovelReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
     }
 
     /// The view left the boundary: reaching it again is a new crossing.
-    func releaseHandoffLatch() { handoffLatch = nil }
+    func releaseHandoffLatch() { endHandoffCrossing() }
+
+    /// Ends the crossing the reader started, and tells the route so a failure shown for it goes away.
+    func endHandoffCrossing() {
+        guard handoffLatch != nil else { return }
+        handoffLatch = nil
+        handoffRouter?.handoffBoundaryLeft(visitID: routeVisitID)
+    }
+
+    var routeHasContent: Bool { loadPhase == .content }
 
     /// The row after the last loaded chapter came into view. Reaching it by the user's own scrolling, with
     /// Seamless Reading effectively on, is one crossing; layout, a restored place or a short chapter that fits
@@ -109,14 +118,22 @@ extension NovelReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
 
     // MARK: - Transition rollback
 
+    /// Remembers what is on screen before a chapter is loaded in its place, so one that turns out to be made
+    /// for the other reader leaves this one where it was. Nothing is remembered when there is no loaded
+    /// chapter to go back to: a load already under way (the user pressed Next twice) has nothing to restore.
     func beginTransitionSnapshot(
         direction: ReaderHandoffDirection,
         trigger: ReaderHandoffTrigger,
         approved: Bool
     ) {
+        guard loadPhase == .content, !loadedChapters.isEmpty else {
+            transition = nil
+            return
+        }
+        // The place the reader really is at, not whatever the view has left of an anchor it already applied.
         transition = NovelTransitionSnapshot(
             chapter: currentChapter, loadPhase: loadPhase, loadedChapters: loadedChapters,
-            restoreAnchor: restoreAnchor, direction: direction, trigger: trigger, groupSwitchApproved: approved
+            restoreAnchor: currentReadingAnchor, direction: direction, trigger: trigger, groupSwitchApproved: approved
         )
     }
 
@@ -125,10 +142,7 @@ extension NovelReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
     func divertTransition(_ prepared: ReaderPreparedChapter) {
         guard let snapshot = transition else { return failDivertedLoad() }
         transition = nil
-        currentChapter = snapshot.chapter
-        loadedChapters = snapshot.loadedChapters
-        restoreAnchor = snapshot.restoreAnchor
-        loadPhase = snapshot.loadPhase
+        restoreTransition(snapshot)
         if hasPresentedPresence { presentPresence(for: currentChapter, resetTimer: false) }
         holdForHandoff(prepared)
         guard let router = handoffRouter else { return }
@@ -151,14 +165,12 @@ extension NovelReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
         )
     }
 
-    /// The first chapter of the route is made for the other reader, or no route can take it.
+    /// The chapter the reader was loading, with nothing on screen, is made for the other reader. It opens at
+    /// its start: the saved position is one number that may belong to the other form of this chapter.
     func divertOpening(_ prepared: ReaderPreparedChapter) {
-        guard let router = handoffRouter else { return failDivertedLoad() }
-        router.requestFormatCorrection(visitID: routeVisitID, prepared: prepared)
-    }
-
-    private func failDivertedLoad() {
-        loadPhase = .failure(ReaderRouteError.otherReader.localizedDescription)
+        guard let router = handoffRouter,
+              router.requestFormatCorrection(visitID: routeVisitID, prepared: prepared, position: .start)
+        else { return failDivertedLoad() }
     }
 
     // MARK: - Held chapters
@@ -208,21 +220,20 @@ extension NovelReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
 
     // MARK: - Destination
 
-    func setPresentationMode(_ mode: ReaderPresentationMode) { presentationMode = mode }
-
     /// Installs pages the route loaded, with the native position `position` names. Nothing it publishes has
     /// an effect: History, position writes, presence and completion wait for `activatePreparedPresentation`.
     func installPreparedChapter(_ pages: [Page], position: ReaderEntryPosition) {
         installMainChapter(pages, chapter: currentChapter, position: position)
+        arrivalOffset = restoreAnchor?.offset ?? 0
         preparedImageKey = preparedInitialImageDescriptor()?.key
     }
 
     /// The image the destination opens on, when its first position is an illustration.
     func preparedInitialImageDescriptor() -> ReaderPageImageDescriptor? {
-        guard let loaded = loadedChapters.first, let anchor = restoreAnchor, anchor.chapterID == loaded.id else {
-            return nil
-        }
-        let block = NovelTextOffsets.blockIndex(containing: anchor.offset, in: loaded.pages)
+        guard let loaded = loadedChapters.first else { return nil }
+        // A chapter opened at its start shows its first block, which can be an illustration too.
+        let offset = restoreAnchor.flatMap { $0.chapterID == loaded.id ? $0.offset : nil } ?? 0
+        let block = NovelTextOffsets.blockIndex(containing: offset, in: loaded.pages)
         guard loaded.pages.indices.contains(block), case .url(let value) = loaded.pages[block].content,
               let url = URL(string: value) else { return nil }
         return ReaderPageImageDescriptor(
@@ -239,14 +250,12 @@ extension NovelReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
         hasPresentedPresence = viewAppeared
         if viewAppeared { presentPresence(for: currentChapter, resetTimer: true) }
         chapterOpened(currentChapter)
-    }
-
-    /// Drops a destination that was never shown: its own work and images end, and nothing of the visible
-    /// reader (presence included) is touched.
-    func discardPreparedPresentation() {
-        guard !presentationMode.isLive else { return }
-        isActive = false
-        invalidateContentOperations()
-        imageSession.deactivate()
+        // Where the reader is now is the destination's position, as for a reader that loaded it itself;
+        // what its staged layout reported first is that place, and the position it was asked to open at is
+        // the one before any was reported.
+        if let loaded = loadedChapters.first {
+            let reported = lastPosition.flatMap { $0.chapterID == loaded.id ? $0.offset : nil }
+            saveOffset(reported ?? arrivalOffset, in: loaded.chapter)
+        }
     }
 }

@@ -172,8 +172,11 @@ struct NovelReaderView: View {
                         reachedEnd: isLast
                     )
                 },
+                // Before the first chapter only a neighbor that opens in the other reader is offered; where
+                // the previous chapter is locked, not downloaded or from another group, reading stays as it was.
                 previousBoundaryNotice: viewModel.loadedChapters.first.flatMap {
-                    ReaderBoundaryNotice.text(for: viewModel.boundaryBefore($0.chapter), isNext: false)
+                    let boundary = viewModel.boundaryBefore($0.chapter)
+                    return boundary.isHandoff ? ReaderBoundaryNotice.text(for: boundary, isNext: false) : nil
                 },
                 onBoundaryNoticeTap: { requestPagedNoticeAction(isNext: true) },
                 onPreviousBoundaryNoticeTap: { requestPagedNoticeAction(isNext: false) },
@@ -335,6 +338,9 @@ struct NovelReaderView: View {
         let block = NovelTextOffsets.blockIndex(containing: anchor.offset, in: loaded.pages)
         proxy.scrollTo(blockID(anchor.chapterID, block), anchor: .top)
         viewModel.consumeRestoreAnchor(anchor)
+        // The place is applied: that is the evidence a destination behind the visible reader is laid out,
+        // including a short chapter whose rows were already on screen and will not appear again.
+        reportContinuousLayoutIfReady()
     }
 
     private var toggleUIGesture: some Gesture {
@@ -419,8 +425,8 @@ struct NovelReaderView: View {
                 trigger: .chapterControl,
                 atLoadedEdge: isNext
             )
-        } else {
-            viewModel.requestGroupSwitch(isNext ? .next : .previous, atLoadedEdge: isNext)
+        } else if isNext {
+            viewModel.requestGroupSwitch(.next, atLoadedEdge: true)
         }
     }
 

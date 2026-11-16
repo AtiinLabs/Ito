@@ -74,7 +74,16 @@ extension MangaReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
     }
 
     /// The viewport left the boundary: reaching it again is a new crossing.
-    func releaseHandoffLatch() { handoffLatch = nil }
+    func releaseHandoffLatch() { endHandoffCrossing() }
+
+    /// Ends the crossing the reader started, and tells the route so a failure shown for it goes away.
+    func endHandoffCrossing() {
+        guard handoffLatch != nil else { return }
+        handoffLatch = nil
+        handoffRouter?.handoffBoundaryLeft(visitID: routeVisitID)
+    }
+
+    var routeHasContent: Bool { loadPhase == .content }
 
     private func handoffOrigin(for event: ReaderHandoffEvent) -> Manga.Chapter? {
         if ChapterToken(currentChapter).isByteIdentical(to: event.origin) { return currentChapter }
@@ -88,7 +97,7 @@ extension MangaReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
     func releaseHandoffLatchIfViewportLeftEdge() {
         guard let latch = handoffLatch else { return }
         let edge = latch.direction == .next ? flatPages.last : flatPages.first
-        if let edge, !visiblePageIDs.contains(edge.id) { handoffLatch = nil }
+        if let edge, !visiblePageIDs.contains(edge.id) { endHandoffCrossing() }
     }
 
     func isCurrentHandoffSource(_ event: ReaderHandoffEvent) -> Bool {
@@ -118,16 +127,32 @@ extension MangaReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
 
     // MARK: - Transition rollback
 
+    /// Remembers what is on screen before a chapter is loaded in its place, so one that turns out to be made
+    /// for the other reader leaves this one where it was. Nothing is remembered when there is no loaded
+    /// chapter to go back to: a load already under way (the user pressed Next twice) has nothing to restore.
     func beginTransitionSnapshot(
         direction: ReaderHandoffDirection,
         trigger: ReaderHandoffTrigger,
         approved: Bool
     ) {
+        guard loadPhase == .content, !currentChapterHasNothingToRestore else {
+            transition = nil
+            return
+        }
+        // The page the reader is really on: a pager resting on the notice past its last page is on that page.
+        let page = pagedPages.isEmpty ? 0 : min(max(pagedIndex, 0), pagedPages.count - 1)
+        let target = isPaged || !flatPages.indices.contains(continuousPageIndex)
+            ? nil
+            : MangaScrollRequest(pageID: flatPages[continuousPageIndex].id, animated: false)
         transition = MangaTransitionSnapshot(
-            chapter: currentChapter, loadPhase: loadPhase, pagedPages: pagedPages, pagedIndex: pagedIndex,
-            segments: segments, continuousPageIndex: continuousPageIndex, scrollTarget: scrollTarget,
+            chapter: currentChapter, loadPhase: loadPhase, pagedPages: pagedPages, pagedIndex: page,
+            segments: segments, continuousPageIndex: continuousPageIndex, scrollTarget: target,
             direction: direction, trigger: trigger, groupSwitchApproved: approved
         )
+    }
+
+    private var currentChapterHasNothingToRestore: Bool {
+        isPaged ? pagedPages.isEmpty : segments.isEmpty
     }
 
     /// The chapter the transition was loading is made for the other reader: put this reader back as it was
@@ -135,13 +160,7 @@ extension MangaReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
     func divertTransition(_ prepared: ReaderPreparedChapter, opensAtEnd: Bool) {
         guard let snapshot = transition else { return failDivertedLoad() }
         transition = nil
-        currentChapter = snapshot.chapter
-        pagedPages = snapshot.pagedPages
-        pagedIndex = snapshot.pagedIndex
-        segments = snapshot.segments
-        continuousPageIndex = snapshot.continuousPageIndex
-        scrollTarget = snapshot.scrollTarget
-        loadPhase = snapshot.loadPhase
+        restoreTransition(snapshot)
         if hasPresentedPresence { presentPresence(for: currentChapter, resetTimer: false) }
         holdForHandoff(prepared)
         guard let router = handoffRouter else { return }
@@ -163,14 +182,14 @@ extension MangaReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
         )
     }
 
-    /// The first chapter of the route is made for the other reader, or no route can take it.
-    func divertOpening(_ prepared: ReaderPreparedChapter) {
-        guard let router = handoffRouter else { return failDivertedLoad() }
-        router.requestFormatCorrection(visitID: routeVisitID, prepared: prepared)
-    }
-
-    private func failDivertedLoad() {
-        loadPhase = .failure(ReaderRouteError.otherReader.localizedDescription)
+    /// The chapter the reader was loading, with nothing on screen, is made for the other reader. Where it
+    /// opens is the start (or the end, coming back from the next chapter): the saved position is one number
+    /// that may belong to the other form of this chapter.
+    func divertOpening(_ prepared: ReaderPreparedChapter, opensAtEnd: Bool) {
+        guard let router = handoffRouter,
+              router.requestFormatCorrection(
+                  visitID: routeVisitID, prepared: prepared, position: opensAtEnd ? .end : .start
+              ) else { return failDivertedLoad() }
     }
 
     // MARK: - Held chapters
@@ -232,8 +251,6 @@ extension MangaReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
 
     // MARK: - Destination
 
-    func setPresentationMode(_ mode: ReaderPresentationMode) { presentationMode = mode }
-
     /// Installs pages the route loaded, with the native position `position` names. Nothing it publishes has
     /// an effect: History, position writes, presence and completion wait for `activatePreparedPresentation`.
     func installPreparedChapter(_ pages: [Page], position: ReaderEntryPosition) {
@@ -268,16 +285,6 @@ extension MangaReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
             prefetchPagedImages(around: pagedIndex)
             beginAdjacentChapterPrefetch()
         }
-    }
-
-    /// Drops a destination that was never shown: its own work and images end, and nothing of the visible
-    /// reader (presence included) is touched.
-    func discardPreparedPresentation() {
-        guard !presentationMode.isLive else { return }
-        isActive = false
-        invalidateContentOperations()
-        imagePrefetcher.stopPrefetching()
-        imageSession.deactivate()
     }
 }
 

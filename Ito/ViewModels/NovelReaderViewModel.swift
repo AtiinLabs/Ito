@@ -18,30 +18,32 @@ final class NovelReaderViewModel: ObservableObject {
     let offline: ReaderOfflineContext
 
     /// Live, or built behind the visible reader for one handoff request.
-    @Published var presentationMode: ReaderPresentationMode
+    @Published private(set) var presentationMode: ReaderPresentationMode
     weak var handoffRouter: (any ReaderHandoffRouting)?
     /// The handoff request this reader was built for, kept after it goes live.
     var arrivalRequestID: UUID?
     /// The request of the first image the destination shows, for handing the route's lease over.
     var preparedImageKey: ReaderPageImageKey?
+    /// Where a destination was asked to open, as a text offset, until its own layout reports a place.
+    var arrivalOffset = 0
     /// Some block of the loaded chapter scrolled off the screen, so the reader was moved by the user and not by layout.
     var userScrolledSinceInstall = false
 
-    @Published var currentChapter: Novel.Chapter
-    @Published var loadedChapters: [NovelLoadedChapter] = [] {
+    @Published private(set) var currentChapter: Novel.Chapter
+    @Published private(set) var loadedChapters: [NovelLoadedChapter] = [] {
         didSet {
             let ids = Set(loadedChapters.map(\.id))
             visibleBlocks = visibleBlocks.filter { ids.contains($0.chapterID) }
             visibleChapterEnds.formIntersection(ids)
         }
     }
-    @Published var loadPhase: NovelReaderLoadPhase = .idle
+    @Published private(set) var loadPhase: NovelReaderLoadPhase = .idle
     @Published private(set) var isLoadingNext = false
     /// The last next-chapter load failed; it waits for `retryNextChapter` instead of being
     /// started again by scrolling or page turns.
     @Published private(set) var appendFailed = false
     /// Where the reader should open the loaded chapter; the view applies it once and consumes it.
-    @Published var restoreAnchor: NovelReadingAnchor?
+    @Published private(set) var restoreAnchor: NovelReadingAnchor?
 
     @Published private(set) var fontSize: Double
     @Published private(set) var lineSpacing: Double
@@ -58,10 +60,10 @@ final class NovelReaderViewModel: ObservableObject {
     /// Captured once per route; every chapter and both readers share it.
     var completionContext: PluginCompletionContext { routeSession.completionContext }
 
-    var isActive = true
+    private(set) var isActive = true
     var hasPresentedPresence = false
     private(set) var sessionID = UUID()
-    var contentGeneration: UInt64 = 0
+    private(set) var contentGeneration: UInt64 = 0
     /// Set when the route replaced this reader with the other one, not when it was closed.
     var handoffRetired = false
     /// The reader's view is mounted; a destination uses it to present itself once it goes live.
@@ -87,7 +89,7 @@ final class NovelReaderViewModel: ObservableObject {
     /// Continuous-mode blocks on screen; the topmost one is where the reader is.
     private var visibleBlocks: Set<NovelBlockReference> = []
     /// The last place reported in either mode, reopened after switching between them.
-    private var lastPosition: NovelReadingAnchor?
+    private(set) var lastPosition: NovelReadingAnchor?
     /// Chapters whose end marker is on screen: the reader is at their end.
     private var visibleChapterEnds: Set<UUID> = []
     var lastSavedOffset: (chapterKey: String, offset: Int)?
@@ -337,13 +339,47 @@ final class NovelReaderViewModel: ObservableObject {
         guard isActive, presentationMode.isLive, !chapter.isPaywalled else { return }
         // What the reader holds now, until the chapter proves to be made for this reader.
         beginTransitionSnapshot(direction: direction, trigger: trigger, approved: approved)
-        handoffLatch = nil
+        endHandoffCrossing()
         changeCurrentChapter(to: chapter)
         loadedChapters = []
         restoreAnchor = nil
         loadPhase = .loading
         invalidateContentOperations()
         beginMainLoad(for: chapter)
+    }
+
+    /// Where the reader is: a place its view has yet to apply, else the last place the view reported.
+    var currentReadingAnchor: NovelReadingAnchor? {
+        let ids = Set(loadedChapters.map(\.id))
+        if let restoreAnchor, ids.contains(restoreAnchor.chapterID) { return restoreAnchor }
+        return lastPosition.flatMap { ids.contains($0.chapterID) ? $0 : nil }
+    }
+
+    /// Puts the chapter a transition was leaving back on screen, at the place the reader really was. The
+    /// place is applied as an anchor, so the view lands there and does not report the top of the chapter.
+    func restoreTransition(_ snapshot: NovelTransitionSnapshot) {
+        currentChapter = snapshot.chapter
+        loadedChapters = snapshot.loadedChapters
+        restoreAnchor = snapshot.restoreAnchor
+        userScrolledSinceInstall = false
+        loadPhase = snapshot.loadPhase
+    }
+
+    /// The route made this reader live, or built it behind the visible one; only the route decides.
+    func setPresentationMode(_ mode: ReaderPresentationMode) { presentationMode = mode }
+
+    /// The chapter is made for the other reader and no route can take it.
+    func failDivertedLoad() {
+        loadPhase = .failure(ReaderRouteError.otherReader.localizedDescription)
+    }
+
+    /// Drops a destination that was never shown: its own work and images end, and nothing of the visible
+    /// reader (presence included) is touched.
+    func discardPreparedPresentation() {
+        guard !presentationMode.isLive else { return }
+        isActive = false
+        invalidateContentOperations()
+        imageSession.deactivate()
     }
 
     func retry() {

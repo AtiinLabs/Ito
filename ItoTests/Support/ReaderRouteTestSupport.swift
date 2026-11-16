@@ -228,9 +228,10 @@ func makeRouteFixture(
     format: HistoryReaderFormat,
     preparer: ScriptedChapterPreparer = ScriptedChapterPreparer(),
     imagePipeline: ImagePipeline? = nil,
-    epoch: String? = "epoch"
+    epoch: String? = "epoch",
+    preloadImageCount: Int = 5
 ) async -> RouteFixture {
-    let manga = makeMangaReaderSubject(entry: entry, initialChapter: chapter)
+    let manga = makeMangaReaderSubject(entry: entry, initialChapter: chapter, preloadImageCount: preloadImageCount)
     let novel = makeNovelReaderSubject(entry: entry, initialChapter: chapter)
     manga.progress.originatingEpoch = epoch
     novel.progress.originatingEpoch = epoch
@@ -240,7 +241,7 @@ func makeRouteFixture(
     let network = RouteNetworkFake()
     let route = ReaderRouteCoordinator(
         rootID: UUID(), pluginID: "plugin.test", entry: entry, chapter: chapter, format: format,
-        content: ReaderContentSource(remote: nil), session: session, preparer: preparer,
+        session: session, preparer: preparer,
         presentations: presentations, settings: manga.settings, network: network
     )
     let fixture = RouteFixture(
@@ -262,13 +263,24 @@ func makeRouteFixture(
 final class RecordingHandoffRouter: ReaderHandoffRouting {
     private(set) var events: [ReaderHandoffEvent] = []
     private(set) var preparedEvents: [(event: ReaderHandoffEvent, key: String)] = []
-    private(set) var corrections: [String] = []
+    private(set) var corrections: [(key: String, position: ReaderEntryPosition)] = []
+    var acceptsCorrections = true
+    private(set) var boundaryLeaves = 0
+    /// Called after each event is recorded, so a test can wait on the renderer's delivery.
+    var onEvent: (() -> Void)?
 
-    func requestHandoff(_ event: ReaderHandoffEvent) { events.append(event) }
+    func requestHandoff(_ event: ReaderHandoffEvent) {
+        events.append(event)
+        onEvent?()
+    }
     func requestHandoff(_ event: ReaderHandoffEvent, prepared: ReaderPreparedChapter) {
         preparedEvents.append((event, prepared.chapter.key))
     }
-    func requestFormatCorrection(visitID: UUID, prepared: ReaderPreparedChapter) { corrections.append(prepared.chapter.key) }
+    func requestFormatCorrection(visitID: UUID, prepared: ReaderPreparedChapter, position: ReaderEntryPosition) -> Bool {
+        corrections.append((prepared.chapter.key, position))
+        return acceptsCorrections
+    }
+    func handoffBoundaryLeft(visitID: UUID) { boundaryLeaves += 1 }
 }
 
 /// An image pipeline whose data loader answers each URL from a script, so image states are real and no network is used.

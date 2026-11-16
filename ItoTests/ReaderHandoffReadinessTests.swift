@@ -1,3 +1,4 @@
+import Combine
 import ito_runner
 import XCTest
 @testable import Ito
@@ -33,7 +34,75 @@ final class ReaderHandoffReadinessTests: XCTestCase {
 
     // MARK: - Initial image
 
-    func testTheRoutesImageLeaseHandsOverToTheRenderersOwnWithoutResettingOrRefetching() async throws {
+    /// The staged renderer is mounted under the visible one, so its first image takes its own visible lease in
+    /// `onAppear`, right after the destination is staged and long before a remote image is ready.
+    func testTheRenderersLeaseArrivingBeforeTheImageIsReadyDoesNotEndTheRoutesObservation() async throws {
+        let (fixture, data) = await imageRoute()
+        try XCTUnwrap(fixture.textModel).goToNextChapter()
+        await fixture.route.waitForPreparationForTesting()
+        guard case .staging(let request, let staged) = fixture.route.phase, case .pages(_, let destination) = staged else {
+            return XCTFail("Staged as pages")
+        }
+        let key = try XCTUnwrap(destination.preparedImageKey)
+        let rendererLease = destination.imageSession.acquire(
+            try XCTUnwrap(destination.preparedInitialImageDescriptor()), consumer: .visible
+        )
+        fixture.route.initialImageVisibleLeaseAcquired(requestID: request.id, visitID: staged.visitID)
+        XCTAssertEqual(fixture.route.stagedImageHoldCountForTesting, 1, "The image is not ready: the proof stays")
+
+        // Layout alone is not drawable readiness.
+        fixture.route.presentationReady(requestID: request.id, visitID: staged.visitID)
+        guard case .staging = fixture.route.phase else { return XCTFail("Layout alone does not commit") }
+
+        let ready = expectation(description: "the first image is ready")
+        let observation = destination.imageSession.observe(key) { state in
+            if case .ready = state.phase { ready.fulfill() }
+        }
+        data.releaseLoads()
+        await fulfillment(of: [ready], timeout: 5)
+        observation.cancel()
+
+        XCTAssertTrue(fixture.pagesModel === destination, "The settled image and the layout commit")
+        XCTAssertEqual(fixture.route.stagedImageHoldCountForTesting, 0, "The proof is let go once it served")
+        if case .ready = destination.imageSession.state(for: key).phase {} else { XCTFail("The image was reset") }
+        XCTAssertEqual(data.requestCount(for: Self.imageURL), 1, "Nothing was fetched again")
+        destination.imageSession.release(rendererLease)
+    }
+
+    func testAnImageFailingAfterTheRenderersLeaseWasReportedFailsThePresentation() async throws {
+        let (fixture, data) = await imageRoute(failing: true)
+        let source = try XCTUnwrap(fixture.textModel)
+        source.goToNextChapter()
+        await fixture.route.waitForPreparationForTesting()
+        guard case .staging(let request, let staged) = fixture.route.phase, case .pages(_, let destination) = staged else {
+            return XCTFail("Staged as pages")
+        }
+        let key = try XCTUnwrap(destination.preparedImageKey)
+        let rendererLease = destination.imageSession.acquire(
+            try XCTUnwrap(destination.preparedInitialImageDescriptor()), consumer: .visible
+        )
+        fixture.route.initialImageVisibleLeaseAcquired(requestID: request.id, visitID: staged.visitID)
+        fixture.route.presentationReady(requestID: request.id, visitID: staged.visitID)
+
+        // The route reports the failure itself; waiting on the session would race the route dropping it.
+        let failed = expectation(description: "the handoff failed")
+        let phases = fixture.route.$phase.sink { phase in
+            if case .failed = phase { failed.fulfill() }
+        }
+        data.releaseLoads()
+        await fulfillment(of: [failed], timeout: 5)
+        phases.cancel()
+
+        guard case .failed(_, let failure) = fixture.route.phase else { return XCTFail("The failure is shown") }
+        XCTAssertEqual(failure, .presentationFailed)
+        XCTAssertTrue(fixture.textModel === source, "The source survives")
+        XCTAssertFalse(destination.isActive)
+        XCTAssertEqual(fixture.route.stagedImageHoldCountForTesting, 0)
+        destination.imageSession.release(rendererLease)
+    }
+
+    /// The continuous renderer never reports a lease of its own; the route's hold must not outlive the swap.
+    func testACommitReleasesTheHoldWhenTheRendererNeverReportsALease() async throws {
         let (fixture, data) = await imageRoute()
         try XCTUnwrap(fixture.textModel).goToNextChapter()
         await fixture.route.waitForPreparationForTesting()
@@ -45,24 +114,92 @@ final class ReaderHandoffReadinessTests: XCTestCase {
         let observation = destination.imageSession.observe(key) { state in
             if case .ready = state.phase { ready.fulfill() }
         }
-
-        // Layout alone is not drawable readiness: the image has not been proven yet.
-        fixture.route.presentationReady(requestID: request.id, visitID: staged.visitID)
-        guard case .staging = fixture.route.phase else { return XCTFail("Layout alone does not commit") }
-
         data.releaseLoads()
         await fulfillment(of: [ready], timeout: 5)
         observation.cancel()
-        XCTAssertTrue(fixture.pagesModel === destination, "The proven image and the layout together commit")
-        XCTAssertEqual(data.requestCount(for: Self.imageURL), 1)
+        XCTAssertEqual(fixture.route.stagedImageHoldCountForTesting, 1, "No renderer lease yet, so the proof stays")
 
-        // The renderer's own visible lease arrives, then the route's lease goes: the image stays ready.
-        let lease = destination.imageSession.acquire(descriptor(), consumer: .visible)
+        fixture.route.presentationReady(requestID: request.id, visitID: staged.visitID)
+
+        XCTAssertTrue(fixture.pagesModel === destination)
+        XCTAssertEqual(fixture.route.stagedImageHoldCountForTesting, 0, "The commit let it go: no lease leaks")
+    }
+
+    // MARK: - A text chapter that opens on an illustration
+
+    private func illustratedTextRoute(failing: Bool) async -> (RouteFixture, ScriptedImageData) {
+        let data = ScriptedImageData()
+        if failing { data.fail(Self.imageURL) }
+        data.holdLoads()
+        let chapters = [readerChapter("t2", 2, text: true), readerChapter("p1", 1)]
+        let entry = MediaEntry.manga(Manga(key: "series", title: "Series", chapters: chapters))
+        let preparer = ScriptedChapterPreparer()
+        preparer.formats["t2"] = .text
+        preparer.pages["t2"] = [
+            Page(index: 0, content: .url(Self.imageURL.absoluteString)), Page(index: 1, content: .text("words"))
+        ]
+        let fixture = await makeRouteFixture(
+            entry: entry, chapter: chapters[1], format: .pages, preparer: preparer,
+            imagePipeline: makeScriptedPipeline(data)
+        )
+        return (fixture, data)
+    }
+
+    func testATextDestinationOpeningOnAnIllustrationCommitsOnlyOnceItIsReady() async throws {
+        let (fixture, data) = await illustratedTextRoute(failing: false)
+        try XCTUnwrap(fixture.pagesModel).goToNextChapter()
+        await fixture.route.waitForPreparationForTesting()
+        guard case .staging(let request, let staged) = fixture.route.phase, case .text(_, let destination) = staged else {
+            return XCTFail("Staged as text")
+        }
+        let descriptor = try XCTUnwrap(destination.preparedInitialImageDescriptor(), "It opens on the illustration")
+        let rendererLease = destination.imageSession.acquire(descriptor, consumer: .visible)
         fixture.route.initialImageVisibleLeaseAcquired(requestID: request.id, visitID: staged.visitID)
+        fixture.route.presentationReady(requestID: request.id, visitID: staged.visitID)
+        guard case .staging = fixture.route.phase else { return XCTFail("The image is not ready yet") }
+        XCTAssertEqual(fixture.route.stagedImageHoldCountForTesting, 1)
+
+        let ready = expectation(description: "the illustration is ready")
+        let observation = destination.imageSession.observe(descriptor.key) { state in
+            if case .ready = state.phase { ready.fulfill() }
+        }
+        data.releaseLoads()
+        await fulfillment(of: [ready], timeout: 5)
+        observation.cancel()
+
+        XCTAssertTrue(fixture.textModel === destination)
         XCTAssertEqual(fixture.route.stagedImageHoldCountForTesting, 0)
-        if case .ready = destination.imageSession.state(for: key).phase {} else { XCTFail("The image was reset") }
-        XCTAssertEqual(data.requestCount(for: Self.imageURL), 1, "Nothing was fetched again")
-        destination.imageSession.release(lease)
+        if case .ready = destination.imageSession.state(for: descriptor.key).phase {} else { XCTFail("The image was reset") }
+        XCTAssertEqual(data.requestCount(for: Self.imageURL), 1)
+        destination.imageSession.release(rendererLease)
+    }
+
+    func testAnIllustrationThatFailsInATextDestinationIsReportedAsAPresentationFailure() async throws {
+        let (fixture, data) = await illustratedTextRoute(failing: true)
+        let source = try XCTUnwrap(fixture.pagesModel)
+        source.goToNextChapter()
+        await fixture.route.waitForPreparationForTesting()
+        guard case .staging(let request, let staged) = fixture.route.phase, case .text(_, let destination) = staged else {
+            return XCTFail("Staged as text")
+        }
+        let descriptor = try XCTUnwrap(destination.preparedInitialImageDescriptor())
+        let rendererLease = destination.imageSession.acquire(descriptor, consumer: .visible)
+        fixture.route.initialImageVisibleLeaseAcquired(requestID: request.id, visitID: staged.visitID)
+        fixture.route.presentationReady(requestID: request.id, visitID: staged.visitID)
+
+        let failed = expectation(description: "the handoff failed")
+        let phases = fixture.route.$phase.sink { phase in
+            if case .failed = phase { failed.fulfill() }
+        }
+        data.releaseLoads()
+        await fulfillment(of: [failed], timeout: 5)
+        phases.cancel()
+
+        guard case .failed(_, let failure) = fixture.route.phase else { return XCTFail("The failure is shown") }
+        XCTAssertEqual(failure, .presentationFailed)
+        XCTAssertTrue(fixture.pagesModel === source)
+        XCTAssertFalse(destination.isActive)
+        destination.imageSession.release(rendererLease)
     }
 
     func testAnImageThatCannotBeLoadedFailsTheHandoffAndTheSourceSurvives() async throws {
@@ -177,35 +314,6 @@ final class ReaderHandoffReadinessTests: XCTestCase {
 
     // MARK: - Crossings a reader may start
 
-    func testLayoutRestoresNewRowsAndSettlingNeverStartACrossing() async throws {
-        let chapters = [readerChapter("c3", 3, text: true), readerChapter("c2", 2), readerChapter("c1", 1)]
-        let entry = MediaEntry.manga(Manga(key: "series", title: "Series", viewer: .Webtoon, chapters: chapters))
-        let preparer = ScriptedChapterPreparer()
-        preparer.formats["c3"] = .text
-        preparer.pages["c2"] = [Page(index: 0, content: .text("a")), Page(index: 1, content: .text("b"))]
-        let fixture = await makeRouteFixture(entry: entry, chapter: chapters[1], format: .pages, preparer: preparer)
-        let source = try XCTUnwrap(fixture.pagesModel)
-        let router = RecordingHandoffRouter()
-        source.handoffRouter = router
-        let ids = source.flatPages.map(\.id)
-
-        // First layout, a restore, rows arriving and the viewport settling are not the user crossing.
-        source.continuousViewportChanged(ids)
-        source.continuousViewportChanged([ids[0]])
-        source.appendNextChapter()
-        source.continuousViewportSettled()
-        XCTAssertTrue(router.events.isEmpty && router.preparedEvents.isEmpty)
-
-        // The viewport reporting the end again is one crossing; leaving the edge makes the next arrival new.
-        source.requestHandoff(direction: .next, position: .start, trigger: .visibleBoundary, atLoadedEdge: true)
-        source.continuousViewportChanged([ids[1]])
-        source.requestHandoff(direction: .next, position: .start, trigger: .visibleBoundary, atLoadedEdge: true)
-        XCTAssertEqual(router.events.count, 1)
-        source.continuousViewportChanged([ids[0]])
-        source.requestHandoff(direction: .next, position: .start, trigger: .visibleBoundary, atLoadedEdge: true)
-        XCTAssertEqual(router.events.count, 2)
-    }
-
     func testTheTextReaderCrossesOnlyAfterTheUserScrolledAndNeverFromAPlacedAnchor() async throws {
         let preparer = ScriptedChapterPreparer()
         preparer.formats["x1"] = .text
@@ -229,19 +337,37 @@ final class ReaderHandoffReadinessTests: XCTestCase {
     }
 
     func testANewDestinationDoesNotBounceBackToTheReaderItReplaced() async throws {
-        let (fixture, _) = await imageRoute()
-        fixture.preparer.pages["i2"] = [Page(index: 0, content: .text("a page of text"))]
-        try XCTUnwrap(fixture.textModel).goToNextChapter()
+        let chapters = [readerChapter("p3", 3), readerChapter("t2", 2, text: true), readerChapter("p1", 1)]
+        let entry = MediaEntry.manga(Manga(key: "series", title: "Series", chapters: chapters))
+        let preparer = ScriptedChapterPreparer()
+        preparer.formats["t2"] = .text
+        preparer.pages["t2"] = [Page(index: 0, content: .text("one")), Page(index: 1, content: .text("two"))]
+        let fixture = await makeRouteFixture(entry: entry, chapter: chapters[2], format: .pages, preparer: preparer)
+        try XCTUnwrap(fixture.pagesModel).goToNextChapter()
         await fixture.route.waitForPreparationForTesting()
         guard case .staging(let request, let staged) = fixture.route.phase else { return XCTFail("Staged") }
         fixture.route.presentationReady(requestID: request.id, visitID: staged.visitID)
-        let destination = try XCTUnwrap(fixture.pagesModel)
+        let destination = try XCTUnwrap(fixture.textModel)
+        let loaded = try XCTUnwrap(destination.loadedChapters.first)
 
-        destination.continuousViewportSettled()
-        destination.setPagedIndex(0)
+        // The new reader lays itself out, reporting what its rows do in the order the live view does. Its
+        // previous chapter is the one it replaced and its next is another page chapter, both handoffs.
+        destination.continuousChapterTitleAppeared(loaded)
+        destination.continuousPageAppeared(chapterID: loaded.id, pageIndex: 0)
+        destination.continuousPageAppeared(chapterID: loaded.id, pageIndex: 1)
+        destination.continuousChapterEndAppeared(chapterID: loaded.id)
+        destination.continuousHandoffBoundaryAppeared()
+        guard case .idle = fixture.route.phase else { return XCTFail("Nothing started from the new reader's layout") }
+        XCTAssertEqual(preparer.callCount("p1"), 1, "The replaced chapter was not requested again")
+        XCTAssertEqual(preparer.callCount("p3"), 0)
 
-        guard case .idle = fixture.route.phase else { return XCTFail("Nothing started from the new reader") }
-        XCTAssertEqual(fixture.preparer.callCount("x1"), 1, "The replaced chapter was not requested again")
+        // Only the user scrolling opens the next crossing.
+        destination.continuousPageDisappeared(chapterID: loaded.id, pageIndex: 0)
+        destination.continuousHandoffBoundaryAppeared()
+        guard case .preparing(let crossing) = fixture.route.phase else { return XCTFail("The user's scroll crosses") }
+        XCTAssertEqual(crossing.chapter.key, "p3")
+        XCTAssertEqual(crossing.event.direction, .next)
+        fixture.route.cancelHandoff()
     }
 
     // MARK: - Direction is logical

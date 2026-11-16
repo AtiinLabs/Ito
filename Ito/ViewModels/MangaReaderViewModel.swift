@@ -16,24 +16,24 @@ final class MangaReaderViewModel: ObservableObject {
     let offline: ReaderOfflineContext
 
     /// Live, or built behind the visible reader for one handoff request.
-    @Published var presentationMode: ReaderPresentationMode
+    @Published private(set) var presentationMode: ReaderPresentationMode
     weak var handoffRouter: (any ReaderHandoffRouting)?
     /// The handoff request this reader was built for, kept after it goes live.
     var arrivalRequestID: UUID?
     /// The request of the first image the destination shows, for handing the route's lease over.
     var preparedImageKey: ReaderPageImageKey?
 
-    @Published var currentChapter: Manga.Chapter
-    @Published var loadPhase: MangaReaderLoadPhase = .idle
+    @Published private(set) var currentChapter: Manga.Chapter
+    @Published private(set) var loadPhase: MangaReaderLoadPhase = .idle
     @Published private(set) var overrideViewer: Manga.Viewer = .Default
     @Published private(set) var preloadImageCount: Int
     @Published private(set) var groupSwitchConsent: ReaderGroupSwitchConsent<Manga.Chapter>?
     var askBeforeSwitchingGroups: Bool { dependencies.settings.askBeforeSwitchingGroups }
 
-    @Published var pagedPages: [Page] = [] {
+    @Published private(set) var pagedPages: [Page] = [] {
         didSet { retainImageRequestsForChapterWindow() }
     }
-    @Published var pagedIndex = 0
+    @Published private(set) var pagedIndex = 0
     @Published private(set) var prefetchedChapters: [String: [Page]] = [:] {
         didSet { retainImageRequestsForChapterWindow() }
     }
@@ -43,9 +43,9 @@ final class MangaReaderViewModel: ObservableObject {
     }
     /// Every page of `segments` in reading order; rebuilt only when `segments` changes.
     @Published private(set) var flatPages: [FlatPage] = []
-    @Published var continuousPageIndex = 0
+    @Published private(set) var continuousPageIndex = 0
     @Published private(set) var continuousSnapshot = MangaContinuousReaderSnapshot.empty
-    @Published var scrollTarget: MangaScrollRequest?
+    @Published private(set) var scrollTarget: MangaScrollRequest?
     @Published var loadingNextChapter = false {
         didSet { publishContinuousSnapshot() }
     }
@@ -69,7 +69,7 @@ final class MangaReaderViewModel: ObservableObject {
     /// Captured once per route; every chapter and both readers share it.
     var completionContext: PluginCompletionContext { routeSession.completionContext }
 
-    var isActive = true
+    private(set) var isActive = true
     var hasPresentedPresence = false
     private(set) var sessionID = UUID()
     var contentGeneration: UInt64 = 0
@@ -270,6 +270,36 @@ final class MangaReaderViewModel: ObservableObject {
         dependencies.presence.clearMangaReaderPresence()
     }
 
+    /// Puts the chapter a transition was leaving back on screen, where the reader really was: the page it
+    /// was on, and for scrolling the same page as a scroll target the view applies without animating.
+    func restoreTransition(_ snapshot: MangaTransitionSnapshot) {
+        currentChapter = snapshot.chapter
+        pagedPages = snapshot.pagedPages
+        pagedIndex = snapshot.pagedIndex
+        segments = snapshot.segments
+        continuousPageIndex = snapshot.continuousPageIndex
+        scrollTarget = snapshot.scrollTarget
+        loadPhase = snapshot.loadPhase
+    }
+
+    /// The route made this reader live, or built it behind the visible one; only the route decides.
+    func setPresentationMode(_ mode: ReaderPresentationMode) { presentationMode = mode }
+
+    /// The chapter is made for the other reader and no route can take it.
+    func failDivertedLoad() {
+        loadPhase = .failure(ReaderRouteError.otherReader.localizedDescription)
+    }
+
+    /// Drops a destination that was never shown: its own work and images end, and nothing of the visible
+    /// reader (presence included) is touched.
+    func discardPreparedPresentation() {
+        guard !presentationMode.isLive else { return }
+        isActive = false
+        invalidateContentOperations()
+        imagePrefetcher.stopPrefetching()
+        imageSession.deactivate()
+    }
+
     /// Loads the current chapter again after it failed to load.
     func retry() {
         guard isActive, case .failure = loadPhase else { return }
@@ -297,7 +327,7 @@ final class MangaReaderViewModel: ObservableObject {
     /// Applies a boundary change to a paged reader. One that arrives while the reader is inactive waits
     /// for `appear()`. A prefetch in flight is left alone unless the neighbors to fetch changed.
     func applyOfflineChange() {
-        guard isActive else { return offlineChangeWaiting = true }
+        guard isActive, presentationMode.isLive else { return offlineChangeWaiting = true }
         offlineChangeWaiting = false
         guard isPaged, loadPhase == .content, !pagedPages.isEmpty else { return }
         if pagedIndex < 0 || pagedIndex >= pagedPages.count {
@@ -390,7 +420,7 @@ final class MangaReaderViewModel: ObservableObject {
             requestGroupSwitch(.previous, opensAtEnd: true)
             return
         }
-        if pagedPages.indices.contains(newIndex) { handoffLatch = nil }
+        if pagedPages.indices.contains(newIndex) { endHandoffCrossing() }
         pagedIndex = newIndex
         if newIndex == pagedPages.count,
            let next = boundaryAfter(currentChapter).chapter {
@@ -583,7 +613,7 @@ final class MangaReaderViewModel: ObservableObject {
         } else {
             transition = nil
         }
-        handoffLatch = nil
+        endHandoffCrossing()
         invalidateContentOperations()
         changeCurrentChapter(to: chapter)
         if let cached = prefetchedChapters[chapter.key] {
@@ -618,7 +648,7 @@ final class MangaReaderViewModel: ObservableObject {
             return
         }
         beginTransitionSnapshot(direction: direction, trigger: trigger, approved: approved)
-        handoffLatch = nil
+        endHandoffCrossing()
         invalidateContentOperations()
         changeCurrentChapter(to: chapter)
         segments = []
@@ -715,7 +745,7 @@ final class MangaReaderViewModel: ObservableObject {
             if transition != nil {
                 divertTransition(prepared, opensAtEnd: opensAtEnd)
             } else {
-                divertOpening(prepared)
+                divertOpening(prepared, opensAtEnd: opensAtEnd)
             }
             return
         }

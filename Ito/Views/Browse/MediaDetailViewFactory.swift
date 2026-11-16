@@ -75,7 +75,6 @@ struct MediaDetailReaderViewFactory {
             entry: entry,
             chapter: chapter,
             format: format,
-            content: content,
             session: session,
             preparer: makeChapterPreparer(content: content, pluginID: pluginID),
             presentations: ReaderRouteComposition(factory: self, pluginID: pluginID, content: content),

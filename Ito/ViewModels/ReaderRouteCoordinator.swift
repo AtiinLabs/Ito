@@ -66,14 +66,22 @@ struct ReaderHandoffRequest: Identifiable {
     let event: ReaderHandoffEvent
     let chapter: Chapter
     let token: ChapterToken
-    let catalogGeneration: UInt64
     let sourceContext: PluginCompletionContext
     let authorizationScope: UUID
     let continuationSettingsRevision: UInt64
     let networkPolicyRevision: UInt64
     let pathGeneration: UInt64
-    /// The selected saved copy the opening carries, when the candidate is that exact chapter.
-    let selectedLease: OfflineChapterLease?
+
+    /// The same request under the network policy now in force, as a new operation. Everything the request
+    /// was bound to (scope, setting, candidate) stays as it was and is checked as such.
+    func renewingNetwork(policyRevision: UInt64, pathGeneration: UInt64) -> ReaderHandoffRequest {
+        ReaderHandoffRequest(
+            id: UUID(), routeID: routeID, routeGeneration: routeGeneration, event: event, chapter: chapter,
+            token: token, sourceContext: sourceContext, authorizationScope: authorizationScope,
+            continuationSettingsRevision: continuationSettingsRevision,
+            networkPolicyRevision: policyRevision, pathGeneration: pathGeneration
+        )
+    }
 }
 
 /// The renderer that is on screen. The visit identifies one mounted renderer.
@@ -152,6 +160,8 @@ protocol ReaderRouteModel: AnyObject {
     func retireForHandoff()
     /// The crossing ended without a switch; the reader shows its own position again.
     func handoffDidEnd()
+    /// Whether the reader shows a loaded chapter. A reader without one has nothing a replacement could lose.
+    var routeHasContent: Bool { get }
 }
 
 /// How a reader reports a crossing to its route.
@@ -161,9 +171,14 @@ protocol ReaderHandoffRouting: AnyObject {
     /// For an event whose chapter was already loaded by the source reader and turned out to be made for
     /// the other one. Never creates an event by itself.
     func requestHandoff(_ event: ReaderHandoffEvent, prepared: ReaderPreparedChapter)
-    /// The first chapter of the route turned out to be made for the other reader. There is no source to
-    /// keep, so the right reader replaces the one that found out.
-    func requestFormatCorrection(visitID: UUID, prepared: ReaderPreparedChapter)
+    /// A chapter the reader was loading with no content on screen turned out to be made for the other
+    /// reader, so the right reader replaces the one that found out. Returns whether the route took it:
+    /// when it did not, the reader has to say so itself.
+    @discardableResult
+    func requestFormatCorrection(visitID: UUID, prepared: ReaderPreparedChapter, position: ReaderEntryPosition) -> Bool
+    /// The reader left the boundary a crossing started from, or navigated on its own: a failure that was
+    /// shown for that crossing no longer describes it.
+    func handoffBoundaryLeft(visitID: UUID)
 }
 
 @MainActor
@@ -312,11 +327,6 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
     private let presentations: any ReaderRoutePresentationMaking
     private let settings: any ReaderContinuationSettingsReading
     private let network: any ReaderRouteNetworking
-    private let openingLease: OfflineChapterLease?
-    private let openingChapterKey: String
-
-    /// The route's pinned catalog. A replacement advances `catalogGeneration`.
-    private var catalogGeneration: UInt64 = 0
     private var routeGeneration: UInt64 = 0
     private var operationTask: Task<Void, Never>?
     /// Boundary entries that already produced a request, until the reader leaves and re-enters them.
@@ -345,7 +355,6 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
         entry: MediaEntry,
         chapter: Chapter,
         format: HistoryReaderFormat,
-        content: ReaderContentSource,
         session: ReaderRouteSession,
         preparer: any ReaderChapterPreparing,
         presentations: any ReaderRoutePresentationMaking,
@@ -359,8 +368,6 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
         self.presentations = presentations
         self.settings = settings
         self.network = network
-        openingLease = content.preference.localOnlySeed?.lease
-        openingChapterKey = chapter.key
         let presentation = presentations.makeInitialPresentation(
             format: format, entry: entry, chapter: chapter, session: session,
             preparer: preparer, visitID: UUID()
@@ -406,12 +413,19 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
     }
 
     private func admit(_ event: ReaderHandoffEvent, prepared: ReaderPreparedChapter?) {
-        guard session.isOpen, case .idle = phase,
+        // A failure that was shown for an earlier crossing gives way to a new one.
+        switch phase {
+        case .idle, .failed: break
+        case .opening, .awaitingConsent, .preparing, .staging, .closed: return
+        }
+        guard session.isOpen,
               !consumedBoundaryEntries.contains(event.boundaryEntryID),
               let source = active?.model,
               source.isCurrentHandoffSource(event),
               let boundary = source.handoffBoundary(for: event) else { return }
-        guard let candidate = acceptedCandidate(boundary, prepared: prepared, event: event) else { return }
+        guard let candidate = acceptedCandidate(
+            boundary, prepared: prepared, event: event, sourceFormat: source.routeFormat
+        ) else { return }
         consumedBoundaryEntries.insert(event.boundaryEntryID)
         if let prepared, !ChapterToken(prepared.chapter).isByteIdentical(to: ChapterToken(candidate.chapter)) { return }
         let request = makeRequest(event: event, chapter: candidate.chapter)
@@ -420,6 +434,8 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
                 source.handoffDidEnd()
                 return
             }
+            // What the source already loaded waits with the question, so approving it fetches nothing again.
+            pendingPrepared = prepared.map { (request.id, $0) }
             phase = .awaitingConsent(request, consent)
             return
         }
@@ -435,16 +451,17 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
     private func acceptedCandidate(
         _ boundary: ReaderChapterBoundary<Chapter>,
         prepared: ReaderPreparedChapter?,
-        event: ReaderHandoffEvent
+        event: ReaderHandoffEvent,
+        sourceFormat: HistoryReaderFormat
     ) -> (chapter: Chapter, requiresConsent: Bool)? {
         switch boundary {
         case .handoff(let chapter, let requiresConsent):
             return (chapter, requiresConsent)
         case .chapter(let chapter):
-            guard prepared != nil else { return nil }
+            guard let prepared, prepared.format != sourceFormat else { return nil }
             return (chapter, false)
         case .groupConsent(let chapter):
-            guard prepared != nil else { return nil }
+            guard let prepared, prepared.format != sourceFormat else { return nil }
             return (chapter, !event.groupSwitchApproved)
         case .end, .locked, .notAvailableOffline:
             return nil
@@ -459,13 +476,11 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
             event: event,
             chapter: chapter,
             token: ChapterToken(chapter),
-            catalogGeneration: catalogGeneration,
             sourceContext: session.completionContext,
             authorizationScope: network.liveScope(pluginID: pluginID),
             continuationSettingsRevision: settings.readerContinuationSettingsRevision,
             networkPolicyRevision: network.policyRevision,
-            pathGeneration: network.pathGeneration,
-            selectedLease: chapter.key.utf8.elementsEqual(openingChapterKey.utf8) ? openingLease : nil
+            pathGeneration: network.pathGeneration
         )
     }
 
@@ -492,7 +507,19 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
             invalidate()
             return
         }
-        beginPreparation(request)
+        if let held = pendingPrepared, held.requestID == request.id {
+            guard revalidate(request, requiringCandidate: true, preparedFormat: held.payload.format) else {
+                invalidate()
+                return
+            }
+            stage(request, prepared: held.payload)
+        } else {
+            beginPreparation(
+                request.networkPolicyRevision == network.policyRevision && request.pathGeneration == network.pathGeneration
+                    ? request
+                    : request.renewingNetwork(policyRevision: network.policyRevision, pathGeneration: network.pathGeneration)
+            )
+        }
     }
 
     func cancelHandoff() {
@@ -552,7 +579,7 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
     private func preparationFinished(requestID: UUID, prepared: ReaderPreparedChapter) {
         guard case .preparing(let request) = phase, request.id == requestID, !Task.isCancelled else { return }
         // A result that no longer matches the route is dropped, and the source shows its own position again.
-        guard revalidate(request, requiringCandidate: true) else {
+        guard revalidate(request, requiringCandidate: true, preparedFormat: prepared.format) else {
             cancelHandoff()
             return
         }
@@ -579,6 +606,14 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
     /// Builds the destination behind the visible reader. Nothing it does yet has an effect.
     private func stage(_ request: ReaderHandoffRequest, prepared: ReaderPreparedChapter) {
         guard active != nil else { return }
+        // A chapter with nothing to show can never be drawn, and waiting for it would never end.
+        guard !prepared.pages.isEmpty else {
+            releaseStaged()
+            phase = .failed(request, .loadFailed)
+            return
+        }
+        // Whatever an earlier request held is let go before this one holds anything.
+        releaseStaged()
         let visitID = UUID()
         let presentation = presentations.makePreparedPresentation(
             prepared, position: request.event.position, session: session, preparer: preparer,
@@ -627,12 +662,12 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
         failStaging(request, .presentationFailed)
     }
 
-    /// The destination's own renderer holds a visible lease on the first image now, so the one that
-    /// proved the image can go.
+    /// The destination's own renderer holds a visible lease on the first image now. The route's lease
+    /// stays, and its observation with it, until the image has settled: the renderer acquiring a lease
+    /// says nothing about the image being drawable. The commit lets it go otherwise.
     func initialImageVisibleLeaseAcquired(requestID: UUID, visitID: UUID) {
         guard let hold = imageHold, hold.requestID == requestID, hold.visitID == visitID else { return }
-        hold.release()
-        imageHold = nil
+        hold.rendererAcquiredLease()
     }
 
     private func failStaging(_ request: ReaderHandoffRequest, _ failure: ReaderHandoffFailure) {
@@ -644,7 +679,8 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
         guard case .staging(let request, let staged) = phase, let readiness, readiness.isComplete,
               readiness.requestID == request.id, readiness.visitID == staged.visitID else { return }
         // Final revalidation and the swap are one main-actor section: nothing can interleave.
-        guard revalidate(request, requiringCandidate: true), let source = active?.model else {
+        guard revalidate(request, requiringCandidate: true, preparedFormat: staged.model.routeFormat),
+              let source = active?.model else {
             invalidate()
             return
         }
@@ -656,34 +692,51 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
         phase = .idle
         staged.model.setPresentationMode(.live)
         staged.model.activatePreparedPresentation()
+        // The destination is live and holds its own leases; the route's proof of the image goes now.
+        imageHold?.release()
+        imageHold = nil
     }
 
     // MARK: Format correction
 
-    func requestFormatCorrection(visitID: UUID, prepared: ReaderPreparedChapter) {
-        guard session.isOpen, case .opening = phase, let source = active, source.visitID == visitID else { return }
+    @discardableResult
+    func requestFormatCorrection(visitID: UUID, prepared: ReaderPreparedChapter, position: ReaderEntryPosition) -> Bool {
+        // Only a reader with nothing on screen is replaced: whatever it was loading is all it has.
+        switch phase {
+        case .opening, .idle: break
+        case .awaitingConsent, .preparing, .staging, .failed, .closed: return false
+        }
+        guard session.isOpen, let source = active, source.visitID == visitID,
+              !source.model.routeHasContent else { return false }
         let newVisit = UUID()
         let presentation = presentations.makePreparedPresentation(
-            prepared, position: .resume, session: session, preparer: preparer,
+            prepared, position: position, session: session, preparer: preparer,
             visitID: newVisit, mode: .live
         )
         presentation.model.handoffRouter = self
         source.model.retireForHandoff()
         active = presentation
         phase = .idle
-        observeOpening(presentation)
+        openingSubscription = nil
         presentation.model.activatePreparedPresentation()
+        return true
+    }
+
+    func handoffBoundaryLeft(visitID: UUID) {
+        guard case .failed = phase, active?.visitID == visitID else { return }
+        invalidate()
     }
 
     // MARK: Validity
 
-    /// Whether `request` still describes the route. Scope checks are reads, never captures.
+    /// Whether `request` still describes the route. Scope checks are reads, never captures. A `.chapter`
+    /// boundary only stands when the payload proves a reader other than the source's.
     private func revalidate(
         _ request: ReaderHandoffRequest,
-        requiringCandidate: Bool
+        requiringCandidate: Bool,
+        preparedFormat: HistoryReaderFormat? = nil
     ) -> Bool {
         guard session.isOpen, request.routeID == rootID, request.routeGeneration == routeGeneration,
-              request.catalogGeneration == catalogGeneration,
               request.continuationSettingsRevision == settings.readerContinuationSettingsRevision,
               request.authorizationScope == network.liveScope(pluginID: pluginID),
               request.sourceContext.originatingEpoch == session.currentEpoch,
@@ -694,7 +747,8 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
               let candidate = boundary.candidate,
               ChapterToken(candidate).isByteIdentical(to: request.token) else { return false }
         switch boundary {
-        case .handoff, .groupConsent, .chapter: return true
+        case .handoff: return true
+        case .groupConsent, .chapter: return preparedFormat.map { $0 != source.routeFormat } ?? true
         case .end, .locked, .notAvailableOffline: return false
         }
     }
@@ -719,7 +773,8 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
         pendingPrepared = nil
     }
 
-    /// A policy or path change moves what a pending remote preparation was admitted under; it is prepared
+    /// A policy or path change moves what a pending remote preparation was admitted under. What the
+    /// request was bound to (scope, setting, candidate) is checked as it was; only then is it prepared
     /// again under the policy now in force, and a refusal fails it instead of presenting. A staged
     /// destination keeps its payload: its image requests are admitted by the transport as they start.
     func networkDidChange() {
@@ -728,12 +783,13 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
                 || request.pathGeneration != network.pathGeneration else { return }
         operationTask?.cancel()
         operationTask = nil
-        let renewed = makeRequest(event: request.event, chapter: request.chapter)
-        guard revalidate(renewed, requiringCandidate: true) else {
+        guard revalidate(request, requiringCandidate: true) else {
             cancelHandoff()
             return
         }
-        beginPreparation(renewed)
+        beginPreparation(request.renewingNetwork(
+            policyRevision: network.policyRevision, pathGeneration: network.pathGeneration
+        ))
     }
 
     /// The source's authorization scope was replaced, even if it later returned to what it was: nothing
@@ -749,12 +805,6 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
         cancelHandoff()
     }
 
-    /// An authoritative replacement of the series' chapters invalidates what a handoff was started for.
-    func catalogDidChange() {
-        catalogGeneration &+= 1
-        cancelHandoff()
-    }
-
     /// The route is over. Admitted local marks and position writes still finish.
     func close() {
         if case .closed = phase { return }
@@ -767,17 +817,21 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
     }
 
 #if DEBUG
-    var stagedImageHoldCountForTesting: Int { imageHold == nil ? 0 : 1 }
+    var stagedImageHoldCountForTesting: Int { imageHold?.isReleased == false ? 1 : 0 }
     /// Returns once the running preparation has finished and published or dropped its result.
     func waitForPreparationForTesting() async { await operationTask?.value }
+    /// The running preparation itself, for a test that must wait for a cancelled one to unwind.
+    var operationTaskForTesting: Task<Void, Never>? { operationTask }
 #endif
 }
 
 // MARK: - Initial image readiness
 
 /// Proves the destination's first image can be drawn before the destination is shown. It holds a visible
-/// lease on the destination's own image session, with the descriptor its renderer requests, until the
-/// renderer holds one of its own: releasing the last visible ready lease would reset the image to idle.
+/// lease on the destination's own image session, with the descriptor its renderer requests, so the image is
+/// not reset to idle while the renderer takes over: releasing the last visible ready lease would do that.
+/// It keeps observing until the image has settled, whatever the renderer's own lease reports, and lets go
+/// once the image is ready and the renderer holds a lease of its own, or when the route commits or drops it.
 @MainActor
 final class ReaderPreparationImageHold {
     let requestID: UUID
@@ -787,6 +841,9 @@ final class ReaderPreparationImageHold {
     private var onSettled: ((Bool) -> Void)?
     private var lease: ReaderImageLease?
     private var observation: ReaderImageObservation?
+    private var rendererHoldsLease = false
+    private var settledAsReady = false
+    private(set) var isReleased = false
 
     init(
         requestID: UUID,
@@ -824,10 +881,24 @@ final class ReaderPreparationImageHold {
         self.onSettled = nil
         observation?.cancel()
         observation = nil
+        settledAsReady = succeeded
         onSettled(succeeded)
+        releaseOnceHandedOver()
+    }
+
+    /// The renderer holds its own visible lease on the image. This alone proves nothing about the image, so
+    /// the observation goes on; the lease is let go only once the image is also ready.
+    func rendererAcquiredLease() {
+        rendererHoldsLease = true
+        releaseOnceHandedOver()
+    }
+
+    private func releaseOnceHandedOver() {
+        if rendererHoldsLease, settledAsReady { release() }
     }
 
     func release() {
+        isReleased = true
         onSettled = nil
         observation?.cancel()
         observation = nil

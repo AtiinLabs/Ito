@@ -269,10 +269,13 @@ struct ReaderView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             if notice.requestsHandoff {
+                // The tap on the notice the pager rests on is the paged edge itself, and a deliberate tap
+                // asks again after a cancelled or failed attempt, which the latch would otherwise swallow.
+                viewModel.releaseHandoffLatch()
                 viewModel.requestHandoff(
                     direction: isNext ? .next : .previous,
                     position: isNext ? .start : .end,
-                    trigger: .chapterControl,
+                    trigger: .pagedEdge,
                     atLoadedEdge: false
                 )
             } else if notice.requestsGroupConsent {

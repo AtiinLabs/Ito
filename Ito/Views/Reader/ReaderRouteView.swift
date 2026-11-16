@@ -30,6 +30,14 @@ struct ReaderRouteView: View {
         .onChange(of: scenePhase) { phase in
             if phase != .active { coordinator.sceneDidLeaveActive() }
         }
+        // Progress turning into a failure is announced: nothing the user is touching changes focus.
+        .onChange(of: failedRequestID) { id in
+            guard id != nil, case .failed(let request, let failure) = coordinator.phase else { return }
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: message(for: failure, direction: request.event.direction)
+            )
+        }
         .alert(
             String(localized: "Switch groups?", comment: "Reader consent title: open one exact upload from another translation group"),
             // The buttons decide: a setter that cancelled could run before Continue's action.
@@ -47,6 +55,11 @@ struct ReaderRouteView: View {
 
     private var consent: ReaderGroupSwitchConsent<Chapter>? {
         if case .awaitingConsent(_, let consent) = coordinator.phase { return consent }
+        return nil
+    }
+
+    private var failedRequestID: UUID? {
+        if case .failed(let request, _) = coordinator.phase { return request.id }
         return nil
     }
 
@@ -81,8 +94,9 @@ struct ReaderRouteView: View {
             }
         }
         // The visible reader waits while a handoff is pending, and the one behind it is not for the user yet.
+        // Neither is reachable by touch or by VoiceOver: the status below is what is actionable.
         .allowsHitTesting(!isStaged && !busy)
-        .accessibilityHidden(isStaged)
+        .accessibilityHidden(isStaged || busy)
     }
 
     // MARK: - Handoff status
@@ -91,36 +105,44 @@ struct ReaderRouteView: View {
     private var handoffStatus: some View {
         switch coordinator.phase {
         case .preparing(let request), .staging(let request, _):
-            statusCapsule {
-                ProgressView()
-                Text(request.event.direction == .next
-                    ? String(localized: "Opening the next chapter…", comment: "Reader: shown over the current chapter while the next one, made for the other reader, is being prepared")
-                    : String(localized: "Opening the previous chapter…", comment: "Reader: shown over the current chapter while the previous one, made for the other reader, is being prepared"))
+            statusCard {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text(request.event.direction == .next
+                        ? String(localized: "Opening the next chapter…", comment: "Reader: shown over the current chapter while the next one, made for the other reader, is being prepared")
+                        : String(localized: "Opening the previous chapter…", comment: "Reader: shown over the current chapter while the previous one, made for the other reader, is being prepared"))
+                }
                 Button("Cancel") { coordinator.cancelHandoff() }
             }
         case .failed(let request, let failure):
-            statusCapsule {
+            statusCard {
                 Text(message(for: failure, direction: request.event.direction))
-                Button("Try Again") { coordinator.retryHandoff(requestID: request.id) }
-                Button("Cancel") { coordinator.cancelHandoff() }
+                HStack(spacing: 16) {
+                    Button("Try Again") { coordinator.retryHandoff(requestID: request.id) }
+                    Button("Cancel") { coordinator.cancelHandoff() }
+                }
             }
         case .opening, .idle, .awaitingConsent, .closed:
             EmptyView()
         }
     }
 
-    private func statusCapsule<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    /// Stacked and allowed to wrap, so large text sizes grow the card instead of cutting its words.
+    private func statusCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         VStack {
             Spacer()
-            HStack(spacing: 12) {
+            VStack(spacing: 8) {
                 content()
             }
             .font(.footnote)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
             .foregroundColor(.white)
             .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(.ultraThinMaterial, in: Capsule())
+            .padding(.vertical, 12)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .environment(\.colorScheme, .dark)
+            .padding(.horizontal, 16)
             .padding(.bottom, 96)
         }
         .accessibilityElement(children: .contain)

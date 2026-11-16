@@ -12,7 +12,7 @@ extension MangaReaderViewModel {
         let candidates = adjacentPrefetchCandidates(for: reference)
         adjacentPrefetchKeys = Set(candidates.map(\.key))
         let missing = candidates.filter { prefetchedChapters[$0.key] == nil }
-        guard !missing.isEmpty, isActive, isPaged else {
+        guard !missing.isEmpty, isActive, isPaged, presentationMode.isLive else {
             adjacentPrefetchTask = nil
             adjacentPrefetchOperationID = nil
             return
