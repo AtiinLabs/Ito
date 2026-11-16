@@ -93,17 +93,19 @@ nonisolated enum ReaderChapterTitle {
 }
 
 /// What lies past a chapter in reading order. `locked` is a candidate the account cannot open;
-/// `otherReader` and `notAvailableOffline` are decided by the reader that asks, since they depend
-/// on the chapter's format and on what is stored.
+/// `handoff` and `notAvailableOffline` are decided by the reader that asks, since they depend
+/// on the chapter's format and on what is stored. A `handoff` chapter opens in the other reader of
+/// the same route; it asks for consent first when `requiresGroupConsent`.
 nonisolated enum ReaderChapterBoundary<C> {
     case chapter(C)
     case end
     case locked(C)
-    case otherReader(C)
+    case handoff(C, requiresGroupConsent: Bool)
     case notAvailableOffline(C)
     case groupConsent(C)
 
-    /// The neighbor to open, when the reader can open it.
+    /// The neighbor to open in this reader, when it can. A chapter of the other format is never
+    /// returned here, so prefetching and appending cannot consume it.
     var chapter: C? {
         guard case .chapter(let chapter) = self else { return nil }
         return chapter
@@ -112,7 +114,8 @@ nonisolated enum ReaderChapterBoundary<C> {
     /// The neighbor in reading order, whether or not the reader can open it; nil at the end.
     var candidate: C? {
         switch self {
-        case .chapter(let chapter), .locked(let chapter), .otherReader(let chapter), .notAvailableOffline(let chapter), .groupConsent(let chapter):
+        case .chapter(let chapter), .locked(let chapter), .handoff(let chapter, _),
+             .notAvailableOffline(let chapter), .groupConsent(let chapter):
             chapter
         case .end:
             nil
@@ -124,18 +127,44 @@ nonisolated enum ReaderChapterBoundary<C> {
         return true
     }
 
+    /// Whether Next or Previous leads somewhere: a chapter this reader opens, a group the user is
+    /// asked about, or a chapter that opens in the other reader.
+    var canNavigate: Bool {
+        switch self {
+        case .chapter, .groupConsent, .handoff:
+            true
+        case .end, .locked, .notAvailableOffline:
+            false
+        }
+    }
+
     /// A different group at the same transition is a named consent boundary, not an open chapter.
-    /// Locked, other-reader and offline-unavailable boundaries are never converted: they keep
-    /// stopping the reader where they are.
+    /// A chapter of the other format keeps its handoff and records that the group differs. Locked
+    /// and offline-unavailable boundaries are never converted: they keep stopping the reader where
+    /// they are.
     @MainActor
     func requiringGroupConsent(from current: C, enabled: Bool) -> Self where C: ChapterDisplayable {
-        guard enabled, case .chapter(let candidate) = self,
-              !ReaderContinuationGroup(current).matches(ReaderContinuationGroup(candidate)) else { return self }
-        return .groupConsent(candidate)
+        guard enabled else { return self }
+        switch self {
+        case .chapter(let candidate):
+            guard !ReaderContinuationGroup(current).matches(ReaderContinuationGroup(candidate)) else { return self }
+            return .groupConsent(candidate)
+        case .handoff(let candidate, _):
+            let differs = !ReaderContinuationGroup(current).matches(ReaderContinuationGroup(candidate))
+            return .handoff(candidate, requiresGroupConsent: differs)
+        default:
+            return self
+        }
     }
 
     var needsGroupConsent: Bool {
         if case .groupConsent = self { return true }
+        return false
+    }
+
+    /// Whether the neighbor opens in the other reader.
+    var isHandoff: Bool {
+        if case .handoff = self { return true }
         return false
     }
 }
@@ -277,21 +306,24 @@ nonisolated enum ReaderChapterOrdering {
     }
 }
 
-/// What a reader says where it stops instead of opening the neighboring chapter. The user returns to
-/// the details and opens that chapter there; a reader never switches by itself.
+/// What a reader says where it stops instead of opening the neighboring chapter in itself. A
+/// neighbor of the other format continues in the other reader when the user taps the notice.
 nonisolated struct ReaderBoundaryNotice: Equatable {
     let text: String
     let systemImage: String
     /// The notice names a consent the reader asks for when the user taps it.
     var requestsGroupConsent = false
+    /// Tapping the notice continues in the other reader of the same route.
+    var requestsHandoff = false
 
-    private static func groupChoice(isNext: Bool) -> Self {
+    private static func groupChoice(isNext: Bool, requestsHandoff: Bool = false) -> Self {
         Self(
             text: isNext
                 ? String(localized: "Next chapter is from another group. Tap to continue", comment: "Reader boundary: the next chapter belongs to a different translation group; tapping asks to open that one upload")
                 : String(localized: "Previous chapter is from another group. Tap to continue", comment: "Reader boundary: the previous chapter belongs to a different translation group; tapping asks to open that one upload"),
             systemImage: "person.2",
-            requestsGroupConsent: true
+            requestsGroupConsent: true,
+            requestsHandoff: requestsHandoff
         )
     }
 
@@ -305,34 +337,40 @@ nonisolated struct ReaderBoundaryNotice: Equatable {
             return groupChoice(isNext: isNext)
         case .locked:
             return locked(isNext: isNext)
-        case .otherReader:
+        case .handoff(_, let requiresGroupConsent):
+            if requiresGroupConsent { return groupChoice(isNext: isNext, requestsHandoff: true) }
             return ReaderBoundaryNotice(
                 text: isNext
-                    ? String(localized: "Next chapter opens in the text reader", comment: "Reader: the next chapter is text; go back to the series to open it")
-                    : String(localized: "Previous chapter opens in the text reader", comment: "Reader: the previous chapter is text; go back to the series to open it"),
-                systemImage: "text.alignleft"
+                    ? String(localized: "Next chapter opens in the text reader. Tap to continue", comment: "Reader boundary: the next chapter is text; tapping opens it in the text reader without leaving the series")
+                    : String(localized: "Previous chapter opens in the text reader. Tap to continue", comment: "Reader boundary: the previous chapter is text; tapping opens it in the text reader without leaving the series"),
+                systemImage: "text.alignleft",
+                requestsHandoff: true
             )
         case .notAvailableOffline:
             return notDownloaded(isNext: isNext)
         }
     }
 
-    /// The text reader's notice after its last loaded chapter. It shows nothing before the first one.
-    static func textAfterLast<C>(for boundary: ReaderChapterBoundary<C>) -> ReaderBoundaryNotice? {
+    /// The text reader's notice after its last loaded chapter, or before its first one.
+    static func text<C>(for boundary: ReaderChapterBoundary<C>, isNext: Bool) -> ReaderBoundaryNotice? {
         switch boundary {
         case .chapter, .end:
             return nil
         case .groupConsent:
-            return groupChoice(isNext: true)
+            return groupChoice(isNext: isNext)
         case .locked:
-            return locked(isNext: true)
-        case .otherReader:
+            return locked(isNext: isNext)
+        case .handoff(_, let requiresGroupConsent):
+            if requiresGroupConsent { return groupChoice(isNext: isNext, requestsHandoff: true) }
             return ReaderBoundaryNotice(
-                text: String(localized: "Next chapter opens in the page reader", comment: "Reader: the next chapter is made of pages; go back to the series to open it"),
-                systemImage: "photo.on.rectangle"
+                text: isNext
+                    ? String(localized: "Next chapter opens in the page reader. Tap to continue", comment: "Reader boundary: the next chapter is made of pages; tapping opens it in the page reader without leaving the series")
+                    : String(localized: "Previous chapter opens in the page reader. Tap to continue", comment: "Reader boundary: the previous chapter is made of pages; tapping opens it in the page reader without leaving the series"),
+                systemImage: "photo.on.rectangle",
+                requestsHandoff: true
             )
         case .notAvailableOffline:
-            return notDownloaded(isNext: true)
+            return notDownloaded(isNext: isNext)
         }
     }
 

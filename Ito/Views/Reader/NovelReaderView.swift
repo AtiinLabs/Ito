@@ -2,7 +2,10 @@ import SwiftUI
 import ito_runner
 
 struct NovelReaderView: View {
-    @StateObject private var viewModel: NovelReaderViewModel
+    @ObservedObject private var viewModel: NovelReaderViewModel
+    let onPresentationReady: (UUID, UUID) -> Void
+    let onPresentationFailed: (UUID, UUID) -> Void
+    let onInitialImageVisibleLeaseAcquired: (UUID, UUID) -> Void
     @State private var showUI = true
     @State private var showSettings = false
     /// Screen brightness before the reader's slider first changed it; put back on close.
@@ -11,9 +14,17 @@ struct NovelReaderView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
-    /// `viewModel` is evaluated once, when SwiftUI first creates this view's state.
-    init(viewModel: @autoclosure @escaping () -> NovelReaderViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel())
+    /// The route owns the reader; this view only draws it and reports what the route asked to be told.
+    init(
+        viewModel: NovelReaderViewModel,
+        onPresentationReady: @escaping (UUID, UUID) -> Void,
+        onPresentationFailed: @escaping (UUID, UUID) -> Void,
+        onInitialImageVisibleLeaseAcquired: @escaping (UUID, UUID) -> Void
+    ) {
+        self.viewModel = viewModel
+        self.onPresentationReady = onPresentationReady
+        self.onPresentationFailed = onPresentationFailed
+        self.onInitialImageVisibleLeaseAcquired = onInitialImageVisibleLeaseAcquired
     }
 
     var body: some View {
@@ -106,8 +117,8 @@ struct NovelReaderView: View {
                     Spacer()
 
                     NovelReaderFooterView(
-                        hasPrev: viewModel.previousChapter != nil || viewModel.boundaryBefore(viewModel.currentChapter).needsGroupConsent,
-                        hasNext: viewModel.nextChapter != nil || viewModel.boundaryAfter(viewModel.currentChapter).needsGroupConsent,
+                        hasPrev: viewModel.boundaryBefore(viewModel.currentChapter).canNavigate,
+                        hasNext: viewModel.boundaryAfter(viewModel.currentChapter).canNavigate,
                         safeAreaBottom: safeAreaBottom,
                         onPrevChapter: { viewModel.goToPreviousChapter() },
                         onNextChapter: { viewModel.goToNextChapter() },
@@ -144,7 +155,7 @@ struct NovelReaderView: View {
                 appendFailed: viewModel.appendFailed,
                 onRetryNextChapter: { viewModel.retryNextChapter() },
                 boundaryNotice: viewModel.loadedChapters.last.flatMap {
-                    ReaderBoundaryNotice.textAfterLast(for: viewModel.boundaryAfter($0.chapter))
+                    ReaderBoundaryNotice.text(for: viewModel.boundaryAfter($0.chapter), isNext: true)
                 },
                 currentChapter: Binding(
                     get: { viewModel.currentChapter },
@@ -161,7 +172,24 @@ struct NovelReaderView: View {
                         reachedEnd: isLast
                     )
                 },
-                onBoundaryNoticeTap: { viewModel.requestGroupSwitch(.next, atLoadedEdge: true) }
+                // Before the first chapter only a neighbor that opens in the other reader is offered; where
+                // the previous chapter is locked, not downloaded or from another group, reading stays as it was.
+                previousBoundaryNotice: viewModel.loadedChapters.first.flatMap {
+                    let boundary = viewModel.boundaryBefore($0.chapter)
+                    return boundary.isHandoff ? ReaderBoundaryNotice.text(for: boundary, isNext: false) : nil
+                },
+                onBoundaryNoticeTap: { requestPagedNoticeAction(isNext: true) },
+                onPreviousBoundaryNoticeTap: { requestPagedNoticeAction(isNext: false) },
+                onInitialLayoutApplied: { _, chapterID in
+                    guard case .staged(let requestID, let visitID) = viewModel.presentationMode,
+                          chapterID == viewModel.loadedChapters.first?.id else { return }
+                    onPresentationReady(requestID, visitID)
+                },
+                onLayoutFailed: {
+                    guard case .staged(let requestID, let visitID) = viewModel.presentationMode else { return }
+                    onPresentationFailed(requestID, visitID)
+                },
+                onInitialImageVisibleLease: { key in reportInitialImage(key) }
             )
             .simultaneousGesture(toggleUIGesture)
         } else {
@@ -182,6 +210,7 @@ struct NovelReaderView: View {
                                 .padding(.horizontal)
                                 .onAppear {
                                     viewModel.continuousChapterTitleAppeared(loadedChapter)
+                                    reportContinuousLayoutIfReady()
                                 }
                                 .onDisappear {
                                     viewModel.continuousChapterTitleDisappeared(loadedChapter)
@@ -195,6 +224,7 @@ struct NovelReaderView: View {
                                             chapterID: loadedChapter.id,
                                             pageIndex: index
                                         )
+                                        reportContinuousLayoutIfReady()
                                     }
                                     .onDisappear {
                                         viewModel.continuousPageDisappeared(
@@ -239,7 +269,7 @@ struct NovelReaderView: View {
                 .padding()
         } else if let last = viewModel.loadedChapters.last {
             let boundary = viewModel.boundaryAfter(last.chapter)
-            if let notice = ReaderBoundaryNotice.textAfterLast(for: boundary) {
+            if let notice = ReaderBoundaryNotice.text(for: boundary, isNext: true) {
                 VStack(spacing: 8) {
                     Image(systemName: notice.systemImage)
                         .font(.title2)
@@ -257,10 +287,16 @@ struct NovelReaderView: View {
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    if notice.requestsGroupConsent { viewModel.requestGroupSwitch(.next, atLoadedEdge: true) }
+                    if notice.requestsHandoff {
+                        viewModel.requestHandoff(direction: .next, position: .start, trigger: .chapterControl, atLoadedEdge: true)
+                    } else if notice.requestsGroupConsent {
+                        viewModel.requestGroupSwitch(.next, atLoadedEdge: true)
+                    }
                 }
+                .onAppear { viewModel.continuousHandoffBoundaryAppeared() }
+                .onDisappear { viewModel.releaseHandoffLatch() }
                 .accessibilityElement(children: .combine)
-                .accessibilityAddTraits(notice.requestsGroupConsent ? .isButton : [])
+                .accessibilityAddTraits(notice.requestsGroupConsent || notice.requestsHandoff ? .isButton : [])
                 .padding()
             } else if let next = boundary.chapter {
                 if viewModel.appendFailed {
@@ -302,6 +338,9 @@ struct NovelReaderView: View {
         let block = NovelTextOffsets.blockIndex(containing: anchor.offset, in: loaded.pages)
         proxy.scrollTo(blockID(anchor.chapterID, block), anchor: .top)
         viewModel.consumeRestoreAnchor(anchor)
+        // The place is applied: that is the evidence a destination behind the visible reader is laid out,
+        // including a short chapter whose rows were already on screen and will not appear again.
+        reportContinuousLayoutIfReady()
     }
 
     private var toggleUIGesture: some Gesture {
@@ -374,10 +413,41 @@ struct NovelReaderView: View {
         .accessibilityAction(.escape, closeSettings)
     }
 
+    /// The user tapped the notice at a loaded chapter's edge: continue in the other reader, or ask about the group.
+    private func requestPagedNoticeAction(isNext: Bool) {
+        let boundary = isNext
+            ? viewModel.boundaryAfter(viewModel.loadedChapters.last?.chapter ?? viewModel.currentChapter)
+            : viewModel.boundaryBefore(viewModel.currentChapter)
+        if boundary.isHandoff {
+            viewModel.requestHandoff(
+                direction: isNext ? .next : .previous,
+                position: isNext ? .start : .end,
+                trigger: .chapterControl,
+                atLoadedEdge: isNext
+            )
+        } else if isNext {
+            viewModel.requestGroupSwitch(.next, atLoadedEdge: true)
+        }
+    }
+
     private func closeSettings() {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             showSettings = false
         }
+    }
+
+    /// A destination built behind the visible reader reports its first image holding a lease of this renderer,
+    /// which is when the route's own lease can go.
+    private func reportInitialImage(_ key: ReaderPageImageKey) {
+        guard let requestID = viewModel.arrivalRequestID, key == viewModel.preparedImageKey else { return }
+        onInitialImageVisibleLeaseAcquired(requestID, viewModel.routeVisitID)
+    }
+
+    /// The scrolling text is laid out once any pending place is applied and a row of it is on screen.
+    private func reportContinuousLayoutIfReady() {
+        guard case .staged(let requestID, let visitID) = viewModel.presentationMode,
+              !viewModel.isPaging, viewModel.restoreAnchor == nil, !viewModel.loadedChapters.isEmpty else { return }
+        onPresentationReady(requestID, visitID)
     }
 
     @ViewBuilder
@@ -399,7 +469,11 @@ struct NovelReaderView: View {
                 session: viewModel.imageSession,
                 pageID: pageID,
                 foreground: viewModel.theme.textColor,
-                interaction: .passive
+                interaction: .passive,
+                onVisibleLeaseAcquired: { key in
+                    reportInitialImage(key)
+                    reportContinuousLayoutIfReady()
+                }
             )
                 .padding(.horizontal)
         }

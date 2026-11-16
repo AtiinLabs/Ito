@@ -8,13 +8,21 @@ import ito_runner
 struct MangaContinuousReaderView: UIViewControllerRepresentable {
     let viewModel: MangaReaderViewModel
     let onToggleUI: () -> Void
+    let onInitialLayout: () -> Void
+    /// Told with the request's key each time an image of the renderer holds a visible lease.
+    let onImageVisibleLease: (ReaderPageImageKey) -> Void
 
     func makeUIViewController(context: Context) -> MangaContinuousCollectionViewController {
-        MangaContinuousCollectionViewController(viewModel: viewModel, onToggleUI: onToggleUI)
+        let controller = MangaContinuousCollectionViewController(viewModel: viewModel, onToggleUI: onToggleUI)
+        controller.onInitialLayout = onInitialLayout
+        controller.onImageVisibleLease = onImageVisibleLease
+        return controller
     }
 
     func updateUIViewController(_ controller: MangaContinuousCollectionViewController, context: Context) {
         controller.onToggleUI = onToggleUI
+        controller.onInitialLayout = onInitialLayout
+        controller.onImageVisibleLease = onImageVisibleLease
     }
 
     static func dismantleUIViewController(_ controller: MangaContinuousCollectionViewController, coordinator: ()) {
@@ -77,6 +85,11 @@ final class MangaContinuousCollectionViewController: UIViewController,
     private var isLandingNavigation = false
     private var lastReportedPageIDs: [String] = []
     private var isInvalidated = false
+    /// Called once, when the first position the view model asked for is on screen.
+    var onInitialLayout: (() -> Void)?
+    /// Told with the request's key each time an image of this renderer holds a visible lease.
+    var onImageVisibleLease: ((ReaderPageImageKey) -> Void)?
+    private var initialLayoutReported = false
 
 #if DEBUG
     /// Called after every layout transaction this controller commits.
@@ -216,6 +229,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
         updateRendererWindow()
         performPendingNavigation()
         reportViewport()
+        reportInitialLayoutIfReady()
     }
 
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -566,6 +580,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
             let isCurrentLanding = landed && self.viewportEpoch == epoch
             let pageIDs = self.visiblePageIDs()
             self.viewModel.consumeScrollTarget(request)
+            self.reportInitialLayoutIfReady()
             guard self.pendingNavigation == nil, !self.isChangingZoom,
                   !self.scrollView.isZooming, !self.scrollView.isZoomBouncing else { return }
             guard !pageIDs.isEmpty else { return }
@@ -575,6 +590,32 @@ final class MangaContinuousCollectionViewController: UIViewController,
                 preferredPageID: isCurrentLanding ? request.pageID : nil
             )
             if appendingIfNearEnd { self.appendIfNearEnd() }
+        }
+    }
+
+    /// A destination built behind the visible reader is ready once its rows are laid out and the scroll
+    /// position it asked for has been applied and acknowledged; a first layout alone is not.
+    private func reportInitialLayoutIfReady() {
+        guard !initialLayoutReported, !isInvalidated, scrollView.bounds.height > 0, !rows.isEmpty,
+              pendingNavigation == nil, animatingNavigation == nil, viewModel.scrollTarget == nil else { return }
+        initialLayoutReported = true
+        onInitialLayout?()
+    }
+
+    /// Reaching the actual end of the last loaded chapter by the user's own scrolling, when the next chapter
+    /// opens in the other reader, is one crossing. Nearness alone, layout, restores and new rows are not.
+    private func requestHandoffIfAtEnd() {
+        guard let snapshot, snapshot.nextBoundary.isHandoff, view.window != nil,
+              let lastPage = snapshot.pages.last, let frame = pageFrame(lastPage.id),
+              frame.maxY <= documentViewport.maxY else { return }
+        let revision = snapshot.revision
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.isInvalidated, self.snapshot?.revision == revision,
+                  let lastPage = self.snapshot?.pages.last, let frame = self.pageFrame(lastPage.id),
+                  frame.maxY <= self.documentViewport.maxY else { return }
+            self.viewModel.requestHandoff(
+                direction: .next, position: .start, trigger: .visibleBoundary, atLoadedEdge: true
+            )
         }
     }
 
@@ -729,6 +770,7 @@ final class MangaContinuousCollectionViewController: UIViewController,
     /// Asks for the next chapter when the user scrolls near the bottom of the last page. Only
     /// the user's own scrolling counts: inserting rows never starts another load.
     private func appendIfNearEnd() {
+        requestHandoffIfAtEnd()
         guard let snapshot, snapshot.nextChapter != nil, !snapshot.loadingNext, !snapshot.appendFailed,
               view.window != nil, let lastPage = snapshot.pages.last, let frame = pageFrame(lastPage.id) else {
             return
@@ -802,7 +844,8 @@ final class MangaContinuousCollectionViewController: UIViewController,
                 pageID: page.id,
                 fillsRowWidth: true,
                 interaction: .continuous(onTap: { [weak self] in self?.onToggleUI() }),
-                imageLabel: String(localized: "Page \(page.chapterPosition + 1)", comment: "Accessibility label of a manga page; number is its position in the chapter")
+                imageLabel: String(localized: "Page \(page.chapterPosition + 1)", comment: "Accessibility label of a manga page; number is its position in the chapter"),
+                onVisibleLeaseAcquired: { [weak self] key in self?.onImageVisibleLease?(key) }
             ))
         case .text(let text):
             return AnyView(MangaContinuousTextPage(text: text))
@@ -818,7 +861,12 @@ final class MangaContinuousCollectionViewController: UIViewController,
             notice: ReaderBoundaryNotice.pages(for: boundary, isNext: false),
             action: { [weak self] in
                 guard let self else { return }
-                if boundary.needsGroupConsent {
+                if boundary.isHandoff {
+                    // The user's own tap on the prompt above the first loaded chapter.
+                    self.viewModel.requestHandoff(
+                        direction: .previous, position: .end, trigger: .visibleBoundary, atLoadedEdge: true
+                    )
+                } else if boundary.needsGroupConsent {
                     self.viewModel.requestGroupSwitch(.previous, atLoadedEdge: true)
                 } else {
                     self.viewModel.prependPreviousChapter()
@@ -836,7 +884,11 @@ final class MangaContinuousCollectionViewController: UIViewController,
             notice: ReaderBoundaryNotice.pages(for: boundary, isNext: true),
             action: { [weak self] in
                 guard let self else { return }
-                if boundary.needsGroupConsent {
+                if boundary.isHandoff {
+                    self.viewModel.requestHandoff(
+                        direction: .next, position: .start, trigger: .chapterControl, atLoadedEdge: true
+                    )
+                } else if boundary.needsGroupConsent {
                     self.viewModel.requestGroupSwitch(.next, atLoadedEdge: true)
                 } else if self.snapshot?.appendFailed == true {
                     self.viewModel.retryAppendNextChapter()
@@ -1014,7 +1066,7 @@ private struct MangaContinuousChapterPrompt: View {
     let action: () -> Void
 
     var body: some View {
-        if let notice, !notice.requestsGroupConsent {
+        if let notice, !notice.requestsGroupConsent, !notice.requestsHandoff {
             // Where reading stops there is nothing to press: the prompt only says why.
             content.accessibilityElement(children: .combine)
         } else {

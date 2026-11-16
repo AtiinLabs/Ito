@@ -699,6 +699,75 @@ final class MangaContinuousRendererTests: XCTestCase {
         XCTAssertLessThanOrEqual(controller.collectionView.bounds.height, scrollView.bounds.height * 2)
     }
 
+    // MARK: - Handoff to the other reader
+
+    /// Resolves once every block already queued on the main queue has run: the renderer hands its crossing to
+    /// the main queue after checking geometry, so this is a barrier on its delivery, not a wait on time.
+    private func mainQueueBarrier() async {
+        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+    }
+
+    func testReachingTheEndBeforeATextChapterIsOneCrossingFromTheRendererAndLayoutIsNone() async throws {
+        let scrollView = MomentumScrollView()
+        let reader = try await openReader(
+            chapters: [chapter("c1", 1), readerChapter("t2", 2, text: true)], initial: "c1", pageCount: 12,
+            scrollView: scrollView
+        )
+        let router = RecordingHandoffRouter()
+        reader.subject.viewModel.handoffRouter = router
+        let viewModel = reader.subject.viewModel
+        XCTAssertTrue(viewModel.continuousSnapshot.nextBoundary.isHandoff)
+
+        // The first layout, an append attempt and the viewport settling are not the user reaching the end.
+        viewModel.appendNextChapter()
+        viewModel.continuousViewportSettled()
+        await mainQueueBarrier()
+        XCTAssertTrue(router.events.isEmpty)
+
+        // The user's own scroll to the actual end is one crossing, however often it reports the same end.
+        scrollView.simulatesDeceleration = true
+        let crossed = expectation(description: "the renderer asks for the crossing")
+        router.onEvent = { crossed.fulfill() }
+        let bottom = scrollView.contentSize.height - scrollView.bounds.height
+        scrollView.contentOffset = CGPoint(x: 0, y: bottom)
+        await fulfillment(of: [crossed], timeout: 5)
+        scrollView.contentOffset = CGPoint(x: 0, y: bottom - 1)
+        scrollView.contentOffset = CGPoint(x: 0, y: bottom)
+        await mainQueueBarrier()
+        XCTAssertEqual(router.events.count, 1)
+        XCTAssertEqual(router.events.first?.trigger, .visibleBoundary)
+        XCTAssertEqual(router.events.first?.direction, .next)
+        XCTAssertEqual(router.events.first?.position, .start)
+        XCTAssertEqual(router.events.first?.origin.key, "c1")
+
+        // Leaving the end and reaching it again is a new crossing.
+        _ = try reader.scroll(toPage: "c1#0", pixelOffset: 0)
+        // The renderer reports the pages on screen through the main queue: the departure is delivered first.
+        await mainQueueBarrier()
+        let again = expectation(description: "a new arrival at the end")
+        router.onEvent = { again.fulfill() }
+        scrollView.contentOffset = CGPoint(x: 0, y: bottom)
+        await fulfillment(of: [again], timeout: 5)
+        XCTAssertEqual(router.events.count, 2)
+    }
+
+    func testTheFirstLayoutIsReportedOnceAndOnlyAfterTheRequestedPlaceIsApplied() async throws {
+        let reported = expectation(description: "the first layout is reported")
+        let probe = LayoutReports()
+        let reader = try await openReader(
+            chapters: [chapter("a", 1)], initial: "a", pageCount: 6, savedPage: 3,
+            onInitialLayout: { probe.count += 1; reported.fulfill() }
+        )
+        await fulfillment(of: [reported], timeout: 5)
+
+        XCTAssertNil(reader.subject.viewModel.scrollTarget, "The place was applied and acknowledged first")
+        XCTAssertEqual(reader.subject.viewModel.continuousPageIndex, 3)
+        reader.controller.view.setNeedsLayout()
+        reader.controller.view.layoutIfNeeded()
+        await mainQueueBarrier()
+        XCTAssertEqual(probe.count, 1, "Later layouts do not report again")
+    }
+
     // MARK: - Fixtures
 
     private func openReader(
@@ -707,7 +776,8 @@ final class MangaContinuousRendererTests: XCTestCase {
         pageCount: Int,
         savedPage: Int? = nil,
         windowSize: CGSize = CGSize(width: 390, height: 844),
-        scrollView: UIScrollView = UIScrollView()
+        scrollView: UIScrollView = UIScrollView(),
+        onInitialLayout: (() -> Void)? = nil
     ) async throws -> RendererFixture {
         let images = GatedImageLoader()
         let pipeline = ImagePipeline {
@@ -733,6 +803,7 @@ final class MangaContinuousRendererTests: XCTestCase {
         let controller = MangaContinuousCollectionViewController(
             viewModel: subject.viewModel, onToggleUI: {}, scrollView: scrollView
         )
+        controller.onInitialLayout = onInitialLayout
         window.rootViewController = controller
         window.makeKeyAndVisible()
         controller.view.layoutIfNeeded()
@@ -755,6 +826,12 @@ final class MangaContinuousRendererTests: XCTestCase {
         }
         XCTFail("Timed out waiting for the reader")
     }
+}
+
+/// Counts what a renderer reports about its first layout.
+@MainActor
+private final class LayoutReports {
+    var count = 0
 }
 
 @MainActor

@@ -6,9 +6,22 @@ import ito_runner
 final class MangaReaderViewModel: ObservableObject {
     let pluginID: String
     let entry: MediaEntry
-    let pageLoader: any MangaPageLoading
+    /// Loads a chapter with the form it is actually stored or served in.
+    let chapterPreparer: any ReaderChapterPreparing
+    /// What every renderer visit of this route shares: History, completion and position writes.
+    let routeSession: ReaderRouteSession
+    /// Identifies this renderer visit among the route's.
+    let routeVisitID: UUID
     /// Stored copies and the route's source: where reading stops, and the downloaded copy to offer.
     let offline: ReaderOfflineContext
+
+    /// Live, or built behind the visible reader for one handoff request.
+    @Published private(set) var presentationMode: ReaderPresentationMode
+    weak var handoffRouter: (any ReaderHandoffRouting)?
+    /// The handoff request this reader was built for, kept after it goes live.
+    var arrivalRequestID: UUID?
+    /// The request of the first image the destination shows, for handing the route's lease over.
+    var preparedImageKey: ReaderPageImageKey?
 
     @Published private(set) var currentChapter: Manga.Chapter
     @Published private(set) var loadPhase: MangaReaderLoadPhase = .idle
@@ -25,7 +38,7 @@ final class MangaReaderViewModel: ObservableObject {
         didSet { retainImageRequestsForChapterWindow() }
     }
 
-    @Published private(set) var segments: [ChapterSegment] = [] {
+    @Published var segments: [ChapterSegment] = [] {
         didSet { rebuildFlatPages() }
     }
     /// Every page of `segments` in reading order; rebuilt only when `segments` changes.
@@ -33,36 +46,48 @@ final class MangaReaderViewModel: ObservableObject {
     @Published private(set) var continuousPageIndex = 0
     @Published private(set) var continuousSnapshot = MangaContinuousReaderSnapshot.empty
     @Published private(set) var scrollTarget: MangaScrollRequest?
-    @Published private(set) var loadingNextChapter = false {
+    @Published var loadingNextChapter = false {
         didSet { publishContinuousSnapshot() }
     }
-    @Published private(set) var loadingPrevChapter = false {
+    @Published var loadingPrevChapter = false {
         didSet { publishContinuousSnapshot() }
     }
-    @Published private(set) var appendFailed = false {
+    @Published var appendFailed = false {
         didSet { publishContinuousSnapshot() }
     }
-    @Published private(set) var prependFailed = false {
+    @Published var prependFailed = false {
         didSet { publishContinuousSnapshot() }
     }
 
-    private(set) var markedChapterKeys: Set<String> = []
+    /// The chapters this route marked read, by exact key.
+    var markedChapterKeys: Set<String> { routeSession.claimedCompletionKeys }
 
     let dependencies: PreparedMangaReaderDependencies
     let imagePrefetcher: any MangaReaderImagePrefetching
     let imageSession: ReaderPageImageSession
     let mediaIdentity: MediaIdentity
-    /// Captured once per reader session; every chapter in the session shares it.
-    let completionContext: PluginCompletionContext
+    /// Captured once per route; every chapter and both readers share it.
+    var completionContext: PluginCompletionContext { routeSession.completionContext }
 
     private(set) var isActive = true
-    private var hasPresentedPresence = false
+    var hasPresentedPresence = false
     private(set) var sessionID = UUID()
-    private(set) var contentGeneration: UInt64 = 0
+    var contentGeneration: UInt64 = 0
+    /// Set when the route replaced this reader with the other one, not when it was closed.
+    var handoffRetired = false
+    /// The reader's view is mounted; a destination uses it to present itself once it goes live.
+    var viewAppeared = false
+    var effectGate = ReaderEffectGate()
+    var handoffLatch: ReaderHandoffLatch?
+    var transition: MangaTransitionSnapshot?
+    /// What each loaded chapter's source choice pins, for as long as the chapter is in this window.
+    var chapterResolvers: [ExactChapterKey: OfflineChapterSourceResolver] = [:]
+    /// Neighbors found to be made for the other reader, with what was already loaded for them.
+    var heldPayloads: [ExactChapterKey: ReaderPreparedChapter] = [:]
 
     private var networkSubscription: AnyCancellable?
-    private var mainLoadTask: Task<Void, Never>?
-    private var mainLoadOperationID: UUID?
+    var mainLoadTask: Task<Void, Never>?
+    var mainLoadOperationID: UUID?
     // Written by the adjacent-prefetch extension in its own file, so the setters stay internal.
     var adjacentPrefetchTask: Task<Void, Never>?
     var adjacentPrefetchOperationID: UUID?
@@ -70,32 +95,29 @@ final class MangaReaderViewModel: ObservableObject {
     /// The neighbors the last prefetch was started for.
     var adjacentPrefetchKeys: Set<String> = []
     /// A boundary changed while the reader was inactive; `appear()` applies it.
-    private var offlineChangeWaiting = false
+    var offlineChangeWaiting = false
     /// Operations whose end was logged, so an operation ends in the log once however many paths finish it.
     var finalizedLogOperations: Set<UUID> = []
-    private(set) var appendTask: Task<Void, Never>?
-    private(set) var appendOperationID: UUID?
-    private(set) var appendPrefetchEpoch: NetworkPrefetchEpoch?
+    var appendTask: Task<Void, Never>?
+    var appendOperationID: UUID?
+    var appendPrefetchEpoch: NetworkPrefetchEpoch?
     var appendBoundary: ChapterToken?
     var appendSession: UUID?
     var appendGeneration: UInt64?
-    private var prependTask: Task<Void, Never>?
-    private var prependOperationID: UUID?
+    var prependTask: Task<Void, Never>?
+    var prependOperationID: UUID?
     /// A chapter-window trim that waited for the viewport to stop moving.
-    private var pendingTrim: ContinuousLoadedEnd?
-    private var effectTasks: [UUID: Task<Void, Never>] = [:]
-    /// Page writes run one after another so an older write cannot land after a newer one.
-    private var pageWriteTask: Task<Void, Never>?
-    private var lastSavedPage: (chapterKey: String, page: Int)?
-    private var settingsWriteTask: Task<Void, Never>?
+    var pendingTrim: ContinuousLoadedEnd?
+    var effectTasks: [UUID: Task<Void, Never>] = [:]
+    var lastSavedPage: (chapterKey: String, page: Int)?
+    var settingsWriteTask: Task<Void, Never>?
     private var viewerWriteTask: Task<Void, Never>?
-    private var historyChapterKeys: Set<String> = []
-    private var flatPageIndexByID: [String: Int] = [:]
+    var flatPageIndexByID: [String: Int] = [:]
     /// Continuous pages on screen; the topmost is the current page.
-    private var visiblePageIDs: Set<String> = []
+    var visiblePageIDs: Set<String> = []
     /// Whether the last loaded page is on screen, so the reader is at the loaded chapter's end.
     var readerIsAtLoadedEnd: Bool { flatPages.last.map { visiblePageIDs.contains($0.id) } ?? false }
-    private var continuousViewportRetention = MangaContinuousViewportRetentionRegistry()
+    var continuousViewportRetention = MangaContinuousViewportRetentionRegistry()
     private var visiblePageOrder: [String] = []
     private var continuousMutationDepth = 0
     private var continuousSnapshotRevision: UInt64 = 0
@@ -103,14 +125,21 @@ final class MangaReaderViewModel: ObservableObject {
     nonisolated deinit {}
 
     init(
-        pageLoader: any MangaPageLoading,
+        chapterPreparer: any ReaderChapterPreparing,
+        routeSession: ReaderRouteSession,
+        routeVisitID: UUID,
+        presentationMode: ReaderPresentationMode,
         pluginID: String,
         entry: MediaEntry,
         initialChapter: Manga.Chapter,
         dependencies: PreparedMangaReaderDependencies,
         offline: ReaderOfflineContext
     ) {
-        self.pageLoader = pageLoader
+        self.chapterPreparer = chapterPreparer
+        self.routeSession = routeSession
+        self.routeVisitID = routeVisitID
+        self.presentationMode = presentationMode
+        if case .staged(let requestID, _) = presentationMode { arrivalRequestID = requestID }
         self.pluginID = pluginID
         self.entry = entry
         self.offline = offline
@@ -120,10 +149,10 @@ final class MangaReaderViewModel: ObservableObject {
         imageSession = imagePrefetcher.imageSession
         preloadImageCount = dependencies.settings.mangaReaderPreloadImageCount
         mediaIdentity = MediaIdentity(pluginId: pluginID, canonicalMediaId: entry.key, mediaKind: entry.kind)
-        completionContext = dependencies.progress.captureCompletionContext(media: mediaIdentity, mediaKey: entry.key)
         overrideViewer = dependencies.progress.savedViewer(media: mediaIdentity) ?? .Default
         publishContinuousSnapshot()
         observeOfflineChanges()
+        offline.bind(downloadedCopy: self)
         networkSubscription = dependencies.settings.mangaReaderNetworkChanges.sink { @Sendable [weak self] in
             Task { @MainActor in self?.networkPolicyDidChange() }
         }
@@ -173,11 +202,11 @@ final class MangaReaderViewModel: ObservableObject {
         )
     }
 
-    private func beginContinuousMutation() {
+    func beginContinuousMutation() {
         continuousMutationDepth += 1
     }
 
-    private func endContinuousMutation() {
+    func endContinuousMutation() {
         guard continuousMutationDepth > 0 else { return }
         continuousMutationDepth -= 1
         if continuousMutationDepth == 0 { publishContinuousSnapshot() }
@@ -186,7 +215,7 @@ final class MangaReaderViewModel: ObservableObject {
     // MARK: - Presentation lifecycle
 
     func start() {
-        guard isActive else { return }
+        guard isActive, presentationMode.isLive else { return }
         switch loadPhase {
         case .content, .failure:
             return
@@ -199,10 +228,14 @@ final class MangaReaderViewModel: ObservableObject {
     }
 
     func appear() {
+        viewAppeared = true
+        // A destination built behind the visible reader only records that it is mounted.
+        guard presentationMode.isLive, !handoffRetired else { return }
         let isResumingCancelledLoad = !isActive && loadPhase == .loading
         if !isActive {
             isActive = true
             sessionID = UUID()
+            effectGate = ReaderEffectGate()
         }
         hasPresentedPresence = true
         presentPresence(for: currentChapter, resetTimer: true)
@@ -213,21 +246,58 @@ final class MangaReaderViewModel: ObservableObject {
     }
 
     func disappear() {
+        guard presentationMode.isLive else {
+            discardPreparedPresentation()
+            return
+        }
         guard isActive else { return }
         isActive = false
+        viewAppeared = false
         hasPresentedPresence = false
         sessionID = UUID()
         groupSwitchConsent = nil
         contentGeneration &+= 1
         cancelContentOperations()
         // Not cancelled: a chapter's local read mark is durable progress and must finish even
-        // if the reader closes right after the last page. The tracker step checks `isActive`.
+        // if the reader closes right after the last page. A tracker step needs the gate open, which a
+        // reader that is closed (not one handing off to the other) shuts.
+        if !handoffRetired { effectGate.isOpen = false }
         effectTasks.removeAll()
         settingsWriteTask?.cancel()
         settingsWriteTask = nil
         imagePrefetcher.stopPrefetching()
         imageSession.deactivate()
         dependencies.presence.clearMangaReaderPresence()
+    }
+
+    /// Puts the chapter a transition was leaving back on screen, where the reader really was: the page it
+    /// was on, and for scrolling the same page as a scroll target the view applies without animating.
+    func restoreTransition(_ snapshot: MangaTransitionSnapshot) {
+        currentChapter = snapshot.chapter
+        pagedPages = snapshot.pagedPages
+        pagedIndex = snapshot.pagedIndex
+        segments = snapshot.segments
+        continuousPageIndex = snapshot.continuousPageIndex
+        scrollTarget = snapshot.scrollTarget
+        loadPhase = snapshot.loadPhase
+    }
+
+    /// The route made this reader live, or built it behind the visible one; only the route decides.
+    func setPresentationMode(_ mode: ReaderPresentationMode) { presentationMode = mode }
+
+    /// The chapter is made for the other reader and no route can take it.
+    func failDivertedLoad() {
+        loadPhase = .failure(ReaderRouteError.otherReader.localizedDescription)
+    }
+
+    /// Drops a destination that was never shown: its own work and images end, and nothing of the visible
+    /// reader (presence included) is touched.
+    func discardPreparedPresentation() {
+        guard !presentationMode.isLive else { return }
+        isActive = false
+        invalidateContentOperations()
+        imagePrefetcher.stopPrefetching()
+        imageSession.deactivate()
     }
 
     /// Loads the current chapter again after it failed to load.
@@ -257,7 +327,7 @@ final class MangaReaderViewModel: ObservableObject {
     /// Applies a boundary change to a paged reader. One that arrives while the reader is inactive waits
     /// for `appear()`. A prefetch in flight is left alone unless the neighbors to fetch changed.
     func applyOfflineChange() {
-        guard isActive else { return offlineChangeWaiting = true }
+        guard isActive, presentationMode.isLive else { return offlineChangeWaiting = true }
         offlineChangeWaiting = false
         guard isPaged, loadPhase == .content, !pagedPages.isEmpty else { return }
         if pagedIndex < 0 || pagedIndex >= pagedPages.count {
@@ -331,7 +401,16 @@ final class MangaReaderViewModel: ObservableObject {
     // MARK: - Chapter and page navigation
 
     func setPagedIndex(_ newIndex: Int) {
-        guard isActive else { return }
+        guard isActive, presentationMode.isLive else { return }
+        // The other reader's chapter: the pager rests on its notice and the route takes the crossing.
+        if newIndex == pagedPages.count, boundaryAfter(currentChapter).isHandoff {
+            requestHandoff(direction: .next, position: .start, trigger: .pagedEdge, atLoadedEdge: false)
+            return
+        }
+        if newIndex == -1, boundaryBefore(currentChapter).isHandoff {
+            requestHandoff(direction: .previous, position: .end, trigger: .pagedEdge, atLoadedEdge: false)
+            return
+        }
         // Another group's chapter waits for consent: the pager is not moved onto it.
         if newIndex == pagedPages.count, boundaryAfter(currentChapter).needsGroupConsent {
             requestGroupSwitch(.next)
@@ -341,14 +420,15 @@ final class MangaReaderViewModel: ObservableObject {
             requestGroupSwitch(.previous, opensAtEnd: true)
             return
         }
+        if pagedPages.indices.contains(newIndex) { endHandoffCrossing() }
         pagedIndex = newIndex
         if newIndex == pagedPages.count,
            let next = boundaryAfter(currentChapter).chapter {
-            pagedGoToChapter(next)
+            pagedGoToChapter(next, direction: .next, trigger: .pagedEdge)
         } else if newIndex == -1,
                   let previous = boundaryBefore(currentChapter).chapter {
             // Swiping back past the first page continues from the end of the previous chapter.
-            pagedGoToChapter(previous, opensAtEnd: true)
+            pagedGoToChapter(previous, opensAtEnd: true, direction: .previous, trigger: .pagedEdge)
         } else if pagedPages.indices.contains(newIndex) {
             pageShown(in: currentChapter, at: newIndex, pageCount: pagedPages.count)
             prefetchPagedImages(around: newIndex)
@@ -387,25 +467,37 @@ final class MangaReaderViewModel: ObservableObject {
     }
 
     func goToNextChapter() {
-        guard isActive else { return }
+        guard isActive, presentationMode.isLive else { return }
         let boundary = boundaryAfter(currentChapter)
+        if boundary.isHandoff {
+            requestHandoff(direction: .next, position: .resume, trigger: .chapterControl, atLoadedEdge: false)
+            return
+        }
         if boundary.needsGroupConsent {
             requestGroupSwitch(.next)
             return
         }
         guard let next = boundary.chapter else { return }
         if isPaged {
-            pagedGoToChapter(next)
+            pagedGoToChapter(next, direction: .next, trigger: .chapterControl)
         } else {
-            continuousGoToChapter(next)
+            continuousGoToChapter(next, direction: .next, trigger: .chapterControl)
         }
     }
 
     func setGroupSwitchConsent(_ consent: ReaderGroupSwitchConsent<Manga.Chapter>?) { groupSwitchConsent = consent }
 
     /// Opens the one neighbor the user approved, in the reader's current mode.
-    func openApprovedGroupSwitch(_ chapter: Manga.Chapter, opensAtEnd: Bool) {
-        if isPaged { pagedGoToChapter(chapter, opensAtEnd: opensAtEnd) } else { continuousGoToChapter(chapter) }
+    func openApprovedGroupSwitch(
+        _ chapter: Manga.Chapter,
+        opensAtEnd: Bool,
+        direction: ReaderHandoffDirection
+    ) {
+        if isPaged {
+            pagedGoToChapter(chapter, opensAtEnd: opensAtEnd, direction: direction, trigger: .chapterControl, approved: true)
+        } else {
+            continuousGoToChapter(chapter, direction: direction, trigger: .chapterControl, approved: true)
+        }
     }
 
     func cachePrefetchedChapter(_ pages: [Page], for key: String) { prefetchedChapters[key] = pages }
@@ -446,17 +538,21 @@ final class MangaReaderViewModel: ObservableObject {
     }
 
     func goToPreviousChapter() {
-        guard isActive else { return }
+        guard isActive, presentationMode.isLive else { return }
         let boundary = boundaryBefore(currentChapter)
+        if boundary.isHandoff {
+            requestHandoff(direction: .previous, position: .resume, trigger: .chapterControl, atLoadedEdge: false)
+            return
+        }
         if boundary.needsGroupConsent {
             requestGroupSwitch(.previous)
             return
         }
         guard let previous = boundary.chapter else { return }
         if isPaged {
-            pagedGoToChapter(previous)
+            pagedGoToChapter(previous, direction: .previous, trigger: .chapterControl)
         } else {
-            continuousGoToChapter(previous)
+            continuousGoToChapter(previous, direction: .previous, trigger: .chapterControl)
         }
     }
 
@@ -469,7 +565,7 @@ final class MangaReaderViewModel: ObservableObject {
 
     /// Receives page IDs ordered by their actual image-frame position in the continuous viewport.
     func continuousViewportChanged(_ pageIDs: [String], preferredPageID: String? = nil) {
-        guard isActive, !isPaged else { return }
+        guard isActive, presentationMode.isLive, !isPaged else { return }
         let validIDs = pageIDs.filter { flatPageIndexByID[$0] != nil }
         guard !validIDs.isEmpty else { return }
 
@@ -501,9 +597,23 @@ final class MangaReaderViewModel: ObservableObject {
             // Several short strips can be on screen at once: preload past the last of them.
             prefetchContinuousImages(around: bottomIndex, allPages: flatPages)
         }
+        releaseHandoffLatchIfViewportLeftEdge()
     }
 
-    private func pagedGoToChapter(_ chapter: Manga.Chapter, opensAtEnd: Bool = false) {
+    private func pagedGoToChapter(
+        _ chapter: Manga.Chapter,
+        opensAtEnd: Bool = false,
+        direction: ReaderHandoffDirection = .next,
+        trigger: ReaderHandoffTrigger = .chapterControl,
+        approved: Bool = false
+    ) {
+        // What the reader holds now, until the chapter proves to be made for this reader.
+        if prefetchedChapters[chapter.key] == nil {
+            beginTransitionSnapshot(direction: direction, trigger: trigger, approved: approved)
+        } else {
+            transition = nil
+        }
+        endHandoffCrossing()
         invalidateContentOperations()
         changeCurrentChapter(to: chapter)
         if let cached = prefetchedChapters[chapter.key] {
@@ -526,12 +636,19 @@ final class MangaReaderViewModel: ObservableObject {
         }
     }
 
-    private func continuousGoToChapter(_ chapter: Manga.Chapter) {
+    private func continuousGoToChapter(
+        _ chapter: Manga.Chapter,
+        direction: ReaderHandoffDirection = .next,
+        trigger: ReaderHandoffTrigger = .chapterControl,
+        approved: Bool = false
+    ) {
         // Already loaded: scroll to it rather than throwing the loaded chapters away.
         if let first = flatPages.first(where: { $0.chapter.key == chapter.key }) {
             scrollTarget = MangaScrollRequest(pageID: first.id, animated: false)
             return
         }
+        beginTransitionSnapshot(direction: direction, trigger: trigger, approved: approved)
+        endHandoffCrossing()
         invalidateContentOperations()
         changeCurrentChapter(to: chapter)
         segments = []
@@ -553,7 +670,7 @@ final class MangaReaderViewModel: ObservableObject {
     // MARK: - Main chapter loading
 
     private func beginMainLoad(for chapter: Manga.Chapter, opensAtEnd: Bool = false) {
-        guard isActive, !chapter.isPaywalled else { return }
+        guard isActive, presentationMode.isLive, !chapter.isPaywalled else { return }
         let token = ChapterToken(chapter)
         if loadPhase == .loading,
            mainLoadOperationID != nil,
@@ -566,16 +683,16 @@ final class MangaReaderViewModel: ObservableObject {
         let session = sessionID
         let generation = contentGeneration
         let expectedPaged = isPaged
-        let loader = pageLoader
+        let preparer = chapterPreparer
         let entry = entry
         mainLoadOperationID = operationID
         loadPhase = .loading
         logStarted(kind: .remoteLoad, operationID: operationID)
         let operation = PluginNetworkOperation(purpose: .foregroundReading, operationID: operationID)
 
-        mainLoadTask = Task { @MainActor [weak self, loader, entry] in
+        mainLoadTask = Task { @MainActor [weak self, preparer, entry] in
             do {
-                let result = try await loader.pages(for: entry, chapter: chapter, operation: operation)
+                let result = try await preparer.prepareChapter(entry: entry, chapter: chapter, operation: operation)
                 self?.completeMainLoad(
                     result,
                     chapter: chapter,
@@ -600,7 +717,7 @@ final class MangaReaderViewModel: ObservableObject {
     }
 
     private func completeMainLoad(
-        _ pages: [Page],
+        _ prepared: ReaderPreparedChapter,
         chapter: Manga.Chapter,
         token: ChapterToken,
         expectedPaged: Bool,
@@ -620,15 +737,53 @@ final class MangaReaderViewModel: ObservableObject {
             return
         }
 
-        let sorted = ReaderPageOrdering.ascending(pages)
-        let start = opensAtEnd
-            ? max(sorted.count - 1, 0)
-            : startPage(for: chapter, pageCount: sorted.count)
+        mainLoadTask = nil
+        mainLoadOperationID = nil
+        guard prepared.format == .pages else {
+            // Made for the other reader: this one is put back as it was and the route takes over.
+            logFinished(kind: .remoteLoad, operationID: operationID, outcome: .succeeded)
+            if transition != nil {
+                divertTransition(prepared, opensAtEnd: opensAtEnd)
+            } else {
+                divertOpening(prepared, opensAtEnd: opensAtEnd)
+            }
+            return
+        }
+        transition = nil
+        retain(prepared)
+        let start = installMainPages(
+            prepared.pages, chapter: chapter, position: opensAtEnd ? .end : .resume, paged: expectedPaged
+        )
+        logFinished(kind: .remoteLoad, operationID: operationID, outcome: .succeeded)
+        chapterOpened(chapter)
+        if !prepared.pages.isEmpty {
+            pageShown(in: chapter, at: start, pageCount: prepared.pages.count)
+        }
         if expectedPaged {
-            pagedPages = sorted
+            prefetchPagedImages(around: start)
+            beginAdjacentChapterPrefetch()
+        }
+    }
+
+    /// Publishes a loaded chapter at the native position `position` names, and returns the page it opens on.
+    @discardableResult
+    func installMainPages(
+        _ pages: [Page],
+        chapter: Manga.Chapter,
+        position: ReaderEntryPosition,
+        paged: Bool
+    ) -> Int {
+        let start: Int
+        switch position {
+        case .start: start = 0
+        case .end: start = max(pages.count - 1, 0)
+        case .resume: start = startPage(for: chapter, pageCount: pages.count)
+        }
+        if paged {
+            pagedPages = pages
             pagedIndex = start
         } else {
-            segments = [ChapterSegment(chapter: chapter, pages: sorted)]
+            segments = [ChapterSegment(chapter: chapter, pages: pages)]
             continuousPageIndex = start
             scrollTarget = start > 0
                 ? MangaScrollRequest(
@@ -638,17 +793,7 @@ final class MangaReaderViewModel: ObservableObject {
                 : nil
         }
         loadPhase = .content
-        mainLoadTask = nil
-        mainLoadOperationID = nil
-        logFinished(kind: .remoteLoad, operationID: operationID, outcome: .succeeded)
-        chapterOpened(chapter)
-        if !sorted.isEmpty {
-            pageShown(in: chapter, at: start, pageCount: sorted.count)
-        }
-        if expectedPaged {
-            prefetchPagedImages(around: start)
-            beginAdjacentChapterPrefetch()
-        }
+        return start
     }
 
     private func failMainLoad(
@@ -671,6 +816,7 @@ final class MangaReaderViewModel: ObservableObject {
         }
         mainLoadTask = nil
         mainLoadOperationID = nil
+        transition = nil
         loadPhase = .failure(error.localizedDescription)
         let outcome: PresentationEventOutcome = error is CancellationError
             ? .cancelled
@@ -691,267 +837,6 @@ final class MangaReaderViewModel: ObservableObject {
             && mainLoadOperationID == operationID
             && ChapterToken(currentChapter) == token
             && isPaged == expectedPaged
-            && !Task.isCancelled
-    }
-
-    // MARK: - Continuous chapter loading
-
-    /// Retries the next-chapter append after `appendFailed`.
-    func retryAppendNextChapter() {
-        guard appendFailed else { return }
-        appendFailed = false
-        appendNextChapter()
-    }
-
-    func appendNextChapter(trigger: ChapterAppendTrigger = .reader) {
-        guard trigger == .reader || dependencies.settings.mangaReaderAdjacentPrefetchCount > 0 else { return }
-        guard isActive,
-              !loadingNextChapter,
-              !appendFailed,
-              appendOperationID == nil,
-              !isPaged,
-              let last = segments.last,
-              let chapter = boundaryAfter(last.chapter).chapter else { return }
-
-        loadingNextChapter = true
-        let boundary = ChapterToken(last.chapter)
-        let operationID = UUID()
-        let session = sessionID
-        let generation = contentGeneration
-        let loader = pageLoader
-        let entry = entry
-        appendOperationID = operationID
-        appendPrefetchEpoch = trigger == .speculative ? dependencies.settings.mangaReaderPrefetchEpoch : nil
-        appendBoundary = boundary
-        appendSession = session
-        appendGeneration = generation
-        logStarted(kind: .chapterAppend, operationID: operationID)
-        let operation = PluginNetworkOperation(
-            purpose: trigger == .speculative ? .prefetch : .foregroundReading, operationID: operationID
-        )
-
-        appendTask = Task { @MainActor [weak self, loader, entry] in
-            guard self?.isCurrentAppend(
-                boundary: boundary, operationID: operationID, session: session, generation: generation
-            ) == true else {
-                if self?.retireStaleSpeculativeAppend(
-                    operationID: operationID, boundary: boundary, session: session, generation: generation
-                ) != true {
-                    self?.finishAppend(operationID: operationID, outcome: .ignoredStale)
-                }
-                return
-            }
-            do {
-                let pages = try await loader.pages(for: entry, chapter: chapter, operation: operation)
-                self?.completeAppend(
-                    pages,
-                    chapter: chapter,
-                    boundary: boundary,
-                    operationID: operationID,
-                    session: session,
-                    generation: generation
-                )
-            } catch {
-                self?.finishAppendFailure(
-                    operationID: operationID,
-                    boundary: boundary,
-                    session: session,
-                    generation: generation
-                )
-            }
-        }
-    }
-
-    private func completeAppend(
-        _ pages: [Page],
-        chapter: Manga.Chapter,
-        boundary: ChapterToken,
-        operationID: UUID,
-        session: UUID,
-        generation: UInt64
-    ) {
-        guard isCurrentAppend(
-            boundary: boundary,
-            operationID: operationID,
-            session: session,
-            generation: generation
-        ) else {
-            logFinished(kind: .chapterAppend, operationID: operationID, outcome: .ignoredStale)
-            if !retireStaleSpeculativeAppend(
-                operationID: operationID, boundary: boundary, session: session, generation: generation
-            ) {
-                finishAppend(operationID: operationID, outcome: .ignoredStale)
-            }
-            return
-        }
-        let sorted = ReaderPageOrdering.ascending(pages)
-        beginContinuousMutation()
-        defer { endContinuousMutation() }
-        // An empty chapter is a failure: appending it would make the next one due at once.
-        guard !sorted.isEmpty else {
-            finishAppend(operationID: operationID, outcome: .failed(.pluginExecution))
-            return
-        }
-        segments.append(ChapterSegment(chapter: chapter, pages: sorted))
-        finishAppend(operationID: operationID, outcome: .succeeded)
-        trimLoadedSegments(awayFrom: .bottom)
-    }
-
-    func finishAppend(operationID: UUID, outcome: PresentationEventOutcome) {
-        guard appendOperationID == operationID else { return }
-        if case .failed = outcome { appendFailed = true }
-        appendTask = nil
-        appendOperationID = nil
-        appendPrefetchEpoch = nil
-        appendBoundary = nil
-        appendSession = nil
-        appendGeneration = nil
-        loadingNextChapter = false
-        logFinished(kind: .chapterAppend, operationID: operationID, outcome: outcome)
-    }
-
-    func prependPreviousChapter() {
-        guard isActive,
-              !loadingPrevChapter,
-              prependOperationID == nil,
-              !isPaged,
-              let first = segments.first,
-              let chapter = boundaryBefore(first.chapter).chapter else { return }
-
-        loadingPrevChapter = true
-        prependFailed = false
-        let boundary = ChapterToken(first.chapter)
-        let operationID = UUID()
-        let session = sessionID
-        let generation = contentGeneration
-        let loader = pageLoader
-        let entry = entry
-        prependOperationID = operationID
-        logStarted(kind: .chapterPrepend, operationID: operationID)
-        let operation = PluginNetworkOperation(purpose: .foregroundReading, operationID: operationID)
-
-        prependTask = Task { @MainActor [weak self, loader, entry] in
-            do {
-                let pages = try await loader.pages(for: entry, chapter: chapter, operation: operation)
-                self?.completePrepend(
-                    pages,
-                    chapter: chapter,
-                    boundary: boundary,
-                    operationID: operationID,
-                    session: session,
-                    generation: generation
-                )
-            } catch {
-                self?.finishPrependFailure(
-                    operationID: operationID,
-                    session: session,
-                    generation: generation
-                )
-            }
-        }
-    }
-
-    private func completePrepend(
-        _ pages: [Page],
-        chapter: Manga.Chapter,
-        boundary: ChapterToken,
-        operationID: UUID,
-        session: UUID,
-        generation: UInt64
-    ) {
-        guard isCurrentPrepend(
-            boundary: boundary,
-            operationID: operationID,
-            session: session,
-            generation: generation
-        ) else {
-            logFinished(kind: .chapterPrepend, operationID: operationID, outcome: .ignoredStale)
-            return
-        }
-
-        let sorted = ReaderPageOrdering.ascending(pages)
-        beginContinuousMutation()
-        defer { endContinuousMutation() }
-        guard !sorted.isEmpty else {
-            prependFailed = true
-            finishPrepend(operationID: operationID, outcome: .failed(.pluginExecution))
-            return
-        }
-        segments.insert(ChapterSegment(chapter: chapter, pages: sorted), at: 0)
-        finishPrepend(operationID: operationID, outcome: .succeeded)
-        trimLoadedSegments(awayFrom: .top)
-    }
-
-    /// Drops loaded chapters beyond `maximumLoadedSegments` from the end away from the one
-    /// that just grew, keeping one chapter past the current one. Skips an end that is still
-    /// loading, whose result is matched against that end.
-    private func trimLoadedSegments(awayFrom grownEnd: ContinuousLoadedEnd) {
-        guard segments.count > Self.maximumLoadedSegments,
-              flatPages.indices.contains(continuousPageIndex) else { return }
-        let current = flatPages[continuousPageIndex]
-        // Unknown or moving live geometry waits: dropping chapters above the reader then needs
-        // a large position correction in the middle of a gesture or a fling.
-        guard let protectedIDs = continuousViewportRetention.protectionIDs(
-            fallback: visiblePageIDs, validPages: flatPageIndexByID) else { pendingTrim = grownEnd; return }
-        pendingTrim = nil
-        let excess = segments.count - Self.maximumLoadedSegments
-        let visibleSegments = protectedIDs.compactMap { flatPageIndexByID[$0] }.map { flatPages[$0].segmentIndex }
-        switch grownEnd {
-        case .bottom:
-            let removable = min(current.segmentIndex - 1, visibleSegments.min() ?? Int.max)
-            guard prependOperationID == nil, removable > 0 else { return }
-            segments.removeFirst(min(excess, removable))
-        case .top:
-            let removable = min(segments.count - 2 - current.segmentIndex, segments.count - 1 - (visibleSegments.max() ?? 0))
-            guard appendOperationID == nil, removable > 0 else { return }
-            segments.removeLast(min(excess, removable))
-        }
-    }
-
-    /// The renderer's viewport stopped moving: a trim it held back can drop chapters now.
-    func continuousViewportSettled() {
-        guard isActive, !isPaged, let end = pendingTrim else { return }
-        beginContinuousMutation()
-        defer { endContinuousMutation() }
-        trimLoadedSegments(awayFrom: end)
-    }
-
-    private func finishPrependFailure(
-        operationID: UUID,
-        session: UUID,
-        generation: UInt64
-    ) {
-        guard isActive,
-              sessionID == session,
-              contentGeneration == generation,
-              prependOperationID == operationID else {
-            logFinished(kind: .chapterPrepend, operationID: operationID, outcome: .ignoredStale)
-            return
-        }
-        prependFailed = true
-        finishPrepend(operationID: operationID, outcome: .failed(.pluginExecution))
-    }
-
-    private func finishPrepend(operationID: UUID, outcome: PresentationEventOutcome) {
-        guard prependOperationID == operationID else { return }
-        prependTask = nil
-        prependOperationID = nil
-        loadingPrevChapter = false
-        logFinished(kind: .chapterPrepend, operationID: operationID, outcome: outcome)
-    }
-
-    private func isCurrentPrepend(
-        boundary: ChapterToken,
-        operationID: UUID,
-        session: UUID,
-        generation: UInt64
-    ) -> Bool {
-        isActive
-            && !isPaged
-            && sessionID == session
-            && contentGeneration == generation
-            && prependOperationID == operationID
-            && segments.first.map(ChapterToken.init) == boundary
             && !Task.isCancelled
     }
 
@@ -991,126 +876,4 @@ final class MangaReaderViewModel: ObservableObject {
         )
         loadPhase = .content
     }
-
-    // MARK: - Chapter effects
-
-    /// Records the chapter in history once per reader session; crossing back and forth over a
-    /// chapter boundary does not add a row each time.
-    private func chapterOpened(_ chapter: Manga.Chapter) {
-        guard historyChapterKeys.insert(chapter.key).inserted else { return }
-        dependencies.history.recordChapter(
-            of: entry,
-            chapter: HistoryChapter(chapter, format: .pages),
-            pluginID: pluginID
-        )
-    }
-
-    /// Saves where the reader is, and marks the chapter read once its last page is shown.
-    private func pageShown(in chapter: Manga.Chapter, at page: Int, pageCount: Int) {
-        savePage(page, in: chapter)
-        if page == pageCount - 1 {
-            markChapterFinished(chapter)
-        }
-    }
-
-    private func savePage(_ page: Int, in chapter: Manga.Chapter) {
-        if let lastSavedPage, lastSavedPage.chapterKey == chapter.key, lastSavedPage.page == page {
-            return
-        }
-        lastSavedPage = (chapter.key, page)
-        let progress = dependencies.progress
-        let identity = mediaIdentity
-        let preceding = pageWriteTask
-        pageWriteTask = Task { @MainActor [progress] in
-            await preceding?.value
-            // Saving the position is best effort; reading carries on if it fails.
-            try? await progress.savePage(page, media: identity, chapterID: chapter.key)
-        }
-    }
-
-    func markChapterFinished(_ chapter: Manga.Chapter) {
-        let plan = ReaderSessionEffectPlan.chapterFinished(
-            chapterNumber: chapter.chapterNumber,
-            titleOrKey: chapter.title ?? chapter.key,
-            alreadyMarked: markedChapterKeys.contains(chapter.key)
-        )
-        guard !plan.effects.isEmpty else { return }
-        markedChapterKeys.insert(chapter.key)
-        let operationID = UUID()
-        let session = sessionID
-        let progress = dependencies.progress
-        let tracker = dependencies.tracker
-        let context = completionContext
-        logStarted(kind: .chapterEffects, operationID: operationID)
-
-        let task = Task { @MainActor [weak self, progress, tracker] in
-            do {
-                for effect in plan.effects {
-                    switch effect {
-                    case .markLocalProgress:
-                        try await progress.markChapterRead(context: context, chapterID: chapter.key, chapterNumber: chapter.chapterNumber)
-                    case .updateTracker(let progressValue):
-                        guard let self,
-                              self.isActive,
-                              self.sessionID == session,
-                              !Task.isCancelled else { return }
-                        await tracker.updateMangaProgress(media: context.media, progress: progressValue)
-                    }
-                }
-                self?.finishEffect(operationID: operationID, outcome: .succeeded)
-            } catch {
-                self?.finishEffect(
-                    operationID: operationID,
-                    outcome: .failed(.persistence)
-                )
-            }
-        }
-        effectTasks[operationID] = task
-    }
-
-    private func finishEffect(operationID: UUID, outcome: PresentationEventOutcome) {
-        guard effectTasks.removeValue(forKey: operationID) != nil else { return }
-        logFinished(kind: .chapterEffects, operationID: operationID, outcome: outcome)
-    }
-
-    // MARK: - Operation invalidation and logging
-
-    private func invalidateContentOperations() {
-        contentGeneration &+= 1
-        cancelContentOperations()
-    }
-
-    private func cancelContentOperations() {
-        mainLoadTask?.cancel()
-        mainLoadTask = nil
-        mainLoadOperationID = nil
-        adjacentPrefetchTask?.cancel()
-        adjacentPrefetchTask = nil
-        adjacentPrefetchOperationID = nil
-        appendTask?.cancel()
-        appendTask = nil
-        appendOperationID = nil
-        appendPrefetchEpoch = nil
-        appendBoundary = nil
-        appendSession = nil
-        appendGeneration = nil
-        prependTask?.cancel()
-        prependTask = nil
-        prependOperationID = nil
-        loadingNextChapter = false
-        loadingPrevChapter = false
-        appendFailed = false
-        prependFailed = false
-    }
-
-#if DEBUG
-    var appendTaskForTesting: Task<Void, Never>? { appendTask }
-    func waitForTestingOperations() async {
-        await settingsWriteTask?.value
-        await mainLoadTask?.value
-        await adjacentPrefetchTask?.value
-        await appendTask?.value
-        await prependTask?.value
-    }
-#endif
 }

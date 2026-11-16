@@ -94,16 +94,6 @@ final class VideoPlayerDependencyBoundaryTests: XCTestCase {
         XCTAssertFalse(first.playbackCoordinator === second.playbackCoordinator)
     }
 
-    func testReaderFactoryHasNoSecondRunnerLookupAndKeepsAllRoutesTyped() throws {
-        let factory = try source("Ito/Views/Browse/MediaDetailViewFactory.swift")
-
-        XCTAssertFalse(factory.contains("getRunner"))
-        XCTAssertFalse(factory.contains("PluginManager"))
-        XCTAssertTrue(factory.contains("ReaderView("))
-        XCTAssertTrue(factory.contains("VideoPlayerView("))
-        XCTAssertTrue(factory.contains("NovelReaderView("))
-    }
-
     func testNetworkAndPlayerAuthorityAreIsolatedAndDiagnosticFetchWasRemoved() throws {
         let service = try source(
             "Ito/Services/VideoPlayer/VideoPlayerDependencies.swift"

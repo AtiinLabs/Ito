@@ -428,6 +428,12 @@ History: resume reading or watching a series */
 
 "Couldn't load trending titles: %@" = "Couldn't load trending titles: %@";
 
+/* Reader: the next chapter, made for the other reader, could not be opened; the current chapter stays */
+"Couldn't open the next chapter." = "Couldn't open the next chapter.";
+
+/* Reader: the previous chapter, made for the other reader, could not be opened; the current chapter stays */
+"Couldn't open the previous chapter." = "Couldn't open the previous chapter.";
+
 /* Series details: reading the scanlators remembered for this series failed this time. The choice itself may be fine. */
 "Couldn't read the saved scanlator choice" = "Couldn't read the saved scanlator choice";
 
@@ -1206,11 +1212,11 @@ Manga format */
 /* Reader: the next chapter has no saved copy and the source cannot be reached */
 "Next chapter isn't downloaded" = "Next chapter isn't downloaded";
 
-/* Reader: the next chapter is made of pages; go back to the series to open it */
-"Next chapter opens in the page reader" = "Next chapter opens in the page reader";
+/* Reader boundary: the next chapter is made of pages; tapping opens it in the page reader without leaving the series */
+"Next chapter opens in the page reader. Tap to continue" = "Next chapter opens in the page reader. Tap to continue";
 
-/* Reader: the next chapter is text; go back to the series to open it */
-"Next chapter opens in the text reader" = "Next chapter opens in the text reader";
+/* Reader boundary: the next chapter is text; tapping opens it in the text reader without leaving the series */
+"Next chapter opens in the text reader. Tap to continue" = "Next chapter opens in the text reader. Tap to continue";
 
 /* Adjacent chapter prefetch picker value: no neighbouring chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch. */
 "No Adjacent Chapters" = "No Adjacent Chapters";
@@ -1408,6 +1414,12 @@ Manga format: light novel */
 /* A source needs user interaction that background work cannot perform. */
 "Open this source to continue in the foreground." = "Open this source to continue in the foreground.";
 
+/* Reader: shown over the current chapter while the next one, made for the other reader, is being prepared */
+"Opening the next chapter…" = "Opening the next chapter…";
+
+/* Reader: shown over the current chapter while the previous one, made for the other reader, is being prepared */
+"Opening the previous chapter…" = "Opening the previous chapter…";
+
 /* Downloaded versions sheet: the chosen saved copy is being opened */
 "Opening the saved copy…" = "Opening the saved copy…";
 
@@ -1535,8 +1547,11 @@ History: the page a chapter was left on */
 /* Reader: the previous chapter has no saved copy and the source cannot be reached */
 "Previous chapter isn't downloaded" = "Previous chapter isn't downloaded";
 
-/* Reader: the previous chapter is text; go back to the series to open it */
-"Previous chapter opens in the text reader" = "Previous chapter opens in the text reader";
+/* Reader boundary: the previous chapter is made of pages; tapping opens it in the page reader without leaving the series */
+"Previous chapter opens in the page reader. Tap to continue" = "Previous chapter opens in the page reader. Tap to continue";
+
+/* Reader boundary: the previous chapter is text; tapping opens it in the text reader without leaving the series */
+"Previous chapter opens in the text reader. Tap to continue" = "Previous chapter opens in the text reader. Tap to continue";
 
 "Privacy" = "Privacy";
 
@@ -2379,6 +2394,9 @@ Reading font: the system font */
 /* Shown when a chapter has no offline copy and cannot be loaded: no installed source can load it, or the device is offline. Used as the reader's load-failure text and as a notice on the series details screen.
 Shown when a chapter has no offline copy and no installed source can load it. Used as the reader's load-failure text and as a notice on the series details screen. */
 "This chapter isn't downloaded." = "This chapter isn't downloaded.";
+
+/* Reader failure: the chapter is made for the other reader, but this reader has no route to hand it to. */
+"This chapter opens in the other reader." = "This chapter opens in the other reader.";
 
 "This control type (%u) is not supported." = "This control type (%u) is not supported.";
 

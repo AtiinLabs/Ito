@@ -346,6 +346,8 @@ final class MangaReaderImagePrefetcherFake: MangaReaderImagePrefetching {
 struct MangaReaderTestSubject {
     let viewModel: MangaReaderViewModel
     let loader: MangaPageLoaderFake
+    let preparer: LoaderBackedChapterPreparer
+    let session: ReaderRouteSession
     let events: MangaReaderEventRecorder
     let progress: MangaReaderProgressFake
     let history: MangaReaderHistoryFake
@@ -365,7 +367,10 @@ func makeMangaReaderSubject(
     preloadImageCount: Int = 5,
     imageSession: ReaderPageImageSession = ReaderPageImageSession(),
     offlineAvailability: any ReaderOfflineAvailability = UnavailableReaderOfflineAvailability(),
-    isSavedOnly: Bool = false
+    isSavedOnly: Bool = false,
+    session: ReaderRouteSession? = nil,
+    visitID: UUID = UUID(),
+    mode: ReaderPresentationMode = .live
 ) -> MangaReaderTestSubject {
     let events = MangaReaderEventRecorder()
     let loader = MangaPageLoaderFake()
@@ -387,8 +392,13 @@ func makeMangaReaderSubject(
         makeImagePrefetcher: { _ in imagePrefetcher },
         presentationLogger: logger
     )
+    let preparer = LoaderBackedChapterPreparer(manga: loader)
+    let routeSession = session ?? makeReaderRouteSession(entry: entry, scope: progress)
     let viewModel = MangaReaderViewModel(
-        pageLoader: loader,
+        chapterPreparer: preparer,
+        routeSession: routeSession,
+        routeVisitID: visitID,
+        presentationMode: mode,
         pluginID: "plugin.test",
         entry: entry,
         initialChapter: initialChapter,
@@ -398,6 +408,8 @@ func makeMangaReaderSubject(
     return MangaReaderTestSubject(
         viewModel: viewModel,
         loader: loader,
+        preparer: preparer,
+        session: routeSession,
         events: events,
         progress: progress,
         history: history,
