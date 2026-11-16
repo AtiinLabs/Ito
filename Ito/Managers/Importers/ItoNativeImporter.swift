@@ -645,7 +645,13 @@ public struct ItoNativeImporter: BackupImporter {
                 """,
             arguments: [PortableSubscriptionRule.maximumSelectionByteCount]
         ) ?? 0
-        guard count <= PortableSubscriptionRule.maximumCount, unbounded == 0 else {
+        let totalSelectionBytes = try Int.fetchOne(
+            db,
+            sql: "SELECT COALESCE(SUM(length(selection)), 0) FROM seriesSubscription"
+        ) ?? 0
+        guard count <= PortableSubscriptionRule.maximumCount,
+              unbounded == 0,
+              totalSelectionBytes <= PortableSubscriptionRule.maximumTotalSelectionByteCount else {
             throw invalidCapability(component: .automaticDownloadRules, code: "invalidRule")
         }
         let rows = try Row.fetchCursor(

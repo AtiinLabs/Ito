@@ -103,7 +103,7 @@ nonisolated public struct BackupExportOperation: Sendable {
         LibrarySnapshotStateRecord.databaseTableName:
             "Installation-local freshness of saved series details; a restored payload has unknown age.",
         SeriesEditionPreferenceRecord.databaseTableName:
-            "Installation-local scanlator choices for downloads; joins backups with automatic download rules.",
+            "Installation-local scanlator choices for downloads; never carried by a backup.",
         DownloadJobOwnerRecord.databaseTableName:
             "Installation-local record of who asked for each queued download; never replayed from a backup.",
         SubscriptionBaselineRecord.databaseTableName: Self.automaticDownloadRuleReason,
@@ -476,12 +476,21 @@ nonisolated public struct BackupExportOperation: Sendable {
     /// import would reject.
     private static func validateAutomaticDownloadRules(in db: Database) throws {
         let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM seriesSubscription") ?? 0
-        let oversized = try Int.fetchOne(
+        let unbounded = try Int.fetchOne(
             db,
-            sql: "SELECT COUNT(*) FROM seriesSubscription WHERE length(CAST(selection AS BLOB)) > ?",
+            sql: """
+                SELECT COUNT(*) FROM seriesSubscription
+                WHERE typeof(selection) != 'blob' OR length(selection) > ?
+                """,
             arguments: [PortableSubscriptionRule.maximumSelectionByteCount]
         ) ?? 0
-        guard count <= PortableSubscriptionRule.maximumCount, oversized == 0 else {
+        let totalSelectionBytes = try Int.fetchOne(
+            db,
+            sql: "SELECT COALESCE(SUM(length(selection)), 0) FROM seriesSubscription"
+        ) ?? 0
+        guard count <= PortableSubscriptionRule.maximumCount,
+              unbounded == 0,
+              totalSelectionBytes <= PortableSubscriptionRule.maximumTotalSelectionByteCount else {
             throw ValidationError.invalidAutomaticDownloadRules
         }
         var identities = Set<MediaIdentity>()

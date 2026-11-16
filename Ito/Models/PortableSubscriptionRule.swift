@@ -13,6 +13,9 @@ nonisolated public struct PortableSubscriptionRule: Sendable, Equatable {
     static let maximumCount = 10_000
     /// The largest stored `EditionSelection` a backup may carry, in bytes.
     static let maximumSelectionByteCount = 65_536
+    /// The most stored selection bytes all rules of one backup may carry together; checked in SQL before any row
+    /// loads, on import and on export.
+    static let maximumTotalSelectionByteCount = 16 * 1_024 * 1_024
 
     static let columnNames = [
         "pluginId", "mediaKind", "canonicalMediaId", "mode", "windowSize", "perRunPositionCap", "selection",

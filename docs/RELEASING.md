@@ -40,9 +40,9 @@ epochs and runtime permissions.
 Schema v27 adds the automatic-download ledger (`seriesSubscription`, `subscriptionBaseline`, `subscriptionSeenKey`,
 `subscriptionEvent`) and `downloadJobOwner`. The migration rebuilds `downloadBatch` (new `automatic` preset) and gives
 every existing job exactly one manual owner named by its batch; no owner is ever inferred from a preset. Of the five new
-tables only `seriesSubscription` can travel in a backup (see below); the other four (`subscriptionBaseline`,
-`subscriptionSeenKey`, `subscriptionEvent`, `downloadJobOwner`) are excluded and sanitized child-first on export, so
-catalog evidence, job ownership and queued work never travel. Two scalar preferences,
+tables, from v28 `seriesSubscription` travels as `automaticDownloadRules` (see below); the other four
+(`subscriptionBaseline`, `subscriptionSeenKey`, `subscriptionEvent`, `downloadJobOwner`) are excluded and sanitized
+child-first on export, so catalog evidence, job ownership and queued work never travel. Two scalar preferences,
 `Ito.AutomaticDownloadQueueLimit` (10...500, default 100) and `Ito.AutomaticDownloadQuotaGiB` (1...200, default 5), are
 part of the preference catalog, so backups from this version carry them; earlier builds reject those backups, and
 backups from earlier versions restore with the defaults.
@@ -54,21 +54,12 @@ rule) as a new rule paused with the reason `restored`: generations, check ticket
 no baseline, seen key, event, job owner, queue entry or source epoch is exported. Restore never creates a baseline,
 event, owner or job and never touches read state, History or update badges. It inserts a rule only for a series that
 is in the Library after the Library restore; a rule whose group selection this build cannot read is skipped. A wipe
-restore deletes the local rules the backup does not carry (their queued jobs go, saved files stay) and replaces a
-rule it does carry in place as a new incarnation; a merge restore keeps a local enabled or paused rule and replaces
-only a disabled one. Backups from earlier versions have no such component and restore with local rules untouched.
+restore deletes every local rule that no readable rule of the backup replaces (the jobs only they asked for go, saved
+files stay), including the local twin of a skipped rule, and replaces a rule it does carry in place as a new
+incarnation; a merge restore keeps a local enabled or paused rule and replaces only a disabled one. Backups from
+earlier versions have no such component and restore with local rules untouched.
 Earlier builds reject backups from this version with `unknownComponent`, so release notes must say that backups from
 this version need this version or later.
-
-Automatic checks of subscribed series run in the foreground only. The scheduler starts when the app is ready and active,
-when a Library refresh ends, and when a rule is enabled, edited or resumed; a rule is due one update interval after its
-last check, longer after a failure, and a refresh counts as a check. Checks follow the automatic-metadata network
-policy (Wi-Fi only, Low Data Mode, unknown path) before every series, and a source that needs a sign-in or settings is
-not asked again in that pass. The one background refresh, when the user opted into it, feeds subscribed series through
-the same single fetch; the scheduler never runs in the background and nothing here promises background immediacy.
-Downloads that only rules asked for run as automatic bulk work: they never mint, borrow or hold a metered-data consent
-and wait under "Ask" on a metered path without holding back a person's batches. This slice adds no screen, string or
-notification: the commands exist behind `AutomaticDownloads`, and no rule can be created from the app yet.
 
 Automatic checks of subscribed series run in the foreground only. The scheduler starts when the app is ready and active,
 when a Library refresh ends, and when a rule is enabled, edited or resumed; a rule is due one update interval after its

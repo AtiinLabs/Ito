@@ -1465,10 +1465,11 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
     /// A rule is carried only as the user's choices, and a restored rule is a new paused rule: it has no baseline, seen
     /// key, event, owner or job, and it waits for review before it checks anything. A backup from before the
     /// component has no representation, so local rules stay as they are. A rule whose series is not in the Library
-    /// after the Library restore, or whose selection this build cannot read, is skipped. A wipe first deletes the
-    /// local rules the backup does not carry, releasing their owners and removing the jobs only they asked for; a wipe
-    /// or a merge over a disabled local rule replaces the rule in place as a new incarnation. A merge keeps a local
-    /// enabled or paused rule. Restore touches no read state, History or badge.
+    /// after the Library restore, or whose selection this build cannot read, is skipped. A wipe first deletes every
+    /// local rule that no readable rule of the backup replaces, releasing its owners and removing the jobs only it
+    /// asked for, so the local twin of a skipped unreadable rule goes too (counted as replaced, the backup rule stays
+    /// skipped); a wipe or a merge over a disabled local rule replaces the rule in place as a new incarnation. A merge
+    /// keeps a local enabled or paused rule. Restore touches no read state, History or badge.
     private func restoreAutomaticDownloadRules(
         _ plan: RestorePlan,
         db: Database,
@@ -1483,7 +1484,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
                     < (rhs.media.pluginId, rhs.media.mediaKind.rawValue, rhs.media.canonicalMediaId)
             }
         if plan.mode == .wipe {
-            let carried = Set(rules.map(\.media))
+            let carried = Set(rules.filter { $0.rule.configuration?.isValid == true }.map(\.media))
             for local in try SeriesSubscriptionRecord.fetchAll(db) where !carried.contains(local.media) {
                 try OfflineChapterStore.deleteSubscription(local, in: db)
                 outcomes[.automaticDownloadRules]?.replaced += 1

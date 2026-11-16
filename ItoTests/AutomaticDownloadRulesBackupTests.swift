@@ -221,15 +221,19 @@ struct AutomaticDownloadRulesBackupTests {
     @Test func b2_aRuleWithAnUnreadableSelectionFailsTheExportAndPublishesNothing() async throws {
         let f = try await Fixture()
         _ = try await f.enable().id
-        try Self.insertPreferenceCatalog(into: f.pool)
         try await f.write { db in
             try db.execute(sql: "UPDATE seriesSubscription SET selection = ?", arguments: [Data("not a selection".utf8)])
         }
+        try await expectExportFails(f, name: "corrupt.itobackup")
+    }
+
+    private func expectExportFails(_ f: Fixture, name: String) async throws {
+        try Self.insertPreferenceCatalog(into: f.pool)
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("AutomaticDownloadRulesBackupTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let url = directory.appendingPathComponent("corrupt.itobackup")
+        let url = directory.appendingPathComponent(name)
 
         await #expect(throws: BackupExportOperation.ValidationError.invalidAutomaticDownloadRules) {
             try await BackupExportOperation(
@@ -238,6 +242,32 @@ struct AutomaticDownloadRulesBackupTests {
             ).export(to: url)
         }
         #expect(!FileManager.default.fileExists(atPath: url.path))
+    }
+
+    /// The importer rejects a selection that is not a blob, so the exporter must not publish one.
+    @Test func b2_aRuleWhoseSelectionIsStoredAsTextFailsTheExportAndPublishesNothing() async throws {
+        let f = try await Fixture()
+        _ = try await f.enable().id
+        let text = String(decoding: Self.storage(.sourceList), as: UTF8.self)
+        try await f.write { db in
+            try db.execute(sql: "UPDATE seriesSubscription SET selection = ?", arguments: [text])
+            #expect(try String.fetchOne(db, sql: "SELECT typeof(selection) FROM seriesSubscription") == "text")
+        }
+        try await expectExportFails(f, name: "text-selection.itobackup")
+    }
+
+    @Test func b2_selectionsThatTogetherExceedTheTotalBoundFailTheExportAndPublishNothing() async throws {
+        let f = try await Fixture()
+        let each = PortableSubscriptionRule.maximumSelectionByteCount
+        let rules = PortableSubscriptionRule.maximumTotalSelectionByteCount / each + 1
+        try await f.write { db in
+            for index in 0..<rules {
+                let media = Self.media("big-\(index)")
+                _ = try Self.seedRule(db, media)
+            }
+            try db.execute(sql: "UPDATE seriesSubscription SET selection = zeroblob(\(each))")
+        }
+        try await expectExportFails(f, name: "oversized-total.itobackup")
     }
 
     // MARK: - B3: import
@@ -414,6 +444,26 @@ struct AutomaticDownloadRulesBackupTests {
                 WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < \(PortableSubscriptionRule.maximumCount + 1))
                 INSERT INTO seriesSubscription
                 SELECT 'plugin.test', 'manga', 'series-' || i, 'newReleases', NULL, 5, X'7B7D', 'off' FROM n
+                """)
+        }
+
+        await #expect(throws: BackupPreflightError.rejected(
+            .invalidCapabilityMetadata(component: .automaticDownloadRules, code: "invalidRule")
+        )) {
+            _ = try await ItoNativeImporter().parse(url: file.url)
+        }
+    }
+
+    @Test func b3_selectionsThatTogetherExceedTheTotalBoundAreRejectedBeforeAnyRowLoads() async throws {
+        let file = try BackupFile()
+        defer { file.cleanup() }
+        let each = PortableSubscriptionRule.maximumSelectionByteCount
+        let rules = PortableSubscriptionRule.maximumTotalSelectionByteCount / each + 1
+        try file.create(capability: "representedNonempty", ruleTable: true) { db in
+            try db.execute(sql: """
+                WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < \(rules))
+                INSERT INTO seriesSubscription
+                SELECT 'plugin.test', 'manga', 'series-' || i, 'newReleases', NULL, 5, zeroblob(\(each)), 'off' FROM n
                 """)
         }
 
@@ -679,6 +729,32 @@ struct AutomaticDownloadRulesBackupTests {
         #expect(rules.map(\.media) == [kept])
         #expect(rules.first?.state == .paused && rules.first?.pauseReason == .restored)
         #expect(try await f.pool.read { db in try LibraryItem.fetchAll(db).map(\.id) } == ["kept"])
+        #expect(try await f.jobs().isEmpty)
+        #expect(try Self.count(f.pool, "downloadJobOwner") == 0)
+        try await f.expectEveryJobHasAnOwner()
+    }
+
+    /// A skipped rule must not shield its local twin: the wipe deletes every local rule no readable backup rule
+    /// replaces, so an unreadable backup selection over a local enabled rule releases it and the job only it asked for.
+    @Test func b6_aWipeOverAnUnreadableBackupRuleReleasesTheLocalRuleAndItsAutomaticOnlyJob() async throws {
+        let f = try await Fixture()
+        try await f.enable()
+        try await f.check(Fixture.numbered(1...2))
+        try await f.check(Fixture.numbered(1...4))
+        #expect(try await f.jobs().count == 2)
+        let unreadable = PortableSubscriptionRule(
+            pluginId: Self.plugin, mediaKind: .manga, canonicalMediaId: "series-1", mode: .newReleases,
+            windowSize: nil, perRunPositionCap: 5, selection: Data("not a selection".utf8), replacementRule: .off
+        )
+        let backup = Self.backup([unreadable], items: [Self.item("series-1")])
+
+        let report = try await Self.operation(f.pool).restore(backup, mode: .wipe)
+
+        let outcome = try Self.outcome(report)
+        #expect(outcome.replaced == 1 && outcome.skipped == 1 && outcome.inserted == 0)
+        #expect(try await f.pool.read { db in try LibraryItem.fetchAll(db).map(\.id) } == ["series-1"])
+        #expect(try await f.store.subscription(for: f.media) == nil)
+        #expect(try Self.count(f.pool, "seriesSubscription") == 0)
         #expect(try await f.jobs().isEmpty)
         #expect(try Self.count(f.pool, "downloadJobOwner") == 0)
         try await f.expectEveryJobHasAnOwner()
