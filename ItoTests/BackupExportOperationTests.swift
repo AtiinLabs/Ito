@@ -76,10 +76,13 @@ struct BackupExportOperationTests {
             let capabilities = try BackupCapabilityRecord.fetchAll(db)
             #expect(capabilities.count == BackupComponent.allCases.count)
             #expect(Set(capabilities.map(\.component)) == Set(BackupComponent.allCases))
-            #expect(capabilities.filter { $0.component != .savedLibraryThumbnails && $0.component != .downloadPresets }
-                .allSatisfy { $0.representation == .representedNonempty })
+            #expect(capabilities.filter {
+                $0.component != .savedLibraryThumbnails && $0.component != .downloadPresets
+                    && $0.component != .automaticDownloadRules
+            }.allSatisfy { $0.representation == .representedNonempty })
             #expect(capabilities.first(where: { $0.component == .savedLibraryThumbnails })?.representation == .representedEmpty)
             #expect(capabilities.first(where: { $0.component == .downloadPresets })?.representation == .representedEmpty)
+            #expect(capabilities.first(where: { $0.component == .automaticDownloadRules })?.representation == .representedEmpty)
 
             let pluginSecret = Data("opaque-plugin-secret".utf8)
             #expect(
@@ -606,7 +609,7 @@ struct BackupExportOperationTests {
             try SeriesSubscriptionRecord(
                 id: subscriptionId, pluginId: "plugin.test", mediaKind: .manga, canonicalMediaId: "series-1",
                 state: .enabled, pauseReason: nil, mode: .newReleases, windowSize: nil, perRunPositionCap: 5,
-                selection: Data("{}".utf8), replacementRule: .off, incarnation: 1, configGeneration: 1,
+                selection: try EditionSelection.sourceList.storageData(), replacementRule: .off, incarnation: 1, configGeneration: 1,
                 nextCheckTicket: 2, lastAttemptAt: nil, lastAttemptOutcome: nil, lastSuccessAt: nil,
                 createdAt: date, updatedAt: date
             ).insert(db)
@@ -650,7 +653,7 @@ struct BackupExportOperationTests {
         defer { try? exported.close() }
         let tables = [
             "downloadedChapter", "downloadJob", "downloadBatch", "downloadSuppression", "downloadStore",
-            "downloadJobOwner", "seriesSubscription", "subscriptionBaseline", "subscriptionSeenKey", "subscriptionEvent"
+            "downloadJobOwner", "subscriptionBaseline", "subscriptionSeenKey", "subscriptionEvent"
         ]
         let exportedCounts = try await exported.read { db in
             try tables.map { try rowCount($0, in: db) }
@@ -660,6 +663,13 @@ struct BackupExportOperationTests {
             try tables.map { try rowCount($0, in: db) }
         }
         #expect(sourceCounts == Array(repeating: 1, count: tables.count))
+        // The rule itself is the one automatic-download table a backup keeps, reduced to a paused restored rule.
+        let rule = try await exported.read { db in try SeriesSubscriptionRecord.fetchAll(db) }
+        #expect(rule.map(\.state) == [.paused])
+        #expect(rule.map(\.pauseReason) == [.restored])
+        #expect(rule.map(\.incarnation) == [1])
+        #expect(rule.map(\.configGeneration) == [1])
+        #expect(rule.map(\.nextCheckTicket) == [1])
     }
 
     private func rowCount(_ table: String, in db: Database) throws -> Int {

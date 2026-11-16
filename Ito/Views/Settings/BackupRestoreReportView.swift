@@ -86,7 +86,7 @@ struct BackupRestoreReportView: View {
     }
 }
 
-private extension BackupComponent {
+extension BackupComponent {
     var displayName: String {
         switch self {
         case .libraryCore: String(localized: "Library", comment: "Backup component name for library entries")
@@ -105,6 +105,10 @@ private extension BackupComponent {
         case .downloadPresets: String(
             localized: "Download presets",
             comment: "Backup restore report: the component holding the user's custom download presets."
+        )
+        case .automaticDownloadRules: String(
+            localized: "Automatic download rules",
+            comment: "Backup restore report: the component holding automatic download rules, restored paused."
         )
         case .legacyStateArchive: String(localized: "Legacy archive")
         }

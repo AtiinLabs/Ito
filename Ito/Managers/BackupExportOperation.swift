@@ -19,6 +19,7 @@ nonisolated public struct BackupExportOperation: Sendable {
         case invalidScalarPreferenceCatalog
         case invalidMetadata
         case invalidDownloadPresets
+        case invalidAutomaticDownloadRules
         case invalidCapabilities
         case integrityCheckFailed(String)
         case foreignKeyCheckFailed
@@ -59,8 +60,7 @@ nonisolated public struct BackupExportOperation: Sendable {
         SeriesEditionPreferenceRecord.databaseTableName,
         SubscriptionEventRecord.databaseTableName,
         SubscriptionSeenKeyRecord.databaseTableName,
-        SubscriptionBaselineRecord.databaseTableName,
-        SeriesSubscriptionRecord.databaseTableName
+        SubscriptionBaselineRecord.databaseTableName
     ]
 
     static let excludedTableReasons: [String: String] = [
@@ -106,14 +106,13 @@ nonisolated public struct BackupExportOperation: Sendable {
             "Installation-local scanlator choices for downloads; joins backups with automatic download rules.",
         DownloadJobOwnerRecord.databaseTableName:
             "Installation-local record of who asked for each queued download; never replayed from a backup.",
-        SeriesSubscriptionRecord.databaseTableName: Self.automaticDownloadRuleReason,
         SubscriptionBaselineRecord.databaseTableName: Self.automaticDownloadRuleReason,
         SubscriptionSeenKeyRecord.databaseTableName: Self.automaticDownloadRuleReason,
         SubscriptionEventRecord.databaseTableName: Self.automaticDownloadRuleReason
     ]
 
     private static let automaticDownloadRuleReason =
-        "Installation-local automatic download rules and catalog evidence; a rule never carries over from a backup."
+        "Installation-local catalog evidence of automatic download rules; only a rule's own choices travel, in its component."
 
     static let durableTablesByComponent: [BackupComponent: [String]] = [
         .libraryCore: [
@@ -141,6 +140,7 @@ nonisolated public struct BackupExportOperation: Sendable {
         .pluginSettings: [PluginSettingRecord.databaseTableName],
         .legacyUnscopedMediaState: [LegacyUnscopedMediaStateRecord.databaseTableName],
         .downloadPresets: [DownloadPresetDefinitionRecord.databaseTableName],
+        .automaticDownloadRules: [SeriesSubscriptionRecord.databaseTableName],
         .legacyStateArchive: [LegacyStateArchiveRecord.databaseTableName]
     ]
 
@@ -223,6 +223,15 @@ nonisolated public struct BackupExportOperation: Sendable {
             for table in Self.sanitizedTables {
                 try db.execute(sql: "DELETE FROM \(table)")
             }
+            // The rules are the one automatic-download table a backup keeps. A disabled rule is nothing the user
+            // asked to keep. Every kept rule is reduced to its choices as a new paused rule: it has no history,
+            // and the restoring installation must review it before it checks anything.
+            try db.execute(sql: "DELETE FROM seriesSubscription WHERE state = 'disabled'")
+            try db.execute(sql: """
+                UPDATE seriesSubscription
+                SET state = 'paused', pauseReason = 'restored', incarnation = 1, configGeneration = 1,
+                    nextCheckTicket = 1, lastAttemptAt = NULL, lastAttemptOutcome = NULL, lastSuccessAt = NULL
+                """)
 
             try db.execute(
                 sql: """
@@ -318,6 +327,7 @@ nonisolated public struct BackupExportOperation: Sendable {
 
             try Self.validateThumbnails(in: db)
             try Self.validateDownloadPresets(in: db)
+            try Self.validateAutomaticDownloadRules(in: db)
 
             let metadata = try BackupMetadataRecord.fetchAll(db)
             guard metadata.count == 1,
@@ -368,6 +378,11 @@ nonisolated public struct BackupExportOperation: Sendable {
                     db,
                     sql: "SELECT COUNT(*) FROM appPreference WHERE key != ?",
                     arguments: [LegacyDefaultsSourceTuple.aniListAccessTokenKey]
+                ) ?? 0
+            case .automaticDownloadRules:
+                counts[component] = try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM seriesSubscription WHERE state != 'disabled'"
                 ) ?? 0
             case .legacyStateArchive:
                 counts[component] = try Int.fetchOne(
@@ -453,6 +468,39 @@ nonisolated public struct BackupExportOperation: Sendable {
               (try? records.map { try $0.validated() }) != nil
         else {
             throw ValidationError.invalidDownloadPresets
+        }
+    }
+
+    /// Every rule that is kept must be exactly the sanitized form, bounded, and one that restore accepts: the store is
+    /// the only writer, so a violation means corruption and the export fails rather than publishing a backup that
+    /// import would reject.
+    private static func validateAutomaticDownloadRules(in db: Database) throws {
+        let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM seriesSubscription") ?? 0
+        let oversized = try Int.fetchOne(
+            db,
+            sql: "SELECT COUNT(*) FROM seriesSubscription WHERE length(CAST(selection AS BLOB)) > ?",
+            arguments: [PortableSubscriptionRule.maximumSelectionByteCount]
+        ) ?? 0
+        guard count <= PortableSubscriptionRule.maximumCount, oversized == 0 else {
+            throw ValidationError.invalidAutomaticDownloadRules
+        }
+        var identities = Set<MediaIdentity>()
+        for record in try SeriesSubscriptionRecord.fetchAll(db) {
+            let portable = PortableSubscriptionRule(record: record)
+            guard record.state == .paused,
+                  record.pauseReason == .restored,
+                  record.incarnation == 1,
+                  record.configGeneration == 1,
+                  record.nextCheckTicket == 1,
+                  record.lastAttemptAt == nil,
+                  record.lastAttemptOutcome == nil,
+                  record.lastSuccessAt == nil,
+                  portable.isStructurallyValid,
+                  portable.configuration?.isValid == true,
+                  identities.insert(portable.media).inserted
+            else {
+                throw ValidationError.invalidAutomaticDownloadRules
+            }
         }
     }
 

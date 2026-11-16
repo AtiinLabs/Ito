@@ -188,10 +188,11 @@ struct BackupDurableStateContractsTests {
 
         #expect(backup.representedPreferenceKeys == ["row-level-key", "z-key"])
         #expect(backup.representedComponents == BackupComponent.allCases.filter {
-            $0 != .savedLibraryThumbnails && $0 != .downloadPresets
+            $0 != .savedLibraryThumbnails && $0 != .downloadPresets && $0 != .automaticDownloadRules
         })
         for component in BackupComponent.allCases {
             let expected: BackupRepresentation = component == .savedLibraryThumbnails || component == .downloadPresets
+                || component == .automaticDownloadRules
                 ? .unrepresented
                 : .representedNonempty
             #expect(backup.representation(of: component) == expected)

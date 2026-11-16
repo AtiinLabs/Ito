@@ -1147,6 +1147,9 @@
     "Automatic Updates" : {
 
     },
+    "Automatic download rules" : {
+      "comment" : "Backup restore report: the component holding automatic download rules, restored paused."
+    },
     "Automatic progress updates are off while this entry is %@. Set it to %@ to resume them." : {
       "localizations" : {
         "en" : {

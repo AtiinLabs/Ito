@@ -242,6 +242,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         try restoreUnscopedMediaState(plan, db: db, outcomes: &outcomes)
         try restoreSavedThumbnails(plan, db: db, outcomes: &outcomes)
         try restoreDownloadPresets(plan, db: db, outcomes: &outcomes)
+        try restoreAutomaticDownloadRules(plan, db: db, outcomes: &outcomes)
 
         try restoreArchives(plan, db: db, outcomes: &outcomes)
         // The Library is final. A rule must not outlive its series, whatever the restore kept or removed, so its
@@ -328,6 +329,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             represented: represented,
             local: local
         )
+        try validateAutomaticDownloadRules(backup: backup, represented: represented, library: library)
         try validateCredentialPayloads(backup.legacyStateArchives)
 
         return RestorePlan(
@@ -441,6 +443,8 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             !backup.savedLibraryThumbnails.isEmpty
         case .downloadPresets:
             !backup.downloadPresets.isEmpty
+        case .automaticDownloadRules:
+            !backup.automaticDownloadRules.isEmpty
         case .legacyStateArchive:
             !backup.legacyStateArchives.isEmpty
         }
@@ -481,6 +485,11 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             else {
                 throw rejection(.invalidComponentData(component: .downloadPresets, code: "invalidPreset"))
             }
+        }
+        guard backup.automaticDownloadRules.count <= PortableSubscriptionRule.maximumCount,
+              backup.automaticDownloadRules.allSatisfy(\.isStructurallyValid)
+        else {
+            throw rejection(.invalidComponentData(component: .automaticDownloadRules, code: "invalidRule"))
         }
         try requireUnique(
             backup.links.map { "\($0.itemId)\u{1F}\($0.categoryId)" },
@@ -1450,6 +1459,116 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
             try appended.insert(db)
             localRows.append(appended)
             outcomes[.downloadPresets]?.inserted += 1
+        }
+    }
+
+    /// A rule is carried only as the user's choices, and a restored rule is a new paused rule: it has no baseline, seen
+    /// key, event, owner or job, and it waits for review before it checks anything. A backup from before the
+    /// component has no representation, so local rules stay as they are. A rule whose series is not in the Library
+    /// after the Library restore, or whose selection this build cannot read, is skipped. A wipe first deletes the
+    /// local rules the backup does not carry, releasing their owners and removing the jobs only they asked for; a wipe
+    /// or a merge over a disabled local rule replaces the rule in place as a new incarnation. A merge keeps a local
+    /// enabled or paused rule. Restore touches no read state, History or badge.
+    private func restoreAutomaticDownloadRules(
+        _ plan: RestorePlan,
+        db: Database,
+        outcomes: inout [BackupComponent: MutableOutcome]
+    ) throws {
+        guard plan.represented.contains(.automaticDownloadRules) else { return }
+        let now = plan.createdAt
+        let rules = plan.backup.automaticDownloadRules
+            .map { (rule: $0, media: remappedMedia(of: $0, library: plan.library)) }
+            .sorted { lhs, rhs in
+                (lhs.media.pluginId, lhs.media.mediaKind.rawValue, lhs.media.canonicalMediaId)
+                    < (rhs.media.pluginId, rhs.media.mediaKind.rawValue, rhs.media.canonicalMediaId)
+            }
+        if plan.mode == .wipe {
+            let carried = Set(rules.map(\.media))
+            for local in try SeriesSubscriptionRecord.fetchAll(db) where !carried.contains(local.media) {
+                try OfflineChapterStore.deleteSubscription(local, in: db)
+                outcomes[.automaticDownloadRules]?.replaced += 1
+            }
+        }
+        for (rule, media) in rules {
+            guard let configuration = rule.configuration,
+                  configuration.isValid,
+                  try OfflineChapterStore.libraryItemExists(for: media, in: db) else {
+                outcomes[.automaticDownloadRules]?.skipped += 1
+                continue
+            }
+            guard var local = try SeriesSubscriptionRecord.forMedia(media).fetchOne(db) else {
+                let inserted = SeriesSubscriptionRecord(
+                    id: UUID().uuidString,
+                    pluginId: media.pluginId,
+                    mediaKind: media.mediaKind,
+                    canonicalMediaId: media.canonicalMediaId,
+                    state: .paused,
+                    pauseReason: .restored,
+                    mode: configuration.mode,
+                    windowSize: configuration.windowSize,
+                    perRunPositionCap: configuration.perRunPositionCap,
+                    selection: rule.selection,
+                    replacementRule: configuration.replacementRule,
+                    incarnation: 1,
+                    configGeneration: 1,
+                    nextCheckTicket: 1,
+                    lastAttemptAt: nil,
+                    lastAttemptOutcome: nil,
+                    lastSuccessAt: nil,
+                    createdAt: now,
+                    updatedAt: now
+                )
+                try inserted.insert(db)
+                outcomes[.automaticDownloadRules]?.inserted += 1
+                continue
+            }
+            if plan.mode == .merge, local.state != .disabled {
+                if PortableSubscriptionRule(record: local).configuration == configuration {
+                    outcomes[.automaticDownloadRules]?.skipped += 1
+                } else {
+                    outcomes[.automaticDownloadRules]?.preservedLocal += 1
+                }
+                continue
+            }
+            try OfflineChapterStore.releaseOwners(ofSubscription: local.id, in: db)
+            try SubscriptionLedger.discardEvidence(of: local.id, now: now, in: db)
+            local.apply(configuration, selection: rule.selection)
+            local.state = .paused
+            local.pauseReason = .restored
+            local.incarnation += 1
+            local.configGeneration += 1
+            local.lastAttemptAt = nil
+            local.lastAttemptOutcome = nil
+            local.lastSuccessAt = nil
+            local.updatedAt = now
+            try local.update(db)
+            outcomes[.automaticDownloadRules]?.replaced += 1
+        }
+    }
+
+    private func remappedMedia(of rule: PortableSubscriptionRule, library: LibraryPlan) -> MediaIdentity {
+        let identity = remappedIdentity(
+            pluginId: rule.pluginId,
+            canonicalMediaId: rule.canonicalMediaId,
+            mediaKind: rule.mediaKind,
+            library: library
+        )
+        return MediaIdentity(
+            pluginId: identity.pluginId, canonicalMediaId: identity.canonicalMediaId, mediaKind: identity.mediaKind
+        )
+    }
+
+    /// Two rules of the backup may not land on one series.
+    private func validateAutomaticDownloadRules(
+        backup: ImportedBackup,
+        represented: Set<BackupComponent>,
+        library: LibraryPlan
+    ) throws {
+        guard represented.contains(.automaticDownloadRules) else { return }
+        var identities = Set<MediaIdentity>()
+        for rule in backup.automaticDownloadRules
+        where !identities.insert(remappedMedia(of: rule, library: library)).inserted {
+            throw rejection(.invalidComponentData(component: .automaticDownloadRules, code: "invalidRule"))
         }
     }
 
