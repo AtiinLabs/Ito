@@ -28,8 +28,12 @@ struct AppViewFactory {
     private let downloadsOverview: (any DownloadsOverviewServing)?
     private let downloadsThumbnails: any DownloadsThumbnailServing
     private let downloadPresets: DownloadPresetStore?
+    private let automaticDownloads: any AutomaticDownloadServing
+    private let settingsDependencies: PreparedSettingsDependencies?
 
     var hasDownloads: Bool { downloadsOverview != nil }
+    /// Whether the management screen of automatic downloads is offered: they are composed with the offline store.
+    var hasAutomaticDownloads: Bool { automaticDownloads.isAvailable && settingsDependencies != nil }
 
     init(
         rootModels: RootModelStore,
@@ -61,7 +65,9 @@ struct AppViewFactory {
         pluginTrust: PluginTrustStore? = nil,
         downloadsOverview: (any DownloadsOverviewServing)? = nil,
         downloadsThumbnails: any DownloadsThumbnailServing = UnavailableDownloadsThumbnails(),
-        downloadPresets: DownloadPresetStore? = nil
+        downloadPresets: DownloadPresetStore? = nil,
+        automaticDownloads: any AutomaticDownloadServing = UnavailableAutomaticDownloads(),
+        settingsDependencies: PreparedSettingsDependencies? = nil
     ) {
         self.rootModels = rootModels
         self.repositoryManagement = repositoryManagement
@@ -84,6 +90,8 @@ struct AppViewFactory {
         self.downloadsOverview = downloadsOverview
         self.downloadsThumbnails = downloadsThumbnails
         self.downloadPresets = downloadPresets
+        self.automaticDownloads = automaticDownloads
+        self.settingsDependencies = settingsDependencies
         let categoryHistoryViewFactory = CategoryHistoryViewFactory(
             dependencies: categoryHistoryDependencies,
             messagePresenter: categoryHistoryMessagePresenter,
@@ -160,6 +168,20 @@ struct AppViewFactory {
                     sourceName: { pluginManager.installedPlugins[$0]?.info.name ?? $0 }
                 ),
                 viewFactory: self
+            )
+        }
+    }
+
+    @ViewBuilder
+    func makeAutomaticDownloadsView() -> some View {
+        if let settingsDependencies {
+            AutomaticDownloadsView(
+                viewModel: AutomaticDownloadsViewModel(
+                    service: automaticDownloads,
+                    settingsStore: settingsDependencies.settingsStore,
+                    notificationAuthorization: settingsDependencies.notificationAuthorization,
+                    applicationSettingsOpener: settingsDependencies.applicationSettingsOpener
+                )
             )
         }
     }

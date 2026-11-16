@@ -71,7 +71,7 @@ extension MediaDetailViewModel {
         case nil:
             guard isSaved, !chapter.isPaywalled, detailLoadState != .savedOnly else { return [] }
             return [.download]
-        case .queued, .downloading:
+        case .queued, .downloading, .held:
             return [.cancel]
         case .waiting(let reason):
             return reason.requiresRetry ? [.retry, .cancel] : [.cancel]
@@ -94,7 +94,7 @@ extension MediaDetailViewModel {
     private func replacementActions(for chapter: M.Chapter, activity: ChapterDownloadState) -> [ChapterDownloadAction] {
         var actions: [ChapterDownloadAction]
         switch activity {
-        case .queued, .downloading:
+        case .queued, .downloading, .held:
             actions = [.cancelReplacement]
         case .waiting(let reason):
             actions = reason.requiresRetry ? [.retry, .cancelReplacement] : [.cancelReplacement]

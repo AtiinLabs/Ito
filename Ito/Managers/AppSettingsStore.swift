@@ -75,6 +75,7 @@ public final class AppSettingsStore: ObservableObject {
     @Published public private(set) var adjacentChapterPrefetchCount = AppPreferenceCatalog.adjacentChapterPrefetchCount.defaultValue
     @Published public private(set) var automaticDownloadQueueLimit = AppPreferenceCatalog.automaticDownloadQueueLimit.defaultValue
     @Published public private(set) var automaticDownloadQuotaGiB = AppPreferenceCatalog.automaticDownloadQuotaGiB.defaultValue
+    @Published public private(set) var subscriptionAttentionNotifications = AppPreferenceCatalog.subscriptionAttentionNotifications.defaultValue
     @Published public private(set) var loadIssues: [AppSettingsLoadIssue] = []
 
     private let persistence: any AppSettingsPersistence
@@ -231,6 +232,7 @@ public final class AppSettingsStore: ObservableObject {
         adjacentChapterPrefetchCount = snapshot.adjacentChapterPrefetchCount
         automaticDownloadQueueLimit = snapshot.automaticDownloadQueueLimit
         automaticDownloadQuotaGiB = snapshot.automaticDownloadQuotaGiB
+        subscriptionAttentionNotifications = snapshot.subscriptionAttentionNotifications
         automaticDownloadLimitsMirror.set(automaticDownloadLimits)
         loadIssues = issues
         // The configuration is published only here, after persistence acknowledged it, so the live policy
@@ -302,6 +304,7 @@ private struct AppSettingsSnapshot: Sendable {
     let adjacentChapterPrefetchCount: AdjacentChapterPrefetchPreference
     let automaticDownloadQueueLimit: Int
     let automaticDownloadQuotaGiB: Int
+    let subscriptionAttentionNotifications: Bool
 
     var networkConfiguration: NetworkPolicyConfiguration {
         NetworkPolicyConfiguration(
@@ -359,7 +362,8 @@ private struct AppSettingsSnapshot: Sendable {
                 networkDownloadMode: value(AppPreferenceCatalog.networkDownloadMode),
                 adjacentChapterPrefetchCount: value(AppPreferenceCatalog.adjacentChapterPrefetchCount),
                 automaticDownloadQueueLimit: value(AppPreferenceCatalog.automaticDownloadQueueLimit),
-                automaticDownloadQuotaGiB: value(AppPreferenceCatalog.automaticDownloadQuotaGiB)
+                automaticDownloadQuotaGiB: value(AppPreferenceCatalog.automaticDownloadQuotaGiB),
+                subscriptionAttentionNotifications: value(AppPreferenceCatalog.subscriptionAttentionNotifications)
             ),
             repairs,
             issues

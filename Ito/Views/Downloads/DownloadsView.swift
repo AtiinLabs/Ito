@@ -13,6 +13,20 @@ struct DownloadsView: View {
 
     var body: some View {
         List(selection: selection) {
+            if viewFactory.hasAutomaticDownloads {
+                Section {
+                    NavigationLink {
+                        viewFactory.makeAutomaticDownloadsView()
+                    } label: {
+                        Label {
+                            Text("Automatic Downloads", comment: "Downloads manager: opens the automatic download rules")
+                        } icon: {
+                            Image(systemName: "arrow.down.circle")
+                        }
+                    }
+                    .accessibilityIdentifier("automaticDownloadsLink")
+                }
+            }
             Section {
                 if let available = viewModel.availableBytes {
                     Text("Downloads use \(DownloadsViewModel.bytes(viewModel.snapshot.byteCount)) · \(DownloadsViewModel.bytes(available)) available",

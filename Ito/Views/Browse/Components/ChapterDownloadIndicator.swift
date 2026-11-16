@@ -30,6 +30,8 @@ struct ChapterDownloadIndicator: View {
             Image(systemName: "exclamationmark.circle")
         case .damaged:
             Image(systemName: "exclamationmark.triangle")
+        case .held:
+            Image(systemName: "pause.circle")
         }
     }
 
@@ -39,7 +41,7 @@ struct ChapterDownloadIndicator: View {
             return .accentColor
         case .failed, .damaged:
             return .orange
-        case .queued, .waiting:
+        case .queued, .waiting, .held:
             return .secondary
         }
     }
@@ -113,13 +115,15 @@ extension ChapterDownloadState {
                 "Download damaged",
                 comment: "Chapter download status: the saved copy no longer matches what was downloaded"
             )
+        case .held(let reason):
+            return Text(reason.localizedTitle)
         }
     }
 
     /// Whether the menu shows the state as a header: only where the state explains what to do next.
     var explainsMenu: Bool {
         switch self {
-        case .waiting, .failed, .damaged:
+        case .waiting, .failed, .damaged, .held:
             return true
         case .downloaded, .downloading, .queued:
             return false
@@ -132,7 +136,7 @@ extension ChapterDownloadState {
     /// through the menu's own actions.
     var replacementLabel: Text {
         switch self {
-        case .queued, .downloading:
+        case .queued, .downloading, .held:
             return Text(
                 "Replacing download",
                 comment: "Chapter download status: a replacement of a saved chapter is queued or running. The saved copy stays available."

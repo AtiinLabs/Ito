@@ -11,6 +11,9 @@
 /* Download preview: free space on this device. The placeholder is a size such as 4.2 GB. */
 "%@ available" = "%@ available";
 
+/* Rule sheet: free space on the device. The placeholder is a size such as 20 GB. */
+"%@ free on this device" = "%@ free on this device";
+
 /* Confirm removing a series from the Library. The placeholder is the series title. */
 "%@ is also removed from your lists. Reading history and progress are kept." = "%@ is also removed from your lists. Reading history and progress are kept.";
 
@@ -20,6 +23,10 @@
 "%@ is not a library state MangaBaka supports." = "%@ is not a library state MangaBaka supports.";
 
 "%@ is not a list status MyAnimeList supports." = "%@ is not a list status MyAnimeList supports.";
+
+/* Automatic downloads screen: space used by stored downloads. The placeholder is a size.
+Rule sheet: how much space stored downloads use. The placeholder is a size such as 1.2 GB. */
+"%@ of downloads stored" = "%@ of downloads stored";
 
 "%@ progress only moves forward from Ito. Choose Repeating to start over, or change it on %@." = "%1$@ progress only moves forward from Ito. Choose Repeating to start over, or change it on %2$@.";
 
@@ -34,7 +41,19 @@
 /* Discord status: library size */
 "%lld Series in %lld Categories" = "%1$lld Series in %2$lld Categories";
 
+/* Automatic downloads review: a chapter whose position is unclear */
+"A chapter Ito can't place in the reading order." = "A chapter Ito can't place in the reading order.";
+
+/* Automatic downloads review: why new chapters need a decision */
+"A large number of chapters showed up at once, which looks more like a reorganized list than new releases." = "A large number of chapters showed up at once, which looks more like a reorganized list than new releases.";
+
+/* Automatic downloads review: why changed chapters need a decision */
+"A large number of saved chapters changed at once, which looks more like a source-wide update than new revisions." = "A large number of saved chapters changed at once, which looks more like a source-wide update than new revisions.";
+
 "A library item already exists at the destination \"%@\"." = "A library item already exists at the destination \"%@\".";
+
+/* Automatic downloads review: the source changed a chapter that is saved */
+"A saved chapter changed at the source." = "A saved chapter changed at the source.";
 
 "A series in the backup belongs to a list that could not be found, so nothing was merged." = "A series in the backup belongs to a list that could not be found, so nothing was merged.";
 
@@ -62,6 +81,9 @@
 
 "Action completed successfully." = "Action completed successfully.";
 
+/* Automatic downloads: status of a rule that is checking for new chapters */
+"Active" = "Active";
+
 "Add" = "Add";
 
 /* Download presets settings: add a custom preset. */
@@ -73,6 +95,9 @@
 "Add a preset to download a set number of chapters from a series' download menu." = "Add a preset to download a set number of chapters from a series' download menu.";
 
 "Add a repository URL to discover and install plugins." = "Add a repository URL to discover and install plugins.";
+
+/* Series screen: automatic downloads need the series to be in the Library */
+"Add to Library to download new chapters automatically" = "Add to Library to download new chapters automatically";
 
 "Add to List" = "Add to List";
 
@@ -111,6 +136,9 @@ History filter: every kind of media */
 /* Download mode permitting cellular and hotspots */
 "Allow Metered Networks" = "Allow Metered Networks";
 
+/* Automatic downloads: the alert when notifications are not allowed */
+"Allow notifications for Ito in your device Settings to hear when new chapters need your decision." = "Allow notifications for Ito in your device Settings to hear when new chapters need your decision.";
+
 /* Download preview section header for Download More: chapters already stored, which are not counted. */
 "Already Saved or Queued" = "Already Saved or Queued";
 
@@ -121,6 +149,9 @@ History filter: every kind of media */
 
 /* Upload row: this upload is already saved on this device. */
 "Already saved" = "Already saved";
+
+/* Rule sheet: explains the mode that also fills unread chapters */
+"Also lets you review the unread chapters already listed and choose which to download. Nothing is downloaded until you approve it." = "Also lets you review the unread chapters already listed and choose which to download. Nothing is downloaded until you approve it.";
 
 /* History: other sources the same series was read on */
 "Also read on %@" = "Also read on %@";
@@ -138,6 +169,9 @@ History filter: every kind of media */
 /* History filter
 History: kind of media */
 "Anime" = "Anime";
+
+/* Automatic downloads review: a new upload of an existing chapter */
+"Another upload of a chapter you already have." = "Another upload of a chapter you already have.";
 
 /* Advanced explicit permission to use any eligible visible group. */
 "Any available group" = "Any available group";
@@ -171,6 +205,18 @@ History: kind of media */
 /* Footer under Find All Uploads: it only lists uploads; the user picks which to download afterwards. */
 "Asks the source to list every upload it has for this series. Nothing is downloaded until you choose uploads." = "Asks the source to list every upload it has for this series. Nothing is downloaded until you choose uploads.";
 
+/* Automatic downloads: note on a rule whose chapter list is too large */
+"At the last check the chapter list was too large to keep, so nothing was judged." = "At the last check the chapter list was too large to keep, so nothing was judged.";
+
+/* Automatic downloads: note on a rule whose last check got a list of unknown coverage */
+"At the last check the source did not say which chapters it returned, so nothing was judged." = "At the last check the source did not say which chapters it returned, so nothing was judged.";
+
+/* Automatic downloads: note on a rule whose last check got no chapters */
+"At the last check the source returned no chapters, so nothing was judged." = "At the last check the source returned no chapters, so nothing was judged.";
+
+/* Automatic downloads: note on a rule whose last check got an incomplete chapter list */
+"At the last check the source returned only part of the chapter list, so nothing was judged." = "At the last check the source returned only part of the chapter list, so nothing was judged.";
+
 /* Audio track button when no track is selected */
 "Audio" = "Audio";
 
@@ -179,10 +225,22 @@ History: kind of media */
 /* Reading mode: follow the series' default direction */
 "Automatic" = "Automatic";
 
+/* Downloads manager: opens the automatic download rules
+Title of a notification saying that new chapters of a series wait for the person's decision
+Title of the screen that lists the automatic download rules
+Title of the sheet that sets up automatic downloads for a series */
+"Automatic Downloads" = "Automatic Downloads";
+
 "Automatic Updates" = "Automatic Updates";
 
 /* Backup restore report: the component holding automatic download rules, restored paused. */
 "Automatic download rules" = "Automatic download rules";
+
+/* Automatic downloads: only manga and novels have automatic downloads */
+"Automatic downloads are not available for this kind of series." = "Automatic downloads are not available for this kind of series.";
+
+/* Automatic downloads screen: what the limits do */
+"Automatic downloads wait when the queue is full or their space is used up, and start again when there is room." = "Automatic downloads wait when the queue is full or their space is used up, and start again when there is room.";
 
 "Automatic progress updates are off while this entry is %@. Set it to %@ to resume them." = "Automatic progress updates are off while this entry is %1$@. Set it to %2$@ to resume them.";
 
@@ -268,6 +326,10 @@ Downloads queue: cancel one job */
 
 "Certificate Fingerprint (SHA-256)" = "Certificate Fingerprint (SHA-256)";
 
+/* Rule sheet: where the limits are changed */
+"Change these limits under Downloads, Automatic Downloads." = "Change these limits under Downloads, Automatic Downloads.";
+
+/* Review row: the chapter number. The placeholder is the number. */
 "Chapter %@" = "Chapter %@";
 
 /* Novel chapter heading: number, then chapter title */
@@ -309,6 +371,9 @@ Download preset editor: the count field. */
 /* Chapter menu: list the saved uploads of this chapter's reading position and open one of them, for this reading only */
 "Choose Downloaded Version…" = "Choose Downloaded Version…";
 
+/* Rule sheet: opens the choice of scanlation groups */
+"Choose Groups…" = "Choose Groups…";
+
 "Choose List on Save" = "Choose List on Save";
 
 "Choose a library status before adding this series to MangaBaka." = "Choose a library status before adding this series to MangaBaka.";
@@ -342,6 +407,8 @@ Download preset editor: the count field. */
 /* Offline chapters are durable data, separate from the image and network cache */
 "Clearing the cache doesn't remove downloaded chapters." = "Clearing the cache doesn't remove downloaded chapters.";
 
+/* Backfill sheet: close
+Rule sheet: close without changing anything */
 "Close" = "Close";
 
 "Close Reader" = "Close Reader";
@@ -556,12 +623,17 @@ Confirm permanent deletion of selected downloads */
 
 "DiscoverView requires a prepared runtime" = "DiscoverView requires a prepared runtime";
 
-/* Accessibility label of the button that closes the notice about downloads that were cancelled when a series was linked to another source. */
+/* Accessibility label of the button that closes the notice about downloads that were cancelled when a series was linked to another source.
+Review sheet: decide not to download these chapters */
 "Dismiss" = "Dismiss";
 
+/* Review sheet: close */
 "Done" = "Done";
 
-/* Chapter menu: save this chapter for offline reading */
+/* Backfill sheet: queue the ticked chapters
+Chapter menu: save this chapter for offline reading
+Rule sheet: section for which chapters the rule downloads
+Rule sheet: which chapters the rule downloads */
 "Download" = "Download";
 
 /* Download More prompt: title of the count prompt. */
@@ -573,9 +645,15 @@ Confirm permanent deletion of selected downloads */
 /* Configured bulk download network mode */
 "Download Network" = "Download Network";
 
+/* Series screen: opens the rule that downloads new chapters of this series automatically */
+"Download New Chapters Automatically" = "Download New Chapters Automatically";
+
 /* Navigation title of the custom download presets editor.
 Storage settings: open the editor for custom download presets, such as Next 3 Chapters. */
 "Download Presets" = "Download Presets";
+
+/* Review sheet: queue the chapters the person ticked */
+"Download Selected" = "Download Selected";
 
 /* Manual refresh; source revision is unchanged or unknown */
 "Download again" = "Download again";
@@ -611,6 +689,9 @@ Downloads manager stored inventory section */
 /* Title of the sheet that lists the saved copies of a chapter's reading position */
 "Downloaded Versions" = "Downloaded Versions";
 
+/* Rule sheet: what turning a rule off does */
+"Downloaded chapters stay. Queued automatic downloads are removed." = "Downloaded chapters stay. Queued automatic downloads are removed.";
+
 /* Chapter download status */
 "Downloading" = "Downloading";
 
@@ -623,6 +704,9 @@ Storage settings offline downloads section */
 
 /* Download More prompt footer: what counts toward the number. */
 "Downloads chapters after your last read one that aren't saved or queued yet. Saved and queued chapters don't count." = "Downloads chapters after your last read one that aren't saved or queued yet. Saved and queued chapters don't count.";
+
+/* Rule sheet: explains the new releases mode */
+"Downloads chapters the source adds after the first check. Chapters already listed are not downloaded." = "Downloads chapters the source adds after the first check. Chapters already listed are not downloaded.";
 
 /* Downloads manager bulk Cancel failure */
 "Downloads couldn't be cancelled. Check the list before trying again." = "Downloads couldn't be cancelled. Check the list before trying again.";
@@ -710,6 +794,9 @@ History: an episode without a title */
 "Error Loading Video" = "Error Loading Video";
 
 "Error: %@" = "Error: %@";
+
+/* Automatic downloads: the rule takes every upload of a chapter */
+"Every upload of every group" = "Every upload of every group";
 
 /* Source match: exact match on an alternative title */
 "Exact Alt Match" = "Exact Alt Match";
@@ -800,6 +887,9 @@ History: an episode without a title */
 /* Series status: complete */
 "Finished" = "Finished";
 
+/* Automatic downloads: the rule takes the chapters the source lists, whichever group made them */
+"Follow the source's chapter list" = "Follow the source's chapter list";
+
 /* Let the source choose which visible upload to download. Uploads form one reading position only when the source supplies a shared logical-unit ID; otherwise each listed upload is separate. */
 "Follow the source's preferred edition" = "Follow the source's preferred edition";
 
@@ -825,6 +915,12 @@ History: an episode without a title */
 /* Accessibility label for the untranslated source-provided group ID.
 Downloaded versions sheet: the source's identifier of a translation group. The placeholder is that identifier, shown as the source wrote it. */
 "Group ID %@" = "Group ID %@";
+
+/* Automatic downloads: status of a rule whose saved choice of scanlation groups this version of the app cannot read */
+"Group choice can't be read — edit the rule" = "Group choice can't be read — edit the rule";
+
+/* Rule sheet: section for the scanlation groups the rule follows */
+"Groups" = "Groups";
 
 "HTTPS to HTTP redirect downgrades are prohibited." = "HTTPS to HTTP redirect downgrades are prohibited.";
 
@@ -910,6 +1006,12 @@ Downloaded versions sheet: the source's identifier of a translation group. The p
 
 "Items you read or watch\nwill appear here." = "Items you read or watch\nwill appear here.";
 
+/* Automatic downloads review: why new chapters need a decision */
+"Ito can't find the last chapter it saw in the source's list, so it can't tell whether this chapter is new." = "Ito can't find the last chapter it saw in the source's list, so it can't tell whether this chapter is new.";
+
+/* Automatic downloads: the alert when the device Settings app could not be opened */
+"Ito could not open the device Settings app. Open it yourself and allow notifications for Ito." = "Ito could not open the device Settings app. Open it yourself and allow notifications for Ito.";
+
 "Ito could not open the device Settings app. Please try again." = "Ito could not open the device Settings app. Please try again.";
 
 "Ito is still preparing your library. Try again in a moment." = "Ito is still preparing your library. Try again in a moment.";
@@ -919,6 +1021,9 @@ Downloaded versions sheet: the source's identifier of a translation group. The p
 "Ito marks this entry %@ when you start chapter 1." = "Ito marks this entry %@ when you start chapter 1.";
 
 "Ito marks this entry %@ when you start episode 1." = "Ito marks this entry %@ when you start episode 1.";
+
+/* Automatic downloads screen: when notifications are posted */
+"Ito only notifies you when it is not open. It never notifies about finished downloads." = "Ito only notifies you when it is not open. It never notifies about finished downloads.";
 
 "Ito syncs progress for series you are watching or reading on MyAnimeList. Automatic sync only moves progress forward and leaves ratings unchanged; you can edit your rating in the tracker sheet. Ito never deletes entries or changes dates, tags or comments." = "Ito syncs progress for series you are watching or reading on MyAnimeList. Automatic sync only moves progress forward and leaves ratings unchanged; you can edit your rating in the tracker sheet. Ito never deletes entries or changes dates, tags or comments.";
 
@@ -933,8 +1038,14 @@ Downloaded versions sheet: the source's identifier of a translation group. The p
 
 "Keep All Local" = "Keep All Local";
 
+/* Rule mode: keep the chapters after the last one read downloaded */
+"Keep next unread chapters" = "Keep next unread chapters";
+
 /* Confirm only the permitted available chapters and leave missing positions unresolved. */
 "Keep selection" = "Keep selection";
+
+/* Rule sheet: explains the mode that keeps the next unread chapters downloaded */
+"Keeps the chapters after the last one you read downloaded as you read." = "Keeps the chapters after the last one you read downloaded as you read.";
 
 "Key: %@" = "Key: %@";
 
@@ -953,6 +1064,9 @@ Downloaded versions sheet: the source's identifier of a translation group. The p
 "Labels unavailable." = "Labels unavailable.";
 
 "Larger Text" = "Larger Text";
+
+/* Automatic downloads: when the rule was last checked. The placeholder is a relative time such as '5 minutes ago'. */
+"Last checked %@" = "Last checked %@";
 
 "Layout not saved" = "Layout not saved";
 
@@ -977,6 +1091,10 @@ Downloaded versions sheet: the source's identifier of a translation group. The p
 "Library items were remapped, but this mapping could not be remembered for future imports." = "Library items were remapped, but this mapping could not be remembered for future imports.";
 
 "Light" = "Light";
+
+/* Automatic downloads screen: section for the limits
+Rule sheet: section that shows the limits of automatic downloads */
+"Limits" = "Limits";
 
 "Line Spacing" = "Line Spacing";
 
@@ -1036,13 +1154,15 @@ Downloaded versions sheet: the source's identifier of a translation group. The p
 
 "Loading..." = "Loading...";
 
+/* Automatic downloads screen: the rules are being read */
 "Loading…" = "Loading…";
 
 "Local State" = "Local State";
 
 "Local progress not updated" = "Local progress not updated";
 
-/* Upload row: the source marks this upload locked for the account, so it cannot be downloaded. */
+/* Review row: the chapter is locked behind a paywall
+Upload row: the source marks this upload locked for the account, so it cannot be downloaded. */
 "Locked" = "Locked";
 
 /* Download preview footer: locked chapters are not downloaded and the reader stops at them. */
@@ -1132,6 +1252,12 @@ Manga format */
 
 "More Options" = "More Options";
 
+/* Rule sheet: what happens to chapters beyond the per-check limit */
+"More new chapters are held back and queued at the next check." = "More new chapters are held back and queued at the next check.";
+
+/* Automatic downloads: the per-check limit held some new chapters back */
+"More new chapters will be queued at the next check" = "More new chapters will be queued at the next check";
+
 "More options could not be loaded." = "More options could not be loaded.";
 
 /* Scanlator sheet section: asks the source to list every upload of the series, including other groups' translations. */
@@ -1173,12 +1299,24 @@ Manga format */
 /* A request was stopped because its captured network policy is no longer current. */
 "Network settings changed. Try again." = "Network settings changed. Try again.";
 
+/* Title of the sheet where the person decides about new chapters of a rule */
+"New Chapters" = "New Chapters";
+
 "New List" = "New List";
 
 /* Download preset editor title when adding a preset. */
 "New Preset" = "New Preset";
 
 "New Update" = "New Update";
+
+/* Automatic downloads review: a new chapter has several uploads and the person chooses */
+"New chapter — choose which uploads to download." = "New chapter — choose which uploads to download.";
+
+/* Rule mode: download chapters released after the rule was turned on */
+"New releases" = "New releases";
+
+/* Rule mode: also download unread chapters the person approves */
+"New releases and unread chapters" = "New releases and unread chapters";
 
 "Newest" = "Newest";
 
@@ -1221,6 +1359,9 @@ Manga format */
 /* Reader boundary: the next chapter is text; tapping opens it in the text reader without leaving the series */
 "Next chapter opens in the text reader. Tap to continue" = "Next chapter opens in the text reader. Tap to continue";
 
+/* Automatic downloads review: the next unread chapters to keep downloaded */
+"Next unread chapters." = "Next unread chapters.";
+
 /* Adjacent chapter prefetch picker value: no neighbouring chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch. */
 "No Adjacent Chapters" = "No Adjacent Chapters";
 
@@ -1242,6 +1383,9 @@ Manga format */
 "No Saved Chapters" = "No Saved Chapters";
 
 "No Trackers Authenticated" = "No Trackers Authenticated";
+
+/* Automatic downloads screen: there are no rules */
+"No automatic downloads yet. Open a series in your Library to set one up." = "No automatic downloads yet. Open a series in your Library to set one up.";
 
 /* Scanlator choice: a remembered scanlator that the source's current list has no chapters from. */
 "No chapters in the current list" = "No chapters in the current list";
@@ -1321,7 +1465,11 @@ Scanlator choice: the chapters whose source names no scanlator. */
 
 "Not Found" = "Not Found";
 
+/* Automatic downloads alert: leave notifications off */
 "Not Now" = "Not Now";
+
+/* Automatic downloads: an active rule that has not been checked since it was turned on */
+"Not checked yet" = "Not checked yet";
 
 "Not on list" = "Not on list";
 
@@ -1341,18 +1489,36 @@ Scanlator choice: the chapters whose source names no scanlator. */
 
 "Nothing in your library matches\n\"%@\"." = "Nothing in your library matches\n\"%@\".";
 
+/* Review sheet: no chapters wait for the person */
+"Nothing is waiting for your decision." = "Nothing is waiting for your decision.";
+
 /* Series details: a download preset found every chapter in its range already saved or queued, or none to download. */
 "Nothing new to download" = "Nothing new to download";
 
 /* Download preview: no chapter would be queued. */
 "Nothing to download." = "Nothing to download.";
 
+/* Automatic downloads: the queue or the space for automatic downloads is full, so approved chapters wait */
+"Nothing was queued yet. The chapters wait for room in the queue or on the disk." = "Nothing was queued yet. The chapters wait for room in the queue or on the disk.";
+
+/* Automatic downloads: approved chapters needed no download */
+"Nothing was queued. These chapters are saved already, were deleted on purpose, or are locked." = "Nothing was queued. These chapters are saved already, were deleted on purpose, or are locked.";
+
 /* Edition policy save failed. Batch-only authorization requires a separate explicit confirmation. */
 "Nothing was queued. Try again, or turn off Remember to use this choice for this batch only." = "Nothing was queued. Try again, or turn off Remember to use this choice for this batch only.";
 
 "Notification permission was denied, but the preference could not be disabled. Please try again." = "Notification permission was denied, but the preference could not be disabled. Please try again.";
 
+/* Automatic downloads: title of the alert when the system does not allow notifications */
+"Notifications Are Off" = "Notifications Are Off";
+
 "Notifications Disabled" = "Notifications Disabled";
+
+/* Automatic downloads: the alert when the alert setting stays on after notifications were refused */
+"Notifications were refused, but the setting could not be turned off. Try again." = "Notifications were refused, but the setting could not be turned off. Try again.";
+
+/* Automatic downloads screen: turns on notifications for new chapters that need the person's decision */
+"Notify When Chapters Need a Decision" = "Notify When Chapters Need a Decision";
 
 "Notify on New Chapters" = "Notify on New Chapters";
 
@@ -1374,6 +1540,7 @@ Manga format: light novel */
 /* Anime format: original video animation */
 "OVA" = "OVA";
 
+/* Automatic downloads: status of a series whose rule is turned off */
 "Off" = "Off";
 
 /* Discord status: chapter from the official release */
@@ -1398,6 +1565,9 @@ Manga format: light novel */
 /* Approved fallback has no unlisted final fallback, and a fallback is always shown in a preview before it is queued. */
 "Only these groups are offered as fallbacks, in the order shown. You review them before anything is queued." = "Only these groups are offered as fallbacks, in the order shown. You review them before anything is queued.";
 
+/* Automatic downloads: the rule takes chapters of the chosen groups. The placeholder is the list of group names. */
+"Only these groups: %@" = "Only these groups: %@";
+
 "Open" = "Open";
 
 /* Button on a library series whose source is unavailable: shows the details saved in the library. */
@@ -1406,6 +1576,7 @@ Manga format: light novel */
 /* Open saved Library details; reading is through details */
 "Open Series" = "Open Series";
 
+/* Automatic downloads alert: open the device Settings app */
 "Open Settings" = "Open Settings";
 
 /* Button in the downloaded versions sheet: reads the selected saved copy, for this reading only */
@@ -1413,6 +1584,9 @@ Manga format: light novel */
 
 /* Reader consent alert button: opens the one upload from another translation group, for this reading only */
 "Open This Upload" = "Open This Upload";
+
+/* Rule sheet: groups can only be changed from the series screen */
+"Open the series to change the groups." = "Open the series to change the groups.";
 
 /* A source needs user interaction that background work cannot perform. */
 "Open this source to continue in the foreground." = "Open this source to continue in the foreground.";
@@ -1464,6 +1638,10 @@ History: the page a chapter was left on */
 
 "Part of the backup is damaged or from an unsupported version." = "Part of the backup is damaged or from an unsupported version.";
 
+/* Rule sheet: pause the rule */
+"Pause" = "Pause";
+
+/* Automatic downloads: status of a rule the person paused */
 "Paused" = "Paused";
 
 /* Chapter download status: the queue came from a restored backup. Retry to download again. */
@@ -1510,6 +1688,9 @@ History: the page a chapter was left on */
 "Popular" = "Popular";
 
 "Popular This Season" = "Popular This Season";
+
+/* Automatic downloads: the rule prefers the chapters of one group. The placeholder is the group's name. */
+"Prefer %@" = "Prefer %@";
 
 "Preference not saved" = "Preference not saved";
 
@@ -1683,6 +1864,9 @@ History: the page a chapter was left on */
 
 "Repeating" = "Repeating";
 
+/* Rule sheet: replace a saved chapter when the source changes it */
+"Replace Changed Chapters" = "Replace Changed Chapters";
+
 /* Chapter menu: manually replace the exact saved copy after confirmation
 Manual replacement confirmation title */
 "Replace download" = "Replace download";
@@ -1697,6 +1881,9 @@ Manual replacement confirmation title */
 
 /* Chapter download status: the saved copy or its source changed after a replacement was confirmed. The saved copy is kept; replace it again to review the chapter. */
 "Replacement no longer applies" = "Replacement no longer applies";
+
+/* Rule sheet: when a saved chapter is replaced */
+"Replaces a saved chapter only when the source reports a changed revision of the same chapter." = "Replaces a saved chapter only when the source reports a changed revision of the same chapter.";
 
 /* Chapter download status: a replacement of a saved chapter is queued or running. The saved copy stays available. */
 "Replacing download" = "Replacing download";
@@ -1752,9 +1939,13 @@ Manual replacement confirmation title */
 
 "Restore report was already acknowledged." = "Restore report was already acknowledged.";
 
+/* Automatic downloads: status of a rule that came back from a backup and stays paused until the person reviews it */
+"Restored — review to turn on" = "Restored — review to turn on";
+
 /* Exact scope of network settings reset */
 "Restores network and prefetch defaults only. Credentials, cookies, site data and reading state are kept." = "Restores network and prefetch defaults only. Credentials, cookies, site data and reading state are kept.";
 
+/* Rule sheet: enable a rule the person paused */
 "Resume" = "Resume";
 
 /* Approve a download paused after restoring a backup
@@ -1786,8 +1977,23 @@ Downloads queue: retry a failed or paused job */
 
 "Revert" = "Revert";
 
+/* Automatic downloads screen: open the chapters of a rule that wait for the person's decision */
+"Review" = "Review";
+
+/* Rule sheet: opens the chapters that wait for the person's decision */
+"Review New Chapters" = "Review New Chapters";
+
+/* Rule sheet: opens the list of unread chapters the person may download now */
+"Review Unread Chapters to Download" = "Review Unread Chapters to Download";
+
+/* Rule sheet: enable a rule that came back from a backup or a source change, as shown */
+"Review and Turn On" = "Review and Turn On";
+
 /* Series details: detail when the scanlators remembered for this series cannot be read, so the download is shown for review instead of being queued. */
 "Review this download before it starts." = "Review this download before it starts.";
+
+/* Automatic downloads: a rule that came back from a backup or a source change must be reviewed before it runs */
+"Review this rule before turning it on." = "Review this rule before turning it on.";
 
 /* Reading mode */
 "Right to Left" = "Right to Left";
@@ -1799,6 +2005,9 @@ Downloads queue: retry a failed or paused job */
 
 /* Download preset editor: save the preset. */
 "Save" = "Save";
+
+/* Rule sheet: save the edited rule */
+"Save Changes" = "Save Changes";
 
 "Saved" = "Saved";
 
@@ -2054,6 +2263,9 @@ Downloads queue: retry a failed or paused job */
 
 "Source Settings" = "Source Settings";
 
+/* Automatic downloads: status of a rule paused because its series moved to another source, until the person reviews it */
+"Source changed — review to turn on" = "Source changed — review to turn on";
+
 /* Chapter download status: the source's chapter changed after a replacement was confirmed. The saved copy is kept; replace it again to review the chapter. */
 "Source chapter changed" = "Source chapter changed";
 
@@ -2063,7 +2275,8 @@ Downloads queue: retry a failed or paused job */
 
 "Source mappings" = "Source mappings";
 
-/* History: the source a series was read on was removed */
+/* Automatic downloads: status of a rule whose source is not installed, so nothing can be checked
+History: the source a series was read on was removed */
 "Source not installed" = "Source not installed";
 
 "Source settings" = "Source settings";
@@ -2179,6 +2392,9 @@ Reading font: the system font */
 
 "The account this progress was recorded under could not be verified." = "The account this progress was recorded under could not be verified.";
 
+/* Backfill sheet: saving the approval failed */
+"The approval could not be saved. Try again." = "The approval could not be saved. Try again.";
+
 "The backup contains the same series more than once." = "The backup contains the same series more than once.";
 
 "The backup has settings for a source it does not include." = "The backup has settings for a source it does not include.";
@@ -2187,11 +2403,23 @@ Reading font: the system font */
 
 "The certificate couldn't be saved. Try again." = "The certificate couldn't be saved. Try again.";
 
+/* Automatic downloads: saving a change to a rule failed */
+"The change could not be saved. Try again." = "The change could not be saved. Try again.";
+
+/* Automatic downloads review: why new chapters need a decision */
+"The chapter list Ito saved first had no reliable reading order, so Ito can't tell whether this chapter is new." = "The chapter list Ito saved first had no reliable reading order, so Ito can't tell whether this chapter is new.";
+
 /* Download preview: the series' chapter list changed while the preview was open, so it was made again. */
 "The chapter list changed; review again." = "The chapter list changed; review again.";
 
+/* Automatic downloads review: the chapter list changed in an unusual way */
+"The chapter list looks different from before." = "The chapter list looks different from before.";
+
 /* Download preview warning: the last-read chapter belongs to a scanlator that is not selected. */
 "The chapter you last read isn't in the selected scanlators, so this starts from the first unread chapter." = "The chapter you last read isn't in the selected scanlators, so this starts from the first unread chapter.";
+
+/* Review sheet: reading the waiting chapters failed */
+"The chapters could not be loaded." = "The chapters could not be loaded.";
 
 /* Scanlator sheet warning: reading the scanlators remembered for this series failed this time, so the stored choice is kept unless the user turns Remember on. */
 "The choice saved for this series couldn't be loaded. It isn't replaced unless you turn on Remember." = "The choice saved for this series couldn't be loaded. It isn't replaced unless you turn on Remember.";
@@ -2201,12 +2429,24 @@ Reading font: the system font */
 
 "The configured repositories could not be refreshed. Please try again." = "The configured repositories could not be refreshed. Please try again.";
 
+/* Review sheet: saving the person's decision failed */
+"The decision could not be saved. Try again." = "The decision could not be saved. Try again.";
+
 /* Series details: detail for a download action that did not take effect. */
 "The download could not be changed. Please try again." = "The download could not be changed. Please try again.";
 
 "The extension \"%@\" was not found in any of your repositories." = "The extension \"%@\" was not found in any of your repositories.";
 
 "The extension could not be installed. Please try again." = "The extension could not be installed. Please try again.";
+
+/* Automatic downloads: the rule's saved group choice is unreadable, so nothing was done */
+"The group choice of this rule can't be read, so nothing was queued. Edit the rule." = "The group choice of this rule can't be read, so nothing was queued. Edit the rule.";
+
+/* Automatic downloads: why unread chapters cannot be listed */
+"The group choice of this rule can't be read. Edit the rule first." = "The group choice of this rule can't be read. Edit the rule first.";
+
+/* Automatic downloads review: the rule's group choice does not fit the list */
+"The groups this rule follows don't match the chapters the source lists now." = "The groups this rule follows don't match the chapters the source lists now.";
 
 "The history item couldn't be deleted. Please try again." = "The history item couldn't be deleted. Please try again.";
 
@@ -2221,6 +2461,9 @@ Reading font: the system font */
 "The imported library item \"%@\" no longer exists." = "The imported library item \"%@\" no longer exists.";
 
 "The installed extension could not be loaded." = "The installed extension could not be loaded.";
+
+/* Automatic downloads: note on a rule whose last check failed */
+"The last check could not reach the source. Ito tries again later." = "The last check could not reach the source. Ito tries again later.";
 
 "The library backup could not be exported. Please try again." = "The library backup could not be exported. Please try again.";
 
@@ -2272,6 +2515,9 @@ Reading font: the system font */
 
 "The queued read progress could not be read or updated." = "The queued read progress could not be read or updated.";
 
+/* Automatic downloads review: why the next chapters cannot be chosen */
+"The reading order of the chapter list is unclear, so Ito can't tell which chapters come next." = "The reading order of the chapter list is unclear, so Ito can't tell which chapters come next.";
+
 /* Download preview warning: the order of the chapters could not be worked out confidently. */
 "The reading order of this series isn't certain. Check the list before downloading." = "The reading order of this series isn't certain. Check the list before downloading.";
 
@@ -2285,6 +2531,12 @@ Reading font: the system font */
 "The repository index could not be loaded. Pull to refresh or check the repository URL." = "The repository index could not be loaded. Pull to refresh or check the repository URL.";
 
 "The repository package identifier is invalid." = "The repository package identifier is invalid.";
+
+/* Automatic downloads: the accepted chapter list cannot be used, so nothing was done */
+"The saved chapter list can't be used, so nothing was queued. Wait for the next check." = "The saved chapter list can't be used, so nothing was queued. Wait for the next check.";
+
+/* Automatic downloads: why unread chapters cannot be listed */
+"The saved chapter list can't be used. Wait for the next check." = "The saved chapter list can't be used. Wait for the next check.";
 
 /* Downloaded versions sheet: reading the list of saved copies failed */
 "The saved copies couldn't be read. Close this and try again." = "The saved copies couldn't be read. Close this and try again.";
@@ -2310,6 +2562,15 @@ Reading font: the system font */
 
 "The sign-in couldn't be saved. Try again." = "The sign-in couldn't be saved. Try again.";
 
+/* Automatic downloads review: why new chapters need a decision */
+"The source added a chapter in the middle of the list, among chapters Ito already saw." = "The source added a chapter in the middle of the list, among chapters Ito already saw.";
+
+/* Automatic downloads review: why new chapters need a decision */
+"The source added a chapter that looks older than the chapters Ito saw first." = "The source added a chapter that looks older than the chapters Ito saw first.";
+
+/* Automatic downloads review: why new chapters need a decision */
+"The source changed how it identifies this chapter, so Ito can't tell whether it is new." = "The source changed how it identifies this chapter, so Ito can't tell whether it is new.";
+
 "The source could not be saved. Please try again." = "The source could not be saved. Please try again.";
 
 "The source could not complete the search." = "The source could not complete the search.";
@@ -2322,9 +2583,15 @@ Reading font: the system font */
 /* Scanlator sheet: the source did not say whether this list holds all uploads or only the visible ones. */
 "The source didn't say which uploads this covers." = "The source didn't say which uploads this covers.";
 
+/* Automatic downloads review: why new chapters need a decision */
+"The source does not give a reliable reading order, so Ito can't tell where this chapter belongs." = "The source does not give a reliable reading order, so Ito can't tell where this chapter belongs.";
+
 "The source is not installed or is unavailable." = "The source is not installed or is unavailable.";
 
 "The source is not ready." = "The source is not ready.";
+
+/* Automatic downloads review: why new chapters need a decision */
+"The source listed a chapter after the newest one Ito saw that Ito already knew about." = "The source listed a chapter after the newest one Ito saw that Ito already knew about.";
 
 "The source no longer lists this chapter." = "The source no longer lists this chapter.";
 
@@ -2334,7 +2601,13 @@ Reading font: the system font */
 
 "The source rejection could not be saved. Please try again." = "The source rejection could not be saved. Please try again.";
 
+/* Automatic downloads review: why new chapters need a decision */
+"The source reordered chapters it listed before, so Ito can't tell whether this chapter is new." = "The source reordered chapters it listed before, so Ito can't tell whether this chapter is new.";
+
 "The source reported an error." = "The source reported an error.";
+
+/* Automatic downloads review: the chapter list became empty */
+"The source returned no chapters, though it listed some before. Nothing was changed." = "The source returned no chapters, though it listed some before. Nothing was changed.";
 
 /* Scanlator sheet: the list of uploads is complete within what the source offers this account. */
 "The source says this covers every upload it offers for your account and settings." = "The source says this covers every upload it offers for your account and settings.";
@@ -2350,6 +2623,15 @@ Reading font: the system font */
 
 /* Series details: detail when the preferred group is absent from the current chapter list; the user may change the group in the scanlator choice. */
 "The source's current list has no chapters from it. Choose another group to continue." = "The source's current list has no chapters from it. Choose another group to continue.";
+
+/* Automatic downloads: note on a rule whose source changed during the last check */
+"The source's settings changed during the last check, so nothing was judged." = "The source's settings changed during the last check, so nothing was judged.";
+
+/* Automatic downloads: the source's settings or account changed while the sheet was open, so nothing was saved */
+"The source's settings changed since you opened this. Review the rule again." = "The source's settings changed since you opened this. Review the rule again.";
+
+/* Automatic downloads: the source's settings or account changed, so nothing was done */
+"The source's settings changed, so nothing was queued. Check the rule and try again." = "The source's settings changed, so nothing was queued. Check the rule and try again.";
 
 /* The request belongs to a source authorization scope that is no longer current. */
 "The source's sign-in or settings changed. Review them and try again." = "The source's sign-in or settings changed. Review them and try again.";
@@ -2374,7 +2656,13 @@ Reading font: the system font */
 
 "The tracker page could not be opened." = "The tracker page could not be opened.";
 
+/* Backfill sheet: reading the unread chapters failed */
+"The unread chapters could not be listed." = "The unread chapters could not be listed.";
+
 "Theme" = "Theme";
+
+/* Backfill sheet: nothing is left to approve */
+"There are no unread chapters to download." = "There are no unread chapters to download.";
 
 /* Download preview section footer for Download More: the stored chapters listed above do not count toward the number. */
 "These aren't counted." = "These aren't counted.";
@@ -2382,12 +2670,21 @@ Reading font: the system font */
 /* Download preview footer: the uploads listed above are only downloaded when ticked. */
 "These aren't downloaded unless you tick them." = "These aren't downloaded unless you tick them.";
 
+/* Automatic downloads: the approved chapters were already in the queue */
+"These chapters are already queued." = "These chapters are already queued.";
+
 "These settings can't be shown." = "These settings can't be shown.";
+
+/* Automatic downloads: the rule's settings were refused */
+"These settings can't be used. Check them and try again." = "These settings can't be used. Check them and try again.";
 
 "This action is unsupported by the source." = "This action is unsupported by the source.";
 
 /* Scope of temporary metered download permission */
 "This batch may use cellular data or a personal hotspot while the app stays in the foreground. Other downloads and prefetching are not approved." = "This batch may use cellular data or a personal hotspot while the app stays in the foreground. Other downloads and prefetching are not approved.";
+
+/* Automatic downloads: what the person was reviewing changed, so nothing was done */
+"This changed since you opened it. It was reloaded, so look again." = "This changed since you opened it. It was reloaded, so look again.";
 
 /* Series details: the chapter is locked, or its source can't be saved for offline reading. */
 "This chapter can't be downloaded." = "This chapter can't be downloaded.";
@@ -2400,6 +2697,9 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 
 /* Reader failure: the chapter is made for the other reader, but this reader has no route to hand it to. */
 "This chapter opens in the other reader." = "This chapter opens in the other reader.";
+
+/* Rule sheet: the rule's group choice is its own copy */
+"This choice belongs to the rule. It does not change the groups this series remembers for downloads." = "This choice belongs to the rule. It does not change the groups this series remembers for downloads.";
 
 "This control type (%u) is not supported." = "This control type (%u) is not supported.";
 
@@ -2422,6 +2722,9 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 "This includes chapters from several scanlators." = "This includes chapters from several scanlators.";
 
 "This is an ambiguous match. Are you sure you want to link it?" = "This is an ambiguous match. Are you sure you want to link it?";
+
+/* Automatic downloads: the rule or event the person was reviewing is gone or paused, so nothing was done */
+"This is no longer available. It was reloaded." = "This is no longer available. It was reloaded.";
 
 "This item may have been imported with an incompatible content key. Search this source to link it to the correct entry." = "This item may have been imported with an incompatible content key. Search this source to link it to the correct entry.";
 
@@ -2458,13 +2761,32 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 /* Network policy refuses a request on a metered connection. */
 "This request is waiting for an unmetered network." = "This request is waiting for an unmetered network.";
 
+/* Automatic downloads: the rule changed while its sheet was open, so nothing was saved */
+"This rule changed since you opened it. It was reloaded, so review it again." = "This rule changed since you opened it. It was reloaded, so review it again.";
+
+/* Automatic downloads: the rule's mode does not support the requested action
+Automatic downloads: why unread chapters cannot be listed */
+"This rule does not download unread chapters." = "This rule does not download unread chapters.";
+
+/* Automatic downloads: why unread chapters cannot be listed */
+"This rule has no accepted chapter list yet, or it is not turned on." = "This rule has no accepted chapter list yet, or it is not turned on.";
+
+/* Automatic downloads: the rule is gone or is not in the state the action needs */
+"This rule is no longer available. It was reloaded." = "This rule is no longer available. It was reloaded.";
+
 /* Reader failure after integrity verification fails for a specifically chosen downloaded alternative. */
 "This saved copy is damaged and can't be read." = "This saved copy is damaged and can't be read.";
 
 /* Reader failure after choosing a specific downloaded alternative that became unavailable. */
 "This saved copy is no longer available." = "This saved copy is no longer available.";
 
+/* Automatic downloads: a rule for the series exists already, so a new one was not made */
+"This series already has a rule. It was reloaded." = "This series already has a rule. It was reloaded.";
+
 "This series is no longer available on MangaBaka. Stop tracking it and link it again." = "This series is no longer available on MangaBaka. Stop tracking it and link it again.";
+
+/* Automatic downloads: the series was removed from the Library, so a rule cannot be saved */
+"This series is no longer in your Library." = "This series is no longer in your Library.";
 
 /* Scanlator sheet: the source does not offer a list of every upload, so nothing was added to the chapter list. */
 "This source can't list more uploads. The chapter list is unchanged." = "This source can't list more uploads. The chapter list is unchanged.";
@@ -2493,12 +2815,18 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 
 "This tracker does not support manual scoring." = "This tracker does not support manual scoring.";
 
+/* Automatic downloads: chosen chapters are no longer part of the event, so nothing was done */
+"Those chapters can't be approved any more. It was reloaded, so look again." = "Those chapters can't be approved any more. It was reloaded, so look again.";
+
 "To read this content, you must install the '%@' extension." = "To read this content, you must install the '%@' extension.";
 
 /* History section */
 "Today" = "Today";
 
 "Too many attempts failed." = "Too many attempts failed.";
+
+/* Automatic downloads review: why new chapters need a decision */
+"Too many chapters showed up at once to decide automatically." = "Too many chapters showed up at once to decide automatically.";
 
 "Top Rated" = "Top Rated";
 
@@ -2546,9 +2874,23 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 
 "Trusting this certificate allows connections to this server. Only trust certificates from servers you own or control." = "Trusting this certificate allows connections to this server. Only trust certificates from servers you own or control.";
 
+/* Backfill sheet: read the unread chapters again
+Review sheet: read the waiting chapters again */
 "Try Again" = "Try Again";
 
 "Try different search terms or adjust your filters" = "Try different search terms or adjust your filters";
+
+/* Rule sheet: confirms turning the rule off */
+"Turn Off" = "Turn Off";
+
+/* Rule sheet: title of the confirmation for turning a rule off */
+"Turn Off Automatic Downloads?" = "Turn Off Automatic Downloads?";
+
+/* Rule sheet: turn the rule off, after a confirmation */
+"Turn Off…" = "Turn Off…";
+
+/* Rule sheet: create the rule and start checking */
+"Turn On" = "Turn On";
 
 /* Download preset editor: the type of preset. */
 "Type" = "Type";
@@ -2565,9 +2907,16 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 
 "Unable to Load Content" = "Unable to Load Content";
 
+/* Automatic downloads: title of the alert when the device Settings app could not be opened */
 "Unable to Open Settings" = "Unable to Open Settings";
 
+/* Automatic downloads: title of the alert when a limit or setting could not be saved */
+"Unable to Save" = "Unable to Save";
+
 "Unable to Save Settings" = "Unable to Save Settings";
+
+/* Automatic downloads: title of the alert when the alert setting could not be turned off after notifications were refused */
+"Unable to Turn Off Alerts" = "Unable to Turn Off Alerts";
 
 "Unable to search sources. Please try again." = "Unable to search sources. Please try again.";
 
@@ -2605,6 +2954,12 @@ Shown when a chapter has no offline copy and no installed source can load it. Us
 Reader consent: shown in place of the group name when the source supplies none */
 "Unnamed group" = "Unnamed group";
 
+/* Title of the sheet where the person approves unread chapters for download */
+"Unread Chapters" = "Unread Chapters";
+
+/* Automatic downloads review: unread chapters offered for download */
+"Unread chapters to download." = "Unread chapters to download.";
+
 "Unread/Unwatched" = "Unread/Unwatched";
 
 "Unresolved" = "Unresolved";
@@ -2612,6 +2967,12 @@ Reader consent: shown in place of the group name when the source supplies none *
 "Unresolved legacy media" = "Unresolved legacy media";
 
 "Unsupported component type." = "Unsupported component type.";
+
+/* Rule sheet: the space automatic downloads may fill. The placeholder is a size such as 5 GB. */
+"Up to %@ of space for automatic downloads" = "Up to %@ of space for automatic downloads";
+
+/* Automatic downloads screen: the space automatic downloads may fill. The placeholder is a number of gigabytes. */
+"Up to %lld GB of space for automatic downloads" = "Up to %lld GB of space for automatic downloads";
 
 /* Series status: not released yet */
 "Upcoming" = "Upcoming";
@@ -2680,11 +3041,41 @@ Reader consent: shown in place of the group name when the source supplies none *
 /* History: volume and chapter title */
 "Vol. %@ · %@" = "Vol. %1$@ · %2$@";
 
+/* Review row: the volume number. The placeholder is the number. */
+"Volume %@" = "Volume %@";
+
 /* Series details: detail asking the user to repeat a download that was not queued because an earlier request was still being queued. */
 "Wait a moment, then download this again." = "Wait a moment, then download this again.";
 
 /* Chapter download status: downloads do not use cellular or other metered networks */
 "Waiting for Wi-Fi" = "Waiting for Wi-Fi";
+
+/* Download state: an automatic download waits because the connection is metered and Settings does not allow automatic downloads on it */
+"Waiting for Wi-Fi — automatic downloads use cellular data only when Settings allows it" = "Waiting for Wi-Fi — automatic downloads use cellular data only when Settings allows it";
+
+/* Automatic downloads: a rule that has no accepted chapter list yet */
+"Waiting for a complete chapter list" = "Waiting for a complete chapter list";
+
+/* Automatic downloads: a new rule that has not been checked yet */
+"Waiting for a complete chapter list — not checked yet" = "Waiting for a complete chapter list — not checked yet";
+
+/* Automatic downloads: the last check failed */
+"Waiting for a complete chapter list — the last check could not reach the source" = "Waiting for a complete chapter list — the last check could not reach the source";
+
+/* Automatic downloads: the chapter list is larger than the app can keep for checking */
+"Waiting for a complete chapter list — the list is too large to keep" = "Waiting for a complete chapter list — the list is too large to keep";
+
+/* Automatic downloads: the last check got a chapter list whose coverage the source did not state */
+"Waiting for a complete chapter list — the source did not say which chapters it returned" = "Waiting for a complete chapter list — the source did not say which chapters it returned";
+
+/* Automatic downloads: the last check got no chapters */
+"Waiting for a complete chapter list — the source returned no chapters" = "Waiting for a complete chapter list — the source returned no chapters";
+
+/* Automatic downloads: the last check got an incomplete chapter list */
+"Waiting for a complete chapter list — the source returned only part of it" = "Waiting for a complete chapter list — the source returned only part of it";
+
+/* Automatic downloads: the source's settings or account changed while the last check ran */
+"Waiting for a complete chapter list — the source's settings changed during the check" = "Waiting for a complete chapter list — the source's settings changed during the check";
 
 /* Chapter download status
 Effective network policy refusal */
@@ -2699,11 +3090,21 @@ Effective network policy refusal */
 /* Effective network policy refusal */
 "Waiting for an unmetered network" = "Waiting for an unmetered network";
 
+/* Automatic downloads: new chapters wait because the space for automatic downloads is used up
+Download state: an automatic download is queued, but the space for automatic downloads is used up */
+"Waiting for automatic download space" = "Waiting for automatic download space";
+
 /* Chapter download status */
 "Waiting for free storage" = "Waiting for free storage";
 
+/* Automatic downloads: new chapters wait because the download queue is full */
+"Waiting for room in the download queue" = "Waiting for room in the download queue";
+
 /* Chapter download status */
 "Waiting for the device to unlock" = "Waiting for the device to unlock";
+
+/* Download state: an automatic download is queued, but its rule is paused, turned off or being reviewed */
+"Waiting — the rule that queued it is paused" = "Waiting — the rule that queued it is paused";
 
 /* Chapter download status */
 "Waiting: Low Data Mode is on" = "Waiting: Low Data Mode is on";
@@ -2774,6 +3175,9 @@ Effective network policy refusal */
 
 "Your Lists" = "Your Lists";
 
+/* Automatic downloads: the alert when a limit or setting could not be saved */
+"Your change could not be saved. Try again." = "Your change could not be saved. Try again.";
+
 "Your changes could not be saved. Please try again." = "Your changes could not be saved. Please try again.";
 
 /* Series details: detail when the scanlators chosen for this series could not be saved. */
@@ -2791,6 +3195,12 @@ Effective network policy refusal */
 
 /* Video player error when the network policy refuses to start or continue playback. */
 "Your network settings don't allow this episode to play right now." = "Your network settings don't allow this episode to play right now.";
+
+/* Automatic downloads review: why the next chapters cannot be chosen */
+"Your read marks only record chapter numbers, so Ito can't tell which exact chapters you have read." = "Your read marks only record chapter numbers, so Ito can't tell which exact chapters you have read.";
+
+/* Automatic downloads: why unread chapters cannot be listed */
+"Your read marks only record chapter numbers, so Ito can't tell which exact chapters you have read. Nothing can be listed safely." = "Your read marks only record chapter numbers, so Ito can't tell which exact chapters you have read. Nothing can be listed safely.";
 
 "Your restored data is saved. Refresh must finish before a report can be shown." = "Your restored data is saved. Refresh must finish before a report can be shown.";
 

@@ -538,7 +538,10 @@ struct SubscriptionCheckSchedulerTests {
     @Test func theFacadesReadsNeverBeginATicketOrFetch() async throws {
         let h = try await SchedulerHarness()
         try await h.subscribe("a")
-        let facade = AutomaticDownloads(center: h.fixture.center, scheduler: h.scheduler)
+        let facade = AutomaticDownloads(
+            center: h.fixture.center, scheduler: h.scheduler, store: h.fixture.store, limits: { SchedulerHarness.roomy },
+            intervalHours: { 4 }, installedPluginIDs: Just(["plugin.test"]).eraseToAnyPublisher()
+        )
 
         #expect(facade.isAvailable)
         #expect(try facade.sourceEpoch(for: "plugin.test") == OfflineStoreFixture.epoch)
@@ -557,7 +560,10 @@ struct SubscriptionCheckSchedulerTests {
 
     @Test func anAcknowledgedEnableAsksForACheckOfThatRuleAndARefusedOneDoesNot() async throws {
         let h = try await SchedulerHarness()
-        let facade = AutomaticDownloads(center: h.fixture.center, scheduler: h.scheduler)
+        let facade = AutomaticDownloads(
+            center: h.fixture.center, scheduler: h.scheduler, store: h.fixture.store, limits: { SchedulerHarness.roomy },
+            intervalHours: { 4 }, installedPluginIDs: Just(["plugin.test"]).eraseToAnyPublisher()
+        )
         h.scheduler.setActive(true)
         await h.scheduler.untilIdle()
         #expect(h.spy.begins.isEmpty)
@@ -672,7 +678,10 @@ struct SubscriptionCheckSchedulerTests {
 
     @Test func anEnableWhoseSnapshotWasReadBeforeItCommittedIsStillCheckedInTheSameActivation() async throws {
         let h = try await SchedulerHarness()
-        let facade = AutomaticDownloads(center: h.fixture.center, scheduler: h.scheduler)
+        let facade = AutomaticDownloads(
+            center: h.fixture.center, scheduler: h.scheduler, store: h.fixture.store, limits: { SchedulerHarness.roomy },
+            intervalHours: { 4 }, installedPluginIDs: Just(["plugin.test"]).eraseToAnyPublisher()
+        )
         try await h.pool.write { db in
             try LibraryItem(
                 id: "late", title: "Late", coverUrl: nil, pluginId: "plugin.test", isAnime: false, pluginType: .manga,

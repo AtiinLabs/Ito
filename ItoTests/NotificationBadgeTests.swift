@@ -4,11 +4,25 @@ import Testing
 import ito_runner
 @testable import Ito
 
-/// Reports a fixed authorization and streams every icon badge count it is given.
+/// Reports a fixed authorization, streams every icon badge count it is given, and keeps the attention notifications
+/// posted to it, so a test can look at what the system would show.
 nonisolated final class FakeNotificationSystem: NotificationSystem, @unchecked Sendable {
+    nonisolated struct Posted: Equatable {
+        let identifier: String
+        let title: String
+        let body: String
+        let threadIdentifier: String
+        let payload: SubscriptionAttentionPayload
+    }
+
     let authorized: Bool
     let iconBadgeCounts: AsyncStream<Int>
     private let continuation: AsyncStream<Int>.Continuation
+    private let lock = NSLock()
+    private var delivered: [Posted] = []
+    private var adds: [Posted] = []
+    private var removedDelivered: [[String]] = []
+    private var removedPending: [[String]] = []
 
     init(authorized: Bool) {
         self.authorized = authorized
@@ -24,6 +38,42 @@ nonisolated final class FakeNotificationSystem: NotificationSystem, @unchecked S
     func setIconBadgeCount(_ count: Int) async {
         continuation.yield(count)
     }
+
+    func add(
+        identifier: String, title: String, body: String, threadIdentifier: String, payload: SubscriptionAttentionPayload
+    ) async throws {
+        let posted = Posted(
+            identifier: identifier, title: title, body: body, threadIdentifier: threadIdentifier, payload: payload
+        )
+        lock.withLock {
+            adds.append(posted)
+            // A notification with the same identifier replaces the one the system shows.
+            delivered.removeAll { $0.identifier == identifier }
+            delivered.append(posted)
+        }
+    }
+
+    func removeDelivered(identifiers: [String]) async {
+        lock.withLock {
+            removedDelivered.append(identifiers)
+            delivered.removeAll { identifiers.contains($0.identifier) }
+        }
+    }
+
+    func removePending(identifiers: [String]) async {
+        lock.withLock { removedPending.append(identifiers) }
+    }
+
+    func deliveredAttention() async -> [DeliveredAttentionNotification] {
+        lock.withLock { delivered.map { DeliveredAttentionNotification(identifier: $0.identifier, payload: $0.payload) } }
+    }
+
+    /// Every `add`, in order, including the ones a later one replaced.
+    var posts: [Posted] { lock.withLock { adds } }
+    /// The notifications the system shows now.
+    var shown: [Posted] { lock.withLock { delivered } }
+    var removals: [[String]] { lock.withLock { removedDelivered } }
+    var pendingRemovals: [[String]] { lock.withLock { removedPending } }
 }
 
 @MainActor

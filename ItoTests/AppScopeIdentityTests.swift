@@ -352,7 +352,8 @@ final class AppScopeIdentityTests: XCTestCase {
             UITestLaunchConfiguration(
                 resetsStorage: true,
                 repositoryDeepLinkEnabled: false,
-                backupWipeEnabled: false
+                backupWipeEnabled: false,
+                automaticDownloadsEnabled: false
             ).isEnabled
         )
     }

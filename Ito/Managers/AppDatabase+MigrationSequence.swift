@@ -17,6 +17,7 @@ extension AppDatabase {
         registerDownloadPresetsMigration(&migrator)
         registerSubscriptionLedgerMigration(&migrator)
         registerAutomaticDownloadRulesBackupMigration(&migrator)
+        registerSubscriptionNotificationsMigration(&migrator)
     }
 
     nonisolated private static func registerMultiKindSourceMappingMigration(_ migrator: inout DatabaseMigrator) {

@@ -349,3 +349,25 @@ reader's paged mode continues past its last page only through the visible notice
 and its continuous mode crosses by the user's own scrolling to the end row; both are by design, not
 oversights. One-time notes: the boundary notice strings and the "Opening the next/previous chapter…" status
 are new localized text.
+
+## Automatic download screens and notifications
+
+Before releasing changes to the automatic download screens (the series row and its rule sheet, Downloads ›
+Automatic Downloads, the review and unread-chapter sheets), verify that showing any of them checks no source and
+writes nothing: a rule's status, its last check and its waiting chapters are read from the database, and the rule
+is checked only by the foreground triggers (opening the app, a Library refresh, or changing the rule). A rule
+that was just edited or resumed is checked at its next pass; one that was refused (stale, source changed, series
+removed) is not, and its sheet says so and reloads instead of claiming success.
+
+Confirm that a paused, restored or source-changed rule shows its own status and that a restored rule turns on only
+through "Review and Turn On", under the source settings it was reviewed under. A queued automatic download of a
+paused rule, or one waiting for automatic download space or for Wi-Fi, shows as waiting, never as downloading, in
+the Downloads list and on the series screen; a chapter a person also asked for is never shown as held.
+
+Notifications are off until turned on in Automatic Downloads, which asks the system for permission and turns the
+setting back off when it is refused. A notification is posted only while the app is not open, one per rule, and
+names the number of new chapters waiting for a decision; each such chapter is announced once, including while the
+setting was off. Editing, turning off, restoring or deciding the last waiting chapter of a rule removes its
+notification. No notification says that a download finished, and none opens a specific screen: a tap opens the app.
+Background immediacy is not promised until foreground activation, background refresh and relaunch have been
+validated on a device.

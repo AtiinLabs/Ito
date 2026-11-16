@@ -127,6 +127,7 @@ nonisolated public enum AppPreferenceKeys {
     public static let adjacentChapterPrefetchCount = "Ito.AdjacentChapterPrefetchCount"
     public static let automaticDownloadQueueLimit = "Ito.AutomaticDownloadQueueLimit"
     public static let automaticDownloadQuotaGiB = "Ito.AutomaticDownloadQuotaGiB"
+    public static let subscriptionAttentionNotifications = "Ito.SubscriptionAttentionNotifications"
 }
 
 nonisolated public enum AppPreferenceCatalog {
@@ -167,6 +168,8 @@ nonisolated public enum AppPreferenceCatalog {
     public static let automaticDownloadQuotaGiB = AppPreferenceKey<Int>(name: AppPreferenceKeys.automaticDownloadQuotaGiB, defaultValue: 5) {
         (1...200).contains($0)
     }
+    /// Whether a notification may say that an automatic download rule needs a decision. Off until the person turns it on.
+    public static let subscriptionAttentionNotifications = boolean(AppPreferenceKeys.subscriptionAttentionNotifications, defaultValue: false)
 
     private static func boolean(_ name: String, defaultValue: Bool) -> AppPreferenceKey<Bool> {
         AppPreferenceKey(name: name, defaultValue: defaultValue) { _ in true }
@@ -206,13 +209,14 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
     case adjacentChapterPrefetchCount = "Ito.AdjacentChapterPrefetchCount"
     case automaticDownloadQueueLimit = "Ito.AutomaticDownloadQueueLimit"
     case automaticDownloadQuotaGiB = "Ito.AutomaticDownloadQuotaGiB"
+    case subscriptionAttentionNotifications = "Ito.SubscriptionAttentionNotifications"
 
     public var acceptedSource: LegacyPreferenceSourceType {
         switch self {
         case .alwaysShowCategoryPicker, .backgroundUpdatesEnabled, .skipCompleted,
              .updateNotifications, .wifiOnlyUpdates, .discordRPCEnabled,
              .novelIsPaging, .novelPrefetchChapters, .incognitoMode,
-             .autoSyncTrackersToLocal, .askBeforeSwitchingGroups:
+             .autoSyncTrackersToLocal, .askBeforeSwitchingGroups, .subscriptionAttentionNotifications:
             return .booleanNSNumber
         case .libraryLayoutStyle, .updateInterval, .preloadImageCount, .adjacentChapterPrefetchCount,
              .automaticDownloadQueueLimit, .automaticDownloadQuotaGiB:
@@ -228,7 +232,8 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
         switch self {
         case .libraryLayoutStyle: encode(1)
         case .alwaysShowCategoryPicker, .backgroundUpdatesEnabled, .skipCompleted,
-             .wifiOnlyUpdates, .discordRPCEnabled, .novelIsPaging, .incognitoMode, .askBeforeSwitchingGroups:
+             .wifiOnlyUpdates, .discordRPCEnabled, .novelIsPaging, .incognitoMode, .askBeforeSwitchingGroups,
+             .subscriptionAttentionNotifications:
             encode(false)
         case .updateInterval: encode(4)
         case .updateNotifications, .novelPrefetchChapters, .autoSyncTrackersToLocal:
@@ -253,7 +258,7 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
     public var hasLegacyDefaultsSource: Bool {
         switch self {
         case .networkDownloadMode, .adjacentChapterPrefetchCount, .askBeforeSwitchingGroups,
-             .automaticDownloadQueueLimit, .automaticDownloadQuotaGiB: false
+             .automaticDownloadQueueLimit, .automaticDownloadQuotaGiB, .subscriptionAttentionNotifications: false
         default: true
         }
     }
@@ -263,7 +268,7 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
     public var isOptionalInBackupCatalog: Bool {
         switch self {
         case .networkDownloadMode, .adjacentChapterPrefetchCount, .askBeforeSwitchingGroups,
-             .automaticDownloadQueueLimit, .automaticDownloadQuotaGiB: true
+             .automaticDownloadQueueLimit, .automaticDownloadQuotaGiB, .subscriptionAttentionNotifications: true
         default: false
         }
     }
@@ -342,7 +347,7 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
         case .alwaysShowCategoryPicker, .backgroundUpdatesEnabled, .skipCompleted,
              .updateNotifications, .wifiOnlyUpdates, .discordRPCEnabled,
              .novelIsPaging, .novelPrefetchChapters, .incognitoMode,
-             .autoSyncTrackersToLocal, .askBeforeSwitchingGroups:
+             .autoSyncTrackersToLocal, .askBeforeSwitchingGroups, .subscriptionAttentionNotifications:
             return value is Bool
         case .networkDownloadMode:
             return (value as? String).map { NetworkDownloadMode(rawValue: $0) != nil } ?? false

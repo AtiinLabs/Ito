@@ -436,6 +436,8 @@ struct PreparedMediaDetailDependencies {
     /// Never offline unless the composition root passes the live observer.
     var connectivity: any ConnectivityServing = UnavailableConnectivity()
     var history: (any MediaDetailHistoryReading)?
+    /// The rule of automatic downloads of this series. Unavailable unless the composition root passes the live facade.
+    var automaticDownloads: any AutomaticDownloadServing = UnavailableAutomaticDownloads()
 
     static func production(
         libraryManager: LibraryManager,
@@ -450,7 +452,8 @@ struct PreparedMediaDetailDependencies {
         downloads: any MediaDetailDownloadServing,
         downloadPresets: (any DownloadPresetProviding)? = nil,
         connectivity: any ConnectivityServing = UnavailableConnectivity(),
-        historyManager: HistoryManager? = nil
+        historyManager: HistoryManager? = nil,
+        automaticDownloads: any AutomaticDownloadServing = UnavailableAutomaticDownloads()
     ) -> Self {
         Self(
             library: libraryManager,
@@ -467,7 +470,8 @@ struct PreparedMediaDetailDependencies {
             downloads: downloads,
             downloadPresets: downloadPresets ?? NoDownloadPresets(),
             connectivity: connectivity,
-            history: historyManager
+            history: historyManager,
+            automaticDownloads: automaticDownloads
         )
     }
 }

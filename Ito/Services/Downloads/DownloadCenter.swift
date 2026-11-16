@@ -13,6 +13,8 @@ nonisolated enum ChapterDownloadState: Equatable, Sendable {
     case failed(DownloadFailureReason)
     case downloaded
     case damaged
+    /// Queued, but only automatic work asked for it and the queue holds it back.
+    case held(DownloadHoldReason)
 }
 
 /// In-memory progress of attempts in flight, keyed by job. Nothing here is persisted.
@@ -33,6 +35,40 @@ final class DownloadProgressBoard: ObservableObject {
 nonisolated struct DownloadTableSnapshot: Sendable {
     var copies: [DownloadedChapterRecord] = []
     var jobs: [DownloadJobRecord] = []
+    /// Who asked for each job, by job id.
+    var owners: [String: [DownloadOwnerFact]] = [:]
+}
+
+/// One owner of a job, as far as its presentation needs: who asked, and whether that rule still runs.
+nonisolated struct DownloadOwnerFact: Sendable, Equatable {
+    let kind: DownloadOwnerKind
+    /// The owning rule's state; nil for a manual owner.
+    let subscriptionState: SubscriptionState?
+    /// Whether the rule is still the incarnation that asked.
+    let isCurrent: Bool
+
+    /// A rule that is enabled and is the one that asked: it can still want the job.
+    var isEnabledAndCurrent: Bool { kind == .subscription && subscriptionState == .enabled && isCurrent }
+
+    static func readAll(_ db: Database) throws -> [String: [DownloadOwnerFact]] {
+        var result: [String: [DownloadOwnerFact]] = [:]
+        for row in try Row.fetchAll(
+            db,
+            sql: """
+                SELECT o.jobId AS jobId, o.ownerKind AS ownerKind, s.state AS state,
+                       (s.incarnation = o.subscriptionIncarnation) AS isCurrent
+                FROM downloadJobOwner o LEFT JOIN seriesSubscription s ON s.id = o.subscriptionId
+                """
+        ) {
+            guard let kind = DownloadOwnerKind(rawValue: row["ownerKind"] as String) else { continue }
+            result[row["jobId"] as String, default: []].append(DownloadOwnerFact(
+                kind: kind,
+                subscriptionState: (row["state"] as String?).flatMap(SubscriptionState.init(rawValue:)),
+                isCurrent: (row["isCurrent"] as Bool?) ?? false
+            ))
+        }
+        return result
+    }
 }
 
 /// The app's download surface: the state of every chapter that has a copy or a job, and the commands a
@@ -62,6 +98,15 @@ final class DownloadCenter: ObservableObject {
     /// Called when automatic work may have room it did not have: the queue got shorter or the stored bytes fewer. The
     /// scheduler drains the events that wait for room from it. It carries nothing and starts no network work.
     var onAutomaticCapacityChanged: (@MainActor () -> Void)?
+    /// Told after every commit, drain, resolution and approval that leaves events waiting for a person.
+    private var attentionNotifier: SubscriptionAttentionNotifier?
+
+    func configure(attentionNotifier: SubscriptionAttentionNotifier?) {
+        self.attentionNotifier = attentionNotifier
+    }
+
+    /// The space automatic downloads may fill, readable from a database observation.
+    nonisolated var automaticQuotaBytes: Int64 { automaticLimits().quotaBytes }
     private var observation: DatabaseCancellable?
     private var progressSubscription: AnyCancellable?
 
@@ -98,7 +143,8 @@ final class DownloadCenter: ObservableObject {
         let observation = ValueObservation.tracking { db -> DownloadTableSnapshot in
             DownloadTableSnapshot(
                 copies: try DownloadedChapterRecord.fetchAll(db),
-                jobs: try DownloadJobRecord.order(DownloadJobRecord.queueOrder).fetchAll(db)
+                jobs: try DownloadJobRecord.order(DownloadJobRecord.queueOrder).fetchAll(db),
+                owners: try DownloadOwnerFact.readAll(db)
             )
         }
         self.observation = observation.start(
@@ -362,12 +408,14 @@ final class DownloadCenter: ObservableObject {
     func resolveSubscriptionEvent(_ resolution: SubscriptionEventResolution) async throws -> SubscriptionCommitOutcome {
         let outcome = try await store.resolveSubscriptionEvent(resolution, limits: automaticLimits())
         if outcome.queuedJobs > 0 { coordinator.wake() }
+        await attentionNotifier?.didCommit(outcome)
         return outcome
     }
 
     func approveSubscriptionBackfill(_ approval: SubscriptionBackfillApproval) async throws -> SubscriptionCommitOutcome {
         let outcome = try await store.approveSubscriptionBackfill(approval, limits: automaticLimits())
         if outcome.queuedJobs > 0 { coordinator.wake() }
+        await attentionNotifier?.didCommit(outcome)
         return outcome
     }
 
@@ -375,6 +423,7 @@ final class DownloadCenter: ObservableObject {
     func drainSubscriptionEvents(subscriptionId: String) async throws -> SubscriptionCommitOutcome {
         let outcome = try await store.drainSubscriptionEvents(subscriptionId: subscriptionId, limits: automaticLimits())
         if outcome.queuedJobs > 0 { coordinator.wake() }
+        await attentionNotifier?.didCommit(outcome)
         return outcome
     }
 
@@ -499,8 +548,15 @@ final class DownloadCenter: ObservableObject {
     private func republish(progress current: [String: DownloadProgress]) {
         // A database change republishes the same progress; observers hear only real changes.
         if jobProgress != current { jobProgress = current }
-        states = Self.states(copies: snapshot.copies, jobs: snapshot.jobs, progress: current)
-        let activity = Self.replacementStates(copies: snapshot.copies, jobs: snapshot.jobs, progress: current)
+        let admitted = snapshot.copies.reduce(into: Int64(0)) { $0 += $1.byteCount } < automaticLimits().quotaBytes
+        states = Self.states(
+            copies: snapshot.copies, jobs: snapshot.jobs, progress: current,
+            owners: snapshot.owners, automaticAdmitted: admitted
+        )
+        let activity = Self.replacementStates(
+            copies: snapshot.copies, jobs: snapshot.jobs, progress: current,
+            owners: snapshot.owners, automaticAdmitted: admitted
+        )
         if chapterReplacementStates != activity { chapterReplacementStates = activity }
     }
 
@@ -508,7 +564,9 @@ final class DownloadCenter: ObservableObject {
     nonisolated static func states(
         copies: [DownloadedChapterRecord],
         jobs: [DownloadJobRecord],
-        progress: [String: DownloadProgress]
+        progress: [String: DownloadProgress],
+        owners: [String: [DownloadOwnerFact]] = [:],
+        automaticAdmitted: Bool = true
     ) -> [MediaIdentity: [String: ChapterDownloadState]] {
         var result: [MediaIdentity: [String: ChapterDownloadState]] = [:]
         for copy in copies {
@@ -528,7 +586,9 @@ final class DownloadCenter: ObservableObject {
             if result[identity]?[job.chapterKey] != nil {
                 continue
             }
-            result[identity, default: [:]][job.chapterKey] = state(of: job, progress: progress[job.id])
+            result[identity, default: [:]][job.chapterKey] = state(
+                of: job, progress: progress[job.id], owners: owners[job.id], automaticAdmitted: automaticAdmitted
+            )
         }
         return result
     }
@@ -539,7 +599,9 @@ final class DownloadCenter: ObservableObject {
     nonisolated static func replacementStates(
         copies: [DownloadedChapterRecord],
         jobs: [DownloadJobRecord],
-        progress: [String: DownloadProgress]
+        progress: [String: DownloadProgress],
+        owners: [String: [DownloadOwnerFact]] = [:],
+        automaticAdmitted: Bool = true
     ) -> [MediaIdentity: [String: ChapterDownloadState]] {
         let verified = Set(copies.filter { $0.state == .verified }.map(\.edition))
         var result: [MediaIdentity: [String: ChapterDownloadState]] = [:]
@@ -549,19 +611,37 @@ final class DownloadCenter: ObservableObject {
                 canonicalMediaId: job.canonicalMediaId,
                 mediaKind: job.mediaKind
             )
-            result[identity, default: [:]][job.chapterKey] = state(of: job, progress: progress[job.id])
+            result[identity, default: [:]][job.chapterKey] = state(
+                of: job, progress: progress[job.id], owners: owners[job.id], automaticAdmitted: automaticAdmitted
+            )
         }
         return result
     }
 
-    nonisolated static func state(of job: DownloadJobRecord, progress: DownloadProgress?) -> ChapterDownloadState {
+    /// - Parameters:
+    ///   - owners: who asked for the job. A queued job that only automatic work asked for is held, not queued: it waits
+    ///     for its rule to be enabled again or for room on the disk. Nil or empty owners are not claimed to be anything.
+    ///   - automaticAdmitted: whether the stored bytes are still under the space automatic downloads may fill.
+    nonisolated static func state(
+        of job: DownloadJobRecord,
+        progress: DownloadProgress?,
+        owners: [DownloadOwnerFact]? = nil,
+        automaticAdmitted: Bool = true
+    ) -> ChapterDownloadState {
         switch job.state {
         case .queued:
-            return .queued
+            guard let owners, !owners.isEmpty, !owners.contains(where: { $0.kind == .manual }) else { return .queued }
+            if !owners.contains(where: \.isEnabledAndCurrent) { return .held(.automaticRulePaused) }
+            return automaticAdmitted ? .queued : .held(.automaticSpaceFull)
         case .downloading:
             return .downloading(completed: progress?.completedPages ?? 0, total: progress?.totalPages)
         case .waiting:
-            return .waiting(job.waitingReason ?? .networkUnknown)
+            let reason = job.waitingReason ?? .networkUnknown
+            // Only automatic work asked for it, and a metered path is allowed to automatic work only by Settings.
+            if reason == .meteredNetwork, let owners, !owners.isEmpty, !owners.contains(where: { $0.kind == .manual }) {
+                return .held(.automaticMeteredNotAllowed)
+            }
+            return .waiting(reason)
         case .failed:
             return .failed(job.failureReason ?? .sourceError)
         }
@@ -586,6 +666,7 @@ extension DownloadCenter: SubscriptionCatalogSink {
             return
         }
         if outcome.queuedJobs > 0 { coordinator.wake() }
+        await attentionNotifier?.didCommit(outcome)
     }
 
     func fail(_ ticket: SubscriptionCheckTicket, _ outcome: SubscriptionCheckOutcome) async {

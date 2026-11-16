@@ -38,16 +38,20 @@ nonisolated struct DownloadsSnapshot: Sendable {
     var byteCount: Int64 { downloaded.reduce(0) { $0 + $1.byteCount } }
 
     /// Queue groups keep first appearance in queue order. Inventory groups sort by title, then identity.
-    static func read(_ db: Database) throws -> Self {
+    static func read(_ db: Database, automaticQuotaBytes: Int64 = .max) throws -> Self {
         let decoder = JSONDecoder()
         var queue: [DownloadsSeries] = []
         var saved: [DownloadsSeries] = []
+        let owners = try DownloadOwnerFact.readAll(db)
+        let admitted = try OfflineChapterStore.storedBytes(in: db) < automaticQuotaBytes
         for job in try DownloadJobRecord.order(DownloadJobRecord.queueOrder).fetchAll(db) {
             let chapter = try? decoder.decode(Chapter.self, from: job.chapterSnapshot)
             append(DownloadListRow(
                 edition: job.edition, title: chapter?.title, number: chapter?.chapterNumber,
                 volume: chapter?.volumeNumber, scanlator: chapter?.scanlator,
-                state: DownloadCenter.state(of: job, progress: nil), byteCount: 0, jobID: job.id
+                state: DownloadCenter.state(
+                    of: job, progress: nil, owners: owners[job.id], automaticAdmitted: admitted
+                ), byteCount: 0, jobID: job.id
             ), title: job.seriesTitle, to: &queue)
         }
         for copy in try DownloadedChapterRecord.order(Column("verifiedAt"), Column("chapterKey")).fetchAll(db) {
@@ -218,7 +222,9 @@ private final class DownloadsObservation {
             self?.reports = reports
             self?.publish()
         }
-        observation = ValueObservation.tracking { db in try DownloadsSnapshot.read(db) }.start(
+        observation = ValueObservation.tracking { [center] db in
+            try DownloadsSnapshot.read(db, automaticQuotaBytes: center.automaticQuotaBytes)
+        }.start(
             in: database,
             scheduling: DelayedMainActorValueObservationScheduler.mainActor,
             onError: { [weak self] error in self?.receive(.failure(error)) },

@@ -181,7 +181,8 @@ struct PreparedApplicationDependencies {
                     ?? UnavailableMediaDetailDownloads(),
                 downloadPresets: downloads?.presets,
                 connectivity: connectivity ?? UnavailableConnectivity(),
-                historyManager: historyManager
+                historyManager: historyManager,
+                automaticDownloads: automaticDownloads ?? UnavailableAutomaticDownloads()
             ),
             mangaReader: .production(
                 readProgressManager: readProgressManager,
@@ -589,7 +590,9 @@ final class AppScope {
             pluginTrust: preparedDependencies.pluginTrust,
             downloadsOverview: preparedDependencies.downloadsOverview,
             downloadsThumbnails: preparedDependencies.downloadsThumbnails,
-            downloadPresets: preparedDependencies.downloadPresets
+            downloadPresets: preparedDependencies.downloadPresets,
+            automaticDownloads: preparedDependencies.automaticDownloads,
+            settingsDependencies: preparedDependencies.settings
         )
     }
 

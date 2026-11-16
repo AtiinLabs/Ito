@@ -4,15 +4,39 @@ import UserNotifications
 import UIKit
 import Combine
 
+/// What an attention notification of an automatic download rule is valid for. A rule that was edited, replaced or
+/// turned off no longer matches it, so the notification is removed.
+nonisolated struct SubscriptionAttentionPayload: Sendable, Equatable {
+    let subscriptionId: String
+    let incarnation: Int64
+    let configGeneration: Int64
+}
+
+/// One attention notification the system still shows.
+nonisolated struct DeliveredAttentionNotification: Sendable, Equatable {
+    let identifier: String
+    let payload: SubscriptionAttentionPayload
+}
+
 /// The parts of the system notification settings `NotificationManager` uses.
 nonisolated protocol NotificationSystem: Sendable {
     /// Whether the app may post notifications (authorized or provisional).
     nonisolated func isAuthorized() async -> Bool
     /// Sets the number on the app icon.
     nonisolated func setIconBadgeCount(_ count: Int) async
+    /// Posts one attention notification now. A notification posted with the same identifier replaces the earlier one.
+    nonisolated func add(
+        identifier: String, title: String, body: String, threadIdentifier: String, payload: SubscriptionAttentionPayload
+    ) async throws
+    nonisolated func removeDelivered(identifiers: [String]) async
+    nonisolated func removePending(identifiers: [String]) async
+    /// The attention notifications of automatic downloads the system still shows.
+    nonisolated func deliveredAttention() async -> [DeliveredAttentionNotification]
 }
 
 nonisolated struct UserNotificationSystem: NotificationSystem {
+    static let attentionIdentifierPrefix = "ito.subscription.attention."
+
     nonisolated func isAuthorized() async -> Bool {
         let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
         return status == .authorized || status == .provisional
@@ -23,6 +47,48 @@ nonisolated struct UserNotificationSystem: NotificationSystem {
             try? await UNUserNotificationCenter.current().setBadgeCount(count)
         } else {
             await MainActor.run { UIApplication.shared.applicationIconBadgeNumber = count }
+        }
+    }
+
+    nonisolated func add(
+        identifier: String, title: String, body: String, threadIdentifier: String, payload: SubscriptionAttentionPayload
+    ) async throws {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.threadIdentifier = threadIdentifier
+        content.sound = .default
+        content.userInfo = [
+            "subscriptionId": payload.subscriptionId,
+            "incarnation": NSNumber(value: payload.incarnation),
+            "configGeneration": NSNumber(value: payload.configGeneration)
+        ]
+        try await UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+        )
+    }
+
+    nonisolated func removeDelivered(identifiers: [String]) async {
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+
+    nonisolated func removePending(identifiers: [String]) async {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
+    }
+
+    nonisolated func deliveredAttention() async -> [DeliveredAttentionNotification] {
+        await UNUserNotificationCenter.current().deliveredNotifications().compactMap { notification in
+            let info = notification.request.content.userInfo
+            guard notification.request.identifier.hasPrefix(Self.attentionIdentifierPrefix),
+                  let id = info["subscriptionId"] as? String,
+                  let incarnation = (info["incarnation"] as? NSNumber)?.int64Value,
+                  let generation = (info["configGeneration"] as? NSNumber)?.int64Value else { return nil }
+            return DeliveredAttentionNotification(
+                identifier: notification.request.identifier,
+                payload: SubscriptionAttentionPayload(
+                    subscriptionId: id, incarnation: incarnation, configGeneration: generation
+                )
+            )
         }
     }
 }

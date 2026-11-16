@@ -23,7 +23,8 @@ nonisolated struct SeriesDownloadSummary: Equatable, Sendable {
         for state in states.values {
             switch state {
             case .downloaded: saved += 1
-            case .queued, .downloading, .waiting: queued += 1
+            // A held chapter is queued: it waits for its rule or for room, and is never counted as downloading.
+            case .queued, .downloading, .waiting, .held: queued += 1
             case .failed: failed += 1
             case .damaged: damaged += 1
             }

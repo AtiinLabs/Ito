@@ -2,12 +2,15 @@
 import Combine
 import Foundation
 import GRDB
+import OSLog
 import ito_runner
 
 struct UITestLaunchConfiguration {
     nonisolated static let resetStorageArgument = "--ui-test-reset-storage"
     nonisolated static let repositoryDeepLinkArgument = "--ui-test-repository-deep-link"
     nonisolated static let backupWipeArgument = "--ui-test-backup-wipe"
+    /// Seeds a second series with a rule whose new chapter waits for a decision, so a UI test can open its review.
+    nonisolated static let automaticDownloadsArgument = "--ui-test-automatic-downloads"
     nonisolated static let repositoryURLString = "https://repository.ui-test.invalid/fixture"
     nonisolated static let fixtureDirectoryName = "UITestFixtures"
     nonisolated static let productionDatabaseDirectoryName = "Database"
@@ -28,18 +31,20 @@ struct UITestLaunchConfiguration {
     let resetsStorage: Bool
     let repositoryDeepLinkEnabled: Bool
     let backupWipeEnabled: Bool
+    let automaticDownloadsEnabled: Bool
 
     static var current: Self {
         let arguments = ProcessInfo.processInfo.arguments
         return Self(
             resetsStorage: arguments.contains(resetStorageArgument),
             repositoryDeepLinkEnabled: arguments.contains(repositoryDeepLinkArgument),
-            backupWipeEnabled: arguments.contains(backupWipeArgument)
+            backupWipeEnabled: arguments.contains(backupWipeArgument),
+            automaticDownloadsEnabled: arguments.contains(automaticDownloadsArgument)
         )
     }
 
     var isEnabled: Bool {
-        resetsStorage || repositoryDeepLinkEnabled || backupWipeEnabled
+        resetsStorage || repositoryDeepLinkEnabled || backupWipeEnabled || automaticDownloadsEnabled
     }
 
     nonisolated static func fixtureRootURL(fileManager: FileManager = .default) throws -> URL {
@@ -143,6 +148,14 @@ final class UITestLaunchFixtureCoordinator: ObservableObject {
 
         if configuration.repositoryDeepLinkEnabled {
             appScope.router.handleRepositoryDeepLink(UITestLaunchConfiguration.repositoryDeepLink)
+        }
+
+        if configuration.automaticDownloadsEnabled, let automatic = appScope.dependencies.automaticDownloads as? AutomaticDownloads {
+            do {
+                try await automatic.seedUITestAttentionFixture()
+            } catch {
+                AppLogger.general.error("The automatic downloads UI test fixture could not be seeded")
+            }
         }
 
         if configuration.backupWipeEnabled {
