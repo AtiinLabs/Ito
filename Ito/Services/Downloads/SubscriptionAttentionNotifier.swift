@@ -17,6 +17,7 @@ final class SubscriptionAttentionNotifier {
 
     private let system: any NotificationSystem
     private let claim: @Sendable (Date) async throws -> [SubscriptionAttentionClaim]
+    private let readStates: @Sendable () async throws -> [SubscriptionAttentionState]
     private let isForeground: @MainActor () -> Bool
     private let isEnabled: @MainActor () -> Bool
     private let now: @Sendable () -> Date
@@ -26,12 +27,14 @@ final class SubscriptionAttentionNotifier {
     init(
         system: any NotificationSystem,
         claim: @escaping @Sendable (Date) async throws -> [SubscriptionAttentionClaim],
+        readStates: @escaping @Sendable () async throws -> [SubscriptionAttentionState],
         isForeground: @escaping @MainActor () -> Bool,
         isEnabled: @escaping @MainActor () -> Bool,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.system = system
         self.claim = claim
+        self.readStates = readStates
         self.isForeground = isForeground
         self.isEnabled = isEnabled
         self.now = now
@@ -46,14 +49,28 @@ final class SubscriptionAttentionNotifier {
         await serialized { [self] in await claimAndPost() }
     }
 
-    /// Removes the notifications that are no longer true and, in the foreground, claims silently what waits. `rules` are
-    /// the rows as the screens read them now.
-    func sweep(rules: [SubscriptionRuleRow]) async {
+    /// Asks for a sweep and returns at once. Which notifications are stale is decided when the sweep runs, from the store,
+    /// behind every claim and post queued before it.
+    func requestSweep() {
+        Task { await sweep() }
+    }
+
+    /// Removes the notifications that are no longer true and, in the foreground, claims silently what waits. The rules are
+    /// read from the store inside the serialized queue, so a notification posted just before is judged by a picture that
+    /// includes it, and a rule that cannot be read removes nothing.
+    func sweep() async {
         await serialized { [self] in
-            let byId = Dictionary(rules.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            let states: [SubscriptionAttentionState]
+            do {
+                states = try await readStates()
+            } catch {
+                AppLogger.database.error("The automatic download rules could not be read for a notification sweep")
+                return
+            }
+            let byId = Dictionary(states.map { ($0.subscriptionId, $0) }, uniquingKeysWith: { first, _ in first })
             let stale = await system.deliveredAttention().filter { delivered in
                 guard let rule = byId[delivered.payload.subscriptionId] else { return true }
-                return rule.state != .enabled
+                return !rule.isEnabled
                     || rule.incarnation != delivered.payload.incarnation
                     || rule.configGeneration != delivered.payload.configGeneration
                     || rule.attentionCount == 0
@@ -102,12 +119,13 @@ final class SubscriptionAttentionNotifier {
         }
     }
 
-    /// The body of a notification: the series' title (source content, shown as it is) and how many chapters wait.
+    /// The body of a notification: the series' title (source content, shown as it is) and how many items wait. An item is
+    /// a new chapter, a changed chapter or a list that looks different: anything that needs the person's decision.
     static func body(title: String?, count: Int) -> String {
         guard let title else {
-            return String(localized: "\(count) new chapters wait for your decision.", comment: "Notification body: how many new chapters of a series wait for the person to decide whether to download them. The placeholder is a count.")
+            return String(localized: "\(count) items need your decision.", comment: "Notification body: how many items of automatic downloads wait for the person to decide, such as new chapters. The placeholder is a count.")
         }
-        return String(localized: "\(title) has \(count) new chapters waiting for your decision.", comment: "Notification body: the first placeholder is a series title, the second how many of its new chapters wait for the person to decide whether to download them.")
+        return String(localized: "\(title) has \(count) items that need your decision.", comment: "Notification body: the first placeholder is a series title, the second how many of its items (new chapters or changes) wait for the person to decide.")
     }
 
     private func serialized(_ body: @escaping @MainActor () async -> Void) async {

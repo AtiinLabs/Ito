@@ -98,8 +98,18 @@ final class DownloadCenter: ObservableObject {
     /// Called when automatic work may have room it did not have: the queue got shorter or the stored bytes fewer. The
     /// scheduler drains the events that wait for room from it. It carries nothing and starts no network work.
     var onAutomaticCapacityChanged: (@MainActor () -> Void)?
+    /// Counts the changes of the automatic limits, so a screen that read the tables with a quota can read them again.
+    @Published private(set) var automaticLimitsRevision = 0
     /// Told after every commit, drain, resolution and approval that leaves events waiting for a person.
     private var attentionNotifier: SubscriptionAttentionNotifier?
+
+    /// The queue limit or the quota changed. The chapters held for room are judged again under the new quota, and the worker
+    /// looks at the queue: a raised quota may let queued automatic jobs start.
+    func automaticLimitsDidChange() {
+        automaticLimitsRevision += 1
+        republish(progress: progress.progress)
+        coordinator.wake()
+    }
 
     func configure(attentionNotifier: SubscriptionAttentionNotifier?) {
         self.attentionNotifier = attentionNotifier

@@ -204,6 +204,11 @@ public final class AppSettingsStore: ObservableObject {
     }
 
     private func publish(_ snapshot: AppSettingsSnapshot, issues: [AppSettingsLoadIssue]) {
+        // The mirror is what a read off the main actor sees. It is set before the published values change, so whatever
+        // reacts to the published change (a read that starts again, a worker) already sees the new limits.
+        automaticDownloadLimitsMirror.set(AutomaticDownloadLimits(
+            queueLimit: snapshot.automaticDownloadQueueLimit, quotaGiB: snapshot.automaticDownloadQuotaGiB
+        ))
         libraryLayoutStyle = snapshot.libraryLayoutStyle
         alwaysShowCategoryPicker = snapshot.alwaysShowCategoryPicker
         backgroundUpdatesEnabled = snapshot.backgroundUpdatesEnabled
@@ -233,7 +238,6 @@ public final class AppSettingsStore: ObservableObject {
         automaticDownloadQueueLimit = snapshot.automaticDownloadQueueLimit
         automaticDownloadQuotaGiB = snapshot.automaticDownloadQuotaGiB
         subscriptionAttentionNotifications = snapshot.subscriptionAttentionNotifications
-        automaticDownloadLimitsMirror.set(automaticDownloadLimits)
         loadIssues = issues
         // The configuration is published only here, after persistence acknowledged it, so the live policy
         // revision never runs ahead of what is stored.

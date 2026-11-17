@@ -86,6 +86,7 @@ final class AutomaticDownloadsViewModel: ObservableObject {
                 guard let self else { return }
                 self.rows = Self.sorted(rules)
                 self.hasLoaded = true
+                self.refreshUsage()
             }
             .store(in: &cancellables)
         settingsStore.$automaticDownloadQueueLimit
@@ -100,6 +101,10 @@ final class AutomaticDownloadsViewModel: ObservableObject {
         settingsStore.$updateInterval
             .sink { @MainActor [weak self] in self?.intervalHours = $0.rawValue }
             .store(in: &cancellables)
+    }
+
+    /// Reads the usage numbers again. They change with the tables the rules observation reads, so it runs after each.
+    private func refreshUsage() {
         Task { [weak self] in
             guard let self else { return }
             self.usage = await self.service.usage()

@@ -98,6 +98,19 @@ struct AutomaticDownloadsViewModelTests {
         #expect(s.model.alert == nil)
     }
 
+    @Test func theLimitsMirrorHoldsTheNewValuesWhenTheChangeIsAnnounced() async throws {
+        let s = try await subject()
+        defer { s.database.cleanup() }
+        var seen: [Int64] = []
+        let subscription = s.settings.automaticDownloadLimitsChanged.sink { @MainActor in
+            seen.append(s.settings.automaticDownloadLimitsMirror.current.quotaBytes)
+        }
+        await s.model.setQuotaGiB(20)
+        #expect(!seen.isEmpty && seen.allSatisfy { $0 == 20 * AutomaticDownloadLimits.bytesPerGiB },
+                "A reader off the main actor sees the new quota")
+        subscription.cancel()
+    }
+
     @Test func attentionNotificationsAreOffByDefaultAndTurningThemOnAsksThePermissionOnce() async throws {
         let s = try await subject()
         defer { s.database.cleanup() }

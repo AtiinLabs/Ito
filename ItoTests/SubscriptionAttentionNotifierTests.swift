@@ -43,6 +43,7 @@ struct SubscriptionAttentionNotifierTests {
         let notifier = SubscriptionAttentionNotifier(
             system: system,
             claim: { now in try await store.claimSubscriptionAttention(now: now) },
+            readStates: { try await store.subscriptionAttentionStates() },
             isForeground: { switches.isForeground },
             isEnabled: { switches.isEnabled },
             now: { OfflineStoreFixture.fixedDate }
@@ -97,7 +98,7 @@ struct SubscriptionAttentionNotifierTests {
         #expect(post.threadIdentifier == "AutomaticDownloads")
         #expect(post.payload == SubscriptionAttentionPayload(subscriptionId: s.ruleId, incarnation: 1, configGeneration: 1))
         #expect(post.body.contains("Series"), "The body names the series")
-        #expect(post.body.contains("1 new chapter"))
+        #expect(post.body.contains("1 item that needs your decision"))
 
         // The same commit again: the event was claimed, so nothing is posted.
         await s.notifier.didCommit(s.first)
@@ -111,7 +112,7 @@ struct SubscriptionAttentionNotifierTests {
         await s.notifier.didCommit(second)
         #expect(s.system.posts.count == 2)
         #expect(s.system.posts[1].identifier == post.identifier)
-        #expect(s.system.posts[1].body.contains("2 new chapters"))
+        #expect(s.system.posts[1].body.contains("2 items that need your decision"))
         #expect(s.system.shown.count == 1, "The second notification replaced the first")
     }
 
@@ -154,7 +155,7 @@ struct SubscriptionAttentionNotifierTests {
 
     @Test func v12_aRuleThatStillMatchesKeepsItsNotification() async throws {
         let s = try await deliveredScenario()
-        await s.notifier.sweep(rules: try await rows(s.f))
+        await s.notifier.sweep()
         #expect(s.system.shown.count == 1)
         #expect(s.system.removals.isEmpty)
     }
@@ -173,7 +174,7 @@ struct SubscriptionAttentionNotifierTests {
 
         let current = try await rows(s.f)
         #expect(current.first?.attentionCount == 0)
-        await s.notifier.sweep(rules: current)
+        await s.notifier.sweep()
 
         #expect(s.system.shown.isEmpty)
         #expect(s.system.removals == [["ito.subscription.attention.\(s.ruleId)"]])
@@ -191,7 +192,7 @@ struct SubscriptionAttentionNotifierTests {
 
         let current = try await rows(s.f)
         #expect(current.first?.configGeneration == rule.configGeneration + 1)
-        await s.notifier.sweep(rules: current)
+        await s.notifier.sweep()
 
         #expect(s.system.shown.isEmpty)
     }
@@ -200,7 +201,7 @@ struct SubscriptionAttentionNotifierTests {
         let s = try await deliveredScenario()
         _ = try await s.f.store.disableSubscription(id: s.ruleId)
 
-        await s.notifier.sweep(rules: try await rows(s.f))
+        await s.notifier.sweep()
 
         #expect(s.system.shown.isEmpty)
     }
@@ -211,14 +212,44 @@ struct SubscriptionAttentionNotifierTests {
         try await s.f.write { db in
             try db.execute(sql: "UPDATE seriesSubscription SET incarnation = incarnation + 1, configGeneration = configGeneration + 1")
         }
-        await s.notifier.sweep(rules: try await rows(s.f))
+        await s.notifier.sweep()
         #expect(s.system.shown.isEmpty)
     }
 
     @Test func v12_aRuleThatIsGoneRemovesTheNotification() async throws {
         let s = try await deliveredScenario()
-        await s.notifier.sweep(rules: [])
+        try await s.f.write { db in
+            try db.execute(sql: "DELETE FROM subscriptionEvent")
+            try db.execute(sql: "DELETE FROM subscriptionSeenKey")
+            try db.execute(sql: "DELETE FROM subscriptionBaseline")
+            try db.execute(sql: "DELETE FROM seriesSubscription")
+        }
+        await s.notifier.sweep()
         #expect(s.system.shown.isEmpty)
+    }
+
+    @Test func aSweepJudgesByTheStoreWhenItRunsSoANotificationPostedJustBeforeItStays() async throws {
+        let s = try await scenario()
+        s.switches.isEnabled = true
+        // The sweep reads the rule when it runs, after the claim and the post: it never judges by an older picture.
+        await s.notifier.didCommit(s.first)
+        await s.notifier.sweep()
+        #expect(s.system.shown.count == 1)
+        await s.notifier.sweep()
+        #expect(s.system.shown.count == 1, "A sweep that reads the same rule again removes nothing valid")
+    }
+
+    @Test func aSweepThatCannotReadTheRulesRemovesNothing() async throws {
+        let s = try await deliveredScenario()
+        let failing = SubscriptionAttentionNotifier(
+            system: s.system,
+            claim: { _ in [] },
+            readStates: { throw CocoaError(.fileReadUnknown) },
+            isForeground: { false }, isEnabled: { true }
+        )
+        await failing.sweep()
+        #expect(s.system.shown.count == 1)
+        #expect(s.system.removals.isEmpty)
     }
 
     @Test func theSweepInTheForegroundClaimsWhatWaitsSilentlyAndInTheBackgroundLeavesItForThePost() async throws {
@@ -226,11 +257,11 @@ struct SubscriptionAttentionNotifierTests {
         s.switches.isEnabled = true
 
         // In the background a sweep must not swallow what the commit has yet to post.
-        await s.notifier.sweep(rules: try await rows(s.f))
+        await s.notifier.sweep()
         #expect(try await notifiedAt(s.f) == [nil])
 
         s.switches.isForeground = true
-        await s.notifier.sweep(rules: try await rows(s.f))
+        await s.notifier.sweep()
 
         #expect(try await notifiedAt(s.f) == [OfflineStoreFixture.fixedDate])
         #expect(s.system.posts.isEmpty)

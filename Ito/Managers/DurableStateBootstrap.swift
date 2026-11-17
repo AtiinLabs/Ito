@@ -96,6 +96,7 @@ public final class DurableStateBootstrap: ObservableObject {
     private var preparationTask: Task<Bool, Never>?
     private var sourcesPrepared = false
     private var runtime: Runtime?
+    private var automaticLimitSubscriptions = Set<AnyCancellable>()
     private var completionBarrierObservation: AnyCancellable?
     private var completionRestoreBlocked = false
     private var completionForeground = UIApplication.shared.applicationState != .background
@@ -514,10 +515,16 @@ public final class DurableStateBootstrap: ObservableObject {
             let notifier = SubscriptionAttentionNotifier(
                 system: UserNotificationSystem(),
                 claim: { now in try await stack.store.claimSubscriptionAttention(now: now) },
+                readStates: { try await stack.store.subscriptionAttentionStates() },
                 isForeground: { policy.isForeground },
                 isEnabled: { settings.subscriptionAttentionNotifications }
             )
             stack.center.configure(attentionNotifier: notifier)
+            // New limits change what is held back for room: the chapter states are judged again, and the worker looks at the
+            // queue, which may have room it did not have.
+            limitsChanged
+                .sink { @MainActor [weak center = stack.center] in center?.automaticLimitsDidChange() }
+                .store(in: &automaticLimitSubscriptions)
             facade.configure(notifier: notifier)
             facade.startObserving(scheduling: DelayedMainActorValueObservationScheduler.mainActor)
             return (facade, scheduler)

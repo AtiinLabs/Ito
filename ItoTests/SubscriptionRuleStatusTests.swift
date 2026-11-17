@@ -113,6 +113,23 @@ struct SubscriptionRuleStatusTests {
         #expect(SubscriptionRuleBadge.waitingForSpace.title == "Waiting for automatic download space")
     }
 
+    @Test func aCheckInTheFutureReadsAsJustNowAndASizeNeverReadsAsAWord() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let ahead = SubscriptionRuleStatus.active(lastCheckedAt: now.addingTimeInterval(30), failure: nil)
+        let text = ahead.detail(now: now, locale: Locale(identifier: "en_US"))
+        #expect(text?.contains("now") == true && text?.contains("in ") == false, "\(String(describing: text))")
+        #expect(AutomaticDownloadsBytes.text(0) == "0 bytes")
+        #expect(AutomaticDownloadsBytes.text(5 * (1 << 30)) == "5 GB", "The quota is binary, like its setting")
+        #expect(!AutomaticDownloadsBytes.text(0).contains("Zero"))
+    }
+
+    @Test func aRulesHeldReasonDoesNotDependOnTheOrderItsJobsAreRead() {
+        let reasons: [DownloadHoldReason] = [.automaticMeteredNotAllowed, .automaticSpaceFull, .automaticRulePaused]
+        #expect(reasons.map(\.priority).sorted() == [0, 1, 2])
+        #expect(DownloadHoldReason.automaticRulePaused.priority < DownloadHoldReason.automaticSpaceFull.priority)
+        #expect(DownloadHoldReason.automaticSpaceFull.priority < DownloadHoldReason.automaticMeteredNotAllowed.priority)
+    }
+
     @Test func theFooterNamesTheIntervalAndPromisesNothingAboutTheBackground() {
         let text = SubscriptionRuleFooter.text(intervalHours: 4)
         #expect(text == "Ito checks rules when it opens or when you refresh the Library, at most every 4 hours.")

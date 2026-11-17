@@ -102,6 +102,8 @@ final class SubscriptionRuleModel: ObservableObject {
     private let title: String?
     private var capturedEpoch: String?
     private var capturedGeneration: Int64?
+    /// The row the sheet's draft and generation came from.
+    private var capturedRow: SubscriptionRuleRow?
     /// Set after a refusal that changed what the sheet is about: the draft and the captured values are taken again from
     /// the row once it is a different row than the one the refusal was about.
     private var recaptureAfter: SubscriptionRuleRow??
@@ -137,6 +139,8 @@ final class SubscriptionRuleModel: ObservableObject {
             recaptureAfter = nil
             capture()
         }
+        // The numbers beside the limits follow the same observation as the rule.
+        if presentation != nil { loadUsage() }
     }
 
     // MARK: - Entry
@@ -207,6 +211,7 @@ final class SubscriptionRuleModel: ObservableObject {
 
     private func capture() {
         capturedGeneration = row?.configGeneration
+        capturedRow = row
         capturedEpoch = try? service.sourceEpoch(for: identity.pluginId)
         if let row, row.state != .disabled, let configuration = row.configuration {
             draft = SubscriptionRuleDraft(configuration)
@@ -364,8 +369,14 @@ final class SubscriptionRuleModel: ObservableObject {
         message = refusal
         guard refusal != nil else { return }
         if recapture {
-            // The row the refusal was about is replaced by the observation; wait for that, then start from it.
-            recaptureAfter = .some(row)
+            if row != capturedRow {
+                // The row the person is looking at is already newer than the one the sheet took: take it now. Waiting for
+                // another change would never end, and the message says the sheet was reloaded.
+                capture()
+            } else {
+                // The store holds a newer rule than the observation has delivered yet: start from it when it arrives.
+                recaptureAfter = .some(row)
+            }
         } else {
             capturedEpoch = try? service.sourceEpoch(for: identity.pluginId)
         }

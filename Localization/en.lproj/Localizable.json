@@ -1,8 +1,8 @@
 {
-  "%@ has %lld new chapters waiting for your decision.": {
-    "description": "Notification body: the first placeholder is a series title, the second how many of its new chapters wait for the person to decide whether to download them.",
-    "one": "%1$@ has %2$lld new chapter waiting for your decision.",
-    "other": "%1$@ has %2$lld new chapters waiting for your decision."
+  "%@ has %lld items that need your decision.": {
+    "description": "Notification body: the first placeholder is a series title, the second how many of its items (new chapters or changes) wait for the person to decide.",
+    "one": "%1$@ has %2$lld item that needs your decision.",
+    "other": "%1$@ has %2$lld items that need your decision."
   },
   "%@ has %lld new editions.": {
     "description": "Manga/novel update-count heuristic: exact uploads, possibly alternate translations, not unique logical chapters.",
@@ -122,6 +122,11 @@
     "one": "%lld item imported",
     "other": "%lld items imported"
   },
+  "%lld items need your decision.": {
+    "description": "Notification body: how many items of automatic downloads wait for the person to decide, such as new chapters. The placeholder is a count.",
+    "one": "%lld item needs your decision.",
+    "other": "%lld items need your decision."
+  },
   "%lld marked read, skipped": {
     "description": "Download preview: how many chapters in range are marked read and so are not downloaded. The placeholder is a number, which needs plural forms.",
     "one": "%lld marked read, skipped",
@@ -132,20 +137,15 @@
     "one": "%lld more is waiting. It appears here once these are decided.",
     "other": "%lld more are waiting. They appear here once these are decided."
   },
-  "%lld more chapters are not listed. Approve these first, then open this list again to see the next ones.": {
+  "%lld more chapters are not listed. Once these are approved, the list shows the next ones.": {
     "description": "Backfill sheet: how many chapters beyond the list's limit remain. The placeholder is a count.",
-    "one": "%lld more chapter is not listed. Approve these first, then open this list again to see it.",
-    "other": "%lld more chapters are not listed. Approve these first, then open this list again to see the next ones."
+    "one": "%lld more chapter is not listed. Once these are approved, the list shows it.",
+    "other": "%lld more chapters are not listed. Once these are approved, the list shows the next ones."
   },
   "%lld more uploads found": {
     "description": "Scanlator sheet: how many uploads the source listed that the chapter list does not show. The placeholder is a number, which needs plural forms.",
     "one": "%lld more upload found",
     "other": "%lld more uploads found"
-  },
-  "%lld new chapters wait for your decision.": {
-    "description": "Notification body: how many new chapters of a series wait for the person to decide whether to download them. The placeholder is a count.",
-    "one": "%lld new chapter waits for your decision.",
-    "other": "%lld new chapters wait for your decision."
   },
   "%lld packages": {
     "one": "%lld package",

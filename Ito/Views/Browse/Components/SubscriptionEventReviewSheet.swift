@@ -40,7 +40,6 @@ struct SubscriptionCandidateRowView: View {
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(isSelected == true ? [.isSelected] : [])
     }
 
     private static func format(_ value: Float) -> String {
@@ -76,6 +75,13 @@ struct SubscriptionEventReviewSheet: View {
                         Button { model.load() } label: { Text("Try Again", comment: "Review sheet: read the waiting chapters again") }
                     }
                 case .loaded:
+                    if !model.ruleIsEnabled {
+                        Section {
+                            Text("This rule is not turned on. Turn it on or resume it to download these chapters. You can still dismiss them.", comment: "Review sheet: the rule is paused or off, so chapters can be dismissed but not approved")
+                                .foregroundColor(.secondary)
+                        }
+                        .accessibilityIdentifier("reviewRuleNotEnabledNote")
+                    }
                     if model.events.isEmpty {
                         Section {
                             Text("Nothing is waiting for your decision.", comment: "Review sheet: no chapters wait for the person")
@@ -108,16 +114,17 @@ struct SubscriptionEventReviewSheet: View {
     private func eventSection(_ event: SubscriptionEventReview) -> some View {
         Section {
             ForEach(event.candidates) { row in
-                if event.canApprove {
+                if model.offersApproval(event) {
                     Button { model.toggle(row.key, in: event) } label: {
                         SubscriptionCandidateRowView(row: row, isSelected: model.isSelected(row.key, in: event))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(model.isSelected(row.key, in: event) ? [.isSelected] : [])
                 } else {
                     SubscriptionCandidateRowView(row: row)
                 }
             }
-            if event.canApprove {
+            if model.offersApproval(event) {
                 Button { model.approve(event) } label: {
                     Text("Download Selected", comment: "Review sheet: queue the chapters the person ticked")
                         .fontWeight(.semibold)

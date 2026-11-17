@@ -211,6 +211,7 @@ private final class DownloadsObservation {
     private var reports: [String: DownloadProgress] = [:]
     private var observation: DatabaseCancellable?
     private var progress: AnyCancellable?
+    private var limits: AnyCancellable?
 
     init(center: DownloadCenter, receive: @escaping (Result<DownloadsSnapshot, Error>) -> Void) {
         self.center = center
@@ -222,6 +223,15 @@ private final class DownloadsObservation {
             self?.reports = reports
             self?.publish()
         }
+        // A new quota changes which jobs are held for room, which the tables do not say: read them again.
+        limits = center.$automaticLimitsRevision.dropFirst().sink { @MainActor [weak self] _ in
+            self?.beginObserving(in: database)
+        }
+        beginObserving(in: database)
+    }
+
+    private func beginObserving(in database: DatabasePool) {
+        observation?.cancel()
         observation = ValueObservation.tracking { [center] db in
             try DownloadsSnapshot.read(db, automaticQuotaBytes: center.automaticQuotaBytes)
         }.start(
@@ -240,6 +250,8 @@ private final class DownloadsObservation {
         observation = nil
         progress?.cancel()
         progress = nil
+        limits?.cancel()
+        limits = nil
     }
 
     private func publish() {

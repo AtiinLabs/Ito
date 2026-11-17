@@ -119,6 +119,27 @@ struct SubscriptionReviewModelTests {
         #expect(model.selectedKeys(for: event).isEmpty, "A second tap unticks")
     }
 
+    @Test func aPausedRulesChoiceCanBeDismissedButNeverApprovedAndTheSheetSaysSo() async throws {
+        let (f, service, id) = try await needsChoice()
+        _ = try await f.store.pauseSubscription(id: id)
+        let model = SubscriptionEventReviewModel(subscriptionId: id, service: service)
+        await model.load().value
+
+        let event = try #require(model.events.first)
+        #expect(!model.ruleIsEnabled)
+        #expect(event.canApprove, "The event itself could be approved; the rule's state decides")
+        #expect(!model.offersApproval(event))
+        model.toggle("c4b", in: event)
+        #expect(model.selectedKeys(for: event).isEmpty && !model.canApprove(event))
+        await model.approve(event).value
+        #expect(model.report == nil && model.busyEventId == nil)
+        #expect(try await f.jobs().isEmpty)
+
+        await model.dismiss(event).value
+        #expect(model.events.isEmpty)
+        #expect(try await f.events(.newPosition).first?.decision == .dismissed)
+    }
+
     // MARK: - V7
 
     private func insertReview(

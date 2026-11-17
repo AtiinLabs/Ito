@@ -39,8 +39,32 @@ extension OfflineChapterStore {
                         candidateRevision: event.candidateRevision
                     )
                 },
-                totalCount: total
+                totalCount: total,
+                ruleIsEnabled: subscription.state == .enabled
             )
+        }
+    }
+
+    /// The incarnation, generation, state and waiting count of every rule, as the store holds them now. The notification
+    /// sweep reads this inside its own serialized queue, so it never judges a notification by an older picture.
+    func subscriptionAttentionStates() async throws -> [SubscriptionAttentionState] {
+        try await database.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT s.id AS id, s.incarnation AS incarnation, s.configGeneration AS generation, s.state AS state,
+                           (SELECT COUNT(*) FROM subscriptionEvent e
+                            WHERE e.subscriptionId = s.id AND e.incarnation = s.incarnation
+                              AND e.decision IN ('needsChoice', 'needsReview')) AS waiting
+                    FROM seriesSubscription s
+                    """
+            ).map { row in
+                SubscriptionAttentionState(
+                    subscriptionId: row["id"], incarnation: row["incarnation"], configGeneration: row["generation"],
+                    isEnabled: (row["state"] as String) == SubscriptionState.enabled.rawValue,
+                    attentionCount: row["waiting"]
+                )
+            }
         }
     }
 

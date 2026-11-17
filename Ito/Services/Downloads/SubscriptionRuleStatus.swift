@@ -131,7 +131,9 @@ nonisolated enum SubscriptionRuleStatus: Equatable, Sendable {
         let formatter = RelativeDateTimeFormatter()
         formatter.locale = locale
         formatter.unitsStyle = .full
-        let when = formatter.localizedString(for: checkedAt, relativeTo: now)
+        formatter.dateTimeStyle = .named
+        // A check is never in the future: a clock that moved back reads as just now.
+        let when = formatter.localizedString(for: min(checkedAt, now), relativeTo: now)
         return String(localized: "Last checked \(when)", comment: "Automatic downloads: when the rule was last checked. The placeholder is a relative time such as '5 minutes ago'.")
     }
 
@@ -140,7 +142,7 @@ nonisolated enum SubscriptionRuleStatus: Equatable, Sendable {
         guard case .active(_, let failure?) = self else { return nil }
         switch failure {
         case .fetchFailed:
-            return String(localized: "The last check could not reach the source. Ito tries again later.", comment: "Automatic downloads: note on a rule whose last check failed")
+            return String(localized: "The last check failed. If the source needs you to sign in or has changed its settings, check them. Ito tries again later.", comment: "Automatic downloads: note on a rule whose last check failed, whatever the reason")
         case .incompleteCatalog:
             return String(localized: "At the last check the source returned only part of the chapter list, so nothing was judged.", comment: "Automatic downloads: note on a rule whose last check got an incomplete chapter list")
         case .unknownScope:

@@ -347,6 +347,9 @@ Download preset editor: the count field. */
 /* Compatibility key-or-number read markers, not offline coverage. */
 "Chapters marked read are skipped, including other editions with the same chapter number." = "Chapters marked read are skipped, including other editions with the same chapter number.";
 
+/* Rule sheet: header of the section where the person chooses which chapters the rule downloads */
+"Chapters to Download" = "Chapters to Download";
+
 "Check AniList Discord Status" = "Check AniList Discord Status";
 
 "Check for Updates" = "Check for Updates";
@@ -631,9 +634,7 @@ Review sheet: decide not to download these chapters */
 "Done" = "Done";
 
 /* Backfill sheet: queue the ticked chapters
-Chapter menu: save this chapter for offline reading
-Rule sheet: section for which chapters the rule downloads
-Rule sheet: which chapters the rule downloads */
+Chapter menu: save this chapter for offline reading */
 "Download" = "Download";
 
 /* Download More prompt: title of the count prompt. */
@@ -1023,7 +1024,7 @@ Downloaded versions sheet: the source's identifier of a translation group. The p
 "Ito marks this entry %@ when you start episode 1." = "Ito marks this entry %@ when you start episode 1.";
 
 /* Automatic downloads screen: when notifications are posted */
-"Ito only notifies you when it is not open. It never notifies about finished downloads." = "Ito only notifies you when it is not open. It never notifies about finished downloads.";
+"Ito posts a notification only while it is closed, and only when a background Library update finds something that needs your decision. Turn on background updates in Settings under Library. It never notifies about finished downloads." = "Ito posts a notification only while it is closed, and only when a background Library update finds something that needs your decision. Turn on background updates in Settings under Library. It never notifies about finished downloads.";
 
 "Ito syncs progress for series you are watching or reading on MyAnimeList. Automatic sync only moves progress forward and leaves ratings unchanged; you can edit your rating in the tracker sheet. Ito never deletes entries or changes dates, tags or comments." = "Ito syncs progress for series you are watching or reading on MyAnimeList. Automatic sync only moves progress forward and leaves ratings unchanged; you can edit your rating in the tracker sheet. Ito never deletes entries or changes dates, tags or comments.";
 
@@ -2462,8 +2463,8 @@ Reading font: the system font */
 
 "The installed extension could not be loaded." = "The installed extension could not be loaded.";
 
-/* Automatic downloads: note on a rule whose last check failed */
-"The last check could not reach the source. Ito tries again later." = "The last check could not reach the source. Ito tries again later.";
+/* Automatic downloads: note on a rule whose last check failed, whatever the reason */
+"The last check failed. If the source needs you to sign in or has changed its settings, check them. Ito tries again later." = "The last check failed. If the source needs you to sign in or has changed its settings, check them. Ito tries again later.";
 
 "The library backup could not be exported. Please try again." = "The library backup could not be exported. Please try again.";
 
@@ -2774,6 +2775,9 @@ Automatic downloads: why unread chapters cannot be listed */
 /* Automatic downloads: the rule is gone or is not in the state the action needs */
 "This rule is no longer available. It was reloaded." = "This rule is no longer available. It was reloaded.";
 
+/* Review sheet: the rule is paused or off, so chapters can be dismissed but not approved */
+"This rule is not turned on. Turn it on or resume it to download these chapters. You can still dismiss them." = "This rule is not turned on. Turn it on or resume it to download these chapters. You can still dismiss them.";
+
 /* Reader failure after integrity verification fails for a specifically chosen downloaded alternative. */
 "This saved copy is damaged and can't be read." = "This saved copy is damaged and can't be read.";
 
@@ -2968,11 +2972,9 @@ Reader consent: shown in place of the group name when the source supplies none *
 
 "Unsupported component type." = "Unsupported component type.";
 
-/* Rule sheet: the space automatic downloads may fill. The placeholder is a size such as 5 GB. */
+/* Automatic downloads screen: the space automatic downloads may fill. The placeholder is a size such as 5 GB.
+Rule sheet: the space automatic downloads may fill. The placeholder is a size such as 5 GB. */
 "Up to %@ of space for automatic downloads" = "Up to %@ of space for automatic downloads";
-
-/* Automatic downloads screen: the space automatic downloads may fill. The placeholder is a number of gigabytes. */
-"Up to %lld GB of space for automatic downloads" = "Up to %lld GB of space for automatic downloads";
 
 /* Series status: not released yet */
 "Upcoming" = "Upcoming";
@@ -3141,6 +3143,9 @@ Download state: an automatic download is queued, but the space for automatic dow
 "When unavailable" = "When unavailable";
 
 "When updating or tracking a series, automatically mark all previous chapters or episodes as read/watched in your local library." = "When updating or tracking a series, automatically mark all previous chapters or episodes as read/watched in your local library.";
+
+/* Rule sheet: accessibility label of the choice of which chapters the rule downloads; it is not shown */
+"Which chapters to download" = "Which chapters to download";
 
 /* Reader background theme */
 "White" = "White";

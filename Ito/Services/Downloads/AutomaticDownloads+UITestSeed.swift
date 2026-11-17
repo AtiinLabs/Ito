@@ -14,7 +14,7 @@ extension AutomaticDownloads {
 
     /// A saved series with a rule that took its first chapter list of three ordered chapters, and then saw a fourth the
     /// source gave no reading position: that one waits for the person.
-    func seedUITestAttentionFixture() async throws {
+    static func seedUITestAttention(store: OfflineChapterStore, epoch: String, limits: AutomaticDownloadLimits) async throws {
         let media = MediaIdentity(pluginId: Self.uiTestPluginID, itemId: Self.uiTestSeriesID, mediaKind: .manga)
         try await store.database.write { db in
             guard try LibraryItem.fetchOne(db, key: Self.uiTestSeriesID) == nil else { return }
@@ -23,7 +23,6 @@ extension AutomaticDownloads {
                 isAnime: false, pluginType: .manga, rawPayload: Data(), anilistId: nil
             ).insert(db)
         }
-        let epoch = try sourceEpoch(for: Self.uiTestPluginID)
         guard case .enabled = try await store.enableSubscription(SubscriptionEnableRequest(
             media: media, reviewedSourceEpoch: epoch, configuration: SubscriptionConfiguration()
         )) else { return }

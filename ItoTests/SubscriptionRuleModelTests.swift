@@ -179,6 +179,26 @@ struct SubscriptionRuleModelTests {
         #expect(model.presentation == nil)
     }
 
+    @Test func v4_aNewerRowThatArrivedBeforeSaveIsTakenAtOnceSoTheRetryDoesNotFailForever() async throws {
+        let (service, _, model) = make(rows: [Fixture.row(configGeneration: 3)])
+        model.open()
+        // Another edit lands while the sheet is open, and the observation has delivered it before the person taps Save.
+        service.publish([Fixture.row(configuration: SubscriptionConfiguration(perRunPositionCap: 2), configGeneration: 4)])
+        model.draft.perRunPositionCap = 9
+
+        service.editOutcome = .stale
+        await model.performPrimaryAction().value
+        #expect(service.edits.map(\.expectedConfigGeneration) == [3])
+        #expect(model.message == .stale)
+        // No further change will come, so the sheet already holds the current rule: its draft and its generation.
+        #expect(model.draft.perRunPositionCap == 2)
+
+        service.editOutcome = .applied(configGeneration: 5)
+        await model.performPrimaryAction().value
+        #expect(service.edits.map(\.expectedConfigGeneration) == [3, 4])
+        #expect(model.presentation == nil)
+    }
+
     @Test func v4_aSheetDismissedBeforeItsCommandEndsPublishesNothingWhenTheCommandFinishes() async throws {
         let (service, _, model) = make(rows: [Fixture.row(configGeneration: 3)])
         let gate = CommandGate()

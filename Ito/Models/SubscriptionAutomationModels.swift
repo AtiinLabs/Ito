@@ -11,6 +11,15 @@ nonisolated enum DownloadHoldReason: Equatable, Hashable, Sendable {
     case automaticSpaceFull
     /// The path is metered, and automatic downloads use it only when Settings allows that.
     case automaticMeteredNotAllowed
+
+    /// Which reason a rule reports when its jobs are held for several: the lowest number.
+    var priority: Int {
+        switch self {
+        case .automaticRulePaused: 0
+        case .automaticSpaceFull: 1
+        case .automaticMeteredNotAllowed: 2
+        }
+    }
 }
 
 /// One automatic rule of one series with what a screen says about it: the rule, the outcome of its last check, and
@@ -105,6 +114,17 @@ nonisolated struct SubscriptionAttention: Equatable, Sendable {
 
     let events: [SubscriptionEventReview]
     let totalCount: Int
+    /// Whether the rule is enabled. Rows of a rule that is paused can be dismissed but not approved.
+    var ruleIsEnabled = true
+}
+
+/// What the sweep of notifications needs of one rule, read from the store at the time it runs.
+nonisolated struct SubscriptionAttentionState: Equatable, Sendable {
+    let subscriptionId: String
+    let incarnation: Int64
+    let configGeneration: Int64
+    let isEnabled: Bool
+    let attentionCount: Int
 }
 
 /// What approving unread chapters would queue, read without writing anything. The approval checks every binding

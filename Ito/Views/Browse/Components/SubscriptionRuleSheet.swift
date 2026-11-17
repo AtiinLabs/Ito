@@ -103,8 +103,9 @@ struct SubscriptionRuleSheet: View {
                 Text("New releases and unread chapters", comment: "Rule mode: also download unread chapters the person approves").tag(SubscriptionMode.newAndFillUnread)
                 Text("Keep next unread chapters", comment: "Rule mode: keep the chapters after the last one read downloaded").tag(SubscriptionMode.maintainNextUnread)
             } label: {
-                Text("Download", comment: "Rule sheet: which chapters the rule downloads")
+                Text("Which chapters to download", comment: "Rule sheet: accessibility label of the choice of which chapters the rule downloads; it is not shown")
             }
+            .labelsHidden()
             .pickerStyle(.inline)
             .disabled(!model.canEditDraft)
             .accessibilityIdentifier("ruleModePicker")
@@ -115,7 +116,7 @@ struct SubscriptionRuleSheet: View {
                 .disabled(!model.canEditDraft)
             }
         } header: {
-            Text("Download", comment: "Rule sheet: section for which chapters the rule downloads")
+            Text("Chapters to Download", comment: "Rule sheet: header of the section where the person chooses which chapters the rule downloads")
         } footer: {
             Text(modeExplanation)
         }
@@ -239,6 +240,6 @@ struct SubscriptionRuleSheet: View {
     }
 
     private static func bytes(_ value: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: value, countStyle: .file)
+        AutomaticDownloadsBytes.text(value)
     }
 }

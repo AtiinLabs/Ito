@@ -200,4 +200,53 @@ struct AutomaticDownloadsFacadeTests {
         #expect(rule?.state == .enabled && rule?.lastAttemptAt != nil, "Its first chapter list was taken")
         #expect(try await h.fixture.store.jobs().isEmpty, "Resuming and the first check queue nothing")
     }
+
+    // MARK: - Limits and usage
+
+    @Test func aChangedQuotaIsReadAgainAndWhatIsHeldForSpaceFollowsIt() async throws {
+        let h = try await AutomaticDownloadsHarness()
+        try await h.queueAutomaticJob()
+        let listener = Listener(h.facade, media: h.media)
+        let held = await observe(h)
+        #expect(listener.rule.last??.queuedJobs == 1 && listener.rule.last??.heldJobs == 0)
+
+        // The quota is not in the database, so the facade is told, and reads the rows under the new one.
+        h.limitsBox.set(quotaBytes: 0)
+        h.limitsChanged.send()
+        await held.nextPublication().run()
+
+        let row = try #require(listener.rule.last ?? nil)
+        #expect(row.heldJobs == 1 && row.heldReason == .automaticSpaceFull)
+        #expect(SubscriptionRuleBadge.badges(for: row) == [.held(.automaticSpaceFull)])
+    }
+
+    @Test func theUsageNumbersAreWhatTheStoreHoldsAndNeverCheckASource() async throws {
+        let h = try await AutomaticDownloadsHarness()
+        let empty = await h.facade.usage()
+        #expect(empty.storedBytes == 0 && empty.queuedJobs == 0)
+
+        try await h.queueAutomaticJob()
+        let busy = await h.facade.usage()
+        #expect(busy.queuedJobs == 1 && busy.storedBytes == 0)
+        #expect(h.spy.begins.isEmpty && h.source.checkedItemIDs.isEmpty)
+    }
+
+    @Test func theCenterJudgesHeldChaptersAgainWhenTheLimitsChange() async throws {
+        let h = try await AutomaticDownloadsHarness()
+        try await h.queueAutomaticJob()
+        let held = HeldObservationScheduler()
+        h.fixture.center.startObserving(scheduling: held)
+        await held.nextPublication().run()
+        #expect(h.fixture.center.states[h.media]?["c3"] == .queued)
+
+        h.limitsBox.set(quotaBytes: 0)
+        h.fixture.center.automaticLimitsDidChange()
+
+        #expect(h.fixture.center.automaticLimitsRevision == 1)
+        #expect(h.fixture.center.states[h.media]?["c3"] == .held(.automaticSpaceFull))
+
+        h.limitsBox.set(quotaBytes: AutomaticDownloadsHarness.roomy.quotaBytes)
+        h.fixture.center.automaticLimitsDidChange()
+        #expect(h.fixture.center.states[h.media]?["c3"] == .queued)
+    }
 }

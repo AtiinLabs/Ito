@@ -91,11 +91,11 @@ struct AutomaticDownloadsView: View {
                 value: Binding(get: { viewModel.quotaGiB }, set: { value in Task { await viewModel.setQuotaGiB(value) } }),
                 in: AppPreferenceCatalogRanges.quotaGiB
             ) {
-                Text("Up to \(viewModel.quotaGiB) GB of space for automatic downloads", comment: "Automatic downloads screen: the space automatic downloads may fill. The placeholder is a number of gigabytes.")
+                Text("Up to \(AutomaticDownloadsBytes.text(Int64(viewModel.quotaGiB) * AutomaticDownloadLimits.bytesPerGiB)) of space for automatic downloads", comment: "Automatic downloads screen: the space automatic downloads may fill. The placeholder is a size such as 5 GB.")
             }
             if let usage = viewModel.usage {
                 if let stored = usage.storedBytes {
-                    Text("\(ByteCountFormatter.string(fromByteCount: stored, countStyle: .file)) of downloads stored", comment: "Automatic downloads screen: space used by stored downloads. The placeholder is a size.")
+                    Text("\(AutomaticDownloadsBytes.text(stored)) of downloads stored", comment: "Automatic downloads screen: space used by stored downloads. The placeholder is a size.")
                         .foregroundColor(.secondary)
                 }
                 if let jobs = usage.queuedJobs {
@@ -120,7 +120,7 @@ struct AutomaticDownloadsView: View {
             }
             .accessibilityIdentifier("attentionNotificationsToggle")
         } footer: {
-            Text("Ito only notifies you when it is not open. It never notifies about finished downloads.", comment: "Automatic downloads screen: when notifications are posted")
+            Text("Ito posts a notification only while it is closed, and only when a background Library update finds something that needs your decision. Turn on background updates in Settings under Library. It never notifies about finished downloads.", comment: "Automatic downloads screen: when notifications are posted")
         }
     }
 }

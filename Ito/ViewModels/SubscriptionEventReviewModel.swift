@@ -33,6 +33,12 @@ final class SubscriptionEventReviewModel: ObservableObject, Identifiable {
     }
 
     var events: [SubscriptionEventReview] { attention?.events ?? [] }
+    /// Whether the rule is turned on. A paused or turned-off rule's chapters can be dismissed but not approved: the store
+    /// refuses an approval for it, so the sheet never offers one.
+    var ruleIsEnabled: Bool { attention?.ruleIsEnabled ?? true }
+
+    /// Whether an approval of this event is offered at all.
+    func offersApproval(_ event: SubscriptionEventReview) -> Bool { event.canApprove && ruleIsEnabled }
     /// How many events wait beyond the ones listed.
     var hiddenCount: Int { max(0, (attention?.totalCount ?? 0) - events.count) }
 
@@ -68,7 +74,7 @@ final class SubscriptionEventReviewModel: ObservableObject, Identifiable {
     }
 
     func toggle(_ key: String, in event: SubscriptionEventReview) {
-        guard event.canApprove, event.candidates.contains(where: { $0.key == key }) else { return }
+        guard offersApproval(event), event.candidates.contains(where: { $0.key == key }) else { return }
         var chosen = selection[event.eventId] ?? []
         if !chosen.insert(key).inserted { chosen.remove(key) }
         selection[event.eventId] = chosen
@@ -81,7 +87,7 @@ final class SubscriptionEventReviewModel: ObservableObject, Identifiable {
     }
 
     func canApprove(_ event: SubscriptionEventReview) -> Bool {
-        event.canApprove && !selectedKeys(for: event).isEmpty && busyEventId == nil
+        offersApproval(event) && !selectedKeys(for: event).isEmpty && busyEventId == nil
     }
 
     /// Approves the ticked rows. The returned task lets a caller wait for it.

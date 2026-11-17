@@ -78,7 +78,11 @@ nonisolated enum SubscriptionRuleReadModel {
             case .downloading, .failed:
                 reason = nil
             }
-            if let reason { held[id] = ((held[id]?.count ?? 0) + 1, reason) }
+            if let reason {
+                // One reason for the rule, whatever order its jobs are read in: the most basic one wins.
+                let kept = held[id]?.reason
+                held[id] = ((held[id]?.count ?? 0) + 1, kept.map { $0.priority <= reason.priority ? $0 : reason } ?? reason)
+            }
         }
 
         let titles = try libraryTitles(of: rules.map(\.media), in: db)

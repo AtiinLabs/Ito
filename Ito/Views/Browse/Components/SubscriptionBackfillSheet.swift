@@ -75,10 +75,11 @@ struct SubscriptionBackfillSheet: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(model.isSelected(index) ? [.isSelected] : [])
                 }
             } footer: {
                 if preview.truncatedCount > 0 {
-                    Text("\(preview.truncatedCount) more chapters are not listed. Approve these first, then open this list again to see the next ones.", comment: "Backfill sheet: how many chapters beyond the list's limit remain. The placeholder is a count.")
+                    Text("\(preview.truncatedCount) more chapters are not listed. Once these are approved, the list shows the next ones.", comment: "Backfill sheet: how many chapters beyond the list's limit remain. The placeholder is a count.")
                 }
             }
         }

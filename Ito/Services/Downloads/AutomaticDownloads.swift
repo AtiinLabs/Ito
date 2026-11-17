@@ -13,6 +13,17 @@ nonisolated struct AutomaticDownloadUsage: Equatable, Sendable {
     var availableBytes: Int64?
 }
 
+/// Sizes of the automatic download limits and their usage, in binary units like the setting itself (the quota is in GiB).
+/// A size of zero reads "0 bytes", never a word.
+nonisolated enum AutomaticDownloadsBytes {
+    static func text(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .memory
+        formatter.allowsNonnumericFormatting = false
+        return formatter.string(fromByteCount: bytes)
+    }
+}
+
 /// What a screen asks of automatic downloads. Every command is the store's, through the download center, and returns
 /// the store's own outcome: a screen says what happened from it, never from what it asked. Rules are never deleted from
 /// here: only removing the series from the Library, moving it to another source, and a restore delete one. The reads
@@ -57,7 +68,7 @@ nonisolated enum AutomaticDownloadsError: Error, Equatable, Sendable {
 final class AutomaticDownloads: AutomaticDownloadServing {
     private let center: DownloadCenter
     private let scheduler: SubscriptionCheckScheduler
-    let store: OfflineChapterStore
+    private let store: OfflineChapterStore
     private let currentLimits: @MainActor () -> AutomaticDownloadLimits
     private let currentIntervalHours: @MainActor () -> Int
     private let installedPluginIDs: AnyPublisher<Set<String>, Never>
@@ -69,8 +80,6 @@ final class AutomaticDownloads: AutomaticDownloadServing {
     private var restartObservation: (@MainActor () -> Void)?
     private var subscriptions = Set<AnyCancellable>()
     private var notifier: SubscriptionAttentionNotifier?
-    private var latestRows: [SubscriptionRuleRow] = []
-    private var sweepTail: Task<Void, Never>?
 
     /// - Parameters:
     ///   - limits: the configured queue and disk limits, read when a screen shows them.
@@ -123,9 +132,6 @@ final class AutomaticDownloads: AutomaticDownloadServing {
             .sink { @MainActor [weak self] in self?.restartObservation?() }
             .store(in: &subscriptions)
         allRows()
-            .sink { @MainActor [weak self] rows in self?.latestRows = rows }
-            .store(in: &subscriptions)
-        allRows()
             .map { $0.map(\.attentionKey) }
             .removeDuplicates()
             .sink { @MainActor [weak self] _ in self?.sweepAttentionNotifications() }
@@ -137,17 +143,19 @@ final class AutomaticDownloads: AutomaticDownloadServing {
         self.notifier = notifier
     }
 
-    /// Removes attention notifications that are no longer true. Called when a rule's attention changes and when the app
-    /// becomes active.
+    /// Signals that attention notifications may be stale: when a rule's attention changes and when the app becomes active.
+    /// What is stale is decided by the notifier, from the store, when the sweep runs.
     func sweepAttentionNotifications() {
-        guard let notifier else { return }
-        let rows = latestRows
-        let preceding = sweepTail
-        sweepTail = Task { @MainActor in
-            await preceding?.value
-            await notifier.sweep(rules: rows)
-        }
+        notifier?.requestSweep()
     }
+
+#if DEBUG
+    /// Debug-only: seeds the rule and the waiting chapter a UI test opens; see `AutomaticDownloads+UITestSeed.swift`.
+    func seedUITestAttentionFixture() async throws {
+        let epoch = try sourceEpoch(for: Self.uiTestPluginID)
+        try await Self.seedUITestAttention(store: store, epoch: epoch, limits: limits)
+    }
+#endif
 
     // MARK: - Reads
 

@@ -36,32 +36,6 @@
     "%@ available" : {
       "comment" : "Download preview: free space on this device. The placeholder is a size such as 4.2 GB."
     },
-    "%@ free on this device" : {
-      "comment" : "Rule sheet: free space on the device. The placeholder is a size such as 20 GB."
-    },
-    "%@ has %lld new chapters waiting for your decision." : {
-      "comment" : "Notification body: the first placeholder is a series title, the second how many of its new chapters wait for the person to decide whether to download them.",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%@ has %lld new chapter waiting for your decision."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%@ has %lld new chapters waiting for your decision."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "%@ has %lld new editions." : {
       "comment" : "Manga/novel update-count heuristic: exact uploads, possibly alternate translations, not unique logical chapters.",
       "localizations" : {
@@ -141,9 +115,6 @@
     },
     "%@ is not a list status MyAnimeList supports." : {
 
-    },
-    "%@ of downloads stored" : {
-      "comment" : "Automatic downloads screen: space used by stored downloads. The placeholder is a size.\nRule sheet: how much space stored downloads use. The placeholder is a size such as 1.2 GB."
     },
     "%@ progress only moves forward from Ito. Choose Repeating to start over, or change it on %@." : {
       "localizations" : {
@@ -398,29 +369,6 @@
         }
       }
     },
-    "%lld chapters queued." : {
-      "comment" : "Automatic downloads: how many chapters were queued after the person approved them. The placeholder is a count.",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld chapter queued."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld chapters queued."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "%lld chapters saved" : {
       "comment" : "Accessibility label for a count of chapters saved on this device, on a Library card and in a series' details header. The placeholder is the number of saved chapters.",
       "localizations" : {
@@ -483,29 +431,6 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld damaged"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "%lld downloads in the queue now" : {
-      "comment" : "Automatic downloads screen: how many downloads are queued now. The placeholder is a count.\nRule sheet: how many downloads are in the queue now. The placeholder is a count.",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld download in the queue now"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld downloads in the queue now"
                 }
               }
             }
@@ -738,52 +663,6 @@
         }
       }
     },
-    "%lld more are waiting. They appear here once these are decided." : {
-      "comment" : "Review sheet: how many more events wait than are listed. The placeholder is a count.",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld more is waiting. It appears here once these are decided."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld more are waiting. They appear here once these are decided."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "%lld more chapters are not listed. Approve these first, then open this list again to see the next ones." : {
-      "comment" : "Backfill sheet: how many chapters beyond the list's limit remain. The placeholder is a count.",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld more chapter is not listed. Approve these first, then open this list again to see it."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld more chapters are not listed. Approve these first, then open this list again to see the next ones."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "%lld more uploads found" : {
       "comment" : "Scanlator sheet: how many uploads the source listed that the chapter list does not show. The placeholder is a number, which needs plural forms.",
       "localizations" : {
@@ -800,29 +679,6 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld more uploads found"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "%lld new chapters wait for your decision." : {
-      "comment" : "Notification body: how many new chapters of a series wait for the person to decide whether to download them. The placeholder is a count.",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld new chapter waits for your decision."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld new chapters wait for your decision."
                 }
               }
             }
@@ -1055,29 +911,6 @@
         }
       }
     },
-    "%lld waiting for your decision" : {
-      "comment" : "Automatic downloads: how many new chapters of a rule need the person to decide. The placeholder is a count.",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld waiting for your decision"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld waiting for your decision"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "%lld waiting to sync" : {
       "localizations" : {
         "en" : {
@@ -1115,20 +948,8 @@
     "0" : {
 
     },
-    "A chapter Ito can't place in the reading order." : {
-      "comment" : "Automatic downloads review: a chapter whose position is unclear"
-    },
-    "A large number of chapters showed up at once, which looks more like a reorganized list than new releases." : {
-      "comment" : "Automatic downloads review: why new chapters need a decision"
-    },
-    "A large number of saved chapters changed at once, which looks more like a source-wide update than new revisions." : {
-      "comment" : "Automatic downloads review: why changed chapters need a decision"
-    },
     "A library item already exists at the destination \"%@\"." : {
 
-    },
-    "A saved chapter changed at the source." : {
-      "comment" : "Automatic downloads review: the source changed a chapter that is saved"
     },
     "A series in the backup belongs to a list that could not be found, so nothing was merged." : {
 
@@ -1169,9 +990,6 @@
     "Action completed successfully." : {
 
     },
-    "Active" : {
-      "comment" : "Automatic downloads: status of a rule that is checking for new chapters"
-    },
     "Add" : {
 
     },
@@ -1186,9 +1004,6 @@
     },
     "Add a repository URL to discover and install plugins." : {
 
-    },
-    "Add to Library to download new chapters automatically" : {
-      "comment" : "Series screen: automatic downloads need the series to be in the Library"
     },
     "Add to List" : {
 
@@ -1229,14 +1044,11 @@
     "All-Time Popular" : {
 
     },
-    "Allow Metered Networks" : {
-      "comment" : "Download mode permitting cellular and hotspots"
-    },
-    "Allow notifications for Ito in your device Settings to hear when new chapters need your decision." : {
-      "comment" : "Automatic downloads: the alert when notifications are not allowed"
-    },
     "Already Saved or Queued" : {
       "comment" : "Download preview section header for Download More: chapters already stored, which are not counted."
+    },
+    "Allow Metered Networks" : {
+      "comment" : "Download mode permitting cellular and hotspots"
     },
     "Already added" : {
 
@@ -1246,9 +1058,6 @@
     },
     "Already saved" : {
       "comment" : "Upload row: this upload is already saved on this device."
-    },
-    "Also lets you review the unread chapters already listed and choose which to download. Nothing is downloaded until you approve it." : {
-      "comment" : "Rule sheet: explains the mode that also fills unread chapters"
     },
     "Also read on %@" : {
       "comment" : "History: other sources the same series was read on"
@@ -1270,9 +1079,6 @@
     },
     "Anime" : {
       "comment" : "History filter\nHistory: kind of media"
-    },
-    "Another upload of a chapter you already have." : {
-      "comment" : "Automatic downloads review: a new upload of an existing chapter"
     },
     "Any available group" : {
       "comment" : "Advanced explicit permission to use any eligible visible group.",
@@ -1323,23 +1129,11 @@
     "Ask on Discord" : {
 
     },
-    "Ask on Metered Networks" : {
-      "comment" : "Download mode requiring batch confirmation on cellular"
-    },
     "Asks the source to list every upload it has for this series. Nothing is downloaded until you choose uploads." : {
       "comment" : "Footer under Find All Uploads: it only lists uploads; the user picks which to download afterwards."
     },
-    "At the last check the chapter list was too large to keep, so nothing was judged." : {
-      "comment" : "Automatic downloads: note on a rule whose chapter list is too large"
-    },
-    "At the last check the source did not say which chapters it returned, so nothing was judged." : {
-      "comment" : "Automatic downloads: note on a rule whose last check got a list of unknown coverage"
-    },
-    "At the last check the source returned no chapters, so nothing was judged." : {
-      "comment" : "Automatic downloads: note on a rule whose last check got no chapters"
-    },
-    "At the last check the source returned only part of the chapter list, so nothing was judged." : {
-      "comment" : "Automatic downloads: note on a rule whose last check got an incomplete chapter list"
+    "Ask on Metered Networks" : {
+      "comment" : "Download mode requiring batch confirmation on cellular"
     },
     "Audio" : {
       "comment" : "Audio track button when no track is selected"
@@ -1350,20 +1144,11 @@
     "Automatic" : {
       "comment" : "Reading mode: follow the series' default direction"
     },
-    "Automatic Downloads" : {
-      "comment" : "Downloads manager: opens the automatic download rules\nTitle of a notification saying that new chapters of a series wait for the person's decision\nTitle of the screen that lists the automatic download rules\nTitle of the sheet that sets up automatic downloads for a series"
-    },
     "Automatic Updates" : {
 
     },
     "Automatic download rules" : {
       "comment" : "Backup restore report: the component holding automatic download rules, restored paused."
-    },
-    "Automatic downloads are not available for this kind of series." : {
-      "comment" : "Automatic downloads: only manga and novels have automatic downloads"
-    },
-    "Automatic downloads wait when the queue is full or their space is used up, and start again when there is room." : {
-      "comment" : "Automatic downloads screen: what the limits do"
     },
     "Automatic progress updates are off while this entry is %@. Set it to %@ to resume them." : {
       "localizations" : {
@@ -1483,9 +1268,6 @@
     "Certificate Fingerprint (SHA-256)" : {
 
     },
-    "Change these limits under Downloads, Automatic Downloads." : {
-      "comment" : "Rule sheet: where the limits are changed"
-    },
     "Chapter %@" : {
       "comment" : "Review row: the chapter number. The placeholder is the number."
     },
@@ -1559,9 +1341,6 @@
     },
     "Choose Downloaded Version…" : {
       "comment" : "Chapter menu: list the saved uploads of this chapter's reading position and open one of them, for this reading only"
-    },
-    "Choose Groups…" : {
-      "comment" : "Rule sheet: opens the choice of scanlation groups"
     },
     "Choose List on Save" : {
 
@@ -1976,7 +1755,7 @@
       "comment" : "Review sheet: close"
     },
     "Download" : {
-      "comment" : "Backfill sheet: queue the ticked chapters\nChapter menu: save this chapter for offline reading\nRule sheet: section for which chapters the rule downloads\nRule sheet: which chapters the rule downloads"
+      "comment" : "Backfill sheet: queue the ticked chapters\nChapter menu: save this chapter for offline reading"
     },
     "Download %lld Chapters" : {
       "comment" : "Button on the download preview: queue the listed chapters. The placeholder is the number of chapters, which needs plural forms.",
@@ -2030,17 +1809,11 @@
     "Download More…" : {
       "comment" : "Download menu item: ask for a count and download that many missing chapters after the last read one."
     },
-    "Download Network" : {
-      "comment" : "Configured bulk download network mode"
-    },
-    "Download New Chapters Automatically" : {
-      "comment" : "Series screen: opens the rule that downloads new chapters of this series automatically"
-    },
     "Download Presets" : {
       "comment" : "Navigation title of the custom download presets editor.\nStorage settings: open the editor for custom download presets, such as Next 3 Chapters."
     },
-    "Download Selected" : {
-      "comment" : "Review sheet: queue the chapters the person ticked"
+    "Download Network" : {
+      "comment" : "Configured bulk download network mode"
     },
     "Download again" : {
       "comment" : "Manual refresh; source revision is unchanged or unknown"
@@ -2083,9 +1856,6 @@
     "Downloaded Versions" : {
       "comment" : "Title of the sheet that lists the saved copies of a chapter's reading position"
     },
-    "Downloaded chapters stay. Queued automatic downloads are removed." : {
-      "comment" : "Rule sheet: what turning a rule off does"
-    },
     "Downloading" : {
       "comment" : "Chapter download status"
     },
@@ -2094,9 +1864,6 @@
     },
     "Downloads chapters after your last read one that aren't saved or queued yet. Saved and queued chapters don't count." : {
       "comment" : "Download More prompt footer: what counts toward the number."
-    },
-    "Downloads chapters the source adds after the first check. Chapters already listed are not downloaded." : {
-      "comment" : "Rule sheet: explains the new releases mode"
     },
     "Downloads couldn't be cancelled. Check the list before trying again." : {
       "comment" : "Downloads manager bulk Cancel failure"
@@ -2261,9 +2028,6 @@
     "Error: %@" : {
 
     },
-    "Every upload of every group" : {
-      "comment" : "Automatic downloads: the rule takes every upload of a chapter"
-    },
     "Exact Alt Match" : {
       "comment" : "Source match: exact match on an alternative title"
     },
@@ -2410,9 +2174,6 @@
     "Finished" : {
       "comment" : "Series status: complete"
     },
-    "Follow the source's chapter list" : {
-      "comment" : "Automatic downloads: the rule takes the chapters the source lists, whichever group made them"
-    },
     "Follow the source's preferred edition" : {
       "comment" : "Let the source choose which visible upload to download. Uploads form one reading position only when the source supplies a shared logical-unit ID; otherwise each listed upload is separate.",
       "localizations" : {
@@ -2453,12 +2214,6 @@
     },
     "Group ID %@" : {
       "comment" : "Accessibility label for the untranslated source-provided group ID.\nDownloaded versions sheet: the source's identifier of a translation group. The placeholder is that identifier, shown as the source wrote it."
-    },
-    "Group choice can't be read — edit the rule" : {
-      "comment" : "Automatic downloads: status of a rule whose saved choice of scanlation groups this version of the app cannot read"
-    },
-    "Groups" : {
-      "comment" : "Rule sheet: section for the scanlation groups the rule follows"
     },
     "HTTPS to HTTP redirect downgrades are prohibited." : {
 
@@ -2574,35 +2329,6 @@
     "Items you read or watch\nwill appear here." : {
 
     },
-    "Ito can't find the last chapter it saw in the source's list, so it can't tell whether this chapter is new." : {
-      "comment" : "Automatic downloads review: why new chapters need a decision"
-    },
-    "Ito checks rules when it opens or when you refresh the Library, at most every %lld hours." : {
-      "comment" : "Automatic downloads: footer explaining when rules are checked. The placeholder is the number of hours of the update interval.",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Ito checks rules when it opens or when you refresh the Library, at most every %lld hour."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Ito checks rules when it opens or when you refresh the Library, at most every %lld hours."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "Ito could not open the device Settings app. Open it yourself and allow notifications for Ito." : {
-      "comment" : "Automatic downloads: the alert when the device Settings app could not be opened"
-    },
     "Ito could not open the device Settings app. Please try again." : {
 
     },
@@ -2617,9 +2343,6 @@
     },
     "Ito marks this entry %@ when you start episode 1." : {
 
-    },
-    "Ito only notifies you when it is not open. It never notifies about finished downloads." : {
-      "comment" : "Automatic downloads screen: when notifications are posted"
     },
     "Ito syncs progress for series you are watching or reading on MyAnimeList. Automatic sync only moves progress forward and leaves ratings unchanged; you can edit your rating in the tracker sheet. Ito never deletes entries or changes dates, tags or comments." : {
 
@@ -2639,9 +2362,6 @@
     "Keep All Local" : {
 
     },
-    "Keep next unread chapters" : {
-      "comment" : "Rule mode: keep the chapters after the last one read downloaded"
-    },
     "Keep selection" : {
       "comment" : "Confirm only the permitted available chapters and leave missing positions unresolved.",
       "localizations" : {
@@ -2652,32 +2372,6 @@
           }
         }
       }
-    },
-    "Keep the next %lld unread chapters" : {
-      "comment" : "Rule sheet: how many unread chapters after the last one read stay downloaded. The placeholder is a count.",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Keep the next %lld unread chapter"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Keep the next %lld unread chapters"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "Keeps the chapters after the last one you read downloaded as you read." : {
-      "comment" : "Rule sheet: explains the mode that keeps the next unread chapters downloaded"
     },
     "Key: %@" : {
 
@@ -2712,9 +2406,6 @@
     },
     "Larger Text" : {
 
-    },
-    "Last checked %@" : {
-      "comment" : "Automatic downloads: when the rule was last checked. The placeholder is a relative time such as '5 minutes ago'."
     },
     "Layout not saved" : {
 
@@ -2755,9 +2446,6 @@
     },
     "Light" : {
 
-    },
-    "Limits" : {
-      "comment" : "Automatic downloads screen: section for the limits\nRule sheet: section that shows the limits of automatic downloads"
     },
     "Line Spacing" : {
 
@@ -2972,12 +2660,6 @@
     "More Options" : {
 
     },
-    "More new chapters are held back and queued at the next check." : {
-      "comment" : "Rule sheet: what happens to chapters beyond the per-check limit"
-    },
-    "More new chapters will be queued at the next check" : {
-      "comment" : "Automatic downloads: the per-check limit held some new chapters back"
-    },
     "More options could not be loaded." : {
 
     },
@@ -3034,9 +2716,6 @@
     "Network settings changed. Try again." : {
       "comment" : "A request was stopped because its captured network policy is no longer current."
     },
-    "New Chapters" : {
-      "comment" : "Title of the sheet where the person decides about new chapters of a rule"
-    },
     "New List" : {
 
     },
@@ -3045,15 +2724,6 @@
     },
     "New Update" : {
 
-    },
-    "New chapter — choose which uploads to download." : {
-      "comment" : "Automatic downloads review: a new chapter has several uploads and the person chooses"
-    },
-    "New releases" : {
-      "comment" : "Rule mode: download chapters released after the rule was turned on"
-    },
-    "New releases and unread chapters" : {
-      "comment" : "Rule mode: also download unread chapters the person approves"
     },
     "Newest" : {
 
@@ -3093,11 +2763,11 @@
     "Next Chapter" : {
 
     },
-    "Next Chapter Only" : {
-      "comment" : "Adjacent chapter prefetch picker value: only the following chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch."
-    },
     "Next Chapters" : {
       "comment" : "Download preset editor: the Next type."
+    },
+    "Next Chapter Only" : {
+      "comment" : "Adjacent chapter prefetch picker value: only the following chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch."
     },
     "Next Page" : {
 
@@ -3123,14 +2793,11 @@
     "Next chapter opens in the text reader. Tap to continue" : {
       "comment" : "Reader boundary: the next chapter is text; tapping opens it in the text reader without leaving the series"
     },
-    "Next unread chapters." : {
-      "comment" : "Automatic downloads review: the next unread chapters to keep downloaded"
+    "No Custom Presets" : {
+      "comment" : "Download presets settings empty state title."
     },
     "No Adjacent Chapters" : {
       "comment" : "Adjacent chapter prefetch picker value: no neighbouring chapter is prefetched. The picker is in Settings, under the reader's chapter prefetch."
-    },
-    "No Custom Presets" : {
-      "comment" : "Download presets settings empty state title."
     },
     "No History" : {
 
@@ -3152,9 +2819,6 @@
     },
     "No Trackers Authenticated" : {
 
-    },
-    "No automatic downloads yet. Open a series in your Library to set one up." : {
-      "comment" : "Automatic downloads screen: there are no rules"
     },
     "No chapters in the current list" : {
       "comment" : "Scanlator choice: a remembered scanlator that the source's current list has no chapters from."
@@ -3255,9 +2919,6 @@
     "Not Now" : {
       "comment" : "Automatic downloads alert: leave notifications off"
     },
-    "Not checked yet" : {
-      "comment" : "Automatic downloads: an active rule that has not been checked since it was turned on"
-    },
     "Not on list" : {
 
     },
@@ -3285,20 +2946,11 @@
     "Nothing in your library matches\n\"%@\"." : {
 
     },
-    "Nothing is waiting for your decision." : {
-      "comment" : "Review sheet: no chapters wait for the person"
-    },
     "Nothing new to download" : {
       "comment" : "Series details: a download preset found every chapter in its range already saved or queued, or none to download."
     },
     "Nothing to download." : {
       "comment" : "Download preview: no chapter would be queued."
-    },
-    "Nothing was queued yet. The chapters wait for room in the queue or on the disk." : {
-      "comment" : "Automatic downloads: the queue or the space for automatic downloads is full, so approved chapters wait"
-    },
-    "Nothing was queued. These chapters are saved already, were deleted on purpose, or are locked." : {
-      "comment" : "Automatic downloads: approved chapters needed no download"
     },
     "Nothing was queued. Try again, or turn off Remember to use this choice for this batch only." : {
       "comment" : "Edition policy save failed. Batch-only authorization requires a separate explicit confirmation.",
@@ -3314,17 +2966,8 @@
     "Notification permission was denied, but the preference could not be disabled. Please try again." : {
 
     },
-    "Notifications Are Off" : {
-      "comment" : "Automatic downloads: title of the alert when the system does not allow notifications"
-    },
     "Notifications Disabled" : {
 
-    },
-    "Notifications were refused, but the setting could not be turned off. Try again." : {
-      "comment" : "Automatic downloads: the alert when the alert setting stays on after notifications were refused"
-    },
-    "Notify When Chapters Need a Decision" : {
-      "comment" : "Automatic downloads screen: turns on notifications for new chapters that need the person's decision"
     },
     "Notify on New Chapters" : {
 
@@ -3374,9 +3017,6 @@
     "Only these groups are offered as fallbacks, in the order shown. You review them before anything is queued." : {
       "comment" : "Approved fallback has no unlisted final fallback, and a fallback is always shown in a preview before it is queued."
     },
-    "Only these groups: %@" : {
-      "comment" : "Automatic downloads: the rule takes chapters of the chosen groups. The placeholder is the list of group names."
-    },
     "Open" : {
 
     },
@@ -3389,6 +3029,9 @@
     "Open Settings" : {
       "comment" : "Automatic downloads alert: open the device Settings app"
     },
+    "Open this source to continue in the foreground." : {
+      "comment" : "A source needs user interaction that background work cannot perform."
+    },
     "Open This Saved Copy" : {
       "comment" : "Button in the downloaded versions sheet: reads the selected saved copy, for this reading only"
     },
@@ -3400,12 +3043,6 @@
     },
     "Opening the previous chapter…" : {
       "comment" : "Reader: shown over the current chapter while the previous one, made for the other reader, is being prepared"
-    },
-    "Open the series to change the groups." : {
-      "comment" : "Rule sheet: groups can only be changed from the series screen"
-    },
-    "Open this source to continue in the foreground." : {
-      "comment" : "A source needs user interaction that background work cannot perform."
     },
     "Opening the saved copy…" : {
       "comment" : "Downloaded versions sheet: the chosen saved copy is being opened"
@@ -3461,9 +3098,6 @@
     },
     "Part of the backup is damaged or from an unsupported version." : {
 
-    },
-    "Pause" : {
-      "comment" : "Rule sheet: pause the rule"
     },
     "Paused" : {
       "comment" : "Automatic downloads: status of a rule the person paused"
@@ -3527,9 +3161,6 @@
     },
     "Popular This Season" : {
 
-    },
-    "Prefer %@" : {
-      "comment" : "Automatic downloads: the rule prefers the chapters of one group. The placeholder is the group's name."
     },
     "Preference not saved" : {
 
@@ -3823,9 +3454,6 @@
     "Repeating" : {
 
     },
-    "Replace Changed Chapters" : {
-      "comment" : "Rule sheet: replace a saved chapter when the source changes it"
-    },
     "Replace download" : {
       "comment" : "Chapter menu: manually replace the exact saved copy after confirmation\nManual replacement confirmation title"
     },
@@ -3840,9 +3468,6 @@
     },
     "Replacement no longer applies" : {
       "comment" : "Chapter download status: the saved copy or its source changed after a replacement was confirmed. The saved copy is kept; replace it again to review the chapter."
-    },
-    "Replaces a saved chapter only when the source reports a changed revision of the same chapter." : {
-      "comment" : "Rule sheet: when a saved chapter is replaced"
     },
     "Replacing download" : {
       "comment" : "Chapter download status: a replacement of a saved chapter is queued or running. The saved copy stays available."
@@ -3919,9 +3544,6 @@
     "Restore report was already acknowledged." : {
 
     },
-    "Restored — review to turn on" : {
-      "comment" : "Automatic downloads: status of a rule that came back from a backup and stays paused until the person reviews it"
-    },
     "Restores network and prefetch defaults only. Credentials, cookies, site data and reading state are kept." : {
       "comment" : "Exact scope of network settings reset"
     },
@@ -3961,23 +3583,8 @@
     "Revert" : {
 
     },
-    "Review" : {
-      "comment" : "Automatic downloads screen: open the chapters of a rule that wait for the person's decision"
-    },
-    "Review New Chapters" : {
-      "comment" : "Rule sheet: opens the chapters that wait for the person's decision"
-    },
-    "Review Unread Chapters to Download" : {
-      "comment" : "Rule sheet: opens the list of unread chapters the person may download now"
-    },
-    "Review and Turn On" : {
-      "comment" : "Rule sheet: enable a rule that came back from a backup or a source change, as shown"
-    },
     "Review this download before it starts." : {
       "comment" : "Series details: detail when the scanlators remembered for this series cannot be read, so the download is shown for review instead of being queued."
-    },
-    "Review this rule before turning it on." : {
-      "comment" : "Automatic downloads: a rule that came back from a backup or a source change must be reviewed before it runs"
     },
     "Right to Left" : {
       "comment" : "Reading mode"
@@ -3991,17 +3598,11 @@
     "Save" : {
       "comment" : "Download preset editor: save the preset."
     },
-    "Save Changes" : {
-      "comment" : "Rule sheet: save the edited rule"
-    },
     "Saved" : {
 
     },
     "Saved Source • %@ • Confirmed" : {
 
-    },
-    "Saved and queued chapters count toward the number, like Next 5 Chapters." : {
-      "comment" : "Download preset editor footer: a Next preset counts chapters already saved or queued."
     },
     "Saved as images" : {
       "comment" : "Downloaded versions sheet: this copy is saved as page images"
@@ -4011,6 +3612,9 @@
     },
     "Saved as text" : {
       "comment" : "Downloaded versions sheet: this copy is saved as text"
+    },
+    "Saved and queued chapters count toward the number, like Next 5 Chapters." : {
+      "comment" : "Download preset editor footer: a Next preset counts chapters already saved or queued."
     },
     "Saved chapters of %lld series are deleted, and their queued downloads are cancelled." : {
       "comment" : "Confirm deleting selected downloaded series. The count is the number of selected series; deletion also cancels their queued downloads.",
@@ -4415,9 +4019,6 @@
     "Source Settings" : {
 
     },
-    "Source changed — review to turn on" : {
-      "comment" : "Automatic downloads: status of a rule paused because its series moved to another source, until the person reviews it"
-    },
     "Source chapter changed" : {
       "comment" : "Chapter download status: the source's chapter changed after a replacement was confirmed. The saved copy is kept; replace it again to review the chapter."
     },
@@ -4628,9 +4229,6 @@
     "The account this progress was recorded under could not be verified." : {
 
     },
-    "The approval could not be saved. Try again." : {
-      "comment" : "Backfill sheet: saving the approval failed"
-    },
     "The backup contains the same series more than once." : {
 
     },
@@ -4643,23 +4241,11 @@
     "The certificate couldn't be saved. Try again." : {
 
     },
-    "The change could not be saved. Try again." : {
-      "comment" : "Automatic downloads: saving a change to a rule failed"
-    },
-    "The chapter list Ito saved first had no reliable reading order, so Ito can't tell whether this chapter is new." : {
-      "comment" : "Automatic downloads review: why new chapters need a decision"
-    },
     "The chapter list changed; review again." : {
       "comment" : "Download preview: the series' chapter list changed while the preview was open, so it was made again."
     },
-    "The chapter list looks different from before." : {
-      "comment" : "Automatic downloads review: the chapter list changed in an unusual way"
-    },
     "The chapter you last read isn't in the selected scanlators, so this starts from the first unread chapter." : {
       "comment" : "Download preview warning: the last-read chapter belongs to a scanlator that is not selected."
-    },
-    "The chapters could not be loaded." : {
-      "comment" : "Review sheet: reading the waiting chapters failed"
     },
     "The choice saved for this series couldn't be loaded. It isn't replaced unless you turn on Remember." : {
       "comment" : "Scanlator sheet warning: reading the scanlators remembered for this series failed this time, so the stored choice is kept unless the user turns Remember on."
@@ -4670,9 +4256,6 @@
     "The configured repositories could not be refreshed. Please try again." : {
 
     },
-    "The decision could not be saved. Try again." : {
-      "comment" : "Review sheet: saving the person's decision failed"
-    },
     "The download could not be changed. Please try again." : {
       "comment" : "Series details: detail for a download action that did not take effect."
     },
@@ -4681,15 +4264,6 @@
     },
     "The extension could not be installed. Please try again." : {
 
-    },
-    "The group choice of this rule can't be read, so nothing was queued. Edit the rule." : {
-      "comment" : "Automatic downloads: the rule's saved group choice is unreadable, so nothing was done"
-    },
-    "The group choice of this rule can't be read. Edit the rule first." : {
-      "comment" : "Automatic downloads: why unread chapters cannot be listed"
-    },
-    "The groups this rule follows don't match the chapters the source lists now." : {
-      "comment" : "Automatic downloads review: the rule's group choice does not fit the list"
     },
     "The history item couldn't be deleted. Please try again." : {
 
@@ -4711,9 +4285,6 @@
     },
     "The installed extension could not be loaded." : {
 
-    },
-    "The last check could not reach the source. Ito tries again later." : {
-      "comment" : "Automatic downloads: note on a rule whose last check failed"
     },
     "The library backup could not be exported. Please try again." : {
 
@@ -4787,9 +4358,6 @@
     "The queued read progress could not be read or updated." : {
 
     },
-    "The reading order of the chapter list is unclear, so Ito can't tell which chapters come next." : {
-      "comment" : "Automatic downloads review: why the next chapters cannot be chosen"
-    },
     "The reading order of this series isn't certain. Check the list before downloading." : {
       "comment" : "Download preview warning: the order of the chapters could not be worked out confidently."
     },
@@ -4807,12 +4375,6 @@
     },
     "The repository package identifier is invalid." : {
 
-    },
-    "The saved chapter list can't be used, so nothing was queued. Wait for the next check." : {
-      "comment" : "Automatic downloads: the accepted chapter list cannot be used, so nothing was done"
-    },
-    "The saved chapter list can't be used. Wait for the next check." : {
-      "comment" : "Automatic downloads: why unread chapters cannot be listed"
     },
     "The saved copies couldn't be read. Close this and try again." : {
       "comment" : "Downloaded versions sheet: reading the list of saved copies failed"
@@ -4847,15 +4409,6 @@
     "The sign-in couldn't be saved. Try again." : {
 
     },
-    "The source added a chapter in the middle of the list, among chapters Ito already saw." : {
-      "comment" : "Automatic downloads review: why new chapters need a decision"
-    },
-    "The source added a chapter that looks older than the chapters Ito saw first." : {
-      "comment" : "Automatic downloads review: why new chapters need a decision"
-    },
-    "The source changed how it identifies this chapter, so Ito can't tell whether it is new." : {
-      "comment" : "Automatic downloads review: why new chapters need a decision"
-    },
     "The source could not be saved. Please try again." : {
 
     },
@@ -4871,17 +4424,11 @@
     "The source didn't say which uploads this covers." : {
       "comment" : "Scanlator sheet: the source did not say whether this list holds all uploads or only the visible ones."
     },
-    "The source does not give a reliable reading order, so Ito can't tell where this chapter belongs." : {
-      "comment" : "Automatic downloads review: why new chapters need a decision"
-    },
     "The source is not installed or is unavailable." : {
 
     },
     "The source is not ready." : {
 
-    },
-    "The source listed a chapter after the newest one Ito saw that Ito already knew about." : {
-      "comment" : "Automatic downloads review: why new chapters need a decision"
     },
     "The source no longer lists this chapter." : {
 
@@ -4895,14 +4442,8 @@
     "The source rejection could not be saved. Please try again." : {
 
     },
-    "The source reordered chapters it listed before, so Ito can't tell whether this chapter is new." : {
-      "comment" : "Automatic downloads review: why new chapters need a decision"
-    },
     "The source reported an error." : {
 
-    },
-    "The source returned no chapters, though it listed some before. Nothing was changed." : {
-      "comment" : "Automatic downloads review: the chapter list became empty"
     },
     "The source says this covers every upload it offers for your account and settings." : {
       "comment" : "Scanlator sheet: the list of uploads is complete within what the source offers this account."
@@ -4919,20 +4460,11 @@
     "The source was saved, but could not be opened. Try Open again." : {
 
     },
-    "The source's current list has no chapters from it. Choose another group to continue." : {
-      "comment" : "Series details: detail when the preferred group is absent from the current chapter list; the user may change the group in the scanlator choice."
-    },
-    "The source's settings changed during the last check, so nothing was judged." : {
-      "comment" : "Automatic downloads: note on a rule whose source changed during the last check"
-    },
-    "The source's settings changed since you opened this. Review the rule again." : {
-      "comment" : "Automatic downloads: the source's settings or account changed while the sheet was open, so nothing was saved"
-    },
-    "The source's settings changed, so nothing was queued. Check the rule and try again." : {
-      "comment" : "Automatic downloads: the source's settings or account changed, so nothing was done"
-    },
     "The source's sign-in or settings changed. Review them and try again." : {
       "comment" : "The request belongs to a source authorization scope that is no longer current."
+    },
+    "The source's current list has no chapters from it. Choose another group to continue." : {
+      "comment" : "Series details: detail when the preferred group is absent from the current chapter list; the user may change the group in the scanlator choice."
     },
     "The source's web page failed: %@" : {
 
@@ -4961,14 +4493,8 @@
     "The tracker page could not be opened." : {
 
     },
-    "The unread chapters could not be listed." : {
-      "comment" : "Backfill sheet: reading the unread chapters failed"
-    },
     "Theme" : {
 
-    },
-    "There are no unread chapters to download." : {
-      "comment" : "Backfill sheet: nothing is left to approve"
     },
     "These aren't counted." : {
       "comment" : "Download preview section footer for Download More: the stored chapters listed above do not count toward the number."
@@ -4976,23 +4502,14 @@
     "These aren't downloaded unless you tick them." : {
       "comment" : "Download preview footer: the uploads listed above are only downloaded when ticked."
     },
-    "These chapters are already queued." : {
-      "comment" : "Automatic downloads: the approved chapters were already in the queue"
-    },
     "These settings can't be shown." : {
 
-    },
-    "These settings can't be used. Check them and try again." : {
-      "comment" : "Automatic downloads: the rule's settings were refused"
     },
     "This action is unsupported by the source." : {
 
     },
     "This batch may use cellular data or a personal hotspot while the app stays in the foreground. Other downloads and prefetching are not approved." : {
       "comment" : "Scope of temporary metered download permission"
-    },
-    "This changed since you opened it. It was reloaded, so look again." : {
-      "comment" : "Automatic downloads: what the person was reviewing changed, so nothing was done"
     },
     "This chapter can't be downloaded." : {
       "comment" : "Series details: the chapter is locked, or its source can't be saved for offline reading."
@@ -5005,9 +4522,6 @@
     },
     "This chapter opens in the other reader." : {
       "comment" : "Reader failure: the chapter is made for the other reader, but this reader has no route to hand it to."
-    },
-    "This choice belongs to the rule. It does not change the groups this series remembers for downloads." : {
-      "comment" : "Rule sheet: the rule's group choice is its own copy"
     },
     "This control type (%u) is not supported." : {
 
@@ -5038,9 +4552,6 @@
     },
     "This is an ambiguous match. Are you sure you want to link it?" : {
 
-    },
-    "This is no longer available. It was reloaded." : {
-      "comment" : "Automatic downloads: the rule or event the person was reviewing is gone or paused, so nothing was done"
     },
     "This item may have been imported with an incompatible content key. Search this source to link it to the correct entry." : {
 
@@ -5087,32 +4598,14 @@
     "This request is waiting for an unmetered network." : {
       "comment" : "Network policy refuses a request on a metered connection."
     },
-    "This rule changed since you opened it. It was reloaded, so review it again." : {
-      "comment" : "Automatic downloads: the rule changed while its sheet was open, so nothing was saved"
-    },
-    "This rule does not download unread chapters." : {
-      "comment" : "Automatic downloads: the rule's mode does not support the requested action\nAutomatic downloads: why unread chapters cannot be listed"
-    },
-    "This rule has no accepted chapter list yet, or it is not turned on." : {
-      "comment" : "Automatic downloads: why unread chapters cannot be listed"
-    },
-    "This rule is no longer available. It was reloaded." : {
-      "comment" : "Automatic downloads: the rule is gone or is not in the state the action needs"
-    },
     "This saved copy is damaged and can't be read." : {
       "comment" : "Reader failure after integrity verification fails for a specifically chosen downloaded alternative."
     },
     "This saved copy is no longer available." : {
       "comment" : "Reader failure after choosing a specific downloaded alternative that became unavailable."
     },
-    "This series already has a rule. It was reloaded." : {
-      "comment" : "Automatic downloads: a rule for the series exists already, so a new one was not made"
-    },
     "This series is no longer available on MangaBaka. Stop tracking it and link it again." : {
 
-    },
-    "This series is no longer in your Library." : {
-      "comment" : "Automatic downloads: the series was removed from the Library, so a rule cannot be saved"
     },
     "This source can't list more uploads. The chapter list is unchanged." : {
       "comment" : "Scanlator sheet: the source does not offer a list of every upload, so nothing was added to the chapter list."
@@ -5147,9 +4640,6 @@
     "This tracker does not support manual scoring." : {
 
     },
-    "Those chapters can't be approved any more. It was reloaded, so look again." : {
-      "comment" : "Automatic downloads: chosen chapters are no longer part of the event, so nothing was done"
-    },
     "To download · %lld" : {
       "comment" : "Download preview section: the chapters that will be queued. The placeholder is their number.",
       "localizations" : {
@@ -5181,9 +4671,6 @@
     },
     "Too many attempts failed." : {
 
-    },
-    "Too many chapters showed up at once to decide automatically." : {
-      "comment" : "Automatic downloads review: why new chapters need a decision"
     },
     "Top Rated" : {
 
@@ -5260,18 +4747,6 @@
     "Try different search terms or adjust your filters" : {
 
     },
-    "Turn Off" : {
-      "comment" : "Rule sheet: confirms turning the rule off"
-    },
-    "Turn Off Automatic Downloads?" : {
-      "comment" : "Rule sheet: title of the confirmation for turning a rule off"
-    },
-    "Turn Off…" : {
-      "comment" : "Rule sheet: turn the rule off, after a confirmation"
-    },
-    "Turn On" : {
-      "comment" : "Rule sheet: create the rule and start checking"
-    },
     "Type" : {
       "comment" : "Download preset editor: the type of preset."
     },
@@ -5299,14 +4774,8 @@
     "Unable to Open Settings" : {
       "comment" : "Automatic downloads: title of the alert when the device Settings app could not be opened"
     },
-    "Unable to Save" : {
-      "comment" : "Automatic downloads: title of the alert when a limit or setting could not be saved"
-    },
     "Unable to Save Settings" : {
 
-    },
-    "Unable to Turn Off Alerts" : {
-      "comment" : "Automatic downloads: title of the alert when the alert setting could not be turned off after notifications were refused"
     },
     "Unable to search sources. Please try again." : {
 
@@ -5353,12 +4822,6 @@
     "Unnamed group" : {
       "comment" : "Downloaded versions sheet: the source gave this upload a group identifier but no name\nReader consent: shown in place of the group name when the source supplies none"
     },
-    "Unread Chapters" : {
-      "comment" : "Title of the sheet where the person approves unread chapters for download"
-    },
-    "Unread chapters to download." : {
-      "comment" : "Automatic downloads review: unread chapters offered for download"
-    },
     "Unread/Unwatched" : {
 
     },
@@ -5370,58 +4833,6 @@
     },
     "Unsupported component type." : {
 
-    },
-    "Up to %@ of space for automatic downloads" : {
-      "comment" : "Rule sheet: the space automatic downloads may fill. The placeholder is a size such as 5 GB."
-    },
-    "Up to %lld GB of space for automatic downloads" : {
-      "comment" : "Automatic downloads screen: the space automatic downloads may fill. The placeholder is a number of gigabytes."
-    },
-    "Up to %lld downloads in the queue" : {
-      "comment" : "Automatic downloads screen: the queue limit. The placeholder is a count.\nRule sheet: the queue limit automatic downloads obey. The placeholder is a count.",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Up to %lld download in the queue"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Up to %lld downloads in the queue"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "Up to %lld new chapters per check" : {
-      "comment" : "Rule sheet: the most new chapters one check queues. The placeholder is a count.",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Up to %lld new chapter per check"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Up to %lld new chapters per check"
-                }
-              }
-            }
-          }
-        }
-      }
     },
     "Upcoming" : {
       "comment" : "Series status: not released yet"
@@ -5551,41 +4962,11 @@
         }
       }
     },
-    "Volume %@" : {
-      "comment" : "Review row: the volume number. The placeholder is the number."
-    },
     "Wait a moment, then download this again." : {
       "comment" : "Series details: detail asking the user to repeat a download that was not queued because an earlier request was still being queued."
     },
     "Waiting for Wi-Fi" : {
       "comment" : "Chapter download status: downloads do not use cellular or other metered networks"
-    },
-    "Waiting for Wi-Fi — automatic downloads use cellular data only when Settings allows it" : {
-      "comment" : "Download state: an automatic download waits because the connection is metered and Settings does not allow automatic downloads on it"
-    },
-    "Waiting for a complete chapter list" : {
-      "comment" : "Automatic downloads: a rule that has no accepted chapter list yet"
-    },
-    "Waiting for a complete chapter list — not checked yet" : {
-      "comment" : "Automatic downloads: a new rule that has not been checked yet"
-    },
-    "Waiting for a complete chapter list — the last check could not reach the source" : {
-      "comment" : "Automatic downloads: the last check failed"
-    },
-    "Waiting for a complete chapter list — the list is too large to keep" : {
-      "comment" : "Automatic downloads: the chapter list is larger than the app can keep for checking"
-    },
-    "Waiting for a complete chapter list — the source did not say which chapters it returned" : {
-      "comment" : "Automatic downloads: the last check got a chapter list whose coverage the source did not state"
-    },
-    "Waiting for a complete chapter list — the source returned no chapters" : {
-      "comment" : "Automatic downloads: the last check got no chapters"
-    },
-    "Waiting for a complete chapter list — the source returned only part of it" : {
-      "comment" : "Automatic downloads: the last check got an incomplete chapter list"
-    },
-    "Waiting for a complete chapter list — the source's settings changed during the check" : {
-      "comment" : "Automatic downloads: the source's settings or account changed while the last check ran"
     },
     "Waiting for a connection" : {
       "comment" : "Chapter download status\nEffective network policy refusal"
@@ -5599,20 +4980,11 @@
     "Waiting for an unmetered network" : {
       "comment" : "Effective network policy refusal"
     },
-    "Waiting for automatic download space" : {
-      "comment" : "Automatic downloads: new chapters wait because the space for automatic downloads is used up\nDownload state: an automatic download is queued, but the space for automatic downloads is used up"
-    },
     "Waiting for free storage" : {
       "comment" : "Chapter download status"
     },
-    "Waiting for room in the download queue" : {
-      "comment" : "Automatic downloads: new chapters wait because the download queue is full"
-    },
     "Waiting for the device to unlock" : {
       "comment" : "Chapter download status"
-    },
-    "Waiting — the rule that queued it is paused" : {
-      "comment" : "Download state: an automatic download is queued, but its rule is paused, turned off or being reviewed"
     },
     "Waiting: Low Data Mode is on" : {
       "comment" : "Chapter download status"
@@ -5724,9 +5096,6 @@
     "Your Lists" : {
 
     },
-    "Your change could not be saved. Try again." : {
-      "comment" : "Automatic downloads: the alert when a limit or setting could not be saved"
-    },
     "Your changes could not be saved. Please try again." : {
 
     },
@@ -5750,12 +5119,6 @@
     },
     "Your network settings don't allow this episode to play right now." : {
       "comment" : "Video player error when the network policy refuses to start or continue playback."
-    },
-    "Your read marks only record chapter numbers, so Ito can't tell which exact chapters you have read." : {
-      "comment" : "Automatic downloads review: why the next chapters cannot be chosen"
-    },
-    "Your read marks only record chapter numbers, so Ito can't tell which exact chapters you have read. Nothing can be listed safely." : {
-      "comment" : "Automatic downloads: why unread chapters cannot be listed"
     },
     "Your restored data is saved. Refresh must finish before a report can be shown." : {
 
@@ -5851,6 +5214,721 @@
     },
     "🙂 Good" : {
 
+    },
+    "%@ free on this device" : {
+      "comment" : "Rule sheet: free space on the device. The placeholder is a size such as 20 GB."
+    },
+    "%@ has %lld items that need your decision." : {
+      "comment" : "Notification body: the first placeholder is a series title, the second how many of its items (new chapters or changes) wait for the person to decide.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ has %lld item that needs your decision."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ has %lld items that need your decision."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%@ has %lld new chapters waiting for your decision." : {
+      "comment" : "Notification body: the first placeholder is a series title, the second how many of its new chapters wait for the person to decide whether to download them.",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ has %lld new chapter waiting for your decision."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ has %lld new chapters waiting for your decision."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%@ of downloads stored" : {
+      "comment" : "Automatic downloads screen: space used by stored downloads. The placeholder is a size.\nRule sheet: how much space stored downloads use. The placeholder is a size such as 1.2 GB."
+    },
+    "%lld chapters queued." : {
+      "comment" : "Automatic downloads: how many chapters were queued after the person approved them. The placeholder is a count.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld chapter queued."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld chapters queued."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld downloads in the queue now" : {
+      "comment" : "Automatic downloads screen: how many downloads are queued now. The placeholder is a count.\nRule sheet: how many downloads are in the queue now. The placeholder is a count.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld download in the queue now"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld downloads in the queue now"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld items need your decision." : {
+      "comment" : "Notification body: how many items of automatic downloads wait for the person to decide, such as new chapters. The placeholder is a count.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld item needs your decision."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld items need your decision."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld more are waiting. They appear here once these are decided." : {
+      "comment" : "Review sheet: how many more events wait than are listed. The placeholder is a count.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more is waiting. It appears here once these are decided."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more are waiting. They appear here once these are decided."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld more chapters are not listed. Approve these first, then open this list again to see the next ones." : {
+      "comment" : "Backfill sheet: how many chapters beyond the list's limit remain. The placeholder is a count.",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more chapter is not listed. Approve these first, then open this list again to see it."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more chapters are not listed. Approve these first, then open this list again to see the next ones."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld more chapters are not listed. Once these are approved, the list shows the next ones." : {
+      "comment" : "Backfill sheet: how many chapters beyond the list's limit remain. The placeholder is a count.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more chapter is not listed. Once these are approved, the list shows it."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld more chapters are not listed. Once these are approved, the list shows the next ones."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld new chapters wait for your decision." : {
+      "comment" : "Notification body: how many new chapters of a series wait for the person to decide whether to download them. The placeholder is a count.",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld new chapter waits for your decision."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld new chapters wait for your decision."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld waiting for your decision" : {
+      "comment" : "Automatic downloads: how many new chapters of a rule need the person to decide. The placeholder is a count.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld waiting for your decision"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld waiting for your decision"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "A chapter Ito can't place in the reading order." : {
+      "comment" : "Automatic downloads review: a chapter whose position is unclear"
+    },
+    "A large number of chapters showed up at once, which looks more like a reorganized list than new releases." : {
+      "comment" : "Automatic downloads review: why new chapters need a decision"
+    },
+    "A large number of saved chapters changed at once, which looks more like a source-wide update than new revisions." : {
+      "comment" : "Automatic downloads review: why changed chapters need a decision"
+    },
+    "A saved chapter changed at the source." : {
+      "comment" : "Automatic downloads review: the source changed a chapter that is saved"
+    },
+    "Active" : {
+      "comment" : "Automatic downloads: status of a rule that is checking for new chapters"
+    },
+    "Add to Library to download new chapters automatically" : {
+      "comment" : "Series screen: automatic downloads need the series to be in the Library"
+    },
+    "Allow notifications for Ito in your device Settings to hear when new chapters need your decision." : {
+      "comment" : "Automatic downloads: the alert when notifications are not allowed"
+    },
+    "Also lets you review the unread chapters already listed and choose which to download. Nothing is downloaded until you approve it." : {
+      "comment" : "Rule sheet: explains the mode that also fills unread chapters"
+    },
+    "Another upload of a chapter you already have." : {
+      "comment" : "Automatic downloads review: a new upload of an existing chapter"
+    },
+    "At the last check the chapter list was too large to keep, so nothing was judged." : {
+      "comment" : "Automatic downloads: note on a rule whose chapter list is too large"
+    },
+    "At the last check the source did not say which chapters it returned, so nothing was judged." : {
+      "comment" : "Automatic downloads: note on a rule whose last check got a list of unknown coverage"
+    },
+    "At the last check the source returned no chapters, so nothing was judged." : {
+      "comment" : "Automatic downloads: note on a rule whose last check got no chapters"
+    },
+    "At the last check the source returned only part of the chapter list, so nothing was judged." : {
+      "comment" : "Automatic downloads: note on a rule whose last check got an incomplete chapter list"
+    },
+    "Automatic Downloads" : {
+      "comment" : "Downloads manager: opens the automatic download rules\nTitle of a notification saying that new chapters of a series wait for the person's decision\nTitle of the screen that lists the automatic download rules\nTitle of the sheet that sets up automatic downloads for a series"
+    },
+    "Automatic downloads are not available for this kind of series." : {
+      "comment" : "Automatic downloads: only manga and novels have automatic downloads"
+    },
+    "Automatic downloads wait when the queue is full or their space is used up, and start again when there is room." : {
+      "comment" : "Automatic downloads screen: what the limits do"
+    },
+    "Change these limits under Downloads, Automatic Downloads." : {
+      "comment" : "Rule sheet: where the limits are changed"
+    },
+    "Chapters to Download" : {
+      "comment" : "Rule sheet: header of the section where the person chooses which chapters the rule downloads"
+    },
+    "Choose Groups…" : {
+      "comment" : "Rule sheet: opens the choice of scanlation groups"
+    },
+    "Download New Chapters Automatically" : {
+      "comment" : "Series screen: opens the rule that downloads new chapters of this series automatically"
+    },
+    "Download Selected" : {
+      "comment" : "Review sheet: queue the chapters the person ticked"
+    },
+    "Downloaded chapters stay. Queued automatic downloads are removed." : {
+      "comment" : "Rule sheet: what turning a rule off does"
+    },
+    "Downloads chapters the source adds after the first check. Chapters already listed are not downloaded." : {
+      "comment" : "Rule sheet: explains the new releases mode"
+    },
+    "Every upload of every group" : {
+      "comment" : "Automatic downloads: the rule takes every upload of a chapter"
+    },
+    "Follow the source's chapter list" : {
+      "comment" : "Automatic downloads: the rule takes the chapters the source lists, whichever group made them"
+    },
+    "Group choice can't be read — edit the rule" : {
+      "comment" : "Automatic downloads: status of a rule whose saved choice of scanlation groups this version of the app cannot read"
+    },
+    "Groups" : {
+      "comment" : "Rule sheet: section for the scanlation groups the rule follows"
+    },
+    "Ito can't find the last chapter it saw in the source's list, so it can't tell whether this chapter is new." : {
+      "comment" : "Automatic downloads review: why new chapters need a decision"
+    },
+    "Ito checks rules when it opens or when you refresh the Library, at most every %lld hours." : {
+      "comment" : "Automatic downloads: footer explaining when rules are checked. The placeholder is the number of hours of the update interval.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Ito checks rules when it opens or when you refresh the Library, at most every %lld hour."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Ito checks rules when it opens or when you refresh the Library, at most every %lld hours."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Ito could not open the device Settings app. Open it yourself and allow notifications for Ito." : {
+      "comment" : "Automatic downloads: the alert when the device Settings app could not be opened"
+    },
+    "Ito posts a notification only while it is closed, and only when a background Library update finds something that needs your decision. Turn on background updates in Settings under Library. It never notifies about finished downloads." : {
+      "comment" : "Automatic downloads screen: when notifications are posted"
+    },
+    "Keep next unread chapters" : {
+      "comment" : "Rule mode: keep the chapters after the last one read downloaded"
+    },
+    "Keep the next %lld unread chapters" : {
+      "comment" : "Rule sheet: how many unread chapters after the last one read stay downloaded. The placeholder is a count.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Keep the next %lld unread chapter"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Keep the next %lld unread chapters"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Keeps the chapters after the last one you read downloaded as you read." : {
+      "comment" : "Rule sheet: explains the mode that keeps the next unread chapters downloaded"
+    },
+    "Last checked %@" : {
+      "comment" : "Automatic downloads: when the rule was last checked. The placeholder is a relative time such as '5 minutes ago'."
+    },
+    "Limits" : {
+      "comment" : "Automatic downloads screen: section for the limits\nRule sheet: section that shows the limits of automatic downloads"
+    },
+    "More new chapters are held back and queued at the next check." : {
+      "comment" : "Rule sheet: what happens to chapters beyond the per-check limit"
+    },
+    "More new chapters will be queued at the next check" : {
+      "comment" : "Automatic downloads: the per-check limit held some new chapters back"
+    },
+    "New Chapters" : {
+      "comment" : "Title of the sheet where the person decides about new chapters of a rule"
+    },
+    "New chapter — choose which uploads to download." : {
+      "comment" : "Automatic downloads review: a new chapter has several uploads and the person chooses"
+    },
+    "New releases" : {
+      "comment" : "Rule mode: download chapters released after the rule was turned on"
+    },
+    "New releases and unread chapters" : {
+      "comment" : "Rule mode: also download unread chapters the person approves"
+    },
+    "Next unread chapters." : {
+      "comment" : "Automatic downloads review: the next unread chapters to keep downloaded"
+    },
+    "No automatic downloads yet. Open a series in your Library to set one up." : {
+      "comment" : "Automatic downloads screen: there are no rules"
+    },
+    "Not checked yet" : {
+      "comment" : "Automatic downloads: an active rule that has not been checked since it was turned on"
+    },
+    "Nothing is waiting for your decision." : {
+      "comment" : "Review sheet: no chapters wait for the person"
+    },
+    "Nothing was queued yet. The chapters wait for room in the queue or on the disk." : {
+      "comment" : "Automatic downloads: the queue or the space for automatic downloads is full, so approved chapters wait"
+    },
+    "Nothing was queued. These chapters are saved already, were deleted on purpose, or are locked." : {
+      "comment" : "Automatic downloads: approved chapters needed no download"
+    },
+    "Notifications Are Off" : {
+      "comment" : "Automatic downloads: title of the alert when the system does not allow notifications"
+    },
+    "Notifications were refused, but the setting could not be turned off. Try again." : {
+      "comment" : "Automatic downloads: the alert when the alert setting stays on after notifications were refused"
+    },
+    "Notify When Chapters Need a Decision" : {
+      "comment" : "Automatic downloads screen: turns on notifications for new chapters that need the person's decision"
+    },
+    "Only these groups: %@" : {
+      "comment" : "Automatic downloads: the rule takes chapters of the chosen groups. The placeholder is the list of group names."
+    },
+    "Open the series to change the groups." : {
+      "comment" : "Rule sheet: groups can only be changed from the series screen"
+    },
+    "Pause" : {
+      "comment" : "Rule sheet: pause the rule"
+    },
+    "Prefer %@" : {
+      "comment" : "Automatic downloads: the rule prefers the chapters of one group. The placeholder is the group's name."
+    },
+    "Replace Changed Chapters" : {
+      "comment" : "Rule sheet: replace a saved chapter when the source changes it"
+    },
+    "Replaces a saved chapter only when the source reports a changed revision of the same chapter." : {
+      "comment" : "Rule sheet: when a saved chapter is replaced"
+    },
+    "Restored — review to turn on" : {
+      "comment" : "Automatic downloads: status of a rule that came back from a backup and stays paused until the person reviews it"
+    },
+    "Review" : {
+      "comment" : "Automatic downloads screen: open the chapters of a rule that wait for the person's decision"
+    },
+    "Review New Chapters" : {
+      "comment" : "Rule sheet: opens the chapters that wait for the person's decision"
+    },
+    "Review Unread Chapters to Download" : {
+      "comment" : "Rule sheet: opens the list of unread chapters the person may download now"
+    },
+    "Review and Turn On" : {
+      "comment" : "Rule sheet: enable a rule that came back from a backup or a source change, as shown"
+    },
+    "Review this rule before turning it on." : {
+      "comment" : "Automatic downloads: a rule that came back from a backup or a source change must be reviewed before it runs"
+    },
+    "Save Changes" : {
+      "comment" : "Rule sheet: save the edited rule"
+    },
+    "Source changed — review to turn on" : {
+      "comment" : "Automatic downloads: status of a rule paused because its series moved to another source, until the person reviews it"
+    },
+    "The approval could not be saved. Try again." : {
+      "comment" : "Backfill sheet: saving the approval failed"
+    },
+    "The change could not be saved. Try again." : {
+      "comment" : "Automatic downloads: saving a change to a rule failed"
+    },
+    "The chapter list Ito saved first had no reliable reading order, so Ito can't tell whether this chapter is new." : {
+      "comment" : "Automatic downloads review: why new chapters need a decision"
+    },
+    "The chapter list looks different from before." : {
+      "comment" : "Automatic downloads review: the chapter list changed in an unusual way"
+    },
+    "The chapters could not be loaded." : {
+      "comment" : "Review sheet: reading the waiting chapters failed"
+    },
+    "The decision could not be saved. Try again." : {
+      "comment" : "Review sheet: saving the person's decision failed"
+    },
+    "The group choice of this rule can't be read, so nothing was queued. Edit the rule." : {
+      "comment" : "Automatic downloads: the rule's saved group choice is unreadable, so nothing was done"
+    },
+    "The group choice of this rule can't be read. Edit the rule first." : {
+      "comment" : "Automatic downloads: why unread chapters cannot be listed"
+    },
+    "The groups this rule follows don't match the chapters the source lists now." : {
+      "comment" : "Automatic downloads review: the rule's group choice does not fit the list"
+    },
+    "The last check failed. If the source needs you to sign in or has changed its settings, check them. Ito tries again later." : {
+      "comment" : "Automatic downloads: note on a rule whose last check failed, whatever the reason"
+    },
+    "The reading order of the chapter list is unclear, so Ito can't tell which chapters come next." : {
+      "comment" : "Automatic downloads review: why the next chapters cannot be chosen"
+    },
+    "The saved chapter list can't be used, so nothing was queued. Wait for the next check." : {
+      "comment" : "Automatic downloads: the accepted chapter list cannot be used, so nothing was done"
+    },
+    "The saved chapter list can't be used. Wait for the next check." : {
+      "comment" : "Automatic downloads: why unread chapters cannot be listed"
+    },
+    "The source added a chapter in the middle of the list, among chapters Ito already saw." : {
+      "comment" : "Automatic downloads review: why new chapters need a decision"
+    },
+    "The source added a chapter that looks older than the chapters Ito saw first." : {
+      "comment" : "Automatic downloads review: why new chapters need a decision"
+    },
+    "The source changed how it identifies this chapter, so Ito can't tell whether it is new." : {
+      "comment" : "Automatic downloads review: why new chapters need a decision"
+    },
+    "The source does not give a reliable reading order, so Ito can't tell where this chapter belongs." : {
+      "comment" : "Automatic downloads review: why new chapters need a decision"
+    },
+    "The source listed a chapter after the newest one Ito saw that Ito already knew about." : {
+      "comment" : "Automatic downloads review: why new chapters need a decision"
+    },
+    "The source reordered chapters it listed before, so Ito can't tell whether this chapter is new." : {
+      "comment" : "Automatic downloads review: why new chapters need a decision"
+    },
+    "The source returned no chapters, though it listed some before. Nothing was changed." : {
+      "comment" : "Automatic downloads review: the chapter list became empty"
+    },
+    "The source's settings changed during the last check, so nothing was judged." : {
+      "comment" : "Automatic downloads: note on a rule whose source changed during the last check"
+    },
+    "The source's settings changed since you opened this. Review the rule again." : {
+      "comment" : "Automatic downloads: the source's settings or account changed while the sheet was open, so nothing was saved"
+    },
+    "The source's settings changed, so nothing was queued. Check the rule and try again." : {
+      "comment" : "Automatic downloads: the source's settings or account changed, so nothing was done"
+    },
+    "The unread chapters could not be listed." : {
+      "comment" : "Backfill sheet: reading the unread chapters failed"
+    },
+    "There are no unread chapters to download." : {
+      "comment" : "Backfill sheet: nothing is left to approve"
+    },
+    "These chapters are already queued." : {
+      "comment" : "Automatic downloads: the approved chapters were already in the queue"
+    },
+    "These settings can't be used. Check them and try again." : {
+      "comment" : "Automatic downloads: the rule's settings were refused"
+    },
+    "This changed since you opened it. It was reloaded, so look again." : {
+      "comment" : "Automatic downloads: what the person was reviewing changed, so nothing was done"
+    },
+    "This choice belongs to the rule. It does not change the groups this series remembers for downloads." : {
+      "comment" : "Rule sheet: the rule's group choice is its own copy"
+    },
+    "This is no longer available. It was reloaded." : {
+      "comment" : "Automatic downloads: the rule or event the person was reviewing is gone or paused, so nothing was done"
+    },
+    "This rule changed since you opened it. It was reloaded, so review it again." : {
+      "comment" : "Automatic downloads: the rule changed while its sheet was open, so nothing was saved"
+    },
+    "This rule does not download unread chapters." : {
+      "comment" : "Automatic downloads: the rule's mode does not support the requested action\nAutomatic downloads: why unread chapters cannot be listed"
+    },
+    "This rule has no accepted chapter list yet, or it is not turned on." : {
+      "comment" : "Automatic downloads: why unread chapters cannot be listed"
+    },
+    "This rule is no longer available. It was reloaded." : {
+      "comment" : "Automatic downloads: the rule is gone or is not in the state the action needs"
+    },
+    "This rule is not turned on. Turn it on or resume it to download these chapters. You can still dismiss them." : {
+      "comment" : "Review sheet: the rule is paused or off, so chapters can be dismissed but not approved"
+    },
+    "This series already has a rule. It was reloaded." : {
+      "comment" : "Automatic downloads: a rule for the series exists already, so a new one was not made"
+    },
+    "This series is no longer in your Library." : {
+      "comment" : "Automatic downloads: the series was removed from the Library, so a rule cannot be saved"
+    },
+    "Those chapters can't be approved any more. It was reloaded, so look again." : {
+      "comment" : "Automatic downloads: chosen chapters are no longer part of the event, so nothing was done"
+    },
+    "Too many chapters showed up at once to decide automatically." : {
+      "comment" : "Automatic downloads review: why new chapters need a decision"
+    },
+    "Turn Off" : {
+      "comment" : "Rule sheet: confirms turning the rule off"
+    },
+    "Turn Off Automatic Downloads?" : {
+      "comment" : "Rule sheet: title of the confirmation for turning a rule off"
+    },
+    "Turn Off…" : {
+      "comment" : "Rule sheet: turn the rule off, after a confirmation"
+    },
+    "Turn On" : {
+      "comment" : "Rule sheet: create the rule and start checking"
+    },
+    "Unable to Save" : {
+      "comment" : "Automatic downloads: title of the alert when a limit or setting could not be saved"
+    },
+    "Unable to Turn Off Alerts" : {
+      "comment" : "Automatic downloads: title of the alert when the alert setting could not be turned off after notifications were refused"
+    },
+    "Unread Chapters" : {
+      "comment" : "Title of the sheet where the person approves unread chapters for download"
+    },
+    "Unread chapters to download." : {
+      "comment" : "Automatic downloads review: unread chapters offered for download"
+    },
+    "Up to %@ of space for automatic downloads" : {
+      "comment" : "Automatic downloads screen: the space automatic downloads may fill. The placeholder is a size such as 5 GB.\nRule sheet: the space automatic downloads may fill. The placeholder is a size such as 5 GB."
+    },
+    "Up to %lld downloads in the queue" : {
+      "comment" : "Automatic downloads screen: the queue limit. The placeholder is a count.\nRule sheet: the queue limit automatic downloads obey. The placeholder is a count.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Up to %lld download in the queue"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Up to %lld downloads in the queue"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Up to %lld new chapters per check" : {
+      "comment" : "Rule sheet: the most new chapters one check queues. The placeholder is a count.",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Up to %lld new chapter per check"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Up to %lld new chapters per check"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Volume %@" : {
+      "comment" : "Review row: the volume number. The placeholder is the number."
+    },
+    "Waiting for Wi-Fi — automatic downloads use cellular data only when Settings allows it" : {
+      "comment" : "Download state: an automatic download waits because the connection is metered and Settings does not allow automatic downloads on it"
+    },
+    "Waiting for a complete chapter list" : {
+      "comment" : "Automatic downloads: a rule that has no accepted chapter list yet"
+    },
+    "Waiting for a complete chapter list — not checked yet" : {
+      "comment" : "Automatic downloads: a new rule that has not been checked yet"
+    },
+    "Waiting for a complete chapter list — the last check could not reach the source" : {
+      "comment" : "Automatic downloads: the last check failed"
+    },
+    "Waiting for a complete chapter list — the list is too large to keep" : {
+      "comment" : "Automatic downloads: the chapter list is larger than the app can keep for checking"
+    },
+    "Waiting for a complete chapter list — the source did not say which chapters it returned" : {
+      "comment" : "Automatic downloads: the last check got a chapter list whose coverage the source did not state"
+    },
+    "Waiting for a complete chapter list — the source returned no chapters" : {
+      "comment" : "Automatic downloads: the last check got no chapters"
+    },
+    "Waiting for a complete chapter list — the source returned only part of it" : {
+      "comment" : "Automatic downloads: the last check got an incomplete chapter list"
+    },
+    "Waiting for a complete chapter list — the source's settings changed during the check" : {
+      "comment" : "Automatic downloads: the source's settings or account changed while the last check ran"
+    },
+    "Waiting for automatic download space" : {
+      "comment" : "Automatic downloads: new chapters wait because the space for automatic downloads is used up\nDownload state: an automatic download is queued, but the space for automatic downloads is used up"
+    },
+    "Waiting for room in the download queue" : {
+      "comment" : "Automatic downloads: new chapters wait because the download queue is full"
+    },
+    "Waiting — the rule that queued it is paused" : {
+      "comment" : "Download state: an automatic download is queued, but its rule is paused, turned off or being reviewed"
+    },
+    "Which chapters to download" : {
+      "comment" : "Rule sheet: accessibility label of the choice of which chapters the rule downloads; it is not shown"
+    },
+    "Your change could not be saved. Try again." : {
+      "comment" : "Automatic downloads: the alert when a limit or setting could not be saved"
+    },
+    "Your read marks only record chapter numbers, so Ito can't tell which exact chapters you have read." : {
+      "comment" : "Automatic downloads review: why the next chapters cannot be chosen"
+    },
+    "Your read marks only record chapter numbers, so Ito can't tell which exact chapters you have read. Nothing can be listed safely." : {
+      "comment" : "Automatic downloads: why unread chapters cannot be listed"
     }
   },
   "version" : "1.0"

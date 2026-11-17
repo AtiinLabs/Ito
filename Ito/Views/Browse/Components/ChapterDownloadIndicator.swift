@@ -136,7 +136,7 @@ extension ChapterDownloadState {
     /// through the menu's own actions.
     var replacementLabel: Text {
         switch self {
-        case .queued, .downloading, .held:
+        case .queued, .downloading:
             return Text(
                 "Replacing download",
                 comment: "Chapter download status: a replacement of a saved chapter is queued or running. The saved copy stays available."
@@ -151,7 +151,8 @@ extension ChapterDownloadState {
                 )
             }
             return label
-        case .downloaded, .damaged:
+        case .downloaded, .damaged, .held:
+            // A replacement that is held says why, like any held download, not that it is running.
             return label
         }
     }

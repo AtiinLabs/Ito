@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import GRDB
 import ito_runner
+import Testing
 @testable import Ito
 
 /// Hands every call to the download center and remembers which series the update manager asked the ledger about.
@@ -26,6 +27,19 @@ final class AutomaticDownloadsSpySink: SubscriptionCatalogSink {
     }
 }
 
+/// The automatic limits a test can change while the worker, the center and the facade read them.
+nonisolated final class AutomaticLimitsBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: AutomaticDownloadLimits
+
+    init(_ limits: AutomaticDownloadLimits) { current = limits }
+
+    var limits: AutomaticDownloadLimits { lock.withLock { current } }
+    func set(quotaBytes: Int64) {
+        lock.withLock { current = AutomaticDownloadLimits(queueLimit: current.queueLimit, quotaBytes: quotaBytes) }
+    }
+}
+
 /// The live facade over the real store, center, worker, scheduler and update manager, with the source and the clock
 /// scripted. The facade observes the database through a scheduler the test holds, so a test decides when it sees a change.
 @MainActor
@@ -35,6 +49,7 @@ final class AutomaticDownloadsHarness {
     )
 
     let fixture: DownloadWorkerFixture
+    let limitsBox: AutomaticLimitsBox
     let pool: DatabasePool
     let source = FakeLibraryUpdateSource(installedPluginIDs: ["plugin.test"])
     let clock = TestClock(OfflineStoreFixture.fixedDate)
@@ -47,8 +62,9 @@ final class AutomaticDownloadsHarness {
     let media = MediaIdentity(pluginId: "plugin.test", canonicalMediaId: "series-1", mediaKind: .manga)
 
     init(quotaBytes: Int64 = AutomaticDownloadsHarness.roomy.quotaBytes) async throws {
-        let limits = AutomaticDownloadLimits(queueLimit: 500, quotaBytes: quotaBytes)
-        fixture = try DownloadWorkerFixture(automaticLimits: { limits })
+        let box = AutomaticLimitsBox(AutomaticDownloadLimits(queueLimit: 500, quotaBytes: quotaBytes))
+        limitsBox = box
+        fixture = try DownloadWorkerFixture(automaticLimits: { box.limits })
         pool = fixture.offline.database.dbPool
         await fixture.coordinator.reconcile()
         let settings = AppSettingsStore(
@@ -69,7 +85,7 @@ final class AutomaticDownloadsHarness {
         )
         facade = AutomaticDownloads(
             center: fixture.center, scheduler: scheduler, store: fixture.store,
-            limits: { limits }, intervalHours: { 4 },
+            limits: { box.limits }, intervalHours: { 4 },
             installedPluginIDs: installed.eraseToAnyPublisher(),
             limitsChanged: limitsChanged.eraseToAnyPublisher()
         )
@@ -91,5 +107,24 @@ final class AutomaticDownloadsHarness {
         source.catalogs[target.canonicalMediaId] = .success(try SubscriptionLedgerFixture.observation(
             SubscriptionLedgerFixture.numbered(chapters), media: target
         ))
+    }
+
+    /// Enables a rule for the saved series and takes its first chapter list and then a new chapter, so one automatic-only job
+    /// is queued. Goes through the store directly: no scheduler or source is involved.
+    @discardableResult
+    func queueAutomaticJob() async throws -> String {
+        try await saveSeries()
+        let outcome = try await fixture.store.enableSubscription(SubscriptionEnableRequest(
+            media: media, reviewedSourceEpoch: OfflineStoreFixture.epoch, configuration: SubscriptionConfiguration()
+        ))
+        guard case .enabled(let id, _) = outcome else { throw SubscriptionLedgerFixtureError.notEnabled }
+        for chapters in [1...2, 1...3] {
+            let ticket = try #require(try await fixture.store.beginSubscriptionCheck(media: media, capturedEpoch: OfflineStoreFixture.epoch))
+            _ = try await fixture.store.commitSubscriptionObservation(
+                ticket, try SubscriptionLedgerFixture.observation(SubscriptionLedgerFixture.numbered(chapters), media: media),
+                limits: Self.roomy
+            )
+        }
+        return id
     }
 }
