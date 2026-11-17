@@ -10,7 +10,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         case loading
         case content
         case savedOnly
-        case failure(String)
+        /// `needsSignIn`: the source needs a sign-in on its website before its details can load.
+        case failure(String, needsSignIn: Bool)
     }
 
     enum RelinkSearchState: Equatable {
@@ -39,6 +40,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         didSet { cancelGroupSwitch(); downloadedAlternatives.cancel(); downloadBatch.mediaDidChange() }
     }
     @Published private(set) var detailLoadState: DetailLoadState = .idle
+    /// Whether the sign-in sheet for a failed details load is open. Closing it tries the load again.
+    @Published var showSignIn = false
     @Published var sortOrder: ChapterSortOrder = .descending
     @Published var filterOption: ChapterFilterOption = .all
     @Published var selectedGroup: String?
@@ -699,7 +702,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             } catch is CancellationError {
                 self?.publishDetailCancellation(operationID: operationID)
             } catch {
-                self?.publishDetailFailure(operationID: operationID, mediaKey: requestedKey)
+                self?.publishDetailFailure(error, operationID: operationID, mediaKey: requestedKey)
             }
         }
         detailTaskOperationID = operationID
@@ -888,13 +891,14 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         logFinished(kind: .detailLoad, operationID: operationID, outcome: .cancelled)
     }
 
-    private func publishDetailFailure(operationID: UUID, mediaKey: String) {
+    private func publishDetailFailure(_ error: any Error, operationID: UUID, mediaKey: String) {
         guard isCurrentDetailOperation(operationID, mediaKey: mediaKey) else { return }
         detailOperationID = nil
         detailTask = nil
         // A screen that could not load stays on its error instead of opening a stale chapter.
         pendingOpenIntent = nil
-        detailLoadState = .failure(String(localized: "Failed to load details. Please try again."))
+        let needsSignIn = (error as? PluginCallError)?.kind == .needsLogin
+        detailLoadState = .failure(String(localized: "Failed to load details. Please try again."), needsSignIn: needsSignIn)
         loadSnapshotRefreshDate()
         messagePresenter.present(.detailLoadFailed)
         logFinished(

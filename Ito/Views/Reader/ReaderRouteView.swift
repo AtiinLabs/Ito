@@ -11,10 +11,13 @@ extension ReaderRoutePresentation: Identifiable {
 struct ReaderRouteView: View {
     @StateObject private var coordinator: ReaderRouteCoordinator
     @Environment(\.scenePhase) private var scenePhase
+    /// Offers Sign In when a chapter's load needs the source's website; see `ReaderView`.
+    private let signIn: PluginSignInSheets
 
     /// `coordinator` is evaluated once, when SwiftUI first creates this view's state.
-    init(coordinator: @autoclosure @escaping () -> ReaderRouteCoordinator) {
+    init(coordinator: @autoclosure @escaping () -> ReaderRouteCoordinator, signIn: PluginSignInSheets) {
         _coordinator = StateObject(wrappedValue: coordinator())
+        self.signIn = signIn
     }
 
     var body: some View {
@@ -82,14 +85,16 @@ struct ReaderRouteView: View {
                     viewModel: model,
                     isHandoffBusy: busy,
                     onPresentationReady: coordinator.presentationReady,
-                    onInitialImageVisibleLeaseAcquired: coordinator.initialImageVisibleLeaseAcquired
+                    onInitialImageVisibleLeaseAcquired: coordinator.initialImageVisibleLeaseAcquired,
+                    signIn: signIn
                 )
             case .text(_, let model):
                 NovelReaderView(
                     viewModel: model,
                     onPresentationReady: coordinator.presentationReady,
                     onPresentationFailed: coordinator.presentationFailed,
-                    onInitialImageVisibleLeaseAcquired: coordinator.initialImageVisibleLeaseAcquired
+                    onInitialImageVisibleLeaseAcquired: coordinator.initialImageVisibleLeaseAcquired,
+                    signIn: signIn
                 )
             }
         }

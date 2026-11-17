@@ -50,7 +50,8 @@ struct LiveAppNetCloudflareHandler: AppNetCloudflareHandling {
     }
 
     nonisolated func cachedUserAgent(for host: String) async -> String {
-        CloudflareManager.defaultUserAgent
+        let agent = await manager?.userAgent.value()
+        return agent ?? ""
     }
 
     nonisolated func resolveChallenge(for url: URL, authority: NetworkRequestAuthority?) async throws -> AppNetCloudflareResolution {
@@ -135,15 +136,12 @@ actor AppNetModule: NetModule {
 
         var updatedHeaders = request.headers
 
-        // Always apply the cached User-Agent for this host if we have one
+        // The host's WebKit user agent replaces any the plugin sent: a clearance is bound to it, and
+        // `X-Used-User-Agent` reports what was sent. Without one, the plugin's own header (if any) is kept.
         if !isRetry, let host = url.host {
             let cachedUA = await cloudflare.cachedUserAgent(for: host)
             if !cachedUA.isEmpty {
-                // If Cloudflare manager has a specific UA for this host, we must use it
                 updatedHeaders["User-Agent"] = cachedUA
-            } else if updatedHeaders["User-Agent"] == nil && updatedHeaders["user-agent"] == nil {
-                // Default fallback if plugin didn't provide one
-                updatedHeaders["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             }
         }
 

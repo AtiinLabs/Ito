@@ -9,8 +9,10 @@ struct ReaderView: View {
     let isHandoffBusy: Bool
     let onPresentationReady: (UUID, UUID) -> Void
     let onInitialImageVisibleLeaseAcquired: (UUID, UUID) -> Void
+    let signIn: PluginSignInSheets
     @State private var showSettings = false
     @State private var showUI = true
+    @State private var showSignIn = false
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -20,12 +22,14 @@ struct ReaderView: View {
         viewModel: MangaReaderViewModel,
         isHandoffBusy: Bool,
         onPresentationReady: @escaping (UUID, UUID) -> Void,
-        onInitialImageVisibleLeaseAcquired: @escaping (UUID, UUID) -> Void
+        onInitialImageVisibleLeaseAcquired: @escaping (UUID, UUID) -> Void,
+        signIn: PluginSignInSheets
     ) {
         self.viewModel = viewModel
         self.isHandoffBusy = isHandoffBusy
         self.onPresentationReady = onPresentationReady
         self.onInitialImageVisibleLeaseAcquired = onInitialImageVisibleLeaseAcquired
+        self.signIn = signIn
     }
 
     var body: some View {
@@ -55,6 +59,11 @@ struct ReaderView: View {
                 )
             )
         }
+        .sheet(isPresented: $showSignIn, onDismiss: { viewModel.retry() }) {
+            if let target = signIn.target(pluginID: viewModel.pluginID) {
+                signIn.sheet(for: target)
+            }
+        }
         .task { viewModel.start() }
         .onAppear { viewModel.appear() }
         .onDisappear { viewModel.disappear() }
@@ -82,7 +91,7 @@ struct ReaderView: View {
             case .idle, .loading:
                 ProgressView("Loading Chapter...")
                     .foregroundColor(.white)
-            case .failure(let error):
+            case .failure(let error, let needsSignIn):
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.largeTitle)
@@ -98,6 +107,11 @@ struct ReaderView: View {
                         .buttonStyle(.bordered)
                         .tint(.white)
                         .padding(.top, 4)
+                    if needsSignIn, signIn.target(pluginID: viewModel.pluginID) != nil {
+                        Button("Sign In") { showSignIn = true }
+                            .buttonStyle(.bordered)
+                            .tint(.white)
+                    }
                     if viewModel.canReadDownloadedCopy {
                         Button {
                             viewModel.readDownloadedCopy()

@@ -118,7 +118,7 @@ final class MangaReaderViewModelTests: XCTestCase {
 
         subject.viewModel.start()
         await waitForReader {
-            subject.viewModel.loadPhase == .failure("expected reader failure")
+            subject.viewModel.loadPhase == .failure("expected reader failure", needsSignIn: false)
         }
 
         XCTAssertTrue(subject.viewModel.pagedPages.isEmpty)

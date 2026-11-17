@@ -130,7 +130,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         await subject.viewModel.waitForAllOperationsForTesting()
         XCTAssertEqual(
             subject.viewModel.loadPhase,
-            .failure("expected novel reader failure")
+            .failure("expected novel reader failure", needsSignIn: false)
         )
         XCTAssertTrue(subject.viewModel.loadedChapters.isEmpty)
         XCTAssertEqual(subject.viewModel.currentChapter.key, "a")

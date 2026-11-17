@@ -6,8 +6,10 @@ struct NovelReaderView: View {
     let onPresentationReady: (UUID, UUID) -> Void
     let onPresentationFailed: (UUID, UUID) -> Void
     let onInitialImageVisibleLeaseAcquired: (UUID, UUID) -> Void
+    let signIn: PluginSignInSheets
     @State private var showUI = true
     @State private var showSettings = false
+    @State private var showSignIn = false
     /// Screen brightness before the reader's slider first changed it; put back on close.
     @State private var brightnessBeforeReading: CGFloat?
 
@@ -19,12 +21,14 @@ struct NovelReaderView: View {
         viewModel: NovelReaderViewModel,
         onPresentationReady: @escaping (UUID, UUID) -> Void,
         onPresentationFailed: @escaping (UUID, UUID) -> Void,
-        onInitialImageVisibleLeaseAcquired: @escaping (UUID, UUID) -> Void
+        onInitialImageVisibleLeaseAcquired: @escaping (UUID, UUID) -> Void,
+        signIn: PluginSignInSheets
     ) {
         self.viewModel = viewModel
         self.onPresentationReady = onPresentationReady
         self.onPresentationFailed = onPresentationFailed
         self.onInitialImageVisibleLeaseAcquired = onInitialImageVisibleLeaseAcquired
+        self.signIn = signIn
     }
 
     var body: some View {
@@ -60,6 +64,11 @@ struct NovelReaderView: View {
         } message: { consent in
             Text(consent.message)
         }
+        .sheet(isPresented: $showSignIn, onDismiss: { viewModel.retry() }) {
+            if let target = signIn.target(pluginID: viewModel.pluginID) {
+                signIn.sheet(for: target)
+            }
+        }
     }
 
     private func readerBody(
@@ -74,7 +83,7 @@ struct NovelReaderView: View {
                 ProgressView("Loading Chapter...")
                     .tint(viewModel.theme.textColor)
                     .foregroundColor(viewModel.theme.textColor)
-            case .failure(let error):
+            case .failure(let error, let needsSignIn):
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.largeTitle)
@@ -90,6 +99,11 @@ struct NovelReaderView: View {
                         .buttonStyle(.bordered)
                         .tint(viewModel.theme.textColor)
                         .padding(.top, 4)
+                    if needsSignIn, signIn.target(pluginID: viewModel.pluginID) != nil {
+                        Button("Sign In") { showSignIn = true }
+                            .buttonStyle(.bordered)
+                            .tint(viewModel.theme.textColor)
+                    }
                     if viewModel.canReadDownloadedCopy {
                         Button {
                             viewModel.readDownloadedCopy()

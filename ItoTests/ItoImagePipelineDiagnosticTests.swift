@@ -63,11 +63,9 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
             data: Self.tinyPNGData
         )
 
-        let defaultUA = CloudflareManager.defaultUserAgent
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockImageURLProtocol.self]
         config.urlCache = nil
-        config.httpAdditionalHeaders = ["User-Agent": defaultUA]
 
         let database = try TestDatabase()
         let pluginsDirectory = FileManager.default.temporaryDirectory
@@ -94,9 +92,11 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
         XCTAssertGreaterThan(response.size.width, 0)
         XCTAssertGreaterThan(response.size.height, 0)
 
-        // Verify request received the User-Agent header from config
+        // The request carries the host's WebKit user agent, the one Cloudflare clearances are made with.
         let lastReq = MockImageURLProtocol.lastRequest(forHost: host)
-        XCTAssertEqual(lastReq?.value(forHTTPHeaderField: "User-Agent"), defaultUA)
+        let webKitUserAgent = await pluginManager.webKitUserAgent.value()
+        XCTAssertNotNil(webKitUserAgent)
+        XCTAssertEqual(lastReq?.value(forHTTPHeaderField: "User-Agent"), webKitUserAgent)
     }
 
     // MARK: - Test C: NukeUI LazyImage lifecycle and display decoding

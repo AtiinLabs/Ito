@@ -20,7 +20,7 @@ struct AppViewFactory {
     private let presentationLogger: any PresentationEventLogging
     private let completionRecovery: (any PluginCompletionRecovering)?
     private let settingsDiagnostics: (any PluginSettingsDiagnosing)?
-    private let pluginCookies: PluginCookieJar?
+    private let signIn: PluginSignInSheets
     private let pluginTrust: PluginTrustStore?
     let categoryHistoryViewFactory: CategoryHistoryViewFactory
     let trackingViewFactory: TrackingViewFactory
@@ -85,7 +85,13 @@ struct AppViewFactory {
         self.presentationLogger = presentationLogger
         self.completionRecovery = completionRecovery
         self.settingsDiagnostics = settingsDiagnostics
-        self.pluginCookies = pluginCookies
+        let runnerProvider = sourceDependencies.runnerProvider
+        let signIn = PluginSignInSheets(
+            pluginCookies: pluginCookies,
+            installedPlugin: { pluginManager.installedPlugins[$0] },
+            evictRunner: { runnerProvider.evictSourceRunner(for: $0) }
+        )
+        self.signIn = signIn
         self.pluginTrust = pluginTrust
         self.downloadsOverview = downloadsOverview
         self.downloadsThumbnails = downloadsThumbnails
@@ -115,7 +121,8 @@ struct AppViewFactory {
                 presentationLogger: presentationLogger,
                 trackingViewFactory: trackingViewFactory,
                 categoryHistoryViewFactory: categoryHistoryViewFactory,
-                networkContexts: sourceDependencies.networkContexts
+                networkContexts: sourceDependencies.networkContexts,
+                signIn: signIn
             )
         }
         self.mediaDetailViewFactory = mediaDetailViewFactory
@@ -345,19 +352,12 @@ struct AppViewFactory {
 
     /// The source's website for signing in, or nil when it has none or sign-in isn't available.
     func signInTarget(pluginID: String) -> PluginSignInTarget? {
-        guard pluginCookies != nil, let plugin = pluginManager.installedPlugins[pluginID] else { return nil }
-        return PluginSignInTarget(pluginID: plugin.id, pluginName: plugin.info.name, siteURL: plugin.info.url)
+        signIn.target(pluginID: pluginID)
     }
 
     /// The sign-in sheet for `target`; nil when sign-in isn't available in this app scope.
     func makePluginSignInSheet(target: PluginSignInTarget) -> PluginSignInSheet? {
-        guard let pluginCookies else { return nil }
-        let runnerProvider = sourceDependencies.runnerProvider
-        return PluginSignInSheet(viewModel: PluginSignInViewModel(
-            target: target,
-            cookieJar: pluginCookies,
-            evictRunner: { runnerProvider.evictSourceRunner(for: $0) }
-        ))
+        signIn.sheet(for: target)
     }
 
     func pendingTrust(for pluginID: String) -> PendingTrust? {

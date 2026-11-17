@@ -20,9 +20,12 @@ nonisolated final class PolicyDataLoader: AuthorizedDataLoading, @unchecked Send
     let session: URLSession
     /// Nuke owns source/epoch-partitioned caching. URLCache's URL-only namespace must not bridge epochs.
     let sourceSession: URLSession
+    /// The WebKit user agent every image transfer sends unless the request names its own.
+    private let userAgent: WebKitUserAgent
 
-    init(configuration: URLSessionConfiguration) {
+    init(configuration: URLSessionConfiguration, userAgent: WebKitUserAgent = WebKitUserAgent()) {
         session = URLSession(configuration: configuration)
+        self.userAgent = userAgent
         guard let sourceConfiguration = configuration.copy() as? URLSessionConfiguration else {
             preconditionFailure("Unable to isolate source image transport cache")
         }
@@ -71,9 +74,11 @@ nonisolated final class PolicyDataLoader: AuthorizedDataLoading, @unchecked Send
         didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void,
         completion: @escaping @Sendable (Error?) -> Void
     ) -> any Cancellable {
+        let userAgent = self.userAgent
         let task = Task {
             do {
-                let (data, response) = try await transport.data(for: request)
+                let sent = await userAgent.withUserAgent(request)
+                let (data, response) = try await transport.data(for: sent)
                 try Task.checkCancellation()
                 if let invalid = DataLoader.validate(response: response) {
                     completion(invalid)

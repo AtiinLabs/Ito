@@ -5,7 +5,8 @@ enum MangaReaderLoadPhase: Equatable {
     case idle
     case loading
     case content
-    case failure(String)
+    /// `needsSignIn`: the chapter's load was refused because the source needs a sign-in on its website.
+    case failure(String, needsSignIn: Bool)
 }
 
 struct ChapterSegment: Identifiable, Equatable {
