@@ -48,6 +48,8 @@ final class AutomaticDownloadsViewModel: ObservableObject {
     @Published private(set) var attentionNotifications: Bool
     @Published private(set) var intervalHours: Int
     @Published private(set) var usage: AutomaticDownloadUsage?
+    /// The newest usage read; an older read that finishes later is dropped.
+    private var usageRead = 0
     @Published private(set) var alert: AutomaticDownloadsAlert?
     /// The rule whose sheet is open.
     @Published private(set) var openRule: SubscriptionRuleModel?
@@ -105,9 +107,13 @@ final class AutomaticDownloadsViewModel: ObservableObject {
 
     /// Reads the usage numbers again. They change with the tables the rules observation reads, so it runs after each.
     private func refreshUsage() {
+        usageRead &+= 1
+        let read = usageRead
         Task { [weak self] in
             guard let self else { return }
-            self.usage = await self.service.usage()
+            let usage = await self.service.usage()
+            guard read == self.usageRead else { return }
+            self.usage = usage
         }
     }
 

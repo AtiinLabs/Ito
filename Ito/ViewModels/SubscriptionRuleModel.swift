@@ -91,6 +91,8 @@ final class SubscriptionRuleModel: ObservableObject {
     @Published private(set) var message: SubscriptionRuleMessage?
     @Published private(set) var isWorking = false
     @Published private(set) var usage: AutomaticDownloadUsage?
+    /// The newest usage read; an older read that finishes later is dropped.
+    private var usageRead = 0
     @Published var groupChoice: SubscriptionGroupChoice?
     @Published var backfill: SubscriptionBackfillModel?
     @Published var review: SubscriptionEventReviewModel?
@@ -222,9 +224,11 @@ final class SubscriptionRuleModel: ObservableObject {
 
     private func loadUsage() {
         guard let session = presentation?.id else { return }
+        usageRead &+= 1
+        let read = usageRead
         Task { [weak self, service] in
             let usage = await service.usage()
-            guard let self, self.presentation?.id == session else { return }
+            guard let self, self.presentation?.id == session, read == self.usageRead else { return }
             self.usage = usage
         }
     }
@@ -369,7 +373,7 @@ final class SubscriptionRuleModel: ObservableObject {
         message = refusal
         guard refusal != nil else { return }
         if recapture {
-            if row != capturedRow {
+            if row?.configGeneration != capturedRow?.configGeneration {
                 // The row the person is looking at is already newer than the one the sheet took: take it now. Waiting for
                 // another change would never end, and the message says the sheet was reloaded.
                 capture()

@@ -658,6 +658,7 @@ public final class DurableStateBootstrap: ObservableObject {
         let scheduler = subscriptionScheduler ?? runtime?.subscriptionScheduler
         scheduler?.setActive(false)
         subscriptionScheduler = nil
+        automaticLimitSubscriptions.removeAll()
         retiredDownloadWork = worker?.retire() ?? retiredDownloadWork
         downloadCoordinator = nil
         runtime = nil
