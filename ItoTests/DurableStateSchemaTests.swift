@@ -166,12 +166,12 @@ struct DurableStateSchemaTests {
                     "id", "subscriptionId", "incarnation", "kind", "identityKind", "identityValue", "qualifier",
                     "decision", "pendingReason", "reviewReason", "candidateKeys", "candidateRevision", "approvedKeys",
                     "decidedKeys", "previousRevision", "targetRevision", "ordinal", "observedCatalogDigest",
-                    "configGeneration", "scopeGeneration", "createdAt", "decidedAt"
+                    "configGeneration", "scopeGeneration", "createdAt", "decidedAt", "notifiedAt"
                 ],
                 primaryKey: ["id"],
                 nullable: [
                     "qualifier", "pendingReason", "reviewReason", "approvedKeys", "decidedKeys", "previousRevision",
-                    "targetRevision", "decidedAt"
+                    "targetRevision", "decidedAt", "notifiedAt"
                 ]
             ),
             "downloadBatch": .init(
@@ -1067,6 +1067,7 @@ struct AppPreferenceCatalogTests {
             .init(entry: .adjacentChapterPrefetchCount, source: .integerNSNumber, defaultJSON: "2", accepted: [0, 1, 2].map(NSNumber.init(value:)), invalid: [NSNumber(value: -1), NSNumber(value: 3), NSNumber(value: 0.5), NSNumber(value: true)]),
             .init(entry: .automaticDownloadQueueLimit, source: .integerNSNumber, defaultJSON: "100", accepted: [10, 100, 500].map(NSNumber.init(value:)), invalid: [NSNumber(value: 9), NSNumber(value: 501), NSNumber(value: 0), NSNumber(value: -1), NSNumber(value: 10.5), NSNumber(value: true)]),
             .init(entry: .automaticDownloadQuotaGiB, source: .integerNSNumber, defaultJSON: "5", accepted: [1, 5, 200].map(NSNumber.init(value:)), invalid: [NSNumber(value: 0), NSNumber(value: 201), NSNumber(value: -1), NSNumber(value: 2.5), NSNumber(value: true)]),
+            .init(entry: .subscriptionAttentionNotifications, source: .booleanNSNumber, defaultJSON: "false", accepted: [NSNumber(value: false), NSNumber(value: true)], invalid: boolInvalid),
             .init(entry: .diskCacheLimitGB, source: .numericNSNumber, defaultJSON: "10", accepted: [NSNumber(value: 1), NSNumber(value: 50)], invalid: numericInvalid + [NSNumber(value: 0), NSNumber(value: 2.5), NSNumber(value: 51)])
         ]
     }
@@ -1098,6 +1099,7 @@ struct AppPreferenceCatalogTests {
         case .adjacentChapterPrefetchCount: AppPreferenceKeys.adjacentChapterPrefetchCount
         case .automaticDownloadQueueLimit: AppPreferenceKeys.automaticDownloadQueueLimit
         case .automaticDownloadQuotaGiB: AppPreferenceKeys.automaticDownloadQuotaGiB
+        case .subscriptionAttentionNotifications: AppPreferenceKeys.subscriptionAttentionNotifications
         }
     }
 
@@ -1128,6 +1130,7 @@ struct AppPreferenceCatalogTests {
         case .adjacentChapterPrefetchCount: try assertRoundTrip(AppPreferenceCatalog.adjacentChapterPrefetchCount)
         case .automaticDownloadQueueLimit: try assertRoundTrip(AppPreferenceCatalog.automaticDownloadQueueLimit)
         case .automaticDownloadQuotaGiB: try assertRoundTrip(AppPreferenceCatalog.automaticDownloadQuotaGiB)
+        case .subscriptionAttentionNotifications: try assertRoundTrip(AppPreferenceCatalog.subscriptionAttentionNotifications)
         }
     }
 

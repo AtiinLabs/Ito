@@ -1,4 +1,9 @@
 {
+  "%@ has %lld items that need your decision.": {
+    "description": "Notification body: the first placeholder is a series title, the second how many of its items (new chapters or changes) wait for the person to decide.",
+    "one": "%1$@ has %2$lld item that needs your decision.",
+    "other": "%1$@ has %2$lld items that need your decision."
+  },
   "%@ has %lld new editions.": {
     "description": "Manga/novel update-count heuristic: exact uploads, possibly alternate translations, not unique logical chapters.",
     "one": "%1$@ has %2$lld new edition.",
@@ -52,6 +57,11 @@
     "one": "%lld chapter",
     "other": "%lld chapters"
   },
+  "%lld chapters queued.": {
+    "description": "Automatic downloads: how many chapters were queued after the person approved them. The placeholder is a count.",
+    "one": "%lld chapter queued.",
+    "other": "%lld chapters queued."
+  },
   "%lld chapters saved": {
     "description": "Accessibility label for a count of chapters saved on this device, on a Library card and in a series' details header. The placeholder is the number of saved chapters.",
     "one": "%lld chapter saved",
@@ -66,6 +76,11 @@
     "description": "Downloads manager damaged edition count\nSeries details: how many saved chapters of the series failed verification and need deleting. The placeholder is a number, which needs plural forms.",
     "one": "%lld damaged",
     "other": "%lld damaged"
+  },
+  "%lld downloads in the queue now": {
+    "description": "Automatic downloads screen: how many downloads are queued now. The placeholder is a count.\nRule sheet: how many downloads are in the queue now. The placeholder is a count.",
+    "one": "%lld download in the queue now",
+    "other": "%lld downloads in the queue now"
   },
   "%lld edition updates": {
     "description": "Library manga/novel badge counts exact uploads, including alternate translations, not logical chapters.",
@@ -107,10 +122,25 @@
     "one": "%lld item imported",
     "other": "%lld items imported"
   },
+  "%lld items need your decision.": {
+    "description": "Notification body: how many items of automatic downloads wait for the person to decide, such as new chapters. The placeholder is a count.",
+    "one": "%lld item needs your decision.",
+    "other": "%lld items need your decision."
+  },
   "%lld marked read, skipped": {
     "description": "Download preview: how many chapters in range are marked read and so are not downloaded. The placeholder is a number, which needs plural forms.",
     "one": "%lld marked read, skipped",
     "other": "%lld marked read, skipped"
+  },
+  "%lld more are waiting. They appear here once these are decided.": {
+    "description": "Review sheet: how many more events wait than are listed. The placeholder is a count.",
+    "one": "%lld more is waiting. It appears here once these are decided.",
+    "other": "%lld more are waiting. They appear here once these are decided."
+  },
+  "%lld more chapters are not listed. Once these are approved, the list shows the next ones.": {
+    "description": "Backfill sheet: how many chapters beyond the list's limit remain. The placeholder is a count.",
+    "one": "%lld more chapter is not listed. Once these are approved, the list shows it.",
+    "other": "%lld more chapters are not listed. Once these are approved, the list shows the next ones."
   },
   "%lld more uploads found": {
     "description": "Scanlator sheet: how many uploads the source listed that the chapter list does not show. The placeholder is a number, which needs plural forms.",
@@ -162,6 +192,11 @@
     "one": "%1$lld title has new updates, including %2$@",
     "other": "%1$lld titles have new updates, including %2$@"
   },
+  "%lld waiting for your decision": {
+    "description": "Automatic downloads: how many new chapters of a rule need the person to decide. The placeholder is a count.",
+    "one": "%lld waiting for your decision",
+    "other": "%lld waiting for your decision"
+  },
   "%lld waiting to sync": {
     "one": "%lld waiting to sync",
     "other": "%lld waiting to sync"
@@ -194,6 +229,16 @@
   "Failed to refresh %lld repositories.": {
     "one": "Failed to refresh %lld repository.",
     "other": "Failed to refresh %lld repositories."
+  },
+  "Ito checks rules when it opens or when you refresh the Library, at most every %lld hours.": {
+    "description": "Automatic downloads: footer explaining when rules are checked. The placeholder is the number of hours of the update interval.",
+    "one": "Ito checks rules when it opens or when you refresh the Library, at most every %lld hour.",
+    "other": "Ito checks rules when it opens or when you refresh the Library, at most every %lld hours."
+  },
+  "Keep the next %lld unread chapters": {
+    "description": "Rule sheet: how many unread chapters after the last one read stay downloaded. The placeholder is a count.",
+    "one": "Keep the next %lld unread chapter",
+    "other": "Keep the next %lld unread chapters"
   },
   "Next %lld Chapters": {
     "description": "Custom download preset summary: download the next N chapters from the last read one. The placeholder is the number of chapters, which needs plural forms.",
@@ -233,6 +278,16 @@
     "description": "Download preview section: the chapters that will be queued. The placeholder is their number.",
     "one": "To download · %lld",
     "other": "To download · %lld"
+  },
+  "Up to %lld downloads in the queue": {
+    "description": "Automatic downloads screen: the queue limit. The placeholder is a count.\nRule sheet: the queue limit automatic downloads obey. The placeholder is a count.",
+    "one": "Up to %lld download in the queue",
+    "other": "Up to %lld downloads in the queue"
+  },
+  "Up to %lld new chapters per check": {
+    "description": "Rule sheet: the most new chapters one check queues. The placeholder is a count.",
+    "one": "Up to %lld new chapter per check",
+    "other": "Up to %lld new chapters per check"
   },
   "Use %lld selected alternatives this time": {
     "description": "Confirm exact alternatives ticked in the preview for this batch only; does not remember fallback permission. The placeholder is the number ticked and needs plural forms.",

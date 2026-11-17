@@ -70,6 +70,13 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             }
     }
 
+    private var automaticRuleSheetBinding: Binding<SubscriptionRulePresentation?> {
+        Binding(
+            get: { viewModel.automaticRule.presentation },
+            set: { if $0 == nil { viewModel.automaticRule.dismiss() } }
+        )
+    }
+
     private var presentationContent: some View {
         navigationContent
             .sheet(item: trackerSheetBinding) { intent in
@@ -83,6 +90,9 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             }
             .sheet(item: relinkPresentationBinding) { _ in
                 relinkSearchSheet
+            }
+            .sheet(item: automaticRuleSheetBinding) { _ in
+                SubscriptionRuleSheet(model: viewModel.automaticRule)
             }
             .sheet(item: downloadSheetBinding, onDismiss: downloadSheetDidDismiss) { sheet in
                 downloadSheetContent(sheet)
@@ -544,6 +554,14 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 chapterFilterMenu(isFiltered: isFiltered)
             }
             .padding(.horizontal, 16)
+
+            if viewModel.showsAutomaticDownloads {
+                AutomaticDownloadsRow(
+                    entry: viewModel.automaticRule.entry,
+                    row: viewModel.automaticRule.row,
+                    action: { viewModel.automaticRule.open() }
+                )
+            }
 
             if viewModel.showsDownloadControls, !viewModel.downloadBatch.summary.isEmpty {
                 SeriesDownloadSummaryView(

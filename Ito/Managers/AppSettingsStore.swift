@@ -75,6 +75,7 @@ public final class AppSettingsStore: ObservableObject {
     @Published public private(set) var adjacentChapterPrefetchCount = AppPreferenceCatalog.adjacentChapterPrefetchCount.defaultValue
     @Published public private(set) var automaticDownloadQueueLimit = AppPreferenceCatalog.automaticDownloadQueueLimit.defaultValue
     @Published public private(set) var automaticDownloadQuotaGiB = AppPreferenceCatalog.automaticDownloadQuotaGiB.defaultValue
+    @Published public private(set) var subscriptionAttentionNotifications = AppPreferenceCatalog.subscriptionAttentionNotifications.defaultValue
     @Published public private(set) var loadIssues: [AppSettingsLoadIssue] = []
 
     private let persistence: any AppSettingsPersistence
@@ -203,6 +204,11 @@ public final class AppSettingsStore: ObservableObject {
     }
 
     private func publish(_ snapshot: AppSettingsSnapshot, issues: [AppSettingsLoadIssue]) {
+        // The mirror is what a read off the main actor sees. It is set before the published values change, so whatever
+        // reacts to the published change (a read that starts again, a worker) already sees the new limits.
+        automaticDownloadLimitsMirror.set(AutomaticDownloadLimits(
+            queueLimit: snapshot.automaticDownloadQueueLimit, quotaGiB: snapshot.automaticDownloadQuotaGiB
+        ))
         libraryLayoutStyle = snapshot.libraryLayoutStyle
         alwaysShowCategoryPicker = snapshot.alwaysShowCategoryPicker
         backgroundUpdatesEnabled = snapshot.backgroundUpdatesEnabled
@@ -231,7 +237,7 @@ public final class AppSettingsStore: ObservableObject {
         adjacentChapterPrefetchCount = snapshot.adjacentChapterPrefetchCount
         automaticDownloadQueueLimit = snapshot.automaticDownloadQueueLimit
         automaticDownloadQuotaGiB = snapshot.automaticDownloadQuotaGiB
-        automaticDownloadLimitsMirror.set(automaticDownloadLimits)
+        subscriptionAttentionNotifications = snapshot.subscriptionAttentionNotifications
         loadIssues = issues
         // The configuration is published only here, after persistence acknowledged it, so the live policy
         // revision never runs ahead of what is stored.
@@ -302,6 +308,7 @@ private struct AppSettingsSnapshot: Sendable {
     let adjacentChapterPrefetchCount: AdjacentChapterPrefetchPreference
     let automaticDownloadQueueLimit: Int
     let automaticDownloadQuotaGiB: Int
+    let subscriptionAttentionNotifications: Bool
 
     var networkConfiguration: NetworkPolicyConfiguration {
         NetworkPolicyConfiguration(
@@ -359,7 +366,8 @@ private struct AppSettingsSnapshot: Sendable {
                 networkDownloadMode: value(AppPreferenceCatalog.networkDownloadMode),
                 adjacentChapterPrefetchCount: value(AppPreferenceCatalog.adjacentChapterPrefetchCount),
                 automaticDownloadQueueLimit: value(AppPreferenceCatalog.automaticDownloadQueueLimit),
-                automaticDownloadQuotaGiB: value(AppPreferenceCatalog.automaticDownloadQuotaGiB)
+                automaticDownloadQuotaGiB: value(AppPreferenceCatalog.automaticDownloadQuotaGiB),
+                subscriptionAttentionNotifications: value(AppPreferenceCatalog.subscriptionAttentionNotifications)
             ),
             repairs,
             issues

@@ -43,7 +43,7 @@ nonisolated enum StoredEditionState: Equatable, Sendable {
         case nil: self = .none
         case .downloaded?: self = .verified
         case .damaged?: self = .damaged
-        case .queued?, .downloading?, .waiting?, .failed?: self = .queued
+        case .queued?, .downloading?, .waiting?, .failed?, .held?: self = .queued
         }
     }
 }

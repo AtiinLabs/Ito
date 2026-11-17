@@ -83,6 +83,8 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
     let downloadBatch: MediaDetailDownloadBatchModel
     /// The choice among saved uploads of one chapter's reading position. Its state shows in the download sheet.
     let downloadedAlternatives: DownloadedAlternativeSelector<M>
+    /// The series' rule of automatic downloads: its entry row and its sheets.
+    let automaticRule: SubscriptionRuleModel
     let snapshots: MediaDetailSnapshotRefresher
     private let presentationLogger: any PresentationEventLogging
 
@@ -146,6 +148,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         pendingOpenIntent = openIntent
 
         let identity = MediaIdentity(pluginId: pluginID, canonicalMediaId: media.key, mediaKind: media.mediaKind)
+        automaticRule = SubscriptionRuleModel(service: dependencies.automaticDownloads, identity: identity, title: media.title)
         let libraryState = dependencies.library.state
         isSaved = libraryState.isSaved(media: identity)
         isOffline = dependencies.connectivity.isOffline
@@ -158,6 +161,15 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         downloadBatch.host = self
         downloadBatch.objectWillChange
             .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+        automaticRule.host = self
+        automaticRule.objectWillChange
+            .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+        // A relink moves the screen to another series; the rule follows it.
+        Self.seriesIdentities(of: $media, pluginID: pluginID)
+            .dropFirst()
+            .sink { [weak self] in self?.automaticRule.follow($0) }
             .store(in: &cancellables)
         wireDownloadedAlternatives().store(in: &cancellables)
         dependencies.library.statePublisher

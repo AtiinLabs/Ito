@@ -75,6 +75,7 @@ final class SubscriptionLedgerFixture {
     /// One chapter with the evidence a test cares about; everything else is absent.
     static func chapter(
         _ key: String,
+        title: String? = nil,
         unit: String? = nil,
         order: Int64? = nil,
         group: (id: String, name: String)? = nil,
@@ -86,6 +87,7 @@ final class SubscriptionLedgerFixture {
     ) -> Chapter {
         Chapter(
             key: key,
+            title: title,
             volume: volume,
             chapter: number,
             dateUpdated: date,

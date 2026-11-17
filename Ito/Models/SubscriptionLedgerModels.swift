@@ -212,6 +212,9 @@ nonisolated struct SubscriptionEventRecord: Codable, Sendable, Equatable, Fetcha
     var scopeGeneration: Int64
     var createdAt: Date
     var decidedAt: Date?
+    /// When the decision to notify about this event was taken, whether or not a notification was posted. Only the
+    /// attention claim writes it, so each event is claimed once; every insert leaves it nil.
+    var notifiedAt: Date?
 
     var candidates: [String] { Self.keys(candidateKeys) }
     var approved: [String]? { approvedKeys.map(Self.keys) }

@@ -96,6 +96,7 @@ public final class DurableStateBootstrap: ObservableObject {
     private var preparationTask: Task<Bool, Never>?
     private var sourcesPrepared = false
     private var runtime: Runtime?
+    private var automaticLimitSubscriptions = Set<AnyCancellable>()
     private var completionBarrierObservation: AnyCancellable?
     private var completionRestoreBlocked = false
     private var completionForeground = UIApplication.shared.applicationState != .background
@@ -486,6 +487,7 @@ public final class DurableStateBootstrap: ObservableObject {
         // rule's check, in the same fetch. The scheduler never runs until the foreground gate below starts it.
         let automatic = downloads.map { stack -> (AutomaticDownloads, SubscriptionCheckScheduler) in
             updates.configure(subscriptionSink: stack.center)
+            let limitsChanged = settings.automaticDownloadLimitsChanged
             let scheduler = SubscriptionCheckScheduler(
                 store: stack.store,
                 center: stack.center,
@@ -493,11 +495,39 @@ public final class DurableStateBootstrap: ObservableObject {
                 updates: updates,
                 dbPool: dbPool,
                 interval: { TimeInterval(settings.updateInterval.rawValue) * 3_600 },
-                limitsChanged: settings.automaticDownloadLimitsChanged,
+                limitsChanged: limitsChanged,
                 now: Date.init
             )
             scheduler.startObservingReadState(scheduling: DelayedMainActorValueObservationScheduler.mainActor)
-            return (AutomaticDownloads(center: stack.center, scheduler: scheduler), scheduler)
+            let facade = AutomaticDownloads(
+                center: stack.center,
+                scheduler: scheduler,
+                store: stack.store,
+                limits: { settings.automaticDownloadLimits },
+                intervalHours: { settings.updateInterval.rawValue },
+                installedPluginIDs: plugins.$installedPlugins
+                    .map { Set($0.keys) }
+                    .removeDuplicates()
+                    .eraseToAnyPublisher(),
+                limitsChanged: limitsChanged
+            )
+            let policy = pluginSettings.networkContexts.policy
+            let notifier = SubscriptionAttentionNotifier(
+                system: UserNotificationSystem(),
+                claim: { now in try await stack.store.claimSubscriptionAttention(now: now) },
+                readStates: { try await stack.store.subscriptionAttentionStates() },
+                isForeground: { policy.isForeground },
+                isEnabled: { settings.subscriptionAttentionNotifications }
+            )
+            stack.center.configure(attentionNotifier: notifier)
+            // New limits change what is held back for room: the chapter states are judged again, and the worker looks at the
+            // queue, which may have room it did not have.
+            limitsChanged
+                .sink { @MainActor [weak center = stack.center] in center?.automaticLimitsDidChange() }
+                .store(in: &automaticLimitSubscriptions)
+            facade.configure(notifier: notifier)
+            facade.startObserving(scheduling: DelayedMainActorValueObservationScheduler.mainActor)
+            return (facade, scheduler)
         }
         return Runtime(
             settingsStore: settings,
@@ -628,6 +658,7 @@ public final class DurableStateBootstrap: ObservableObject {
         let scheduler = subscriptionScheduler ?? runtime?.subscriptionScheduler
         scheduler?.setActive(false)
         subscriptionScheduler = nil
+        automaticLimitSubscriptions.removeAll()
         retiredDownloadWork = worker?.retire() ?? retiredDownloadWork
         downloadCoordinator = nil
         runtime = nil
@@ -682,6 +713,7 @@ public final class DurableStateBootstrap: ObservableObject {
             completionCoordinator.start()
             downloadCoordinator?.start()
             subscriptionScheduler?.setActive(true)
+            runtime?.automaticDownloads?.sweepAttentionNotifications()
         } else {
             completionCoordinator.suspend()
             subscriptionScheduler?.setActive(false)
