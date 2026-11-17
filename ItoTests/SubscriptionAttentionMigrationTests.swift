@@ -79,12 +79,9 @@ struct SubscriptionAttentionMigrationTests {
         }
     }
 
-    @Test func subscriptionEventStaysASanitizedTableSoABackupNeverCarriesIts() {
-        let tables = BackupExportOperation.sanitizedTables
-        let index = tables.firstIndex(of: "subscriptionEvent")
-        #expect(index != nil)
-        // Events are children of the rule: they are cleared before it.
-        #expect(index.map { $0 < (tables.firstIndex(of: "seriesSubscription") ?? -1) } == true)
+    @Test func subscriptionEventStaysASanitizedTableSoABackupNeverCarriesItsClaims() {
+        // The notification claim lives on the event, and events never travel: rules are restored paused, without them.
+        #expect(BackupExportOperation.sanitizedTables.contains("subscriptionEvent"))
         #expect(BackupExportOperation.excludedTableReasons["subscriptionEvent"] != nil)
     }
 
