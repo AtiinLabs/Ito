@@ -2332,6 +2332,9 @@
     "Ito could not open the device Settings app. Please try again." : {
 
     },
+    "Ito couldn't read the browser identity that site verification needs. Try again in a moment." : {
+      "comment" : "Error: the app could not read WebKit's user agent, so a site's verification cannot finish. Shown where the source's screen reports a failed load."
+    },
     "Ito is still preparing your library. Try again in a moment." : {
 
     },

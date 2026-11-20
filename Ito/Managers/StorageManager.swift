@@ -59,7 +59,6 @@ public class StorageManager: ObservableObject {
 
         let config = URLSessionConfiguration.default
         config.urlCache = nil
-        config.httpAdditionalHeaders = ["User-Agent": CloudflareManager.defaultUserAgent]
         let loader = PluginDataLoader(configuration: config, pluginManager: pluginManager)
         let controller = PluginImagePipelineController(
             dataCache: dataCache,

@@ -139,6 +139,9 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     /// The origins the user closed a page for. A closed origin isn't shown again until the app becomes active.
     private var declinedOrigins: Set<String> = []
     private(set) var webView: WKWebView?
+    /// The page the plugin loaded: its site bounds the main-frame navigations the page may make. It is the plugin's
+    /// request until that load commits, and the committed URL after (a redirect may have changed it).
+    private var pageURL: URL?
     /// The load in flight: its continuation, the navigation it started, and the deadline that
     /// fails it.
     private struct PendingLoad {
@@ -146,6 +149,9 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         let continuation: CheckedContinuation<WebviewResponse, Error>
         let deadline: Task<Void, Never>
         var navigation: WKNavigation?
+        /// Whether the plugin's navigation has committed. Until it does, its redirects are its own, and the
+        /// navigation guard does not apply to them.
+        var committed = false
     }
     private var pendingLoad: PendingLoad?
     /// The first line that makes a script an async function body (see `executeJs`).
@@ -206,6 +212,8 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     /// Test hook: called with the reply to each `itoShowPage` message.
     var onShowPageDecision: ((Bool) -> Void)?
     var onPolicyEvaluation: (() -> Void)?
+    /// Test hook: called with the URL of each main-frame navigation the page made that the guard refused.
+    var onNavigationRefused: ((URL) -> Void)?
 #endif
 
     init(
@@ -257,15 +265,13 @@ class WebviewManager: NSObject, WKNavigationDelegate {
             // A page owned by an operation uses its source's website data for the current scope; the unbound page
             // keeps the app's default store.
             config.websiteDataStore = try authority.map { try websites.store(for: $0.context) } ?? .default()
-            let prefs = WKWebpagePreferences()
+            let prefs = WKWebpagePreferences.hostWebView()
             prefs.allowsContentJavaScript = true
             config.defaultWebpagePreferences = prefs
             // A weak proxy: the configuration's user content controller retains its handlers.
             config.userContentController.addScriptMessageHandler(WeakReplyProxy(self), contentWorld: .page, name: "itoShowPage")
 
             let wv = WKWebView(frame: UIScreen.main.bounds, configuration: config)
-            // Use the same fallback UA as CloudflareManager
-            wv.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
             wv.navigationDelegate = self
             wv.alpha = 0.01
             wv.isUserInteractionEnabled = false
@@ -291,6 +297,7 @@ class WebviewManager: NSObject, WKNavigationDelegate {
             throw URLError(.badURL)
         }
         try setupWebView()
+        pageURL = url
 
         let id = UUID()
         let deadlineNanoseconds = UInt64(pageLoadDeadline * 1_000_000_000)
@@ -458,6 +465,18 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
+        // The page may not take the plugin's window to another site once its own load has committed. Until then that
+        // load is provisional: its redirects, including moves to another domain, are the plugin's own, so no guard applies.
+        let pluginLoadProvisional = pendingLoad.map { !$0.committed } ?? false
+        let isMainFrame = navigationAction.targetFrame?.isMainFrame ?? true
+        if !pluginLoadProvisional, let target = navigationAction.request.url,
+           PluginPageNavigation.refuses(target: target, isMainFrame: isMainFrame, pageURL: pageURL) {
+            decisionHandler(.cancel)
+            #if DEBUG
+            onNavigationRefused?(target)
+            #endif
+            return
+        }
         // A navigation of an operation's page is a network request: it is decided against the live policy, and
         // one that is no longer admitted ends this page. Local schemes (data, about) are not network.
         guard authority != nil, let target = navigationAction.request.url,
@@ -481,6 +500,10 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         // A committed navigation replaces the document, so scripts still awaiting the old one can't
         // finish. Same-document changes (pushState, fragment) don't commit and keep their scripts.
         invalidatePendingScripts(with: URLError(.cancelled))
+        if loadID(for: navigation) != nil {
+            pageURL = webView.url ?? pageURL
+            pendingLoad?.committed = true
+        }
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

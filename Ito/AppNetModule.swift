@@ -38,19 +38,16 @@ struct AppNetCloudflareResolution: @unchecked Sendable {
 }
 
 nonisolated protocol AppNetCloudflareHandling: Sendable {
-    nonisolated func cachedUserAgent(for host: String) async -> String
+    /// The host's WebKit user agent, or "" when none can be read now. Throws `CancellationError` if the caller is cancelled.
+    nonisolated func cachedUserAgent(for host: String) async throws -> String
     nonisolated func resolveChallenge(for url: URL, authority: NetworkRequestAuthority?) async throws -> AppNetCloudflareResolution
 }
 
 struct LiveAppNetCloudflareHandler: AppNetCloudflareHandling {
     let manager: CloudflareManager?
 
-    init(manager: CloudflareManager? = nil) {
-        self.manager = manager
-    }
-
-    nonisolated func cachedUserAgent(for host: String) async -> String {
-        CloudflareManager.defaultUserAgent
+    nonisolated func cachedUserAgent(for host: String) async throws -> String {
+        try await manager?.userAgent.value() ?? ""
     }
 
     nonisolated func resolveChallenge(for url: URL, authority: NetworkRequestAuthority?) async throws -> AppNetCloudflareResolution {
@@ -71,7 +68,7 @@ actor AppNetModule: NetModule {
     private let contexts: PluginNetworkContexts?
     private let admitContext: @Sendable (NetworkOperationContext) throws -> Void
 
-    init(pluginID: String, cookieJar: PluginCookieJar, trust: PluginTrustStore, contexts: PluginNetworkContexts? = nil, cloudflare: CloudflareManager? = nil) {
+    init(pluginID: String, cookieJar: PluginCookieJar, trust: PluginTrustStore, contexts: PluginNetworkContexts? = nil, cloudflare: CloudflareManager?) {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
@@ -135,15 +132,12 @@ actor AppNetModule: NetModule {
 
         var updatedHeaders = request.headers
 
-        // Always apply the cached User-Agent for this host if we have one
+        // The host's WebKit user agent replaces any the plugin sent, under whatever case it used: a clearance is bound to
+        // it, and `X-Used-User-Agent` reports what was sent. Without one, the plugin's own header (if any) is kept.
         if !isRetry, let host = url.host {
-            let cachedUA = await cloudflare.cachedUserAgent(for: host)
+            let cachedUA = try await cloudflare.cachedUserAgent(for: host)
             if !cachedUA.isEmpty {
-                // If Cloudflare manager has a specific UA for this host, we must use it
-                updatedHeaders["User-Agent"] = cachedUA
-            } else if updatedHeaders["User-Agent"] == nil && updatedHeaders["user-agent"] == nil {
-                // Default fallback if plugin didn't provide one
-                updatedHeaders["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                updatedHeaders = Self.headers(updatedHeaders, settingUserAgent: cachedUA)
             }
         }
 
@@ -238,7 +232,7 @@ actor AppNetModule: NetModule {
                 var retriedRequest = request
                 var retriedHeaders = request.headers
 
-                retriedHeaders["User-Agent"] = bypassResult.userAgent
+                retriedHeaders = Self.headers(retriedHeaders, settingUserAgent: bypassResult.userAgent)
 
                 // Explicitly inject cookies into the request headers because HTTPCookieStorage drops subdomains
                 var cookieStrings: [String] = []
@@ -276,6 +270,13 @@ actor AppNetModule: NetModule {
             headers: resHeaders,
             body: [UInt8](data)
         )
+    }
+
+    /// The headers with one `User-Agent`: every spelling the plugin used is replaced, so two can never be sent together.
+    nonisolated static func headers(_ headers: [String: String], settingUserAgent agent: String) -> [String: String] {
+        var result = headers.filter { $0.key.lowercased() != "user-agent" }
+        result["User-Agent"] = agent
+        return result
     }
 
     /// Cookies belong to this source. Shared browser clearance is never source authorization.

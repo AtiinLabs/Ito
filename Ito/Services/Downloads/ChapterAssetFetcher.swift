@@ -44,15 +44,16 @@ nonisolated final class URLSessionAssetFetcher: DirectAssetFetching, Sendable {
 
     private let unmetered: Route
     private let metered: Route
+    private let userAgent: WebKitUserAgent
 
-    init(trust: PluginTrustStore, userAgent: String) {
+    init(trust: PluginTrustStore, userAgent: WebKitUserAgent) {
+        self.userAgent = userAgent
         func route(allowingExpensiveAccess: Bool) -> Route {
             let configuration = URLSessionConfiguration.bulkDownload(allowingExpensiveAccess: allowingExpensiveAccess)
             configuration.urlCache = nil
-            configuration.httpAdditionalHeaders = ["User-Agent": userAgent]
             return Route(
                 session: URLSession(configuration: configuration),
-                imageTransport: PluginImageTransport(configuration: configuration, trust: trust)
+                imageTransport: PluginImageTransport(configuration: configuration, trust: trust, userAgent: userAgent)
             )
         }
         unmetered = route(allowingExpensiveAccess: false)
@@ -66,8 +67,9 @@ nonisolated final class URLSessionAssetFetcher: DirectAssetFetching, Sendable {
     func fetchDirect(_ request: URLRequest, allowsExpensiveAccess: Bool) async throws -> FetchedAsset {
         let location: URL
         let response: URLResponse
+        let sent = try await userAgent.withUserAgent(request)
         do {
-            (location, response) = try await route(allowingExpensiveAccess: allowsExpensiveAccess).session.download(for: request)
+            (location, response) = try await route(allowingExpensiveAccess: allowsExpensiveAccess).session.download(for: sent)
         } catch {
             // A cancelled transfer surfaces as a URL error; callers treat it as a cancellation.
             if Task.isCancelled || (error as? URLError)?.code == .cancelled {

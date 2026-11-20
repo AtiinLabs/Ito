@@ -63,11 +63,9 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
             data: Self.tinyPNGData
         )
 
-        let defaultUA = CloudflareManager.defaultUserAgent
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockImageURLProtocol.self]
         config.urlCache = nil
-        config.httpAdditionalHeaders = ["User-Agent": defaultUA]
 
         let database = try TestDatabase()
         let pluginsDirectory = FileManager.default.temporaryDirectory
@@ -94,9 +92,11 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
         XCTAssertGreaterThan(response.size.width, 0)
         XCTAssertGreaterThan(response.size.height, 0)
 
-        // Verify request received the User-Agent header from config
+        // The request carries the host's WebKit user agent, the one Cloudflare clearances are made with.
         let lastReq = MockImageURLProtocol.lastRequest(forHost: host)
-        XCTAssertEqual(lastReq?.value(forHTTPHeaderField: "User-Agent"), defaultUA)
+        let webKitUserAgent = try await pluginManager.webKitUserAgent.value()
+        XCTAssertNotNil(webKitUserAgent)
+        XCTAssertEqual(lastReq?.value(forHTTPHeaderField: "User-Agent"), webKitUserAgent)
     }
 
     // MARK: - Test C: NukeUI LazyImage lifecycle and display decoding
@@ -187,7 +187,7 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
     func testControlF_PageRequestsCarryPluginHeadersAndNeverGuessAReferer() throws {
         let testURL = "https://cdn.example.com/ch1/001.jpg"
 
-        // The plugin's headers are sent as given; the image session supplies the User-Agent.
+        // The plugin's headers are put on the request as given; the transfer sets the User-Agent.
         let customHeaders = [
             "Referer": "https://source.example.com/manga/123",
             "Authorization": "Bearer test-token"
@@ -198,7 +198,7 @@ final class ItoImagePipelineDiagnosticTests: XCTestCase {
         XCTAssertEqual(withHeaders.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
         XCTAssertNil(withHeaders.value(forHTTPHeaderField: "User-Agent"))
 
-        // A plugin's own User-Agent wins.
+        // A plugin's own User-Agent is passed through here; the transfer replaces it with the host's.
         let ownAgent = NukeMangaReaderImagePrefetcher.urlRequest(
             url: url,
             headers: ["User-Agent": "PluginAgent/1"]

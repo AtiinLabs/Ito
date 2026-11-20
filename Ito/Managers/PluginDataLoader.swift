@@ -40,7 +40,8 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
                 if let itoRunner = runner as? ItoRunner {
                     await pluginManager.evictImageRunner(for: pluginId, matching: itoRunner)
                 }
-            }
+            },
+            userAgent: pluginManager.webKitUserAgent
         )
     }
 
@@ -52,13 +53,14 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
         contexts: PluginNetworkContexts,
         defaultLoader: (any DataLoading)? = nil,
         runnerProvider: @escaping @Sendable (String) async throws -> any PluginImageRunner,
-        runnerEvictor: (@Sendable (String, any PluginImageRunner) async -> Void)? = nil
+        runnerEvictor: (@Sendable (String, any PluginImageRunner) async -> Void)? = nil,
+        userAgent: WebKitUserAgent
     ) {
-        self.defaultLoader = defaultLoader ?? PolicyDataLoader(configuration: configuration)
+        self.defaultLoader = defaultLoader ?? PolicyDataLoader(configuration: configuration, userAgent: userAgent)
         self.runnerProvider = runnerProvider
         self.runnerEvictor = runnerEvictor
         self.networkContexts = contexts
-        self.imageTransport = PluginImageTransport(configuration: configuration, trust: trust)
+        self.imageTransport = PluginImageTransport(configuration: configuration, trust: trust, userAgent: userAgent)
     }
 
     public func loadData(with request: URLRequest, didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void, completion: @escaping @Sendable (Error?) -> Void) -> Cancellable {

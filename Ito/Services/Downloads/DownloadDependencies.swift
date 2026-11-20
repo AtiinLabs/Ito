@@ -54,7 +54,7 @@ struct DownloadStack {
         let completion = pluginSettings.completionStore
         let cookies = pluginSettings.cookies
         let trust = pluginSettings.trust
-        let cloudflare = LiveAppNetCloudflareHandler()
+        let userAgent = pluginManager.webKitUserAgent
         let coordinator = DownloadQueueCoordinator(
             store: store,
             runtimes: pluginManager,
@@ -65,7 +65,7 @@ struct DownloadStack {
                     trust: trust,
                     gate: gate,
                     recorder: recorder,
-                    cloudflareUserAgent: { host in await cloudflare.cachedUserAgent(for: host) }
+                    userAgent: userAgent
                 )
             },
             path: path,
@@ -74,7 +74,7 @@ struct DownloadStack {
                 .publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)
                 .map { _ in () }
                 .eraseToAnyPublisher(),
-            fetcher: URLSessionAssetFetcher(trust: trust, userAgent: CloudflareManager.defaultUserAgent),
+            fetcher: URLSessionAssetFetcher(trust: trust, userAgent: userAgent),
             contexts: pluginSettings.networkContexts,
             progress: progress,
             predecessor: predecessor,

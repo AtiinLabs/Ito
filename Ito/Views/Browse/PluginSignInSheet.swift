@@ -60,6 +60,7 @@ final class PluginSignInPage: NSObject, ObservableObject, WKNavigationDelegate {
     override init() {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
+        configuration.defaultWebpagePreferences = .hostWebView()
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
         webView.navigationDelegate = self

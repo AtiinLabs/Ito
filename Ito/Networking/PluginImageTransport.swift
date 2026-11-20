@@ -50,6 +50,7 @@ nonisolated enum PluginImageTransportError: LocalizedError, Equatable, Sendable 
 nonisolated final class PluginImageTransport: Sendable {
     private let sessions: PluginSessionPool
     private let trust: PluginTrustStore?
+    private let userAgent: WebKitUserAgent
 
     private static let prohibitedHeaders: Set<String> = [
         "host",
@@ -69,7 +70,7 @@ nonisolated final class PluginImageTransport: Sendable {
         charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&'*+-.^_`|~"
     )
 
-    init(configuration: URLSessionConfiguration = .ephemeral, trust: PluginTrustStore? = nil) {
+    init(configuration: URLSessionConfiguration = .ephemeral, trust: PluginTrustStore? = nil, userAgent: WebKitUserAgent) {
         let config: URLSessionConfiguration
         if let copied = configuration.copy() as? URLSessionConfiguration {
             config = copied
@@ -84,6 +85,7 @@ nonisolated final class PluginImageTransport: Sendable {
         config.timeoutIntervalForResource = 60
         self.sessions = PluginSessionPool(configuration: config, trust: trust)
         self.trust = trust
+        self.userAgent = userAgent
     }
 
     struct NormalizedOrigin: Equatable, Hashable, CustomStringConvertible, Sendable {
@@ -200,7 +202,7 @@ nonisolated final class PluginImageTransport: Sendable {
         for (key, val) in validatedHeaders {
             request.setValue(val, forHTTPHeaderField: key)
         }
-        let wireRequest = request
+        let wireRequest = try await userAgent.withUserAgent(request)
 
         let delegate = RedirectDelegate(
             originalOrigin: initialOrigin,

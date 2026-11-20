@@ -287,7 +287,7 @@ final class MangaReaderViewModel: ObservableObject {
 
     /// The chapter is made for the other reader and no route can take it.
     func failDivertedLoad() {
-        loadPhase = .failure(ReaderRouteError.otherReader.localizedDescription)
+        loadPhase = .failure(ReaderRouteError.otherReader.localizedDescription, needsSignIn: false)
     }
 
     /// Drops a destination that was never shown: its own work and images end, and nothing of the visible
@@ -817,7 +817,7 @@ final class MangaReaderViewModel: ObservableObject {
         mainLoadTask = nil
         mainLoadOperationID = nil
         transition = nil
-        loadPhase = .failure(error.localizedDescription)
+        loadPhase = .failure(error.localizedDescription, needsSignIn: (error as? PluginCallError)?.kind == .needsLogin)
         let outcome: PresentationEventOutcome = error is CancellationError
             ? .cancelled
             : .failed(.pluginExecution)

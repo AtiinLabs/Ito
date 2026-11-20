@@ -119,6 +119,8 @@ public class PluginManager: ObservableObject {
     public let pluginSettingsStore: PluginSettingsStore
     let websiteContexts: SourceWebsiteContexts
     let cloudflareManager: CloudflareManager
+    /// The host's WebKit user agent, shared by the Cloudflare challenge, plugin HTTP, image and download transfers.
+    let webKitUserAgent: WebKitUserAgent
     private weak var completionCoordinator: PluginCompletionCoordinator?
     private let downloadRunnerLoader: DownloadRunnerLoader
     private let publicationMirror = PluginPublicationRevisionMirror()
@@ -133,8 +135,15 @@ public class PluginManager: ObservableObject {
         pluginsDirectory
     }
 
-    public convenience init(pluginSettingsStore: PluginSettingsStore, pluginsDirectory: URL? = nil) {
-        self.init(pluginSettingsStore: pluginSettingsStore, pluginsDirectory: pluginsDirectory, runnerLoader: nil)
+    convenience init(
+        pluginSettingsStore: PluginSettingsStore,
+        pluginsDirectory: URL? = nil,
+        webKitUserAgent: WebKitUserAgent
+    ) {
+        self.init(
+            pluginSettingsStore: pluginSettingsStore, pluginsDirectory: pluginsDirectory, runnerLoader: nil,
+            webKitUserAgent: webKitUserAgent
+        )
     }
 
     init(
@@ -149,12 +158,14 @@ public class PluginManager: ObservableObject {
         directoryGate: PluginDirectoryGate? = nil,
         packageReader: PluginPackageReader? = nil,
         supportedABI: ClosedRange<Int> = ItoRunner.supportedABIVersions,
-        websiteContexts: SourceWebsiteContexts = SourceWebsiteContexts()
+        websiteContexts: SourceWebsiteContexts = SourceWebsiteContexts(),
+        webKitUserAgent: WebKitUserAgent
     ) {
         self.pluginSettingsStore = pluginSettingsStore
         self.pluginsDirectory = pluginsDirectory
         self.websiteContexts = websiteContexts
-        let cloudflare = CloudflareManager(websites: websiteContexts)
+        self.webKitUserAgent = webKitUserAgent
+        let cloudflare = CloudflareManager(websites: websiteContexts, userAgent: webKitUserAgent)
         cloudflareManager = cloudflare
         self.runnerLoader = runnerLoader ?? { pluginID, pluginURL, settingsStore in
             try await Self.loadRunner(

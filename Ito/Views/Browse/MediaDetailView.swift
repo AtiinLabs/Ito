@@ -16,6 +16,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     private let trackingViewFactory: TrackingViewFactory
     private let readerViewFactory: MediaDetailReaderViewFactory
     private let categoryHistoryViewFactory: CategoryHistoryViewFactory
+    private let signIn: PluginSignInSheets
     @Environment(\.sourceCoverRequests) private var coverRequests
 
     @State private var showNavTitle = false
@@ -28,12 +29,14 @@ struct MediaDetailView<M: MediaDisplayable>: View {
         viewModel: MediaDetailViewModel<M>,
         trackingViewFactory: TrackingViewFactory,
         readerViewFactory: MediaDetailReaderViewFactory,
-        categoryHistoryViewFactory: CategoryHistoryViewFactory
+        categoryHistoryViewFactory: CategoryHistoryViewFactory,
+        signIn: PluginSignInSheets
     ) {
         self._viewModel = StateObject(wrappedValue: viewModel)
         self.trackingViewFactory = trackingViewFactory
         self.readerViewFactory = readerViewFactory
         self.categoryHistoryViewFactory = categoryHistoryViewFactory
+        self.signIn = signIn
     }
 
     var body: some View {
@@ -79,6 +82,11 @@ struct MediaDetailView<M: MediaDisplayable>: View {
 
     private var presentationContent: some View {
         navigationContent
+            .sheet(isPresented: $viewModel.showSignIn, onDismiss: { viewModel.retryDetailLoad() }) {
+                if let target = signIn.target(pluginID: viewModel.pluginID) {
+                    signIn.sheet(for: target)
+                }
+            }
             .sheet(item: trackerSheetBinding) { intent in
                 trackerSheet(for: intent)
             }
@@ -363,8 +371,8 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             relinkDownloadsNotice(message)
         }
 
-        if case .failure(let message) = viewModel.detailLoadState {
-            detailFailureBanner(message: message, notice: viewModel.offlineNotice)
+        if case .failure(let message, let needsSignIn) = viewModel.detailLoadState {
+            detailFailureBanner(message: message, needsSignIn: needsSignIn, notice: viewModel.offlineNotice)
         }
 
         if let notice = viewModel.offlineNotice, notice.kind == .savedOnly {
@@ -430,7 +438,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
         .padding(.horizontal, 16)
     }
 
-    private func detailFailureBanner(message: String, notice: MediaDetailOfflineNotice?) -> some View {
+    private func detailFailureBanner(message: String, needsSignIn: Bool, notice: MediaDetailOfflineNotice?) -> some View {
         VStack(spacing: 12) {
             if let notice, notice.kind == .offline {
                 Image(systemName: "wifi.slash")
@@ -460,6 +468,12 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 viewModel.retryDetailLoad()
             }
             .buttonStyle(.bordered)
+            if needsSignIn, signIn.target(pluginID: viewModel.pluginID) != nil {
+                Button("Sign In") {
+                    viewModel.showSignIn = true
+                }
+                .buttonStyle(.bordered)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)

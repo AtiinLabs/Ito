@@ -227,12 +227,9 @@ struct DownloadNetModuleTests {
 
     @Test func aCloudflareChallengeIsRefusedWithoutSolvingItButAnEarnedUserAgentIsReused() async throws {
         let recorder = DownloadPolicyRecorder()
-        let handler = RefusingCloudflareHandler(recorder: recorder) { host in
-            host == "source.test" ? "Cleared-Agent" : ""
-        }
+        let handler = RefusingCloudflareHandler(recorder: recorder, userAgent: WebKitUserAgent(probe: { "Cleared-Agent" }))
 
-        #expect(await handler.cachedUserAgent(for: "source.test") == "Cleared-Agent")
-        #expect(await handler.cachedUserAgent(for: "other.test").isEmpty)
+        #expect(try await handler.cachedUserAgent(for: "source.test") == "Cleared-Agent")
         await #expect(throws: HostNetworkPolicyOutcome.foregroundPermissionRequired) {
             try await handler.resolveChallenge(for: URL(string: "https://source.test/")!, authority: nil)
         }

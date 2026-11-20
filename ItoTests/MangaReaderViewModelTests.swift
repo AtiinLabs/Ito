@@ -118,7 +118,7 @@ final class MangaReaderViewModelTests: XCTestCase {
 
         subject.viewModel.start()
         await waitForReader {
-            subject.viewModel.loadPhase == .failure("expected reader failure")
+            subject.viewModel.loadPhase == .failure("expected reader failure", needsSignIn: false)
         }
 
         XCTAssertTrue(subject.viewModel.pagedPages.isEmpty)
@@ -128,6 +128,16 @@ final class MangaReaderViewModelTests: XCTestCase {
         await waitForReader { subject.viewModel.loadPhase == .content }
         XCTAssertEqual(subject.viewModel.pagedPages.count, 2)
         XCTAssertEqual(subject.loader.callCount(for: "a"), 2)
+    }
+
+    func testAChapterTheSourceRefusesUntilSignInOffersSignInWithItsMessage() async {
+        let subject = makeSubject(chapters: [makeChapter("a", number: 1)])
+        subject.loader.enqueue(.failure(PluginCallError(kind: .needsLogin, message: "Verify you're human")), for: "a")
+
+        subject.viewModel.start()
+        await waitForReader {
+            subject.viewModel.loadPhase == .failure("Verify you're human", needsSignIn: true)
+        }
     }
 
     func testStaleInitialCompletionCannotReplaceDirectNavigation() async {

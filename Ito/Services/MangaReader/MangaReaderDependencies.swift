@@ -210,8 +210,8 @@ final class NukeMangaReaderImagePrefetcher: MangaReaderImagePrefetching {
 
     /// The request for a page image: the plugin's headers as given. No Referer is guessed (the
     /// image's own URL isn't what a site checks for; a plugin whose site needs one sends it), and
-    /// the image session's User-Agent, the one Cloudflare clearances are made with, applies
-    /// unless the plugin sets its own.
+    /// the transfer sets the host's WebKit user agent, the one Cloudflare clearances are made with, in
+    /// place of any User-Agent the plugin gives here.
     nonisolated static func urlRequest(url: URL, headers: [String: String]?) -> URLRequest {
         var request = URLRequest(url: url)
         for (key, value) in headers ?? [:] {

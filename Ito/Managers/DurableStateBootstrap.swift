@@ -330,14 +330,17 @@ public final class DurableStateBootstrap: ObservableObject {
             dbPool: dbPool, secrets: pluginSecrets, cookies: pluginCookies, tokens: pluginTokens, trust: pluginTrust,
             networkPolicy: networkPolicy
         )
+        // The runtime's one WebKit user agent: every web view, challenge and transfer of this runtime shares it.
+        let webKitUserAgent = WebKitUserAgent()
         let plugins: PluginManager = {
             guard let installedPluginsDirectory else {
-                let plugins = PluginManager(pluginSettingsStore: pluginSettings)
+                let plugins = PluginManager(pluginSettingsStore: pluginSettings, webKitUserAgent: webKitUserAgent)
                 return plugins
             }
             return PluginManager(
                 pluginSettingsStore: pluginSettings,
-                pluginsDirectory: installedPluginsDirectory
+                pluginsDirectory: installedPluginsDirectory,
+                webKitUserAgent: webKitUserAgent
             )
         }()
         let library = LibraryManager(dbPool: dbPool)
@@ -608,6 +611,8 @@ public final class DurableStateBootstrap: ObservableObject {
         pluginResolver = runtime.pluginResolver
         libraryManager = runtime.libraryManager
         pluginManager = runtime.pluginManager
+        // Site verification needs the WebKit user agent on its first request: start reading it as the app comes up.
+        Task { await runtime.pluginManager.webKitUserAgent.warm() }
         storageManager = runtime.storageManager
         discordRPCManager = runtime.discordRPCManager
         historyManager = runtime.historyManager

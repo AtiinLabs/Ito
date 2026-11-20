@@ -6,12 +6,14 @@ import ito_runner
 
 @MainActor
 final class CloudflareManager: NSObject, ObservableObject {
-    nonisolated static let defaultUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
+    /// The host's WebKit user agent. A clearance is bound to it, so every request that uses one sends it too.
+    nonisolated let userAgent: WebKitUserAgent
     private var challenges: [UUID: CloudflareChallenge] = [:]
     private let websites: SourceWebsiteContexts
 
-    init(websites: SourceWebsiteContexts) {
+    init(websites: SourceWebsiteContexts, userAgent: WebKitUserAgent) {
         self.websites = websites
+        self.userAgent = userAgent
         super.init()
     }
 
@@ -26,7 +28,7 @@ final class CloudflareManager: NSObject, ObservableObject {
                     continuation.resume(throwing: CancellationError())
                     return
                 }
-                let challenge = CloudflareChallenge(url: url, authority: authority, websites: websites) { [weak self] result in
+                let challenge = CloudflareChallenge(url: url, authority: authority, websites: websites, userAgent: userAgent) { [weak self] result in
                     self?.challenges[id] = nil
                     continuation.resume(with: result)
                 }
@@ -45,10 +47,13 @@ final class CloudflareChallenge: NSObject, WKNavigationDelegate, WKHTTPCookieSto
     private let url: URL
     private let authority: NetworkRequestAuthority
     private let websites: SourceWebsiteContexts
+    private let userAgent: WebKitUserAgent
     private var completion: ((Result<AppNetCloudflareResolution, Error>) -> Void)?
     private(set) var webView: WKWebView?
     private var presentation: PagePresentation?
     private var deadline: Task<Void, Never>?
+    /// The clearance being resolved: its user agent may arrive late, and finishing the challenge cancels it.
+    private var resolution: Task<Void, Never>?
     private var observation: AnyCancellable?
     private var retirement: UUID?
     private let presentsPage: Bool
@@ -58,7 +63,7 @@ final class CloudflareChallenge: NSObject, WKNavigationDelegate, WKHTTPCookieSto
 #endif
 
     init(
-        url: URL, authority: NetworkRequestAuthority, websites: SourceWebsiteContexts,
+        url: URL, authority: NetworkRequestAuthority, websites: SourceWebsiteContexts, userAgent: WebKitUserAgent,
         presentsPage: Bool = true,
         loadPage: @escaping @MainActor (WKWebView, URL) -> Void = { page, url in page.load(URLRequest(url: url)) },
         completion: @escaping (Result<AppNetCloudflareResolution, Error>) -> Void
@@ -66,6 +71,7 @@ final class CloudflareChallenge: NSObject, WKNavigationDelegate, WKHTTPCookieSto
         self.url = url
         self.authority = authority
         self.websites = websites
+        self.userAgent = userAgent
         self.completion = completion
         self.presentsPage = presentsPage
         self.loadPage = loadPage
@@ -81,8 +87,8 @@ final class CloudflareChallenge: NSObject, WKNavigationDelegate, WKHTTPCookieSto
             configuration.websiteDataStore = try websites.store(for: authority.context)
         } catch { finish(.failure(error)); return }
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        configuration.defaultWebpagePreferences = .hostWebView()
         let page = WKWebView(frame: UIScreen.main.bounds, configuration: configuration)
-        page.customUserAgent = CloudflareManager.defaultUserAgent
         page.navigationDelegate = self
         webView = page
         configuration.websiteDataStore.httpCookieStore.add(self)
@@ -129,7 +135,22 @@ final class CloudflareChallenge: NSObject, WKNavigationDelegate, WKHTTPCookieSto
             }
             guard matching.contains(where: { $0.name == "cf_clearance" }) else { return }
             do { try self.authority.checkLiveSurface() } catch { self.finish(.failure(error)); return }
-            self.finish(.success(AppNetCloudflareResolution(userAgent: page.customUserAgent ?? CloudflareManager.defaultUserAgent, cookies: matching)))
+            self.resolve(cookies: matching, in: page)
+        }
+    }
+
+    /// The clearance is bound to the user agent the challenge page sent: the host's WebKit user agent, which every
+    /// request that uses the clearance sends too. Without one the challenge fails rather than hand out a clearance
+    /// that no request can match. Internal so tests can resolve a challenge with a fixed agent.
+    func resolve(cookies: [HTTPCookie], in page: WKWebView) {
+        resolution = Task { @MainActor [weak self, weak page] in
+            guard let self, let page else { return }
+            let agent: String?
+            do { agent = try await self.userAgent.value() } catch { return }
+            guard !Task.isCancelled, self.webView === page, self.completion != nil else { return }
+            do { try self.authority.checkLiveSurface() } catch { self.finish(.failure(error)); return }
+            guard let agent else { self.finish(.failure(WebKitUserAgentError.unavailable)); return }
+            self.finish(.success(AppNetCloudflareResolution(userAgent: agent, cookies: cookies)))
         }
     }
 
@@ -177,6 +198,7 @@ final class CloudflareChallenge: NSObject, WKNavigationDelegate, WKHTTPCookieSto
         guard let completion else { return }
         self.completion = nil
         deadline?.cancel()
+        resolution?.cancel()
         observation?.cancel()
         if let retirement { websites.removeObserver(retirement) }
         webView?.configuration.websiteDataStore.httpCookieStore.remove(self)

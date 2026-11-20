@@ -185,14 +185,13 @@ nonisolated final class DownloadNetModule: NetModule, Sendable {
 
 /// Answers every Cloudflare challenge with a refusal. Downloads never solve challenges, so they can
 /// never cancel or present one for the reader. A clearance the reader already earned stays usable: the
-/// cached User-Agent for a host comes from `userAgent`, which only reads.
+/// host's WebKit user agent is read, never changed, so the clearance's requests match.
 nonisolated struct RefusingCloudflareHandler: AppNetCloudflareHandling {
     let recorder: DownloadPolicyRecorder
-    /// The cached User-Agent for a host. An empty string means none.
-    let userAgent: @Sendable (String) async -> String
+    let userAgent: WebKitUserAgent
 
-    nonisolated func cachedUserAgent(for host: String) async -> String {
-        await userAgent(host)
+    nonisolated func cachedUserAgent(for host: String) async throws -> String {
+        try await userAgent.value() ?? ""
     }
 
     nonisolated func resolveChallenge(for url: URL, authority: NetworkRequestAuthority?) async throws -> AppNetCloudflareResolution {
@@ -223,11 +222,11 @@ extension PluginRunnerHostModules {
         trust: PluginTrustStore,
         gate: any DownloadAdmissionGate,
         recorder: DownloadPolicyRecorder,
-        cloudflareUserAgent: @escaping @Sendable (String) async -> String
+        userAgent: WebKitUserAgent
     ) -> PluginRunnerHostModules {
         let transport = AppNetModule(
             configuration: .bulkDownload(allowingExpensiveAccess: gate.allowsExpensiveTransport),
-            cloudflare: RefusingCloudflareHandler(recorder: recorder, userAgent: cloudflareUserAgent),
+            cloudflare: RefusingCloudflareHandler(recorder: recorder, userAgent: userAgent),
             retryLogger: OSLogAppNetRetryLogger(),
             pluginID: pluginID,
             cookieJar: cookieJar,

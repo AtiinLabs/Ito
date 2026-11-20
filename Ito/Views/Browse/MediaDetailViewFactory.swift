@@ -11,6 +11,7 @@ struct MediaDetailReaderViewFactory {
     private let downloads: any MediaDetailDownloadServing
     private let connectivity: any ConnectivityServing
     private let networkContexts: PluginNetworkContexts
+    private let signIn: PluginSignInSheets
 
     init(
         mangaReaderDependencies: PreparedMangaReaderDependencies,
@@ -19,7 +20,8 @@ struct MediaDetailReaderViewFactory {
         offlineReading: any OfflineChapterReading = UnavailableOfflineChapterReading(),
         downloads: any MediaDetailDownloadServing = UnavailableMediaDetailDownloads(),
         connectivity: any ConnectivityServing = UnavailableConnectivity(),
-        networkContexts: PluginNetworkContexts
+        networkContexts: PluginNetworkContexts,
+        signIn: PluginSignInSheets
     ) {
         self.mangaReaderDependencies = mangaReaderDependencies
         self.novelReaderDependencies = novelReaderDependencies
@@ -28,6 +30,7 @@ struct MediaDetailReaderViewFactory {
         self.downloads = downloads
         self.connectivity = connectivity
         self.networkContexts = networkContexts
+        self.signIn = signIn
     }
 
     @ViewBuilder
@@ -35,7 +38,9 @@ struct MediaDetailReaderViewFactory {
         switch destination {
         case .pages(let id, let content, let pluginID, let entry, let chapter):
             ReaderRouteView(
-                coordinator: makeRoute(content: content, pluginID: pluginID, entry: entry, chapter: chapter, format: .pages)
+                coordinator: makeRoute(content: content, pluginID: pluginID, entry: entry, chapter: chapter, format: .pages),
+                pluginID: pluginID,
+                signIn: signIn
             )
             .id(id)
         case .anime(_, let runner, let pluginID, let media, let episode):
@@ -49,7 +54,9 @@ struct MediaDetailReaderViewFactory {
             )
         case .text(let id, let content, let pluginID, let entry, let chapter):
             ReaderRouteView(
-                coordinator: makeRoute(content: content, pluginID: pluginID, entry: entry, chapter: chapter, format: .text)
+                coordinator: makeRoute(content: content, pluginID: pluginID, entry: entry, chapter: chapter, format: .text),
+                pluginID: pluginID,
+                signIn: signIn
             )
             .id(id)
         }
@@ -188,6 +195,7 @@ struct MediaDetailViewFactory {
     let trackingViewFactory: TrackingViewFactory
     let readerViewFactory: MediaDetailReaderViewFactory
     private let networkContexts: PluginNetworkContexts
+    private let signIn: PluginSignInSheets
 
     init(
         dependencies: PreparedMediaDetailDependencies,
@@ -199,7 +207,8 @@ struct MediaDetailViewFactory {
         presentationLogger: any PresentationEventLogging,
         trackingViewFactory: TrackingViewFactory,
         categoryHistoryViewFactory: CategoryHistoryViewFactory,
-        networkContexts: PluginNetworkContexts
+        networkContexts: PluginNetworkContexts,
+        signIn: PluginSignInSheets
     ) {
         self.dependencies = dependencies
         self.messagePresenter = messagePresenter
@@ -208,6 +217,7 @@ struct MediaDetailViewFactory {
         self.categoryHistoryViewFactory = categoryHistoryViewFactory
         self.offlineReading = offlineReading
         self.networkContexts = networkContexts
+        self.signIn = signIn
         readerViewFactory = MediaDetailReaderViewFactory(
             mangaReaderDependencies: mangaReaderDependencies,
             novelReaderDependencies: novelReaderDependencies,
@@ -215,7 +225,8 @@ struct MediaDetailViewFactory {
             offlineReading: offlineReading,
             downloads: dependencies.downloads,
             connectivity: dependencies.connectivity,
-            networkContexts: networkContexts
+            networkContexts: networkContexts,
+            signIn: signIn
         )
     }
 
@@ -422,7 +433,8 @@ struct MediaDetailViewFactory {
             ),
             trackingViewFactory: trackingViewFactory,
             readerViewFactory: readerViewFactory,
-            categoryHistoryViewFactory: categoryHistoryViewFactory
+            categoryHistoryViewFactory: categoryHistoryViewFactory,
+            signIn: signIn
         )
     }
 }
