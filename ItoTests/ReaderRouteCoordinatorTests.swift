@@ -310,6 +310,10 @@ final class ReaderRouteCoordinatorTests: XCTestCase {
         XCTAssertEqual(ReaderRouteCoordinator.failure(for: OfflineReadError.protectedDataUnavailable), .protectedDataUnavailable)
         XCTAssertEqual(ReaderRouteCoordinator.failure(for: OfflineReadError.localCopyDamaged), .localCopyUnavailable)
         XCTAssertEqual(ReaderRouteCoordinator.failure(for: MangaReaderTestError.expected), .loadFailed)
+        XCTAssertEqual(
+            ReaderRouteCoordinator.failure(for: PluginCallError(kind: .needsLogin, message: "Sign in")), .needsSignIn
+        )
+        XCTAssertEqual(ReaderRouteCoordinator.failure(for: PluginCallError(kind: .reported, message: "Down")), .loadFailed)
     }
 
     func testCancelThenALateResultPublishesNothingAndLeavesNoSpinner() async throws {

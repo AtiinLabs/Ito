@@ -42,6 +42,8 @@ final class NovelReaderViewModel: ObservableObject {
     /// The last next-chapter load failed; it waits for `retryNextChapter` instead of being
     /// started again by scrolling or page turns.
     @Published private(set) var appendFailed = false
+    /// Whether the failed next-chapter load was refused because the source needs a sign-in on its website.
+    @Published private(set) var appendNeedsSignIn = false
     /// Where the reader should open the loaded chapter; the view applies it once and consumes it.
     @Published private(set) var restoreAnchor: NovelReadingAnchor?
 
@@ -699,6 +701,7 @@ final class NovelReaderViewModel: ObservableObject {
     func retryNextChapter() {
         guard appendFailed else { return }
         appendFailed = false
+        appendNeedsSignIn = false
         loadNextChapter(trigger: .reader)
     }
 
@@ -768,6 +771,7 @@ final class NovelReaderViewModel: ObservableObject {
             } catch {
                 self?.failAppend(
                     operationID: operationID,
+                    needsSignIn: (error as? PluginCallError)?.kind == .needsLogin,
                     session: session,
                     generation: generation
                 )
@@ -817,6 +821,7 @@ final class NovelReaderViewModel: ObservableObject {
 
     private func failAppend(
         operationID: UUID,
+        needsSignIn: Bool,
         session: UUID,
         generation: UInt64
     ) {
@@ -835,6 +840,7 @@ final class NovelReaderViewModel: ObservableObject {
             return
         }
         appendFailed = true
+        appendNeedsSignIn = needsSignIn
         finishAppend(operationID: operationID, outcome: .failed(.pluginExecution))
     }
 

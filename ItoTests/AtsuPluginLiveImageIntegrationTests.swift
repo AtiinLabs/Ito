@@ -35,7 +35,8 @@ final class AtsuPluginLiveImageIntegrationTests: XCTestCase {
         await runner.setNetModule(AppNetModule(
             pluginID: "com.kunihir0.ito.atsumaru",
             cookieJar: PluginCookieJar(keychain: InMemoryPluginSecretKeychain()),
-            trust: PluginTrustStore(keychain: InMemoryPluginSecretKeychain())
+            trust: PluginTrustStore(keychain: InMemoryPluginSecretKeychain()),
+            cloudflare: nil
         ))
         await runner.setStdModule(DefaultStdModule())
         await runner.setHtmlModule(DefaultHtmlModule())

@@ -109,7 +109,7 @@ final class TransportReviewRegressionTests: XCTestCase {
         let (_, contexts, authority) = fixture()
         var results = 0
         let challenge = CloudflareChallenge(
-            url: URL(string: "https://fixture.invalid/")!, authority: authority, websites: SourceWebsiteContexts(),
+            url: URL(string: "https://fixture.invalid/")!, authority: authority, websites: SourceWebsiteContexts(), userAgent: .testing(),
             presentsPage: false, loadPage: { _, _ in }, completion: { _ in results += 1 }
         )
         challenge.start()
@@ -137,7 +137,7 @@ final class TransportReviewRegressionTests: XCTestCase {
         let (_, contexts, authority) = fixture()
         var results = 0
         let challenge = CloudflareChallenge(
-            url: URL(string: "https://fixture.invalid/")!, authority: authority, websites: SourceWebsiteContexts(),
+            url: URL(string: "https://fixture.invalid/")!, authority: authority, websites: SourceWebsiteContexts(), userAgent: .testing(),
             presentsPage: false, loadPage: { _, _ in }, completion: { _ in results += 1 }
         )
         challenge.start()
@@ -174,7 +174,7 @@ final class TransportReviewRegressionTests: XCTestCase {
             XCTFail("Page started during clear")
         } catch {}
         do {
-            _ = try await CloudflareManager(websites: websites).resolveChallenge(for: URL(string: "https://fixture.invalid/")!, authority: authority)
+            _ = try await CloudflareManager(websites: websites, userAgent: .testing()).resolveChallenge(for: URL(string: "https://fixture.invalid/")!, authority: authority)
             XCTFail("Challenge started during clear")
         } catch is CancellationError {} catch { XCTFail("Unexpected clear refusal") }
         await websites.clear()
@@ -273,4 +273,3 @@ private nonisolated final class ReviewImageCancellation: Cancellable, @unchecked
     init(_ cancelAction: @escaping @Sendable () -> Void) { self.cancelAction = cancelAction }
     func cancel() { cancelAction() }
 }
-

@@ -21,7 +21,7 @@ struct MediaDetailReaderViewFactory {
         downloads: any MediaDetailDownloadServing = UnavailableMediaDetailDownloads(),
         connectivity: any ConnectivityServing = UnavailableConnectivity(),
         networkContexts: PluginNetworkContexts,
-        signIn: PluginSignInSheets = .unavailable
+        signIn: PluginSignInSheets
     ) {
         self.mangaReaderDependencies = mangaReaderDependencies
         self.novelReaderDependencies = novelReaderDependencies
@@ -39,6 +39,7 @@ struct MediaDetailReaderViewFactory {
         case .pages(let id, let content, let pluginID, let entry, let chapter):
             ReaderRouteView(
                 coordinator: makeRoute(content: content, pluginID: pluginID, entry: entry, chapter: chapter, format: .pages),
+                pluginID: pluginID,
                 signIn: signIn
             )
             .id(id)
@@ -54,6 +55,7 @@ struct MediaDetailReaderViewFactory {
         case .text(let id, let content, let pluginID, let entry, let chapter):
             ReaderRouteView(
                 coordinator: makeRoute(content: content, pluginID: pluginID, entry: entry, chapter: chapter, format: .text),
+                pluginID: pluginID,
                 signIn: signIn
             )
             .id(id)

@@ -64,7 +64,10 @@ struct NovelReaderView: View {
         } message: { consent in
             Text(consent.message)
         }
-        .sheet(isPresented: $showSignIn, onDismiss: { viewModel.retry() }) {
+        .sheet(isPresented: $showSignIn, onDismiss: {
+            // A failed chapter load retries that load; a failed next-chapter load retries the append.
+            if case .failure = viewModel.loadPhase { viewModel.retry() } else { viewModel.retryNextChapter() }
+        }) {
             if let target = signIn.target(pluginID: viewModel.pluginID) {
                 signIn.sheet(for: target)
             }
@@ -319,6 +322,11 @@ struct NovelReaderView: View {
                             .font(.subheadline)
                             .foregroundColor(viewModel.theme.textColor)
                         Button("Try Again") { viewModel.retryNextChapter() }
+                        if viewModel.appendNeedsSignIn, signIn.target(pluginID: viewModel.pluginID) != nil {
+                            Button("Sign In") { showSignIn = true }
+                                .buttonStyle(.bordered)
+                                .tint(viewModel.theme.textColor)
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     .padding()

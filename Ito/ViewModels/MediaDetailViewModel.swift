@@ -898,7 +898,9 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
         // A screen that could not load stays on its error instead of opening a stale chapter.
         pendingOpenIntent = nil
         let needsSignIn = (error as? PluginCallError)?.kind == .needsLogin
-        detailLoadState = .failure(String(localized: "Failed to load details. Please try again."), needsSignIn: needsSignIn)
+        // A sign-in is the source's own text, shown as a failed chapter shows it; any other failure keeps the generic line.
+        let message = needsSignIn ? error.localizedDescription : String(localized: "Failed to load details. Please try again.")
+        detailLoadState = .failure(message, needsSignIn: needsSignIn)
         loadSnapshotRefreshDate()
         messagePresenter.present(.detailLoadFailed)
         logFinished(

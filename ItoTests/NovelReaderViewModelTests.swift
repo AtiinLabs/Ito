@@ -260,6 +260,38 @@ final class NovelReaderViewModelTests: XCTestCase {
         )
     }
 
+    func testAChapterTheSourceRefusesUntilSignInOffersSignInWithItsMessage() async {
+        let chapter = makeChapter("a", number: 1)
+        let subject = makeSubject(chapters: [chapter], initial: chapter)
+        subject.loader.enqueue(.failure(PluginCallError(kind: .needsLogin, message: "Verify you're human")), for: "a")
+
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        XCTAssertEqual(subject.viewModel.loadPhase, .failure("Verify you're human", needsSignIn: true))
+    }
+
+    func testANextChapterTheSourceRefusesUntilSignInOffersSignInUntilRetried() async {
+        let a = makeChapter("a", number: 1)
+        let b = makeChapter("b", number: 2)
+        let subject = makeSubject(chapters: [a, b], initial: a)
+        subject.loader.enqueue(.pages([page(1)]), for: "a")
+        subject.loader.enqueue(.failure(PluginCallError(kind: .needsLogin, message: "Sign in")), for: "b")
+        subject.loader.enqueue(.pages([page(2)]), for: "b")
+        subject.viewModel.start()
+        await subject.viewModel.waitForAllOperationsForTesting()
+
+        subject.viewModel.loadNextChapter(trigger: .reader)
+        await subject.viewModel.waitForAllOperationsForTesting()
+        XCTAssertTrue(subject.viewModel.appendFailed)
+        XCTAssertTrue(subject.viewModel.appendNeedsSignIn)
+
+        subject.viewModel.retryNextChapter()
+        await subject.viewModel.waitForAllOperationsForTesting()
+        XCTAssertFalse(subject.viewModel.appendFailed)
+        XCTAssertFalse(subject.viewModel.appendNeedsSignIn)
+    }
+
     func testSwitchingModesReopensAtTheSamePlace() async {
         let a = makeChapter("a", number: 1)
         let subject = makeSubject(chapters: [a], initial: a)

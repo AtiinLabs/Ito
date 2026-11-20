@@ -11,7 +11,7 @@ final class CloudflareManager: NSObject, ObservableObject {
     private var challenges: [UUID: CloudflareChallenge] = [:]
     private let websites: SourceWebsiteContexts
 
-    init(websites: SourceWebsiteContexts, userAgent: WebKitUserAgent = WebKitUserAgent()) {
+    init(websites: SourceWebsiteContexts, userAgent: WebKitUserAgent) {
         self.websites = websites
         self.userAgent = userAgent
         super.init()
@@ -52,6 +52,8 @@ final class CloudflareChallenge: NSObject, WKNavigationDelegate, WKHTTPCookieSto
     private(set) var webView: WKWebView?
     private var presentation: PagePresentation?
     private var deadline: Task<Void, Never>?
+    /// The clearance being resolved: its user agent may arrive late, and finishing the challenge cancels it.
+    private var resolution: Task<Void, Never>?
     private var observation: AnyCancellable?
     private var retirement: UUID?
     private let presentsPage: Bool
@@ -61,7 +63,7 @@ final class CloudflareChallenge: NSObject, WKNavigationDelegate, WKHTTPCookieSto
 #endif
 
     init(
-        url: URL, authority: NetworkRequestAuthority, websites: SourceWebsiteContexts, userAgent: WebKitUserAgent = WebKitUserAgent(),
+        url: URL, authority: NetworkRequestAuthority, websites: SourceWebsiteContexts, userAgent: WebKitUserAgent,
         presentsPage: Bool = true,
         loadPage: @escaping @MainActor (WKWebView, URL) -> Void = { page, url in page.load(URLRequest(url: url)) },
         completion: @escaping (Result<AppNetCloudflareResolution, Error>) -> Void
@@ -85,6 +87,7 @@ final class CloudflareChallenge: NSObject, WKNavigationDelegate, WKHTTPCookieSto
             configuration.websiteDataStore = try websites.store(for: authority.context)
         } catch { finish(.failure(error)); return }
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        configuration.defaultWebpagePreferences = .hostWebView()
         let page = WKWebView(frame: UIScreen.main.bounds, configuration: configuration)
         page.navigationDelegate = self
         webView = page
@@ -136,13 +139,15 @@ final class CloudflareChallenge: NSObject, WKNavigationDelegate, WKHTTPCookieSto
         }
     }
 
-    /// The clearance is bound to the user agent the challenge page sent: WebKit's own, which the host reports.
-    /// Without one the challenge fails rather than hand out a clearance no request can match.
-    private func resolve(cookies: [HTTPCookie], in page: WKWebView) {
-        Task { @MainActor [weak self, weak page] in
+    /// The clearance is bound to the user agent the challenge page sent: the host's WebKit user agent, which every
+    /// request that uses the clearance sends too. Without one the challenge fails rather than hand out a clearance
+    /// that no request can match. Internal so tests can resolve a challenge with a fixed agent.
+    func resolve(cookies: [HTTPCookie], in page: WKWebView) {
+        resolution = Task { @MainActor [weak self, weak page] in
             guard let self, let page else { return }
-            let agent = await self.userAgent.value()
-            guard self.webView === page, self.completion != nil else { return }
+            let agent: String?
+            do { agent = try await self.userAgent.value() } catch { return }
+            guard !Task.isCancelled, self.webView === page, self.completion != nil else { return }
             do { try self.authority.checkLiveSurface() } catch { self.finish(.failure(error)); return }
             guard let agent else { self.finish(.failure(WebKitUserAgentError.unavailable)); return }
             self.finish(.success(AppNetCloudflareResolution(userAgent: agent, cookies: cookies)))
@@ -193,6 +198,7 @@ final class CloudflareChallenge: NSObject, WKNavigationDelegate, WKHTTPCookieSto
         guard let completion else { return }
         self.completion = nil
         deadline?.cancel()
+        resolution?.cancel()
         observation?.cancel()
         if let retirement { websites.removeObserver(retirement) }
         webView?.configuration.websiteDataStore.httpCookieStore.remove(self)

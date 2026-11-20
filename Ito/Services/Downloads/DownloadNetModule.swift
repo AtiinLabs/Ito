@@ -190,8 +190,8 @@ nonisolated struct RefusingCloudflareHandler: AppNetCloudflareHandling {
     let recorder: DownloadPolicyRecorder
     let userAgent: WebKitUserAgent
 
-    nonisolated func cachedUserAgent(for host: String) async -> String {
-        await userAgent.value() ?? ""
+    nonisolated func cachedUserAgent(for host: String) async throws -> String {
+        try await userAgent.value() ?? ""
     }
 
     nonisolated func resolveChallenge(for url: URL, authority: NetworkRequestAuthority?) async throws -> AppNetCloudflareResolution {

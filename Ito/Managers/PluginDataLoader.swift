@@ -54,7 +54,7 @@ public final class PluginDataLoader: DataLoading, @unchecked Sendable {
         defaultLoader: (any DataLoading)? = nil,
         runnerProvider: @escaping @Sendable (String) async throws -> any PluginImageRunner,
         runnerEvictor: (@Sendable (String, any PluginImageRunner) async -> Void)? = nil,
-        userAgent: WebKitUserAgent = WebKitUserAgent()
+        userAgent: WebKitUserAgent
     ) {
         self.defaultLoader = defaultLoader ?? PolicyDataLoader(configuration: configuration, userAgent: userAgent)
         self.runnerProvider = runnerProvider

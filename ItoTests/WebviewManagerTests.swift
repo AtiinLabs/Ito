@@ -48,6 +48,75 @@ private final class SilentServer: @unchecked Sendable {
     }
 }
 
+/// A local HTTP server. `/start` redirects to `/final` on the same port under `localhost`, a different site from
+/// `127.0.0.1`; every other path answers a small page. It records the path of each request it receives.
+private final class RedirectingServer: @unchecked Sendable {
+    private let listener: NWListener
+    private let queue = DispatchQueue(label: "WebviewManagerTests.RedirectingServer")
+    private var connections: [NWConnection] = []
+    private var paths: [String] = []
+    private var agents: [String] = []
+    private var boundPort: UInt16 = 0
+    private let ready = AsyncStream<UInt16>.makeStream()
+
+    init() throws {
+        let parameters = NWParameters.tcp
+        parameters.requiredInterfaceType = .loopback
+        listener = try NWListener(using: parameters, on: .any)
+        listener.newConnectionHandler = { [weak self] connection in
+            guard let self else { return }
+            connections.append(connection)
+            connection.start(queue: queue)
+            answer(connection)
+        }
+        listener.stateUpdateHandler = { [weak self] state in
+            guard let self, case .ready = state, let port = listener.port?.rawValue else { return }
+            boundPort = port
+            ready.continuation.yield(port)
+        }
+        listener.start(queue: queue)
+    }
+
+    func port() async -> UInt16 {
+        var iterator = ready.stream.makeAsyncIterator()
+        return await iterator.next() ?? 0
+    }
+
+    var requestedPaths: [String] { queue.sync { paths } }
+    /// The User-Agent header of each request, in order.
+    var requestUserAgents: [String] { queue.sync { agents } }
+
+    private func answer(_ connection: NWConnection) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, _, _ in
+            guard let self, let data, let request = String(data: data, encoding: .utf8) else {
+                connection.cancel()
+                return
+            }
+            let path = request.split(separator: " ", maxSplits: 2).dropFirst().first.map(String.init) ?? "/"
+            paths.append(path)
+            let agentPrefix = "user-agent:"
+            if let line = request.components(separatedBy: "\r\n").first(where: { $0.lowercased().hasPrefix(agentPrefix) }) {
+                agents.append(line.dropFirst(agentPrefix.count).trimmingCharacters(in: .whitespaces))
+            }
+            let response: String
+            if path == "/start" {
+                response = "HTTP/1.1 302 Found\r\nLocation: http://localhost:\(boundPort)/final\r\n"
+                    + "Content-Length: 0\r\nConnection: close\r\n\r\n"
+            } else {
+                let body = "<html><body><p>final</p></body></html>"
+                response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: \(body.utf8.count)\r\n"
+                    + "Connection: close\r\n\r\n\(body)"
+            }
+            connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
+        }
+    }
+
+    deinit {
+        listener.cancel()
+        connections.forEach { $0.cancel() }
+    }
+}
+
 /// Starts `body` as an async script and returns once the page has been sent it.
 @MainActor
 private func startAsyncScript(_ body: String, on manager: WebviewManager) async -> Task<String, Error> {
@@ -472,5 +541,56 @@ struct WebviewManagerTests {
         let webView = try #require(manager.webView)
         #expect(webView.superview == nil)
         #expect(webView.window == nil)
+    }
+
+    @Test func thePluginsOwnLoadFollowsARedirectToAnotherSite() async throws {
+        let server = try RedirectingServer()
+        let port = await server.port()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
+        defer { dispose(manager) }
+
+        // 127.0.0.1 and localhost are different sites. The redirect belongs to the plugin's own load, which has not
+        // committed yet, so the navigation guard lets it through.
+        let response = try await manager.loadUrl(request: WebviewRequest(url: "http://127.0.0.1:\(port)/start", script: nil))
+
+        #expect(response.url == "http://localhost:\(port)/final")
+        #expect(response.html.contains("final"))
+        #expect(server.requestedPaths.contains("/final"))
+    }
+
+    @Test func afterTheLoadCommitsThePageCannotNavigateToAnotherSite() async throws {
+        let server = try RedirectingServer()
+        let port = await server.port()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
+        defer { dispose(manager) }
+        _ = try await manager.loadUrl(request: WebviewRequest(url: "http://localhost:\(port)/final", script: nil))
+        let refused = AsyncStream<URL>.makeStream()
+        manager.onNavigationRefused = { refused.continuation.yield($0) }
+        defer { manager.onNavigationRefused = nil }
+
+        _ = try await manager.executeJs(script: "location.href = 'http://127.0.0.1:\(port)/away'; 'sent'")
+        var iterator = refused.stream.makeAsyncIterator()
+        let target = await iterator.next()
+
+        #expect(target?.absoluteString == "http://127.0.0.1:\(port)/away")
+        #expect(manager.webView?.url?.host == "localhost")
+        // The refusal is decided before any request, so the other site never hears from the page.
+        #expect(!server.requestedPaths.contains("/away"))
+    }
+
+    /// A full-screen plugin page sends and reports the user agent the host probes, so a clearance earned on the page
+    /// matches the requests that follow it. On an iPad this holds only because both pin the phone layout.
+    @Test func aPluginPageSendsAndReportsTheProbedUserAgent() async throws {
+        let server = try RedirectingServer()
+        let port = await server.port()
+        let manager = WebviewManager(websites: SourceWebsiteContexts())
+        defer { dispose(manager) }
+        _ = try await manager.loadUrl(request: WebviewRequest(url: "http://localhost:\(port)/final", script: nil))
+
+        let reported = try await manager.executeJs(script: "navigator.userAgent")
+        let probed = try #require(await WebKitUserAgent.probeWebKit())
+
+        #expect(reported == probed)
+        #expect(server.requestUserAgents.first == probed)
     }
 }

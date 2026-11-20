@@ -43,6 +43,33 @@ final class MediaDetailViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.media.title, "Recovered")
     }
 
+    func testDetailsTheSourceRefusesUntilSignInOfferSignInWithItsMessage() async {
+        let subject = makeMangaSubject()
+        subject.route.loadResponses = [.suspended]
+
+        subject.viewModel.start()
+        await waitUntil { subject.route.pendingLoadCount == 1 }
+        subject.route.resolveLoad(at: 0, with: .failure(PluginCallError(kind: .needsLogin, message: "Verify you're human")))
+        await waitUntil { subject.viewModel.detailLoadState != .loading }
+
+        XCTAssertEqual(subject.viewModel.detailLoadState, .failure("Verify you're human", needsSignIn: true))
+    }
+
+    func testOtherDetailFailuresKeepTheGenericMessageWithoutSignIn() async {
+        let subject = makeMangaSubject()
+        subject.route.loadResponses = [.suspended]
+
+        subject.viewModel.start()
+        await waitUntil { subject.route.pendingLoadCount == 1 }
+        subject.route.resolveLoad(at: 0, with: .failure(PluginCallError(kind: .reported, message: "Server down")))
+        await waitUntil { subject.viewModel.detailLoadState != .loading }
+
+        XCTAssertEqual(
+            subject.viewModel.detailLoadState,
+            .failure(String(localized: "Failed to load details. Please try again."), needsSignIn: false)
+        )
+    }
+
     func testForceRefreshUsesCurrentAuthoritativeMedia() async {
         let subject = makeMangaSubject()
         subject.route.loadResponses = [

@@ -67,7 +67,7 @@ nonisolated final class URLSessionAssetFetcher: DirectAssetFetching, Sendable {
     func fetchDirect(_ request: URLRequest, allowsExpensiveAccess: Bool) async throws -> FetchedAsset {
         let location: URL
         let response: URLResponse
-        let sent = await userAgent.withUserAgent(request)
+        let sent = try await userAgent.withUserAgent(request)
         do {
             (location, response) = try await route(allowingExpensiveAccess: allowsExpensiveAccess).session.download(for: sent)
         } catch {

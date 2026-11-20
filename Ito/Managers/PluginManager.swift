@@ -135,8 +135,15 @@ public class PluginManager: ObservableObject {
         pluginsDirectory
     }
 
-    public convenience init(pluginSettingsStore: PluginSettingsStore, pluginsDirectory: URL? = nil) {
-        self.init(pluginSettingsStore: pluginSettingsStore, pluginsDirectory: pluginsDirectory, runnerLoader: nil)
+    convenience init(
+        pluginSettingsStore: PluginSettingsStore,
+        pluginsDirectory: URL? = nil,
+        webKitUserAgent: WebKitUserAgent
+    ) {
+        self.init(
+            pluginSettingsStore: pluginSettingsStore, pluginsDirectory: pluginsDirectory, runnerLoader: nil,
+            webKitUserAgent: webKitUserAgent
+        )
     }
 
     init(
@@ -152,7 +159,7 @@ public class PluginManager: ObservableObject {
         packageReader: PluginPackageReader? = nil,
         supportedABI: ClosedRange<Int> = ItoRunner.supportedABIVersions,
         websiteContexts: SourceWebsiteContexts = SourceWebsiteContexts(),
-        webKitUserAgent: WebKitUserAgent = WebKitUserAgent()
+        webKitUserAgent: WebKitUserAgent
     ) {
         self.pluginSettingsStore = pluginSettingsStore
         self.pluginsDirectory = pluginsDirectory

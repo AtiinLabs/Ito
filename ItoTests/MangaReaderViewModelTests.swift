@@ -130,6 +130,16 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.loader.callCount(for: "a"), 2)
     }
 
+    func testAChapterTheSourceRefusesUntilSignInOffersSignInWithItsMessage() async {
+        let subject = makeSubject(chapters: [makeChapter("a", number: 1)])
+        subject.loader.enqueue(.failure(PluginCallError(kind: .needsLogin, message: "Verify you're human")), for: "a")
+
+        subject.viewModel.start()
+        await waitForReader {
+            subject.viewModel.loadPhase == .failure("Verify you're human", needsSignIn: true)
+        }
+    }
+
     func testStaleInitialCompletionCannotReplaceDirectNavigation() async {
         let a = makeChapter("a", number: 1)
         let b = makeChapter("b", number: 2)

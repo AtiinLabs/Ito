@@ -56,6 +56,8 @@ nonisolated enum ReaderHandoffFailure: Equatable, Sendable {
     case localCopyUnavailable
     case loadFailed
     case presentationFailed
+    /// The chapter's source needs a sign-in on its website before the chapter can load.
+    case needsSignIn
 }
 
 /// Everything one handoff is bound to. Never persisted and never handed to a plugin.
@@ -593,7 +595,8 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
     }
 
     static func failure(for error: any Error) -> ReaderHandoffFailure {
-        switch error as? OfflineReadError {
+        if (error as? PluginCallError)?.kind == .needsLogin { return .needsSignIn }
+        return switch error as? OfflineReadError {
         case .notDownloaded?: .unavailableOffline
         case .protectedDataUnavailable?: .protectedDataUnavailable
         case .localCopyUnavailable?, .localCopyDamaged?: .localCopyUnavailable

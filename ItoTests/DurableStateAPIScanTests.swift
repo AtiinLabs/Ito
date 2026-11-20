@@ -530,7 +530,7 @@ struct DurableStateAPIScanTests {
         #expect(runner.lowerBound < injection.lowerBound)
 
         let bootstrap = try read("Ito/Managers/DurableStateBootstrap.swift")
-        #expect(bootstrap.contains("PluginManager(pluginSettingsStore: pluginSettings)"))
+        #expect(bootstrap.contains("PluginManager(pluginSettingsStore: pluginSettings, webKitUserAgent: webKitUserAgent)"))
         #expect(!bootstrap.contains("PluginManager()"))
         let storage = try read("Ito/Managers/StorageManager.swift")
         #expect(!storage.contains("PluginManager()"))

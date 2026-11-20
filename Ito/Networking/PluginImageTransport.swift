@@ -70,7 +70,7 @@ nonisolated final class PluginImageTransport: Sendable {
         charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&'*+-.^_`|~"
     )
 
-    init(configuration: URLSessionConfiguration = .ephemeral, trust: PluginTrustStore? = nil, userAgent: WebKitUserAgent = WebKitUserAgent()) {
+    init(configuration: URLSessionConfiguration = .ephemeral, trust: PluginTrustStore? = nil, userAgent: WebKitUserAgent) {
         let config: URLSessionConfiguration
         if let copied = configuration.copy() as? URLSessionConfiguration {
             config = copied
@@ -202,7 +202,7 @@ nonisolated final class PluginImageTransport: Sendable {
         for (key, val) in validatedHeaders {
             request.setValue(val, forHTTPHeaderField: key)
         }
-        let wireRequest = await userAgent.withUserAgent(request)
+        let wireRequest = try await userAgent.withUserAgent(request)
 
         let delegate = RedirectDelegate(
             originalOrigin: initialOrigin,

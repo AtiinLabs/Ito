@@ -149,6 +149,9 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         let continuation: CheckedContinuation<WebviewResponse, Error>
         let deadline: Task<Void, Never>
         var navigation: WKNavigation?
+        /// Whether the plugin's navigation has committed. Until it does, its redirects are its own, and the
+        /// navigation guard does not apply to them.
+        var committed = false
     }
     private var pendingLoad: PendingLoad?
     /// The first line that makes a script an async function body (see `executeJs`).
@@ -209,6 +212,8 @@ class WebviewManager: NSObject, WKNavigationDelegate {
     /// Test hook: called with the reply to each `itoShowPage` message.
     var onShowPageDecision: ((Bool) -> Void)?
     var onPolicyEvaluation: (() -> Void)?
+    /// Test hook: called with the URL of each main-frame navigation the page made that the guard refused.
+    var onNavigationRefused: ((URL) -> Void)?
 #endif
 
     init(
@@ -260,7 +265,7 @@ class WebviewManager: NSObject, WKNavigationDelegate {
             // A page owned by an operation uses its source's website data for the current scope; the unbound page
             // keeps the app's default store.
             config.websiteDataStore = try authority.map { try websites.store(for: $0.context) } ?? .default()
-            let prefs = WKWebpagePreferences()
+            let prefs = WKWebpagePreferences.hostWebView()
             prefs.allowsContentJavaScript = true
             config.defaultWebpagePreferences = prefs
             // A weak proxy: the configuration's user content controller retains its handlers.
@@ -460,11 +465,16 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
-        // The page may not take the plugin's window to another site; see `PluginPageNavigation`.
-        if let target = navigationAction.request.url,
-           PluginPageNavigation.refuses(
-               target: target, isMainFrame: navigationAction.targetFrame?.isMainFrame ?? true, pageURL: pageURL) {
+        // The page may not take the plugin's window to another site once its own load has committed. Until then that
+        // load is provisional: its redirects, including moves to another domain, are the plugin's own, so no guard applies.
+        let pluginLoadProvisional = pendingLoad.map { !$0.committed } ?? false
+        let isMainFrame = navigationAction.targetFrame?.isMainFrame ?? true
+        if !pluginLoadProvisional, let target = navigationAction.request.url,
+           PluginPageNavigation.refuses(target: target, isMainFrame: isMainFrame, pageURL: pageURL) {
             decisionHandler(.cancel)
+            #if DEBUG
+            onNavigationRefused?(target)
+            #endif
             return
         }
         // A navigation of an operation's page is a network request: it is decided against the live policy, and
@@ -490,7 +500,10 @@ class WebviewManager: NSObject, WKNavigationDelegate {
         // A committed navigation replaces the document, so scripts still awaiting the old one can't
         // finish. Same-document changes (pushState, fragment) don't commit and keep their scripts.
         invalidatePendingScripts(with: URLError(.cancelled))
-        if loadID(for: navigation) != nil { pageURL = webView.url ?? pageURL }
+        if loadID(for: navigation) != nil {
+            pageURL = webView.url ?? pageURL
+            pendingLoad?.committed = true
+        }
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

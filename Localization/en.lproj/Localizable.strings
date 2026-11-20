@@ -1015,6 +1015,9 @@ Downloaded versions sheet: the source's identifier of a translation group. The p
 
 "Ito could not open the device Settings app. Please try again." = "Ito could not open the device Settings app. Please try again.";
 
+/* Error: the app could not read WebKit's user agent, so a site's verification cannot finish. Shown where the source's screen reports a failed load. */
+"Ito couldn't read the browser identity that site verification needs. Try again in a moment." = "Ito couldn't read the browser identity that site verification needs. Try again in a moment.";
+
 "Ito is still preparing your library. Try again in a moment." = "Ito is still preparing your library. Try again in a moment.";
 
 "Ito keeps the token in the Keychain on this device. Revoke it on %@ when you no longer need it." = "Ito keeps the token in the Keychain on this device. Revoke it on %@ when you no longer need it.";

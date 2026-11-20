@@ -12,11 +12,16 @@ struct ReaderRouteView: View {
     @StateObject private var coordinator: ReaderRouteCoordinator
     @Environment(\.scenePhase) private var scenePhase
     /// Offers Sign In when a chapter's load needs the source's website; see `ReaderView`.
+    private let pluginID: String
     private let signIn: PluginSignInSheets
+    @State private var showHandoffSignIn = false
+    /// The failed hand-off the sign-in sheet was opened for; closing the sheet tries it again.
+    @State private var handoffSignInRequestID: UUID?
 
     /// `coordinator` is evaluated once, when SwiftUI first creates this view's state.
-    init(coordinator: @autoclosure @escaping () -> ReaderRouteCoordinator, signIn: PluginSignInSheets) {
+    init(coordinator: @autoclosure @escaping () -> ReaderRouteCoordinator, pluginID: String, signIn: PluginSignInSheets) {
         _coordinator = StateObject(wrappedValue: coordinator())
+        self.pluginID = pluginID
         self.signIn = signIn
     }
 
@@ -53,6 +58,13 @@ struct ReaderRouteView: View {
             Button("Cancel", role: .cancel) { coordinator.cancelHandoff() }
         } message: { consent in
             Text(consent.message)
+        }
+        .sheet(isPresented: $showHandoffSignIn, onDismiss: {
+            if let requestID = handoffSignInRequestID { coordinator.retryHandoff(requestID: requestID) }
+        }) {
+            if let target = signIn.target(pluginID: pluginID) {
+                signIn.sheet(for: target)
+            }
         }
     }
 
@@ -123,6 +135,12 @@ struct ReaderRouteView: View {
             statusCard {
                 Text(message(for: failure, direction: request.event.direction))
                 HStack(spacing: 16) {
+                    if failure == .needsSignIn, signIn.target(pluginID: pluginID) != nil {
+                        Button("Sign In") {
+                            handoffSignInRequestID = request.id
+                            showHandoffSignIn = true
+                        }
+                    }
                     Button("Try Again") { coordinator.retryHandoff(requestID: request.id) }
                     Button("Cancel") { coordinator.cancelHandoff() }
                 }
@@ -161,6 +179,8 @@ struct ReaderRouteView: View {
             OfflineReadError.protectedDataUnavailable.errorDescription ?? ""
         case .localCopyUnavailable:
             OfflineReadError.localCopyUnavailable.errorDescription ?? ""
+        case .needsSignIn:
+            String(localized: "Sign in to this source to continue.")
         case .loadFailed, .presentationFailed:
             direction == .next
                 ? String(localized: "Couldn't open the next chapter.", comment: "Reader: the next chapter, made for the other reader, could not be opened; the current chapter stays")

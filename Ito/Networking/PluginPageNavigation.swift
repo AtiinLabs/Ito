@@ -5,7 +5,8 @@ import Foundation
 /// verification or chapter needs. Such a navigation is refused; the page stays where it is.
 ///
 /// Subframes are not refused, so a site's embedded challenge keeps working. Non-web targets (`about:`,
-/// `blob:`, `data:`) and same-site navigations, including same-site redirects, are allowed.
+/// `blob:`, `data:`) and same-site navigations, including same-site redirects, are allowed. The plugin's own load
+/// is not judged here: the caller applies the decision only once that load has committed.
 nonisolated enum PluginPageNavigation {
     /// Whether a main-frame navigation to `target` leaves the site of `pageURL`, the page the plugin loaded.
     static func refuses(target: URL, isMainFrame: Bool, pageURL: URL?) -> Bool {
@@ -21,13 +22,22 @@ nonisolated enum PluginPageNavigation {
     }
 
     /// Second-level labels that, under a two-letter country code, form a public suffix of their own
-    /// (`example.co.uk` belongs to `example.co.uk`, not `co.uk`). This covers the common cases, not the full list.
+    /// (`example.co.uk` belongs to `example.co.uk`, not `co.uk`).
+    ///
+    /// Limits. This is a small built-in list, not the Public Suffix List, so:
+    /// - Hosts under a shared-hosting suffix that is not listed (`*.github.io`, `*.pages.dev`, `*.blogspot.com`,
+    ///   `*.me.uk`) count as one site with each other, so a page may move between two tenants of one such host.
+    /// - A two-label name whose first label is a listed second-level label, under a two-letter country code, is
+    ///   its own site, separate from its `www` host: `go.to` and `www.go.to` have different keys, so a move between
+    ///   them is refused. The plugin can still load either host itself.
+    /// The first limit lets a page move between tenants that share a host; the second refuses a page-initiated move
+    /// between two hosts of one owner. Neither touches the plugin's own loads.
     private static let publicSecondLevelLabels: Set<String> = [
         "ac", "co", "com", "edu", "gov", "go", "gob", "net", "nic", "ne", "or", "org"
     ]
 
     /// The registrable domain of `host`, lowercased: its last two labels, or three under a country-code
-    /// second-level suffix such as `co.jp`. An IP address is its own site.
+    /// second-level suffix such as `co.jp`. An IP address is its own site. See `publicSecondLevelLabels` for limits.
     static func siteKey(for host: String) -> String {
         let host = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
         let labels = host.split(separator: ".").map(String.init)
