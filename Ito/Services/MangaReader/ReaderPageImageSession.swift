@@ -84,6 +84,11 @@ final class ReaderImageObservation {
 
 /// The page images of one reader: one request per URL and headers, shared by the visible page
 /// and prefetch, and a failure that stays until Try Again.
+///
+/// A request has at most one transfer. Its purpose is fixed when that transfer starts and is never upgraded:
+/// a visible reader that joins a speculative transfer keeps it under the speculative authority and raises only
+/// its Nuke priority. If that transfer is refused or fails while the reader still waits, the reader gets one
+/// fresh transfer under foreground authority; that fallback's failure is terminal until Try Again.
 @MainActor
 final class ReaderPageImageSession {
     private struct Entry {
@@ -93,7 +98,8 @@ final class ReaderPageImageSession {
         var revision: UInt64 = 0
         var leases: [UUID: ReaderImageConsumer] = [:]
         var observers: [UUID: @MainActor (ReaderPageImageState) -> Void] = [:]
-        var cancelTask: (() -> Void)?
+        /// The transfer in flight for this request, if any. Its purpose is `taskIsPrefetch`, as it started.
+        var task: ImageTask?
         var generation: UInt64 = 0
         var taskIsPrefetch = false
         var isPrefetchQueued = false
@@ -193,16 +199,11 @@ final class ReaderPageImageSession {
             prefetchOrder.removeAll { $0 == key }
         }
         entries[key] = entry
-        if consumer == .visible, entry.taskIsPrefetch, let cancelTask = entry.cancelTask {
-            // A foreground read never rides on speculative work: that transfer was admitted, and may be refused,
-            // as a prefetch. Replace it with a task started under foreground authority.
-            entry.generation &+= 1
-            runningPrefetches = max(0, runningPrefetches - 1)
-            cancelTask()
-            entry.cancelTask = nil
-            entry.taskIsPrefetch = false
-            entry.phase = .idle
-            entries[key] = entry
+        if consumer == .visible, entry.task != nil {
+            // The page's transfer is already under way, so the reader joins it: no second request and no
+            // cancellation. A speculative transfer keeps its speculative authority; `fail` gives this reader one
+            // foreground attempt if that transfer is refused while this lease remains.
+            updatePriority(for: key)
         }
         if case .idle = entry.phase {
             switch consumer {
@@ -224,16 +225,18 @@ final class ReaderPageImageSession {
             prefetchOrder.removeAll { $0 == lease.key }
             entry.isPrefetchQueued = false
         }
-        if entry.leases.isEmpty, let cancelTask = entry.cancelTask {
+        if entry.leases.isEmpty, let task = entry.task {
             entry.generation &+= 1
             if entry.taskIsPrefetch { runningPrefetches = max(0, runningPrefetches - 1) }
-            cancelTask()
-            entry.cancelTask = nil
+            task.cancel()
+            entry.task = nil
             entry.taskIsPrefetch = false
             if case .loading = entry.phase { entry.phase = .idle }
             shouldPublish = true
         }
         entries[lease.key] = entry
+        // A transfer that outlives its last visible reader keeps running for its prefetch lease, at low priority.
+        if consumer == .visible { updatePriority(for: lease.key) }
         if shouldPublish { publish(lease.key) }
         startQueuedPrefetches()
     }
@@ -287,7 +290,7 @@ final class ReaderPageImageSession {
             guard var entry = entries.removeValue(forKey: key) else { continue }
             entry.generation &+= 1
             if entry.taskIsPrefetch { runningPrefetches = max(0, runningPrefetches - 1) }
-            entry.cancelTask?()
+            entry.task?.cancel()
             prefetchOrder.removeAll { $0 == key }
         }
         startQueuedPrefetches()
@@ -297,8 +300,8 @@ final class ReaderPageImageSession {
         for key in Array(entries.keys) {
             guard var entry = entries[key] else { continue }
             entry.generation &+= 1
-            entry.cancelTask?()
-            entry.cancelTask = nil
+            entry.task?.cancel()
+            entry.task = nil
             entry.taskIsPrefetch = false
             entry.leases.removeAll()
             entry.observers.removeAll()
@@ -312,8 +315,15 @@ final class ReaderPageImageSession {
         runningPrefetches = 0
     }
 
+    /// Sets the transfer's Nuke priority from its readers: a visible reader raises it, and work that only
+    /// speculative readers want is lowered. The authority of the transfer is not changed.
+    private func updatePriority(for key: ReaderPageImageKey) {
+        guard let entry = entries[key], let task = entry.task else { return }
+        task.priority = entry.leases.values.contains(.visible) ? .high : .low
+    }
+
     private func start(_ key: ReaderPageImageKey) {
-        guard !isSourceRevoked, var entry = entries[key], entry.cancelTask == nil, let request = entry.request else { return }
+        guard !isSourceRevoked, var entry = entries[key], entry.task == nil, let request = entry.request else { return }
         if case .failed = entry.phase { return }
         entry.isPrefetchQueued = false
         prefetchOrder.removeAll { $0 == key }
@@ -328,7 +338,8 @@ final class ReaderPageImageSession {
         // otherwise it is a prefetch. The mark is in memory only; it never changes the key or the cache identity.
         let countsAsPrefetch = !entry.leases.values.contains(where: { $0 == .visible })
         let purpose: ImageRequestPurpose = countsAsPrefetch ? .prefetch : .foregroundReading
-        let imageRequest = ImageRequest(urlRequest: boundRequest(request, purpose: purpose))
+        var imageRequest = ImageRequest(urlRequest: boundRequest(request, purpose: purpose))
+        imageRequest.priority = countsAsPrefetch ? .low : .high
         // An image still in memory needs no request: a page shown again appears at once, and a
         // prefetch that precedes the page's view does not turn that into a spinner.
         if let image = pipeline.cache.cachedImage(for: imageRequest, caches: [.memory])?.image {
@@ -346,7 +357,7 @@ final class ReaderPageImageSession {
         entry.taskIsPrefetch = countsAsPrefetch
         entries[key] = entry
         let task = pipeline.imageTask(with: imageRequest)
-        entries[key]?.cancelTask = { task.cancel() }
+        entries[key]?.task = task
         publish(key)
         Task { [weak self] in
             do {
@@ -361,7 +372,7 @@ final class ReaderPageImageSession {
     private func complete(_ key: ReaderPageImageKey, generation: UInt64, response: ImageResponse) {
         guard !isSourceRevoked, var entry = entries[key], entry.generation == generation else { startQueuedPrefetches(); return }
         if entry.taskIsPrefetch { runningPrefetches = max(0, runningPrefetches - 1) }
-        entry.cancelTask = nil
+        entry.task = nil
         entry.taskIsPrefetch = false
         let image = response.image
         let size = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
@@ -378,11 +389,23 @@ final class ReaderPageImageSession {
 
     private func fail(_ key: ReaderPageImageKey, generation: UInt64) {
         guard var entry = entries[key], entry.generation == generation else { startQueuedPrefetches(); return }
-        if entry.taskIsPrefetch { runningPrefetches = max(0, runningPrefetches - 1) }
-        entry.cancelTask = nil
+        let wasSpeculative = entry.taskIsPrefetch
+        if wasSpeculative { runningPrefetches = max(0, runningPrefetches - 1) }
+        entry.task = nil
         entry.taskIsPrefetch = false
-        // A refused or failed prefetch is silent: only a page someone is looking at shows a failure, and the
-        // entry stays startable so a later foreground read is admitted on its own authority.
+        // A speculative transfer that was refused or failed while a reader still waits for the page is not the
+        // page's answer. That reader gets one attempt under foreground authority, derived from the same frozen
+        // source scope. Revocation is checked now: a changed source never starts the fallback. A transfer ended
+        // by release, deactivation or retention already failed the generation check above.
+        if wasSpeculative, entry.leases.values.contains(.visible), !isSourceRevoked {
+            entry.phase = .idle
+            entries[key] = entry
+            start(key)
+            startQueuedPrefetches()
+            return
+        }
+        // A foreground failure is terminal until an explicit retry. A speculative one with no reader is silent,
+        // and the entry stays startable so a later foreground read is admitted on its own authority.
         if entry.leases.values.contains(.visible) { entry.phase = .failed } else { entry.phase = .idle }
         entries[key] = entry
         publish(key)
@@ -390,7 +413,7 @@ final class ReaderPageImageSession {
     }
 
     private func enqueuePrefetch(_ key: ReaderPageImageKey) {
-        guard var entry = entries[key], entry.cancelTask == nil else { return }
+        guard var entry = entries[key], entry.task == nil else { return }
         if case .failed = entry.phase { return }
         guard !entry.isPrefetchQueued else { return }
         entry.isPrefetchQueued = true
