@@ -349,31 +349,37 @@ final class ReaderPageImageSessionTests: XCTestCase {
     func testAJoinedSpeculativeTransferKeepsItsSlotUntilItEnds() async throws {
         let loader = ScriptedReaderLoader()
         let session = ReaderPageImageSession(pipeline: scriptedPipeline(loader))
-        let descriptors = (0..<3).map { scriptedDescriptor("slot-joined-\($0)") }
+        let descriptors = (0..<4).map { scriptedDescriptor("slot-joined-\($0)") }
         let twoStarted = expectation(description: "two prefetches start; the third waits for a slot")
         loader.onStart = { count in if count == 2 { twoStarted.fulfill() } }
         session.setPrefetch(descriptors)
         await fulfillment(of: [twoStarted], timeout: 5)
 
-        // The reader joins page 0's speculative transfer. It still holds a prefetch slot, so page 2 keeps waiting.
+        // The reader joins page 0's speculative transfer, which keeps its prefetch slot.
         let visibleLease = session.acquire(descriptors[0], consumer: .visible)
-        XCTAssertEqual(loader.transferCount, 2, "Joining neither adds a request nor frees a prefetch slot")
 
-        // Page 1 ends and frees its slot: page 2 starts at once, beside the reader's still-running page 0.
+        // Page 1 ends and frees one slot: page 2 takes it. Page 3 must still wait, because page 0 holds the other
+        // slot. Had joining released page 0's slot, page 3 would start in the same turn as page 2.
         let thirdStarted = expectation(description: "the third prefetch takes the freed slot")
         loader.onStart = { count in if count == 3 { thirdStarted.fulfill() } }
         loader.finish(at: loader.index(of: try XCTUnwrap(descriptors[1].request.url)), error: URLError(.networkConnectionLost))
         await fulfillment(of: [thirdStarted], timeout: 5)
         XCTAssertEqual(loader.purpose(at: 2), .prefetch)
+        if case .idle = session.state(for: descriptors[3].key).phase {} else {
+            XCTFail("A joined preload must keep its slot: page 3 may not start while page 0 still runs.")
+        }
+
+        let fourthStarted = expectation(description: "page 3 starts once page 0's transfer ends")
+        loader.onStart = { count in if count == 4 { fourthStarted.fulfill() } }
 
         let ready = expectation(description: "page 0 is ready from its original transfer")
         let readyObservation = session.observe(descriptors[0].key) { state in
             if case .ready = state.phase { ready.fulfill() }
         }
         loader.respond(at: loader.index(of: try XCTUnwrap(descriptors[0].request.url)))
-        await fulfillment(of: [ready], timeout: 5)
+        await fulfillment(of: [ready, fourthStarted], timeout: 5)
         XCTAssertEqual(loader.cancelledIndices, [])
-        XCTAssertEqual(loader.transferCount, 3)
+        XCTAssertEqual(loader.transferCount, 4)
         readyObservation.cancel()
         session.release(visibleLease)
         session.deactivate()
@@ -480,13 +486,13 @@ final class ReaderPageImageSessionTests: XCTestCase {
         path.set(NetworkPathSnapshot(status: .unsatisfied))
         await fulfillment(of: [terminal], timeout: 5)
         XCTAssertEqual(failures, 1, "Only the terminal failure is published")
-        XCTAssertEqual(loader.transferCount, 1, "Both attempts are refused before any byte is requested")
+        XCTAssertEqual(loader.transferCount, 1, "Only the speculative attempt reached the loader; the fallback was refused")
         observation.cancel()
         session.release(lease)
         session.deactivate()
     }
 
-    func testARevokedSourceNeverFallsBackOrBecomesReady() async throws {
+    func testARevokedSourceNeverBecomesReady() async throws {
         let loader = ScriptedReaderLoader()
         let (session, _, contexts) = makeSourceScenario(loader)
         let descriptor = scriptedDescriptor("revoked")
