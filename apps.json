@@ -23,6 +23,16 @@
       },
       "versions": [
         {
+          "version": "1.5.0",
+          "buildVersion": "258",
+          "date": "2026-11-21T09:58:20Z",
+          "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/v1.5.0/Ito-1.5.0-unsigned.ipa",
+          "size": 15137079,
+          "sha256": "900ebbb088e9030445bf34f1e82b650ecd9eab1958642637f478c87986828c35",
+          "localizedDescription": "Ito 1.5.0 (build 258). Unsigned Ito 1.5.0 build. AltStore and SideStore re-sign it with the user's Apple account.",
+          "minOSVersion": "15.4"
+        },
+        {
           "version": "1.4.0",
           "buildVersion": "200",
           "date": "2026-11-02T19:42:38Z",
@@ -53,13 +63,13 @@
           "minOSVersion": "15.4"
         }
       ],
-      "version": "1.4.0",
-      "buildVersion": "200",
-      "date": "2026-11-02T19:42:38Z",
-      "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/v1.4.0/Ito-1.4.0-unsigned.ipa",
-      "size": 13053322,
+      "version": "1.5.0",
+      "buildVersion": "258",
+      "date": "2026-11-21T09:58:20Z",
+      "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/v1.5.0/Ito-1.5.0-unsigned.ipa",
+      "size": 15137079,
       "minOSVersion": "15.4",
-      "versionDescription": "Ito 1.4.0 (build 200). Unsigned Ito 1.4.0 build. AltStore and SideStore re-sign it with the user's Apple account."
+      "versionDescription": "Ito 1.5.0 (build 258). Unsigned Ito 1.5.0 build. AltStore and SideStore re-sign it with the user's Apple account."
     }
   ],
   "news": []
