@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import Nuke
+import ito_runner
 import XCTest
 @testable import Ito
 
@@ -313,6 +314,430 @@ final class ReaderPageImageSessionTests: XCTestCase {
         session.release(second)
         session.deactivate()
     }
+
+    func testAVisibleReaderJoinsARunningPrefetchWithoutANewRequest() async throws {
+        let loader = ScriptedReaderLoader()
+        let session = ReaderPageImageSession(pipeline: scriptedPipeline(loader))
+        let descriptor = scriptedDescriptor("joined")
+        let started = expectation(description: "the prefetch transfer starts")
+        loader.onStart = { _ in started.fulfill() }
+        session.setPrefetch([descriptor])
+        await fulfillment(of: [started], timeout: 5)
+
+        // Half of the image arrives while the page is only a prefetch.
+        let png = ScriptedReaderLoader.pngData()
+        loader.receive(png.prefix(png.count / 2), at: 0)
+        let ready = expectation(description: "the joined page is ready")
+        let observation = session.observe(descriptor.key) { state in
+            if case .ready = state.phase { ready.fulfill() }
+        }
+        let lease = session.acquire(descriptor, consumer: .visible)
+        XCTAssertEqual(loader.transferCount, 1, "A visible reader joins the running transfer instead of making a second request")
+        XCTAssertEqual(loader.cancelledIndices, [])
+
+        loader.receive(png.dropFirst(png.count / 2), at: 0)
+        loader.finish(at: 0)
+        await fulfillment(of: [ready], timeout: 5)
+        XCTAssertEqual(loader.transferCount, 1)
+        XCTAssertEqual(loader.purpose(at: 0), .prefetch, "The transfer keeps the purpose it started with")
+        XCTAssertEqual(session.state(for: descriptor.key).pixelSize, CGSize(width: 300, height: 900))
+        observation.cancel()
+        session.release(lease)
+        session.deactivate()
+    }
+
+    func testAJoinedSpeculativeTransferKeepsItsSlotUntilItEnds() async throws {
+        let loader = ScriptedReaderLoader()
+        let session = ReaderPageImageSession(pipeline: scriptedPipeline(loader))
+        let descriptors = (0..<3).map { scriptedDescriptor("slot-joined-\($0)") }
+        let twoStarted = expectation(description: "two prefetches start; the third waits for a slot")
+        loader.onStart = { count in if count == 2 { twoStarted.fulfill() } }
+        session.setPrefetch(descriptors)
+        await fulfillment(of: [twoStarted], timeout: 5)
+
+        // The reader joins page 0's speculative transfer. It still holds a prefetch slot, so page 2 keeps waiting.
+        let visibleLease = session.acquire(descriptors[0], consumer: .visible)
+        XCTAssertEqual(loader.transferCount, 2, "Joining neither adds a request nor frees a prefetch slot")
+
+        // Page 1 ends and frees its slot: page 2 starts at once, beside the reader's still-running page 0.
+        let thirdStarted = expectation(description: "the third prefetch takes the freed slot")
+        loader.onStart = { count in if count == 3 { thirdStarted.fulfill() } }
+        loader.finish(at: loader.index(of: try XCTUnwrap(descriptors[1].request.url)), error: URLError(.networkConnectionLost))
+        await fulfillment(of: [thirdStarted], timeout: 5)
+        XCTAssertEqual(loader.purpose(at: 2), .prefetch)
+
+        let ready = expectation(description: "page 0 is ready from its original transfer")
+        let readyObservation = session.observe(descriptors[0].key) { state in
+            if case .ready = state.phase { ready.fulfill() }
+        }
+        loader.respond(at: loader.index(of: try XCTUnwrap(descriptors[0].request.url)))
+        await fulfillment(of: [ready], timeout: 5)
+        XCTAssertEqual(loader.cancelledIndices, [])
+        XCTAssertEqual(loader.transferCount, 3)
+        readyObservation.cancel()
+        session.release(visibleLease)
+        session.deactivate()
+    }
+
+    func testAFailedSpeculativeTransferGivesTheWaitingReaderOneForegroundAttempt() async throws {
+        let loader = ScriptedReaderLoader()
+        let session = ReaderPageImageSession(pipeline: scriptedPipeline(loader))
+        let descriptor = scriptedDescriptor("fallback")
+        let speculativeStart = expectation(description: "the speculative transfer starts")
+        let fallbackStart = expectation(description: "the one foreground attempt starts")
+        loader.onStart = { count in
+            if count == 1 { speculativeStart.fulfill() } else if count == 2 { fallbackStart.fulfill() }
+        }
+        var failures = 0
+        let terminal = expectation(description: "the fallback's failure is terminal")
+        let observation = session.observe(descriptor.key) { state in
+            if case .failed = state.phase {
+                failures += 1
+                terminal.fulfill()
+            }
+        }
+
+        session.setPrefetch([descriptor])
+        await fulfillment(of: [speculativeStart], timeout: 5)
+        XCTAssertEqual(loader.purpose(at: 0), .prefetch)
+        let lease = session.acquire(descriptor, consumer: .visible)
+        XCTAssertEqual(loader.transferCount, 1, "Joining the speculative transfer makes no request")
+
+        loader.finish(at: 0, error: URLError(.cannotConnectToHost))
+        await fulfillment(of: [fallbackStart], timeout: 5)
+        XCTAssertEqual(failures, 0, "The refused speculative attempt is not published as a failure")
+        XCTAssertEqual(loader.purpose(at: 1), .foregroundReading)
+
+        loader.finish(at: 1, error: URLError(.cannotConnectToHost))
+        await fulfillment(of: [terminal], timeout: 5)
+        XCTAssertEqual(failures, 1)
+        XCTAssertEqual(loader.transferCount, 2, "One fallback only: its own failure starts no further attempt")
+        observation.cancel()
+        session.release(lease)
+        session.deactivate()
+    }
+
+    func testAPolicyChangeToAnExpensivePathCancelsTheSpeculativeTransferAndTheReaderIsServedInTheForeground() async throws {
+        let loader = ScriptedReaderLoader()
+        let (session, path, _) = makeSourceScenario(loader)
+        let descriptor = scriptedDescriptor("flip")
+        let speculativeStart = expectation(description: "the speculative transfer starts")
+        let fallbackStart = expectation(description: "the foreground attempt starts")
+        loader.onStart = { count in
+            if count == 1 { speculativeStart.fulfill() } else if count == 2 { fallbackStart.fulfill() }
+        }
+        let cancelled = expectation(description: "the speculative transfer is cancelled")
+        loader.onCancel = { index in if index == 0 { cancelled.fulfill() } }
+        var failures = 0
+        let ready = expectation(description: "the foreground attempt is ready")
+        let observation = session.observe(descriptor.key) { state in
+            switch state.phase {
+            case .ready: ready.fulfill()
+            case .failed: failures += 1
+            default: break
+            }
+        }
+
+        session.setPrefetch([descriptor])
+        await fulfillment(of: [speculativeStart], timeout: 5)
+        XCTAssertEqual(loader.purpose(at: 0), .prefetch)
+        let lease = session.acquire(descriptor, consumer: .visible)
+
+        // Metered now: speculative work is refused, but a person reading the page is not.
+        path.set(NetworkPathSnapshot(status: .satisfied, isExpensive: true))
+        await fulfillment(of: [cancelled, fallbackStart], timeout: 5)
+        XCTAssertEqual(loader.purpose(at: 1), .foregroundReading)
+        XCTAssertEqual(failures, 0)
+
+        loader.respond(at: 1)
+        await fulfillment(of: [ready], timeout: 5)
+        XCTAssertEqual(loader.transferCount, 2)
+        observation.cancel()
+        session.release(lease)
+        session.deactivate()
+    }
+
+    func testWhenBothAttemptsAreRefusedTheReaderFailsTerminallyWithoutATransfer() async throws {
+        let loader = ScriptedReaderLoader()
+        let (session, path, _) = makeSourceScenario(loader)
+        let descriptor = scriptedDescriptor("offline")
+        let speculativeStart = expectation(description: "the speculative transfer starts")
+        loader.onStart = { count in if count == 1 { speculativeStart.fulfill() } }
+        var failures = 0
+        let terminal = expectation(description: "the reader fails")
+        let observation = session.observe(descriptor.key) { state in
+            if case .failed = state.phase {
+                failures += 1
+                terminal.fulfill()
+            }
+        }
+
+        session.setPrefetch([descriptor])
+        await fulfillment(of: [speculativeStart], timeout: 5)
+        let lease = session.acquire(descriptor, consumer: .visible)
+
+        // No connection: the speculative attempt is refused, and so is the foreground attempt that follows it.
+        path.set(NetworkPathSnapshot(status: .unsatisfied))
+        await fulfillment(of: [terminal], timeout: 5)
+        XCTAssertEqual(failures, 1, "Only the terminal failure is published")
+        XCTAssertEqual(loader.transferCount, 1, "Both attempts are refused before any byte is requested")
+        observation.cancel()
+        session.release(lease)
+        session.deactivate()
+    }
+
+    func testARevokedSourceNeverFallsBackOrBecomesReady() async throws {
+        let loader = ScriptedReaderLoader()
+        let (session, _, contexts) = makeSourceScenario(loader)
+        let descriptor = scriptedDescriptor("revoked")
+        let speculativeStart = expectation(description: "the speculative transfer starts")
+        loader.onStart = { count in if count == 1 { speculativeStart.fulfill() } }
+        let cancelled = expectation(description: "the speculative transfer is cancelled")
+        loader.onCancel = { index in if index == 0 { cancelled.fulfill() } }
+        var sawReady = false
+        let observation = session.observe(descriptor.key) { state in
+            if case .ready = state.phase { sawReady = true }
+        }
+
+        session.setPrefetch([descriptor])
+        await fulfillment(of: [speculativeStart], timeout: 5)
+        let lease = session.acquire(descriptor, consumer: .visible)
+
+        // Revocation deactivates the session (observers are dropped), cancelling the speculative transfer.
+        contexts.replaceEpochs(["A": String(repeating: "b", count: 32)])
+        await fulfillment(of: [cancelled], timeout: 5)
+        XCTAssertEqual(loader.transferCount, 1, "A revoked source starts no foreground attempt")
+        XCTAssertFalse(sawReady)
+        if case .ready = session.state(for: descriptor.key).phase {
+            XCTFail("A revoked source's page must not become ready")
+        }
+        observation.cancel()
+        session.release(lease)
+        session.deactivate()
+    }
+
+    func testReleasingASpeculativeTransferFreesItsSlotForTheNextPage() async throws {
+        let loader = ScriptedReaderLoader()
+        let session = ReaderPageImageSession(pipeline: scriptedPipeline(loader))
+        let descriptors = (0..<3).map { scriptedDescriptor("slot-\($0)") }
+        let twoStarted = expectation(description: "two prefetches start")
+        loader.onStart = { count in if count == 2 { twoStarted.fulfill() } }
+        session.setPrefetch(descriptors)
+        await fulfillment(of: [twoStarted], timeout: 5)
+
+        let thirdStarted = expectation(description: "the queued page takes the released slot")
+        loader.onStart = { count in if count == 3 { thirdStarted.fulfill() } }
+        session.setPrefetch(Array(descriptors[1...]))
+        await fulfillment(of: [thirdStarted], timeout: 5)
+        XCTAssertEqual(loader.cancelledURLs, [descriptors[0].request.url].compactMap { $0 })
+        XCTAssertEqual(loader.purpose(at: 2), .prefetch)
+        XCTAssertEqual(loader.transferCount, 3)
+        session.deactivate()
+    }
+
+    func testDeactivatingAVisibleSpeculativeTransferLeavesNoFallbackAndNoLeakedSlot() async throws {
+        let loader = ScriptedReaderLoader()
+        let session = ReaderPageImageSession(pipeline: scriptedPipeline(loader))
+        let descriptors = (0..<4).map { scriptedDescriptor("late-\($0)") }
+        let twoStarted = expectation(description: "two prefetches start")
+        loader.onStart = { count in if count == 2 { twoStarted.fulfill() } }
+        session.setPrefetch(Array(descriptors[0...1]))
+        await fulfillment(of: [twoStarted], timeout: 5)
+        let lease = session.acquire(descriptors[0], consumer: .visible)
+
+        let cancelled = expectation(description: "both running transfers are cancelled")
+        cancelled.expectedFulfillmentCount = 2
+        loader.onCancel = { _ in cancelled.fulfill() }
+        session.deactivate()
+        await fulfillment(of: [cancelled], timeout: 5)
+        loader.onCancel = nil
+        // A result that arrives after cancellation is not published, and no fallback starts for it.
+        loader.finish(at: 0, error: URLError(.networkConnectionLost))
+        XCTAssertEqual(loader.transferCount, 2)
+        session.release(lease)
+
+        let freed = expectation(description: "the freed slots start the next two prefetches")
+        loader.onStart = { count in if count == 4 { freed.fulfill() } }
+        session.setPrefetch(Array(descriptors[2...3]))
+        await fulfillment(of: [freed], timeout: 5)
+        XCTAssertEqual(loader.purpose(at: 2), .prefetch)
+        XCTAssertEqual(loader.purpose(at: 3), .prefetch)
+        session.deactivate()
+    }
+
+    private func scriptedPipeline(_ loader: ScriptedReaderLoader) -> ImagePipeline {
+        ImagePipeline {
+            $0.dataLoader = loader
+            $0.imageCache = nil
+            $0.dataCache = nil
+        }
+    }
+
+    private func scriptedDescriptor(_ name: String) -> ReaderPageImageDescriptor {
+        ReaderPageImageDescriptor(
+            pageID: name,
+            request: URLRequest(url: URL(string: "https://scripted-reader.test/\(name).png")!)
+        )
+    }
+
+    /// A session bound to source "A" through the real plugin loader and policy: the path and the source epoch
+    /// are the test's to change.
+    private func makeSourceScenario(
+        _ loader: ScriptedReaderLoader
+    ) -> (ReaderPageImageSession, ManualNetworkPathObserver, PluginNetworkContexts) {
+        let path = ManualNetworkPathObserver(initial: .init(status: .satisfied))
+        let contexts = PluginNetworkContexts(
+            epochs: ["A": String(repeating: "a", count: 32)],
+            policy: NetworkPolicyCenter(path: path)
+        )
+        let plugin = PluginDataLoader(
+            configuration: .ephemeral,
+            contexts: contexts,
+            defaultLoader: loader,
+            runnerProvider: { _ in throw URLError(.unsupportedURL) }
+        )
+        let session = ReaderPageImageSession(
+            pipeline: ImagePipeline {
+                $0.dataLoader = plugin
+                $0.imageCache = nil
+                $0.dataCache = nil
+            },
+            sourceAuthority: ImageRequestSourceAuthority.capture(pluginID: "A", contexts: contexts)
+        )
+        return (session, path, contexts)
+    }
+}
+
+/// A data loader the test answers by hand. It records each transfer's purpose and the transfers it was asked to
+/// cancel, so a test can show which attempt reached the network and which did not.
+private final class ScriptedReaderLoader: AuthorizedDataLoading, @unchecked Sendable {
+    private struct Transfer {
+        let url: URL
+        let purpose: NetworkOperationContext.Purpose?
+        let receive: @Sendable (Data, URLResponse) -> Void
+        let complete: @Sendable (Error?) -> Void
+    }
+
+    private let lock = NSLock()
+    private var transfers: [Transfer] = []
+    private var cancelled: [Int] = []
+    private var startHandler: (@Sendable (Int) -> Void)?
+    private var cancelHandler: (@Sendable (Int) -> Void)?
+
+    /// Called with the number of transfers started so far, after the transfer is recorded.
+    var onStart: (@Sendable (Int) -> Void)? {
+        get { lock.withLock { startHandler } }
+        set { lock.withLock { startHandler = newValue } }
+    }
+
+    /// Called with the index of each transfer cancelled, once.
+    var onCancel: (@Sendable (Int) -> Void)? {
+        get { lock.withLock { cancelHandler } }
+        set { lock.withLock { cancelHandler = newValue } }
+    }
+
+    var transferCount: Int { lock.withLock { transfers.count } }
+    var cancelledIndices: [Int] { lock.withLock { cancelled } }
+
+    func purpose(at index: Int) -> NetworkOperationContext.Purpose? {
+        lock.withLock { transfers[index].purpose }
+    }
+
+    /// The index of the first transfer for `url`. Pages started together reach the loader in no fixed order, so
+    /// a test that starts several at once must address them by URL, not by start position.
+    func index(of url: URL) -> Int {
+        lock.withLock { transfers.firstIndex { $0.url == url } ?? -1 }
+    }
+
+    var cancelledURLs: [URL] {
+        lock.withLock { cancelled.map { transfers[$0].url } }
+    }
+
+    func loadData(
+        with request: URLRequest,
+        didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void,
+        completion: @escaping @Sendable (Error?) -> Void
+    ) -> any Cancellable {
+        record(request, purpose: ImageRequestPurpose.marked(on: request)?.networkPurpose, receive: didReceiveData, complete: completion)
+    }
+
+    func loadData(
+        with request: URLRequest,
+        authority: NetworkRequestAuthority,
+        didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void,
+        completion: @escaping @Sendable (Error?) -> Void
+    ) -> any Cancellable {
+        record(request, purpose: authority.context.purpose, receive: didReceiveData, complete: completion)
+    }
+
+    /// Delivers a chunk of the body of transfer `index`.
+    func receive(_ chunk: Data, at index: Int) {
+        let transfer = lock.withLock { transfers[index] }
+        transfer.receive(chunk, URLResponse(url: transfer.url, mimeType: "image/png", expectedContentLength: -1, textEncodingName: nil))
+    }
+
+    /// Ends transfer `index`, successfully or with `error`.
+    func finish(at index: Int, error: Error? = nil) {
+        let transfer = lock.withLock { transfers[index] }
+        transfer.complete(error)
+    }
+
+    /// Answers transfer `index` with a whole 300 × 900 PNG.
+    @MainActor
+    func respond(at index: Int) {
+        receive(Self.pngData(), at: index)
+        finish(at: index)
+    }
+
+    @MainActor
+    static func pngData() -> Data {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: CGSize(width: 300, height: 900), format: format).pngData { context in
+            UIColor.gray.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 300, height: 900))
+        }
+    }
+
+    private func record(
+        _ request: URLRequest,
+        purpose: NetworkOperationContext.Purpose?,
+        receive: @escaping @Sendable (Data, URLResponse) -> Void,
+        complete: @escaping @Sendable (Error?) -> Void
+    ) -> any Cancellable {
+        let (index, count, start) = lock.withLock { () -> (Int, Int, (@Sendable (Int) -> Void)?) in
+            transfers.append(Transfer(
+                url: request.url ?? URL(string: "about:blank")!,
+                purpose: purpose,
+                receive: receive,
+                complete: complete
+            ))
+            return (transfers.count - 1, transfers.count, startHandler)
+        }
+        start?(count)
+        return ScriptedTransferCancellation { [weak self] in self?.cancel(index) }
+    }
+
+    private func cancel(_ index: Int) {
+        let handler = lock.withLock { () -> (@Sendable (Int) -> Void)? in
+            guard !cancelled.contains(index) else { return nil }
+            cancelled.append(index)
+            return cancelHandler
+        }
+        handler?(index)
+    }
+}
+
+private final class ScriptedTransferCancellation: Cancellable, @unchecked Sendable {
+    private let action: @Sendable () -> Void
+
+    init(_ action: @escaping @Sendable () -> Void) {
+        self.action = action
+    }
+
+    func cancel() {
+        action()
+    }
 }
 
 private final class ReaderSessionURLProtocol: URLProtocol {
@@ -332,7 +757,7 @@ private final class ReaderSessionURLProtocol: URLProtocol {
     }
 
     static func register(host: String) {
-        lock.withLock { hosts.insert(host) }
+        _ = lock.withLock { hosts.insert(host) }
     }
 
     override static func canInit(with request: URLRequest) -> Bool {
