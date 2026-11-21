@@ -109,7 +109,7 @@ actor WebKitUserAgent {
         }
         deadline = Task {
             guard (try? await Task.sleep(nanoseconds: UInt64(Self.probeDeadline * 1_000_000_000))) != nil else { return }
-            await self.finishProbe(token, nil)
+            self.finishProbe(token, nil)
         }
     }
 

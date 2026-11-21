@@ -230,7 +230,7 @@ struct PluginSecretSettingsTests {
         #expect(try settingRowCount(database, key: secret.id) == 0)
         try await database.dbPool.write { db in
             for entry in AppPreferenceCatalogEntry.allCases {
-                try AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON).insert(db)
+                try AppPreference(canonicalDefaultOf: entry).insert(db)
             }
         }
         let backupURL = database.databaseURL.deletingLastPathComponent().appendingPathComponent("rich-controls.itobackup")

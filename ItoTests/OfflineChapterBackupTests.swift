@@ -25,7 +25,7 @@ struct OfflineChapterBackupTests {
         }
         try await fixture.database.dbPool.write { db in
             for entry in AppPreferenceCatalogEntry.allCases {
-                try AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON).insert(db)
+                try AppPreference(canonicalDefaultOf: entry).insert(db)
             }
         }
         let before = try await Self.downloadState(fixture.database.dbPool)

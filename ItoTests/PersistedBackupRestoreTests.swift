@@ -82,7 +82,7 @@ struct PersistedBackupRestoreTests {
         try await source.dbPool.write { db in
             // An installed app has every catalogued preference; export validates the complete catalog.
             for entry in AppPreferenceCatalogEntry.allCases {
-                try AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON).insert(db)
+                try AppPreference(canonicalDefaultOf: entry).insert(db)
             }
         }
         let library = LibraryManager(dbPool: source.dbPool)

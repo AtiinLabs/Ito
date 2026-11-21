@@ -72,7 +72,7 @@ struct LibraryOfflineMetadataBackupTests {
         let database = try TestDatabase()
         try await database.dbPool.write { db in
             for entry in AppPreferenceCatalogEntry.allCases {
-                try AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON).insert(db)
+                try AppPreference(canonicalDefaultOf: entry).insert(db)
             }
             try LibraryItem(
                 id: "series-1",

@@ -723,7 +723,7 @@ struct BackupRestoreOperationPhaseTests {
             try await database.dbPool.write { db in try local.insert(db) }
             let legacy = AppPreferenceCatalogEntry.allCases
                 .filter { $0 != .askBeforeSwitchingGroups }
-                .map { AppPreference(key: $0.rawValue, value: $0.canonicalDefaultJSON) }
+                .map { AppPreference(canonicalDefaultOf: $0) }
             let source = try TestDatabase()
             defer { source.cleanup() }
             try await source.dbPool.write { db in

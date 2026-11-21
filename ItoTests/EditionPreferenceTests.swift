@@ -219,7 +219,7 @@ struct EditionPreferenceTests {
         defer { database.cleanup() }
         try await database.dbPool.write { db in
             for entry in AppPreferenceCatalogEntry.allCases {
-                try AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON).insert(db)
+                try AppPreference(canonicalDefaultOf: entry).insert(db)
             }
             try SeriesEditionPreferenceRecord.save(.allUploads, for: Self.series, at: Self.date, in: db)
         }

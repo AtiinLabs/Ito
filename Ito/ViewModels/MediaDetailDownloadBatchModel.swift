@@ -619,7 +619,7 @@ final class MediaDetailDownloadBatchModel: ObservableObject {
         invalidateMoreOperation()
         guard showsControls, let scope = currentBatchScope() else { return Task {} }
         return Task { [weak self] in
-            await self?.ensurePreferenceRead()
+            _ = await self?.ensurePreferenceRead()
             guard let self, self.isCurrent(scope), self.showsControls else { return }
             if self.remembered == .unknown {
                 self.host?.presentBatchMessage(.editionChoiceReadFailed(reviewing: false))

@@ -76,10 +76,7 @@ struct BackupImporterCapabilityTests {
                 lastVerifiedAt: date.addingTimeInterval(10)
             ).insert(db)
             for entry in AppPreferenceCatalogEntry.allCases {
-                try AppPreference(
-                    key: entry.rawValue,
-                    value: entry.canonicalDefaultJSON
-                ).insert(db)
+                try AppPreference(canonicalDefaultOf: entry).insert(db)
             }
             try ReadProgressKeyRecord(
                 pluginId: "plugin",
@@ -651,10 +648,7 @@ struct BackupImporterCapabilityTests {
                 component: .scalarAppPreferences,
                 representation: .representedNonempty
             ).insert(db)
-            try AppPreference(
-                key: AppPreferenceCatalogEntry.appTheme.rawValue,
-                value: AppPreferenceCatalogEntry.appTheme.canonicalDefaultJSON
-            ).insert(db)
+            try AppPreference(canonicalDefaultOf: AppPreferenceCatalogEntry.appTheme).insert(db)
         }
 
         await #expect(
