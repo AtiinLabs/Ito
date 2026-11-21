@@ -22,6 +22,12 @@ public struct AppPreference: Codable, Identifiable, Hashable, Sendable, Fetchabl
         self.value = try JSONEncoder().encode(value)
     }
 
+    /// The row of a catalog preference holding its canonical default.
+    nonisolated public init(canonicalDefaultOf entry: AppPreferenceCatalogEntry) {
+        self.key = entry.rawValue
+        self.value = entry.canonicalDefaultJSON
+    }
+
     nonisolated public func decodedValue<Value>(for key: AppPreferenceKey<Value>) throws -> Value {
         guard self.key == key.name else {
             throw AppPreferenceError.keyMismatch(expected: key.name, actual: self.key)

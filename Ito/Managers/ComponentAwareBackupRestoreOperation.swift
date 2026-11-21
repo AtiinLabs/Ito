@@ -1726,7 +1726,7 @@ nonisolated struct ComponentAwareBackupRestoreOperation: Sendable {
         if plan.mode == .wipe, plan.backup.metadata != nil, !plan.backup.preferences.isEmpty {
             for entry in AppPreferenceCatalogEntry.allCases where entry.isOptionalInBackupCatalog {
                 guard try AppPreference.fetchOne(db, key: entry.rawValue) == nil else { continue }
-                try AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON).insert(db)
+                try AppPreference(canonicalDefaultOf: entry).insert(db)
             }
         }
     }

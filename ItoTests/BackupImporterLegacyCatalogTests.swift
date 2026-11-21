@@ -18,7 +18,7 @@ struct BackupImporterLegacyCatalogTests {
                 representation: .representedNonempty
             ).insert(db)
             for entry in keys {
-                try AppPreference(key: entry.rawValue, value: entry.canonicalDefaultJSON).insert(db)
+                try AppPreference(canonicalDefaultOf: entry).insert(db)
             }
             for preference in extra { try preference.insert(db) }
         }
