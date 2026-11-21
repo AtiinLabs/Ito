@@ -23,6 +23,16 @@
       },
       "versions": [
         {
+          "version": "1.5.1",
+          "buildVersion": "259",
+          "date": "2026-11-21T10:53:04Z",
+          "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/dev-259/Ito-1.5.1-dev.259-unsigned.ipa",
+          "size": 15136914,
+          "sha256": "463e06deec4b8b8939090ff6720c7b770ad4dbf4c94bc472daa57a2cce4ec18f",
+          "localizedDescription": "Ito 1.5.1-dev.259 (build 259). Automated unsigned dev build from main at ffb1238. This build may be unstable.",
+          "minOSVersion": "15.4"
+        },
+        {
           "version": "1.5.0",
           "buildVersion": "258",
           "date": "2026-11-21T09:26:17Z",
@@ -151,25 +161,15 @@
           "sha256": "fda508c8c30a14e2eb7102e35b79c446e5a91e0ad2abd8d5555a27807326ebb4",
           "localizedDescription": "Ito 1.5.0-dev.245 (build 245). Automated unsigned dev build from main at ca354e1. This build may be unstable.",
           "minOSVersion": "15.4"
-        },
-        {
-          "version": "1.5.0",
-          "buildVersion": "244",
-          "date": "2026-11-14T03:02:57Z",
-          "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/dev-244/Ito-1.5.0-dev.244-unsigned.ipa",
-          "size": 14112547,
-          "sha256": "6926b14f3f20fd086ea0ceccae2a27734e5dc61d532bcaa1c0f8f9a78d2e961c",
-          "localizedDescription": "Ito 1.5.0-dev.244 (build 244). Automated unsigned dev build from main at a8c9600. This build may be unstable.",
-          "minOSVersion": "15.4"
         }
       ],
-      "version": "1.5.0",
-      "buildVersion": "258",
-      "date": "2026-11-21T09:26:17Z",
-      "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/dev-258/Ito-1.5.0-dev.258-unsigned.ipa",
-      "size": 15136992,
+      "version": "1.5.1",
+      "buildVersion": "259",
+      "date": "2026-11-21T10:53:04Z",
+      "downloadURL": "https://github.com/AtiinLabs/Ito/releases/download/dev-259/Ito-1.5.1-dev.259-unsigned.ipa",
+      "size": 15136914,
       "minOSVersion": "15.4",
-      "versionDescription": "Ito 1.5.0-dev.258 (build 258). Automated unsigned dev build from main at ac3486a. This build may be unstable."
+      "versionDescription": "Ito 1.5.1-dev.259 (build 259). Automated unsigned dev build from main at ffb1238. This build may be unstable."
     }
   ],
   "news": []
