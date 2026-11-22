@@ -76,9 +76,7 @@ extension MangaReaderViewModel {
     func networkPolicyDidChange() {
         guard isActive, presentationMode.isLive else { return }
         let settings = dependencies.settings
-        if settings.mangaReaderEffectivePreloadImageCount == 0 {
-            imagePrefetcher.stopPrefetching()
-        }
+        reconcileCurrentImagePrefetch()
         let admitted = settings.mangaReaderAdjacentPrefetchCount > 0
         if adjacentPrefetchOperationID != nil, !admitted || adjacentPrefetchEpoch != settings.mangaReaderPrefetchEpoch {
             cancelAdjacentChapterPrefetch()
@@ -144,8 +142,7 @@ extension MangaReaderViewModel {
 
     // MARK: - Image prefetch
 
-    /// Starts at the page being shown: turning to a page still downloading must not drop its
-    /// prefetch, which would cancel the download just before the page's view asks for it.
+    /// Starts at the page being shown so its in-flight prefetch is not cancelled on a turn.
     func prefetchPagedImages(around index: Int) {
         let count = dependencies.settings.mangaReaderEffectivePreloadImageCount
         preload(Self.pagesToPreload(after: index - 1, count: count > 0 ? count + 1 : 0, in: pagedPages) { $0 })
@@ -156,7 +153,10 @@ extension MangaReaderViewModel {
     }
 
     func preload(_ pages: [Page]) {
-        guard !pages.isEmpty else { return }
+        guard !pages.isEmpty else {
+            imagePrefetcher.stopPrefetching()
+            return
+        }
         guard dependencies.settings.mangaReaderEffectivePreloadImageCount > 0 else {
             imagePrefetcher.stopPrefetching()
             return
