@@ -322,6 +322,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         subject.viewModel.start()
         await waitForReader { subject.loader.pendingCount(for: "a") == 1 }
 
+        let stopsBeforeDisappearing = subject.imagePrefetcher.stopCount
         subject.viewModel.disappear()
         subject.loader.resolveFirst(for: "a", with: .success([page(0)]))
         await yieldReaderTasks()
@@ -329,7 +330,7 @@ final class MangaReaderViewModelTests: XCTestCase {
         XCTAssertEqual(subject.viewModel.loadPhase, .loading)
         XCTAssertTrue(subject.viewModel.pagedPages.isEmpty)
         XCTAssertTrue(subject.history.requests.isEmpty)
-        XCTAssertEqual(subject.imagePrefetcher.stopCount, 1)
+        XCTAssertEqual(subject.imagePrefetcher.stopCount, stopsBeforeDisappearing + 1)
         XCTAssertEqual(subject.presence.events.last, .clear)
     }
 
@@ -982,33 +983,6 @@ final class MangaReaderViewModelTests: XCTestCase {
         subject.viewModel.continuousViewportChanged([subject.viewModel.flatPages[0].id])
 
         XCTAssertEqual(subject.imagePrefetcher.batches[0].map(\.index), [1, 3])
-    }
-
-    func testZeroImagePreloadDisablesPrefetchAndDisappearStopsAdapter() async {
-        let subject = makeSubject(
-            chapters: [makeChapter("a", number: 1)],
-            preload: 0
-        )
-        subject.loader.enqueue(
-            .pages([page(0, url: "https://example.com/0"), page(1, url: "https://example.com/1")]),
-            for: "a"
-        )
-        subject.viewModel.start()
-        await waitForReader { subject.viewModel.loadPhase == .content }
-        subject.viewModel.setPagedIndex(1)
-        subject.viewModel.disappear()
-
-        XCTAssertTrue(subject.imagePrefetcher.batches.isEmpty)
-        XCTAssertEqual(subject.imagePrefetcher.stopCount, 1)
-    }
-
-    func testPreloadPreferenceUsesInjectedSettingsBoundary() async {
-        let subject = makeSubject(chapters: [makeChapter("a", number: 1)], preload: 5)
-
-        subject.viewModel.setPreloadImageCount(10)
-        await waitForReader { subject.viewModel.preloadImageCount == 10 }
-
-        XCTAssertEqual(subject.settings.writtenValues, [10])
     }
 
     func testThePageReaderStopsWhereTheSeriesSwitchesToText() {

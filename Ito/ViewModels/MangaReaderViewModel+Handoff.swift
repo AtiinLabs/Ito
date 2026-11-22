@@ -281,8 +281,8 @@ extension MangaReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
         if count > 0 {
             pageShown(in: currentChapter, at: isPaged ? pagedIndex : continuousPageIndex, pageCount: count)
         }
+        reconcileCurrentImagePrefetch()
         if isPaged {
-            prefetchPagedImages(around: pagedIndex)
             beginAdjacentChapterPrefetch()
         }
     }

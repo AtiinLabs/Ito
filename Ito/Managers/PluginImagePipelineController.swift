@@ -114,13 +114,20 @@ nonisolated final class PluginImagePipelineController: @unchecked Sendable {
     private let sourceMemory: ImageCache
     private var scopeObservation: AnyCancellable?
 
+    /// A fresh bounded source cache that admits any single image smaller than its total budget.
+    static func makeSourceMemoryCache() -> ImageCache {
+        let cache = ImageCache()
+        cache.entryCostLimit = 1.0
+        return cache
+    }
+
     init(
         dataCache: (any DataCaching)?,
         dataLoader: any DataLoading,
         diagnostics: any ImagePipelineDelegate,
         publish: @escaping @Sendable (ImagePipeline) -> Void = { ImagePipeline.shared = $0 },
         contexts: PluginNetworkContexts? = nil,
-        sourceMemory: ImageCache = ImageCache()
+        sourceMemory: ImageCache = makeSourceMemoryCache()
     ) {
         self.dataCache = dataCache
         self.dataLoader = dataLoader

@@ -239,6 +239,7 @@ final class MangaReaderViewModel: ObservableObject {
         }
         hasPresentedPresence = true
         presentPresence(for: currentChapter, resetTimer: true)
+        reconcileCurrentImagePrefetch()
         if isResumingCancelledLoad {
             beginMainLoad(for: currentChapter)
         }
@@ -358,9 +359,15 @@ final class MangaReaderViewModel: ObservableObject {
         guard wasPaged != isNowPaged else { return }
 
         invalidateContentOperations()
+        // The continuous viewport belongs to the mode being left; the renderer reports a new one.
+        visiblePageIDs = []
+        visiblePageOrder = []
         if isNowPaged {
             convertContinuousToPagedOrReload()
+            reconcileCurrentImagePrefetch()
         } else {
+            // The renderer's first viewport report sets the continuous window. Until then the paged
+            // window keeps running: its next pages are the ones the continuous reader needs first.
             convertPagedToContinuousOrReload()
         }
     }
@@ -393,9 +400,38 @@ final class MangaReaderViewModel: ObservableObject {
             }
             guard self.isActive, self.sessionID == session,
                   !Task.isCancelled else { return }
-            self.preloadImageCount = settings.mangaReaderPreloadImageCount
+            self.reconcileCurrentImagePrefetch()
         }
         settingsWriteTask = task
+    }
+
+    /// Reconciles the speculative image window with the committed setting and current visible position.
+    func reconcileCurrentImagePrefetch() {
+        guard isActive, presentationMode.isLive else { return }
+        let configuredCount = dependencies.settings.mangaReaderPreloadImageCount
+        if preloadImageCount != configuredCount { preloadImageCount = configuredCount }
+        guard loadPhase == .content else {
+            imagePrefetcher.stopPrefetching()
+            return
+        }
+        let count = dependencies.settings.mangaReaderEffectivePreloadImageCount
+        guard count > 0 else {
+            imagePrefetcher.stopPrefetching()
+            return
+        }
+        if isPaged {
+            guard pagedPages.indices.contains(pagedIndex) else {
+                imagePrefetcher.stopPrefetching()
+                return
+            }
+            prefetchPagedImages(around: pagedIndex)
+        } else {
+            guard let bottomIndex = visiblePageIDs.lazy.compactMap({ self.flatPageIndexByID[$0] }).max() else {
+                imagePrefetcher.stopPrefetching()
+                return
+            }
+            prefetchContinuousImages(around: bottomIndex, allPages: flatPages)
+        }
     }
 
     // MARK: - Chapter and page navigation
