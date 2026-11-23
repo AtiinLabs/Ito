@@ -324,6 +324,73 @@ final class AppNetModulePrivacyTests: XCTestCase {
         XCTAssertEqual(cookies, [nil, "session=abc", nil])
     }
 
+    /// A rate-limited page read is sent again after the wait the site asked for, so a plugin paging through a long
+    /// chapter list gets every page instead of a 429 it may take for the end of the list.
+    func testARateLimitedSafeRequestIsRetriedAfterTheShortWaitTheSiteAsksFor() async throws {
+        let waited = try await rateLimitRun(method: "GET", responses: [(429, "10"), (200, nil)])
+        XCTAssertEqual(waited.statuses, [200])
+        XCTAssertEqual(waited.sleeps, [10])
+        XCTAssertEqual(waited.requests, 2)
+
+        let capped = try await rateLimitRun(method: "GET", responses: [(429, "1"), (429, "1"), (429, "1"), (200, nil)])
+        XCTAssertEqual(capped.statuses, [429])
+        XCTAssertEqual(capped.sleeps, [1, 1])
+        XCTAssertEqual(capped.requests, 3)
+    }
+
+    /// Only a short, stated wait on a request that is safe to repeat is taken on: anything else is the plugin's 429.
+    func testARateLimitIsReturnedAsIsForUnsafeMethodsAndLongOrMissingWaits() async throws {
+        for (method, retryAfter) in [("POST", "1"), ("GET", "60"), ("GET", nil), ("GET", "soon")] as [(String, String?)] {
+            let run = try await rateLimitRun(method: method, responses: [(429, retryAfter), (200, nil)])
+            XCTAssertEqual(run.statuses, [429], "\(method) Retry-After \(retryAfter ?? "none")")
+            XCTAssertEqual(run.sleeps, [])
+            XCTAssertEqual(run.requests, 1)
+        }
+    }
+
+    func testRetryAfterAcceptsAnHTTPDateWithinTheLimit() throws {
+        let url = try XCTUnwrap(URL(string: "https://example.invalid/"))
+        let now = Date(timeIntervalSince1970: 784_111_777) // Sun, 06 Nov 1994 08:49:37 GMT
+        func response(_ value: String) throws -> HTTPURLResponse {
+            try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 429, httpVersion: nil, headerFields: ["Retry-After": value]))
+        }
+        XCTAssertEqual(AppNetModule.rateLimitDelay(try response("Sun, 06 Nov 1994 08:49:42 GMT"), now: now), 5)
+        XCTAssertNil(AppNetModule.rateLimitDelay(try response("Sun, 06 Nov 1994 08:59:37 GMT"), now: now))
+        XCTAssertEqual(AppNetModule.rateLimitDelay(try response("Sun, 06 Nov 1994 08:49:30 GMT"), now: now), 0)
+    }
+
+    private func rateLimitRun(
+        method: String,
+        responses: [(status: Int, retryAfter: String?)]
+    ) async throws -> (statuses: [Int32], sleeps: [TimeInterval], requests: Int) {
+        let host = "ratelimit-\(UUID().uuidString.lowercased()).example.invalid"
+        let url = try XCTUnwrap(URL(string: "https://\(host)/chapters?page=12"))
+        let boundary = ScriptedRequestBoundary(steps: responses.map { status, retryAfter in
+            .success(StubHTTPResponse(
+                statusCode: status,
+                headers: retryAfter.map { ["Retry-After": $0] } ?? [:],
+                body: Data()
+            ))
+        })
+        ScriptedURLProtocol.register(boundary, forHost: host)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ScriptedURLProtocol.self]
+        config.httpCookieStorage = nil
+        config.httpShouldSetCookies = false
+        let sleeps = RecordedSleeps()
+        let module = AppNetModule(
+            configuration: config,
+            cloudflare: StubCloudflareHandler(cachedUserAgent: "", resolution: .failure(TestFailure.challengeResolution)),
+            retryLogger: RecordingRetryLogger(),
+            pluginID: "test.plugin",
+            cookieJar: PluginCookieJar(keychain: InMemoryPluginSecretKeychain()),
+            sleep: { sleeps.append($0) }
+        )
+        let request = NetRequest(url: url.absoluteString, method: method, headers: [:], body: nil)
+        let response = try await module.fetch(request: request, context: makeTestNetworkContext())
+        return ([response.status], sleeps.values, boundary.requests.count)
+    }
+
     func testThePluginsOwnCookieHeaderWinsOverItsStoredCookie() async throws {
         let host = "cookies-\(UUID().uuidString.lowercased()).example.invalid"
         let url = try XCTUnwrap(URL(string: "https://\(host)/"))
@@ -531,6 +598,13 @@ private enum ResolutionPlan {
 
 private enum TestFailure: Error, Equatable {
     case challengeResolution
+}
+
+private final class RecordedSleeps: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [TimeInterval] = []
+    func append(_ seconds: TimeInterval) { lock.withLock { stored.append(seconds) } }
+    var values: [TimeInterval] { lock.withLock { stored } }
 }
 
 private final class RecordingRetryLogger: AppNetRetryLogging, @unchecked Sendable {
