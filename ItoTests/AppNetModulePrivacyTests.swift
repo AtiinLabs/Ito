@@ -212,6 +212,44 @@ final class AppNetModulePrivacyTests: XCTestCase {
         )
     }
 
+    /// Requests of one plugin can run at once. While one of them is solving a site's challenge, another that
+    /// reaches the same challenge gets the challenge response instead of opening a second page for the user.
+    func testAConcurrentRequestDoesNotOpenASecondChallengeForTheSameSite() async throws {
+        let host = "challenge-\(UUID().uuidString.lowercased()).example.invalid"
+        let url = try XCTUnwrap(URL(string: "https://\(host)/chapters"))
+        let challenge = StubHTTPResponse(statusCode: 503, headers: ["cf-mitigated": "challenge"], body: Data("challenge".utf8))
+        let boundary = ScriptedRequestBoundary(steps: [
+            .success(challenge),
+            .success(challenge),
+            .success(StubHTTPResponse(statusCode: 200, headers: [:], body: Data("cleared".utf8)))
+        ])
+        ScriptedURLProtocol.register(boundary, forHost: host)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ScriptedURLProtocol.self]
+        config.httpCookieStorage = nil
+        config.httpShouldSetCookies = false
+        let cloudflare = GatedCloudflareHandler()
+        let module = AppNetModule(
+            configuration: config,
+            cloudflare: cloudflare,
+            retryLogger: RecordingRetryLogger(),
+            pluginID: "test.plugin",
+            cookieJar: PluginCookieJar(keychain: InMemoryPluginSecretKeychain())
+        )
+        let request = NetRequest(url: url.absoluteString, method: "GET", headers: [:], body: nil)
+
+        let solving = Task { try await module.fetch(request: request, context: makeTestNetworkContext()) }
+        await cloudflare.waitUntilSolving()
+        let concurrent = try await module.fetch(request: request, context: makeTestNetworkContext())
+        cloudflare.finishSolving()
+        let solved = try await solving.value
+
+        XCTAssertEqual(concurrent.status, 503)
+        XCTAssertEqual(solved.status, 200)
+        XCTAssertEqual(cloudflare.solveCount, 1)
+        XCTAssertEqual(boundary.requests.count, 3)
+    }
+
     func testChallengeResolutionErrorPropagatesWithoutRetry() async throws {
         let fixture = try makeFixture(
             steps: [
@@ -624,6 +662,61 @@ private final class RecordingRetryLogger: AppNetRetryLogging, @unchecked Sendabl
     nonisolated var messages: [String] {
         events.map(AppNetRetryDiagnostic.format)
     }
+}
+
+/// Holds the first challenge in resolution until the test lets it finish.
+private final class GatedCloudflareHandler: AppNetCloudflareHandling, @unchecked Sendable {
+    private let lock = NSLock()
+    private var solves = 0
+    private var entered: CheckedContinuation<Void, Never>?
+    private var hasEntered = false
+    private var release: CheckedContinuation<Void, Never>?
+    private var released = false
+
+    nonisolated func cachedUserAgent(for host: String) async -> String { "" }
+
+    nonisolated func resolveChallenge(
+        for url: URL, authority: NetworkRequestAuthority?
+    ) async throws -> AppNetCloudflareResolution {
+        let waiter = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            solves += 1
+            hasEntered = true
+            defer { entered = nil }
+            return entered
+        }
+        waiter?.resume()
+        await withCheckedContinuation { continuation in
+            let finished = lock.withLock { () -> Bool in
+                if released { return true }
+                release = continuation
+                return false
+            }
+            if finished { continuation.resume() }
+        }
+        return AppNetCloudflareResolution(userAgent: "", cookies: [])
+    }
+
+    func waitUntilSolving() async {
+        await withCheckedContinuation { continuation in
+            let already = lock.withLock { () -> Bool in
+                if hasEntered { return true }
+                entered = continuation
+                return false
+            }
+            if already { continuation.resume() }
+        }
+    }
+
+    func finishSolving() {
+        let waiter = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            released = true
+            defer { release = nil }
+            return release
+        }
+        waiter?.resume()
+    }
+
+    var solveCount: Int { lock.withLock { solves } }
 }
 
 private final class StubCloudflareHandler: AppNetCloudflareHandling, @unchecked Sendable {

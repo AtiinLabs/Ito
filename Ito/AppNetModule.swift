@@ -73,6 +73,9 @@ actor AppNetModule: NetModule {
     static let maxRateLimitRetries = 2
     /// The longest `Retry-After` the host waits out. A longer one, or none, goes back to the plugin as the 429.
     static let maxRateLimitWait: TimeInterval = 15
+    /// Hosts one of this plugin's requests is solving a challenge for. A request reaching the same challenge
+    /// meanwhile gets the challenge response as is: concurrent requests never stack challenge pages for the user.
+    private var hostsSolvingChallenge: Set<String> = []
 
     init(pluginID: String, cookieJar: PluginCookieJar, trust: PluginTrustStore, contexts: PluginNetworkContexts? = nil, cloudflare: CloudflareManager?) {
         let config = URLSessionConfiguration.default
@@ -235,9 +238,12 @@ actor AppNetModule: NetModule {
                     && String(describing: value).trimmingCharacters(in: .whitespaces).lowercased() == "challenge"
             }
 
-            if isChallenge {
+            let challengeHost = url.host ?? ""
+            if isChallenge, !hostsSolvingChallenge.contains(challengeHost) {
                 retryLogger.log(.challengeDetected)
                 try authority?.checkInteractive()
+                hostsSolvingChallenge.insert(challengeHost)
+                defer { hostsSolvingChallenge.remove(challengeHost) }
 
                 // The live handler routes through CloudflareManager on MainActor.
                 let bypassResult = try await cloudflare.resolveChallenge(for: url, authority: authority)
