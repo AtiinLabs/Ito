@@ -67,6 +67,12 @@ actor AppNetModule: NetModule {
     private let trust: PluginTrustStore?
     private let contexts: PluginNetworkContexts?
     private let admitContext: @Sendable (NetworkOperationContext) throws -> Void
+    private let sleep: @Sendable (TimeInterval) async throws -> Void
+
+    /// A rate-limited safe request is sent again at most this many times.
+    static let maxRateLimitRetries = 2
+    /// The longest `Retry-After` the host waits out. A longer one, or none, goes back to the plugin as the 429.
+    static let maxRateLimitWait: TimeInterval = 15
 
     init(pluginID: String, cookieJar: PluginCookieJar, trust: PluginTrustStore, contexts: PluginNetworkContexts? = nil, cloudflare: CloudflareManager?) {
         let config = URLSessionConfiguration.default
@@ -81,6 +87,7 @@ actor AppNetModule: NetModule {
         self.trust = trust
         self.contexts = contexts
         self.admitContext = { _ in }
+        self.sleep = Self.taskSleep
     }
 
     init(
@@ -91,7 +98,8 @@ actor AppNetModule: NetModule {
         cookieJar: PluginCookieJar,
         trust: PluginTrustStore? = nil,
         contexts: PluginNetworkContexts? = nil,
-        admitContext: @escaping @Sendable (NetworkOperationContext) throws -> Void = { _ in }
+        admitContext: @escaping @Sendable (NetworkOperationContext) throws -> Void = { _ in },
+        sleep: @escaping @Sendable (TimeInterval) async throws -> Void = AppNetModule.taskSleep
     ) {
         self.sessions = PluginSessionPool(configuration: Self.uncached(configuration), trust: trust)
         self.cloudflare = cloudflare
@@ -101,6 +109,11 @@ actor AppNetModule: NetModule {
         self.trust = trust
         self.contexts = contexts
         self.admitContext = admitContext
+        self.sleep = sleep
+    }
+
+    @Sendable nonisolated static func taskSleep(_ seconds: TimeInterval) async throws {
+        try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
     }
 
     /// A cached answer skips the TLS handshake, so a changed or revoked pin would never be
@@ -113,10 +126,15 @@ actor AppNetModule: NetModule {
     }
 
     func fetch(request: NetRequest, context: NetworkOperationContext) async throws -> NetResponse {
-        return try await fetchInternal(request: request, context: context, isRetry: false)
+        return try await fetchInternal(request: request, context: context, isRetry: false, rateLimitRetries: 0)
     }
 
-    private func fetchInternal(request: NetRequest, context: NetworkOperationContext, isRetry: Bool) async throws -> NetResponse {
+    private func fetchInternal(
+        request: NetRequest,
+        context: NetworkOperationContext,
+        isRetry: Bool,
+        rateLimitRetries: Int
+    ) async throws -> NetResponse {
         try Task.checkCancellation()
         try admitContext(context)
         let authority = contexts.map { NetworkRequestAuthority(contexts: $0, context: context) }
@@ -248,12 +266,26 @@ actor AppNetModule: NetModule {
                 retriedRequest.headers = retriedHeaders
 
                 retryLogger.log(.retryStarted)
-                let retriedResponse = try await fetchInternal(request: retriedRequest, context: context, isRetry: true)
+                let retriedResponse = try await fetchInternal(
+                    request: retriedRequest, context: context, isRetry: true, rateLimitRetries: rateLimitRetries
+                )
                 retryLogger.log(.retryCompleted(status: retriedResponse.status))
                 return retriedResponse
             }
         }
         // --------------------------------------
+
+        // A site that is rate limiting says how long to wait. A safe request is sent again after a short wait, so
+        // a plugin reading many pages gets them all instead of a 429 it may take for the end of the list. The
+        // retry is admitted again like any request.
+        if statusCode == 429, refusesLateResult, rateLimitRetries < Self.maxRateLimitRetries,
+           let delay = Self.rateLimitDelay(httpResponse, now: Date()) {
+            try await sleep(delay)
+            try Task.checkCancellation()
+            return try await fetchInternal(
+                request: request, context: context, isRetry: isRetry, rateLimitRetries: rateLimitRetries + 1
+            )
+        }
 
         var resHeaders: [String: String] = [:]
         for (key, value) in httpResponse.allHeaderFields {
@@ -270,6 +302,31 @@ actor AppNetModule: NetModule {
             headers: resHeaders,
             body: [UInt8](data)
         )
+    }
+
+    /// How long `response` asks to wait, when it is a wait the host takes on: `Retry-After` in seconds or as an
+    /// HTTP date, at most `maxRateLimitWait` away.
+    nonisolated static func rateLimitDelay(_ response: HTTPURLResponse, now: Date) -> TimeInterval? {
+        guard let value = response.value(forHTTPHeaderField: "Retry-After")?.trimmingCharacters(in: .whitespaces),
+              !value.isEmpty else { return nil }
+        let delay: TimeInterval
+        if let seconds = Int(value) {
+            delay = TimeInterval(seconds)
+        } else if let date = httpDate(value) {
+            delay = max(0, date.timeIntervalSince(now))
+        } else {
+            return nil
+        }
+        return (0...maxRateLimitWait).contains(delay) ? delay : nil
+    }
+
+    /// An IMF-fixdate (`Sun, 06 Nov 1994 08:49:37 GMT`), the form HTTP dates are sent in.
+    private nonisolated static func httpDate(_ value: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return formatter.date(from: value)
     }
 
     /// The headers with one `User-Agent`: every spelling the plugin used is replaced, so two can never be sent together.
