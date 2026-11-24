@@ -35,8 +35,17 @@ nonisolated enum PluginDirectoryGateError: Error, Equatable, Sendable {
 /// operation finishes, so that wait is bounded. The gate is per instance; production has one, owned by `PluginManager`.
 @MainActor
 final class PluginDirectoryGate {
-    /// The ID of the lease of the operation the current task runs inside, if any.
-    @TaskLocal private static var inheritedLeaseID: UUID?
+    /// The lease of the operation the current task runs inside, if any. Bound as an object reference, not the lease's
+    /// `UUID`: with deployment targets below iOS 18, async `TaskLocal.withValue` is a back-deployed fallback that
+    /// Xcode 26 miscompiles in optimized builds for values whose size is known only at run time, such as `UUID?`. It
+    /// frees task-allocator memory out of order and the app aborts in `swift_task_dealloc` at launch. A reference has
+    /// a fixed size.
+    @TaskLocal private static var inheritedLease: LeaseScope?
+
+    private final class LeaseScope: Sendable {
+        let leaseID: UUID
+        init(leaseID: UUID) { self.leaseID = leaseID }
+    }
 
     /// Called when an operation starts waiting for the gate. Tests use it to see that an operation queued behind
     /// another instead of running alongside it; production code leaves it empty.
@@ -52,7 +61,7 @@ final class PluginDirectoryGate {
     /// Runs `operation` holding the gate, then releases it, even when the operation throws. A task cancelled while
     /// waiting throws `CancellationError` without running the operation.
     func withLease<Value>(_ operation: (PluginDirectoryLease) async throws -> Value) async throws -> Value {
-        if let inherited = Self.inheritedLeaseID, inherited == activeLeaseID {
+        if let inherited = Self.inheritedLease, inherited.leaseID == activeLeaseID {
             throw PluginDirectoryGateError.reentrantAcquire
         }
         let lease = PluginDirectoryLease()
@@ -62,7 +71,7 @@ final class PluginDirectoryGate {
             throw CancellationError()
         }
         do {
-            let value = try await Self.$inheritedLeaseID.withValue(lease.id) {
+            let value = try await Self.$inheritedLease.withValue(LeaseScope(leaseID: lease.id)) {
                 try await operation(lease)
             }
             release()
