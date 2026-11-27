@@ -30,6 +30,7 @@ struct AppViewFactory {
     private let downloadPresets: DownloadPresetStore?
     private let automaticDownloads: any AutomaticDownloadServing
     private let settingsDependencies: PreparedSettingsDependencies?
+    let panes: AppPaneNavigators
 
     var hasDownloads: Bool { downloadsOverview != nil }
     /// Whether the management screen of automatic downloads is offered: they are composed with the offline store.
@@ -67,7 +68,8 @@ struct AppViewFactory {
         downloadsThumbnails: any DownloadsThumbnailServing = UnavailableDownloadsThumbnails(),
         downloadPresets: DownloadPresetStore? = nil,
         automaticDownloads: any AutomaticDownloadServing = UnavailableAutomaticDownloads(),
-        settingsDependencies: PreparedSettingsDependencies? = nil
+        settingsDependencies: PreparedSettingsDependencies? = nil,
+        panes: AppPaneNavigators
     ) {
         self.rootModels = rootModels
         self.repositoryManagement = repositoryManagement
@@ -98,6 +100,7 @@ struct AppViewFactory {
         self.downloadPresets = downloadPresets
         self.automaticDownloads = automaticDownloads
         self.settingsDependencies = settingsDependencies
+        self.panes = panes
         let categoryHistoryViewFactory = CategoryHistoryViewFactory(
             dependencies: categoryHistoryDependencies,
             messagePresenter: categoryHistoryMessagePresenter,
@@ -508,7 +511,7 @@ struct AppViewFactory {
     }
 
     func makeSettingsView() -> SettingsView {
-        SettingsView(viewFactory: self)
+        SettingsView(viewFactory: self, navigator: panes.settings)
     }
 
     @ViewBuilder

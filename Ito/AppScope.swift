@@ -592,7 +592,8 @@ final class AppScope {
             downloadsThumbnails: preparedDependencies.downloadsThumbnails,
             downloadPresets: preparedDependencies.downloadPresets,
             automaticDownloads: preparedDependencies.automaticDownloads,
-            settingsDependencies: preparedDependencies.settings
+            settingsDependencies: preparedDependencies.settings,
+            panes: router.panes
         )
     }
 

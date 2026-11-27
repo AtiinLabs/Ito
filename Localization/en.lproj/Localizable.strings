@@ -391,6 +391,9 @@ Download preset editor: the count field. */
 
 "Choose List on Save" = "Choose List on Save";
 
+/* Message shown in the Settings detail column when no category is selected */
+"Choose a category." = "Choose a category.";
+
 "Choose a library status before adding this series to MangaBaka." = "Choose a library status before adding this series to MangaBaka.";
 
 "Choose a list status before adding this entry to MyAnimeList." = "Choose a list status before adding this entry to MyAnimeList.";
@@ -1409,6 +1412,9 @@ Manga format */
 
 /* Library filter: series with no chapter saved on this device. Series whose downloads are only queued, damaged or failed count here. */
 "No Saved Chapters" = "No Saved Chapters";
+
+/* Title shown in the Settings detail column when no category is selected */
+"No Setting Selected" = "No Setting Selected";
 
 "No Trackers Authenticated" = "No Trackers Authenticated";
 

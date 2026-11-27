@@ -41,6 +41,7 @@ struct AppearanceSettingsView: View {
         }
         .navigationTitle("Appearance")
         .navigationBarTitleDisplayMode(.inline)
+        .paneHold(viewModel.alert != nil)
         .alert(item: Binding(
             get: { viewModel.alert },
             set: { alert in

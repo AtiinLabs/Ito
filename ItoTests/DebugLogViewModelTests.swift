@@ -330,7 +330,7 @@ final class DebugLogViewModelTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(settingsSource.contains("makeSettingsDestination(for: .debugLogs)"))
+        XCTAssertTrue(settingsSource.contains("categoryRow(.debugLogs,"))
         XCTAssertTrue(factorySource.contains("case .debugLogs:\n            makeDebugLogView()"))
         XCTAssertFalse(settingsSource.contains("destination: DebugLogView()"))
     }

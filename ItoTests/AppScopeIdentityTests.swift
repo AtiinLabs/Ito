@@ -264,6 +264,22 @@ final class AppScopeIdentityTests: XCTestCase {
         XCTAssertFalse(scope.rootModels.hasLoadedDebugLogViewModel)
     }
 
+    func testSettingsFactoryAndRouterShareOnePaneNavigator() {
+        let scope = makeScope()
+
+        XCTAssertTrue(scope.viewFactory.panes === scope.router.panes)
+    }
+
+    func testPaneNavigatorAndRouterNeverReachIntoViewModelsOrSessions() throws {
+        let navigator = try sourceFile("Ito/PaneNavigator.swift")
+        let router = try sourceFile("Ito/AppRouter.swift")
+
+        for source in [navigator, router] {
+            XCTAssertFalse(source.contains("ViewModel"))
+            XCTAssertFalse(source.contains("Session"))
+        }
+    }
+
     func testAppScopeIsUnavailableBeforeRuntimePreparation() async throws {
         let database = try TestDatabase()
         defer { database.cleanup() }

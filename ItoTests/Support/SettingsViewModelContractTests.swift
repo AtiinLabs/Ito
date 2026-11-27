@@ -115,16 +115,15 @@ extension SettingsViewModelTests {
         let enumSource = try XCTUnwrap(
             settingsSource.components(separatedBy: "struct SettingsView").first
         )
+        let paneHostSource = try source(at: "Ito/Views/Shared/Panes/PaneHost.swift")
 
-        XCTAssertTrue(settingsSource.contains(
-            "destination: viewFactory.makeSettingsDestination(for: .trackers)"
-        ))
-        XCTAssertTrue(settingsSource.contains(
-            "destination: viewFactory.makeSettingsDestination(for: .backup)"
-        ))
-        XCTAssertTrue(settingsSource.contains("NavigationView"))
-        XCTAssertTrue(settingsSource.contains("NavigationLink"))
+        XCTAssertTrue(settingsSource.contains("categoryRow(.trackers,"))
+        XCTAssertTrue(settingsSource.contains("categoryRow(.backup,"))
+        XCTAssertTrue(settingsSource.contains("detail: { viewFactory.makeSettingsDestination(for: $0) }"))
+        XCTAssertTrue(paneHostSource.contains("NavigationView"))
+        XCTAssertTrue(paneHostSource.contains("NavigationLink"))
         XCTAssertFalse(settingsSource.contains("NavigationStack"))
+        XCTAssertFalse(paneHostSource.contains("NavigationStack"))
         XCTAssertFalse(appFactorySource.contains("AnyView"))
         XCTAssertFalse(appFactorySource.contains("ReaderSettingsView("))
         XCTAssertFalse(appFactorySource.contains("ManageExtensionsView("))

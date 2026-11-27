@@ -36,6 +36,7 @@ struct TrackerSettingsView: View {
         }
         .navigationTitle("Trackers")
         .navigationBarTitleDisplayMode(.inline)
+        .paneHold(viewModel.signInSheetProvider != nil)
         .onAppear(perform: viewModel.refreshAuthoritativeState)
         .onDisappear(perform: viewModel.cancelOwnedWork)
         .sheet(item: $viewModel.signInSheetProvider) { provider in

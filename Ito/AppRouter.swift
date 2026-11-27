@@ -44,6 +44,7 @@ protocol LibraryTabRouting: AnyObject {
 @MainActor
 final class AppRouter: ObservableObject, BrowseRepositoryIntentRouting, LibraryTabRouting {
     @Published var selectedTab: AppRootTab = .library
+    let panes = AppPaneNavigators()
     @Published private(set) var repositoryIntentDelivery: RepositoryIntentDelivery?
     @Published private var repositoryIntentRevision = 0
 

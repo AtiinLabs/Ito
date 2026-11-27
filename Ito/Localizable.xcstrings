@@ -1662,6 +1662,9 @@
     "Choose List on Save" : {
 
     },
+    "Choose a category." : {
+      "comment" : "Message shown in the Settings detail column when no category is selected"
+    },
     "Choose a library status before adding this series to MangaBaka." : {
 
     },
@@ -3268,6 +3271,9 @@
     },
     "No Saved Chapters" : {
       "comment" : "Library filter: series with no chapter saved on this device. Series whose downloads are only queued, damaged or failed count here."
+    },
+    "No Setting Selected" : {
+      "comment" : "Title shown in the Settings detail column when no category is selected"
     },
     "No Trackers Authenticated" : {
 

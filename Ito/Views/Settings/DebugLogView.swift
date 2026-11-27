@@ -44,6 +44,7 @@ struct DebugLogView: View {
         .searchable(text: $viewModel.searchText)
         .navigationTitle("Debug Logs")
         .navigationBarTitleDisplayMode(.inline)
+        .paneHold(viewModel.alert != nil)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {

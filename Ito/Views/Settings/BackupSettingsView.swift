@@ -60,6 +60,17 @@ struct BackupSettingsView: View {
             }
         }
         .navigationTitle("Backup & Restore")
+        .paneHold(
+            viewModel.isFileExporterPresented
+                || viewModel.isFileImporterPresented
+                || viewModel.showsRestoreStrategy
+                || viewModel.showsWipeConfirmation
+                || viewModel.showsConflictResolver
+                || viewModel.showsRestoreReport
+                || viewModel.alert != nil
+                || viewModel.migrationReportToResolve != nil
+                || viewModel.showsRefreshPending
+        )
         .fileExporter(
             isPresented: Binding(
                 get: { viewModel.isFileExporterPresented },
