@@ -11,17 +11,15 @@ struct LibraryView: View {
     @State private var trustAction: TrustCertificateAction?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private let columns = [
-        // Top-aligned so a two-line title doesn't push its cover up the row.
-        GridItem(.adaptive(minimum: 100, maximum: 140), spacing: 12, alignment: .top)
-    ]
-
     var body: some View {
         NavigationView {
             ZStack(alignment: .top) {
                 switch viewModel.phase {
                 case .loading:
-                    loadingSkeletonView
+                    GeometryReader { proxy in
+                        // Grids are inset 16 pt on each side, so the column math uses the width minus 32 pt.
+                        loadingSkeletonScrollView(columns: AdaptiveGridMetrics.columns(forWidth: proxy.size.width - 32, spacing: 12))
+                    }
                 case .empty:
                     emptyStateView
                 case .content:
@@ -133,18 +131,21 @@ struct LibraryView: View {
                     isAwaitingOfflineProofs: viewModel.isAwaitingOfflineProofs
                 )
             } else {
-                contentScrollView
+                GeometryReader { proxy in
+                    // The grid width comes from the container this view is given, so the column count follows the layout.
+                    libraryScrollView(columns: AdaptiveGridMetrics.columns(forWidth: proxy.size.width - 32, spacing: 12))
+                }
             }
         }
     }
 
-    private var contentScrollView: some View {
+    private func libraryScrollView(columns: [GridItem]) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
                 updateFailureSection
                 if viewModel.layoutStyle == .tabbed && viewModel.selectedCategoryID == nil {
                     Section {
-                        libraryGrid(items: viewModel.filteredItems)
+                        libraryGrid(items: viewModel.filteredItems, columns: columns)
                             .padding(.horizontal, 16)
                             .padding(.bottom, 24)
                     }
@@ -154,7 +155,7 @@ struct LibraryView: View {
                             if group.items.isEmpty {
                                 actionableEmptyState(for: group.name)
                             } else {
-                                libraryGrid(items: group.items)
+                                libraryGrid(items: group.items, columns: columns)
                                     .padding(.horizontal, 16)
                                     .padding(.bottom, 24)
                             }
@@ -278,7 +279,7 @@ struct LibraryView: View {
         )
     }
 
-    private func libraryGrid(items: [LibraryItem]) -> some View {
+    private func libraryGrid(items: [LibraryItem], columns: [GridItem]) -> some View {
         LazyVGrid(columns: columns, spacing: 14) {
             ForEach(items) { item in
                 LibraryItemView(
@@ -426,7 +427,7 @@ struct LibraryView: View {
         }
     }
 
-    private var loadingSkeletonView: some View {
+    private func loadingSkeletonScrollView(columns: [GridItem]) -> some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 14) {
                 ForEach(0..<8, id: \.self) { index in

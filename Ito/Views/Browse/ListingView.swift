@@ -50,35 +50,49 @@ struct ListingView: View {
     }
 
     private var resultsList: some View {
-        List {
-            ForEach(viewModel.entries, id: \.catalogIdentity) { entry in
-                entryRow(entry)
-                    .onAppear {
-                        loadMoreIfNeeded(
-                            lastIdentity: viewModel.entries.last?.catalogIdentity,
-                            identity: entry.catalogIdentity
-                        )
-                    }
-            }
-
-            paginationFooter
+        GeometryReader { proxy in
+            resultsGrid(width: proxy.size.width)
         }
-        .listStyle(.plain)
+    }
+
+    /// Columns follow the width this list is given; the grid is inset 16 pt on each side.
+    private func resultsGrid(width: CGFloat) -> some View {
+        let columns = AdaptiveGridMetrics.columns(forWidth: width - 32, spacing: 12)
+        let cardWidth = AdaptiveGridMetrics.cellWidth(forWidth: width - 32, columns: columns.count, spacing: 12)
+        return ScrollView {
+            VStack(spacing: 0) {
+                LazyVGrid(columns: columns, spacing: 14) {
+                    ForEach(viewModel.entries, id: \.catalogIdentity) { entry in
+                        entryCard(entry, width: cardWidth)
+                            .onAppear {
+                                loadMoreIfNeeded(
+                                    lastIdentity: viewModel.entries.last?.catalogIdentity,
+                                    identity: entry.catalogIdentity
+                                )
+                            }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+
+                paginationFooter
+            }
+        }
     }
 
     @ViewBuilder
-    private func entryRow(_ entry: MediaEntry) -> some View {
+    private func entryCard(_ entry: MediaEntry, width: CGFloat) -> some View {
         switch entry {
         case .manga(let manga):
-            MediaRowView(media: manga) {
+            MediaCardView(media: manga, width: width) {
                 routeFactory.destination(for: viewModel.destination(for: entry))
             }
         case .anime(let anime):
-            MediaRowView(media: anime) {
+            MediaCardView(media: anime, width: width) {
                 routeFactory.destination(for: viewModel.destination(for: entry))
             }
         case .novel(let novel):
-            MediaRowView(media: novel) {
+            MediaCardView(media: novel, width: width) {
                 routeFactory.destination(for: viewModel.destination(for: entry))
             }
         }
