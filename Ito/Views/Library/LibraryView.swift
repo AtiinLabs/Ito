@@ -10,6 +10,7 @@ struct LibraryView: View {
     @State private var signInTarget: PluginSignInTarget?
     @State private var trustAction: TrustCertificateAction?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.layoutDirection) private var layoutDirection
 
     var body: some View {
         NavigationView {
@@ -35,6 +36,8 @@ struct LibraryView: View {
                     .zIndex(2)
                 }
             }
+            // The category chips scroll sideways and would draw into the trailing inset, under iOS 27's side tab pill.
+            .clipShape(TrailingEdgeClip(layoutDirection: layoutDirection))
             .navigationTitle("Library")
             .toolbar { toolbarContent }
             .searchable(

@@ -6,6 +6,7 @@ struct DiscoverView: View {
     @StateObject private var viewModel: DiscoverViewModel
     private let viewFactory: AppViewFactory
     @State private var showFilters = false
+    @Environment(\.layoutDirection) private var layoutDirection
 
     init(viewModel: DiscoverViewModel, viewFactory: AppViewFactory) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -21,6 +22,8 @@ struct DiscoverView: View {
                     searchResultsView
                 }
             }
+            // The shelves scroll sideways and would draw into the trailing inset, under iOS 27's side tab pill.
+            .clipShape(TrailingEdgeClip(layoutDirection: layoutDirection))
             .navigationTitle("Discover")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
