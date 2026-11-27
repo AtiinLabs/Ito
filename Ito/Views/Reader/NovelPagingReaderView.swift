@@ -149,7 +149,7 @@ struct NovelPagingReaderView: View {
                 repaginate(configuration(size: newSize), discardingLayout: true)
             }
             .onChange(of: verticalSizeClass) { _ in
-                // Two pages share a spread only in a regular vertical size class.
+                // The width class depends on the vertical size class, so a change re-lays out the pages.
                 repaginate(configuration(size: size), discardingLayout: true)
             }
             .onChange(of: loadedChapters) { _ in
@@ -223,8 +223,7 @@ struct NovelPagingReaderView: View {
     ) -> PagingLayout {
         let resolvedFontSize = fontSize ?? self.fontSize
         let spread = NovelReaderLayout.showsSpread(
-            windowSize: size,
-            verticallyRegular: verticalSizeClass == .regular
+            widthClass: WidthClass.make(size: size, verticallyRegular: verticalSizeClass == .regular)
         )
         let width = NovelReaderLayout.pageTextWidth(
             availableWidth: size.width,

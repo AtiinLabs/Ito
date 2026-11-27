@@ -38,8 +38,10 @@ struct ReaderView: View {
             readerBody(
                 safeArea: geometry.safeAreaInsets,
                 showsSpread: NovelReaderLayout.showsSpread(
-                    windowSize: geometry.size,
-                    verticallyRegular: verticalSizeClass == .regular
+                    widthClass: WidthClass.make(
+                        size: geometry.size,
+                        verticallyRegular: verticalSizeClass == .regular
+                    )
                 )
             )
         }

@@ -28,9 +28,9 @@ nonisolated enum NovelReaderLayout {
         return min(columnWidth, readableTextWidth(fontSize: fontSize))
     }
 
-    /// Two pages share a window only when it is wide, landscape, and has a regular vertical size class.
-    static func showsSpread(windowSize: CGSize, verticallyRegular: Bool) -> Bool {
-        verticallyRegular && windowSize.width >= 700 && windowSize.width > windowSize.height
+    /// Two pages share a window only in the wide width class.
+    static func showsSpread(widthClass: WidthClass) -> Bool {
+        widthClass == .wide
     }
 
     /// Groups `count` pages into the ranges shown together, in order. Page `i` shares a spread with

@@ -9,19 +9,14 @@ nonisolated enum HomeLayoutMode: Equatable {
     /// The hero pinned in a left column while the shelves scroll in the right one.
     case sideBySide
 
-    /// Two columns need a wide, landscape-shaped space with room to stand a cover up. The height that matters is the
-    /// window's, not the home's (the navigation and search bars take part of it), so it is judged by the vertical size
-    /// class: regular on an unfolded Duo or iPad, compact on a phone held sideways. A portrait Duo (669 pt) and a
-    /// folded one (466 pt) are narrow.
+    /// Two columns need the wide width class: a landscape-shaped space with room to stand a cover up. The window's
+    /// width class is read from its vertical size class and size, not the home's own height, because the navigation
+    /// and search bars take part of the window. A portrait Duo (669 pt) and a folded one (466 pt) are narrow.
     static func make(
-        size: CGSize,
-        verticallyRegular: Bool,
+        widthClass: WidthClass,
         preference: SourceHomeWideLayoutPreference
     ) -> HomeLayoutMode {
-        guard preference == .sideBySide, verticallyRegular,
-              size.width >= 700, size.width > size.height else {
-            return .narrow
-        }
+        guard preference == .sideBySide, widthClass == .wide else { return .narrow }
         return .sideBySide
     }
 }

@@ -50,18 +50,23 @@ struct ListingView: View {
     }
 
     private var resultsList: some View {
-        GeometryReader { proxy in
-            resultsGrid(width: proxy.size.width)
+        WidthClassReader { widthClass, size in
+            resultsGrid(width: size.width, spacing: widthClass.spacing)
         }
     }
 
-    /// Columns follow the width this list is given; the grid is inset 16 pt on each side.
-    private func resultsGrid(width: CGFloat) -> some View {
-        let columns = AdaptiveGridMetrics.columns(forWidth: width - 32, spacing: 12)
-        let cardWidth = AdaptiveGridMetrics.cellWidth(forWidth: width - 32, columns: columns.count, spacing: 12)
+    /// Columns follow the width this list is given; the grid is inset by the width class's margin on each side.
+    private func resultsGrid(width: CGFloat, spacing: LayoutSpacing) -> some View {
+        let contentWidth = width - 2 * spacing.margin
+        let columns = AdaptiveGridMetrics.columns(forWidth: contentWidth, spacing: spacing.gridSpacing)
+        let cardWidth = AdaptiveGridMetrics.cellWidth(
+            forWidth: contentWidth,
+            columns: columns.count,
+            spacing: spacing.gridSpacing
+        )
         return ScrollView {
             VStack(spacing: 0) {
-                LazyVGrid(columns: columns, spacing: 14) {
+                LazyVGrid(columns: columns, spacing: spacing.gridRowSpacing) {
                     ForEach(viewModel.entries, id: \.catalogIdentity) { entry in
                         entryCard(entry, width: cardWidth)
                             .onAppear {
@@ -72,7 +77,7 @@ struct ListingView: View {
                             }
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, spacing.margin)
                 .padding(.top, 16)
 
                 paginationFooter

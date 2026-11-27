@@ -63,29 +63,10 @@ final class NovelReaderLayoutTests: XCTestCase {
         XCTAssertEqual(NovelReaderLayout.pageTextWidth(availableWidth: 20, fontSize: 18, spread: false), 0)
     }
 
-    func testSpreadNeedsWideLandscapeRegularWindow() {
-        let landscape = CGSize(width: 951, height: 669)
-        XCTAssertTrue(NovelReaderLayout.showsSpread(windowSize: landscape, verticallyRegular: true))
-        XCTAssertFalse(NovelReaderLayout.showsSpread(windowSize: landscape, verticallyRegular: false))
-    }
-
-    func testSpreadWidthBoundaryIsSevenHundred() {
-        XCTAssertFalse(NovelReaderLayout.showsSpread(
-            windowSize: CGSize(width: 699, height: 500), verticallyRegular: true))
-        XCTAssertTrue(NovelReaderLayout.showsSpread(
-            windowSize: CGSize(width: 700, height: 500), verticallyRegular: true))
-    }
-
-    func testPortraitWindowNeverShowsSpread() {
-        XCTAssertFalse(NovelReaderLayout.showsSpread(
-            windowSize: CGSize(width: 669, height: 951), verticallyRegular: true))
-        XCTAssertFalse(NovelReaderLayout.showsSpread(
-            windowSize: CGSize(width: 820, height: 1180), verticallyRegular: true))
-    }
-
-    func testSquareWindowNeverShowsSpread() {
-        XCTAssertFalse(NovelReaderLayout.showsSpread(
-            windowSize: CGSize(width: 800, height: 800), verticallyRegular: true))
+    func testSpreadOnlyInTheWideWidthClass() {
+        XCTAssertTrue(NovelReaderLayout.showsSpread(widthClass: .wide))
+        XCTAssertFalse(NovelReaderLayout.showsSpread(widthClass: .regular))
+        XCTAssertFalse(NovelReaderLayout.showsSpread(widthClass: .compact))
     }
 
     func testSpreadsPairPagesInOrder() {

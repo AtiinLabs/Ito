@@ -20,7 +20,6 @@ struct SourceView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var trustAction: TrustCertificateAction?
     @Environment(\.sourceHomeWideLayout) private var sourceHomeWideLayout
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.layoutDirection) private var layoutDirection
     @State private var isHeroVisible = true
 
@@ -146,16 +145,12 @@ struct SourceView: View {
     }
 
     private var homeContent: some View {
-        GeometryReader { proxy in
-            switch HomeLayoutMode.make(
-                size: proxy.size,
-                verticallyRegular: verticalSizeClass == .regular,
-                preference: sourceHomeWideLayout
-            ) {
+        WidthClassReader { widthClass, size in
+            switch HomeLayoutMode.make(widthClass: widthClass, preference: sourceHomeWideLayout) {
             case .narrow:
-                narrowHome(viewport: proxy.size)
+                narrowHome(viewport: size)
             case .sideBySide:
-                sideBySideHome(viewport: proxy.size)
+                sideBySideHome(viewport: size)
             }
         }
         // The home lays out inside the safe area, but its horizontal scroll views would still draw into the trailing

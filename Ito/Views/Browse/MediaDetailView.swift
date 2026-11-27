@@ -24,7 +24,6 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     @State private var displayedAlternativeID: UUID?
     @State private var replacementPreview: DownloadReplacementPreview?
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     init(
         viewModel: MediaDetailViewModel<M>,
@@ -185,8 +184,8 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     }
 
     private var mediaScroll: some View {
-        GeometryReader { proxy in
-            switch MediaDetailLayout.make(size: proxy.size, verticallyRegular: verticalSizeClass == .regular) {
+        WidthClassReader { widthClass, size in
+            switch MediaDetailLayout.make(widthClass: widthClass, width: size.width) {
             case .singleColumn:
                 singleColumnScroll
             case .twoColumns(let leadingWidth):

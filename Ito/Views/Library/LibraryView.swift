@@ -17,9 +17,8 @@ struct LibraryView: View {
             ZStack(alignment: .top) {
                 switch viewModel.phase {
                 case .loading:
-                    GeometryReader { proxy in
-                        // Grids are inset 16 pt on each side, so the column math uses the width minus 32 pt.
-                        loadingSkeletonScrollView(columns: AdaptiveGridMetrics.columns(forWidth: proxy.size.width - 32, spacing: 12))
+                    WidthClassReader { widthClass, size in
+                        loadingSkeletonScrollView(columns: widthClass.spacing.gridColumns(forWidth: size.width), spacing: widthClass.spacing)
                     }
                 case .empty:
                     emptyStateView
@@ -134,22 +133,22 @@ struct LibraryView: View {
                     isAwaitingOfflineProofs: viewModel.isAwaitingOfflineProofs
                 )
             } else {
-                GeometryReader { proxy in
+                WidthClassReader { widthClass, size in
                     // The grid width comes from the container this view is given, so the column count follows the layout.
-                    libraryScrollView(columns: AdaptiveGridMetrics.columns(forWidth: proxy.size.width - 32, spacing: 12))
+                    libraryScrollView(columns: widthClass.spacing.gridColumns(forWidth: size.width), spacing: widthClass.spacing)
                 }
             }
         }
     }
 
-    private func libraryScrollView(columns: [GridItem]) -> some View {
+    private func libraryScrollView(columns: [GridItem], spacing: LayoutSpacing) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
                 updateFailureSection
                 if viewModel.layoutStyle == .tabbed && viewModel.selectedCategoryID == nil {
                     Section {
-                        libraryGrid(items: viewModel.filteredItems, columns: columns)
-                            .padding(.horizontal, 16)
+                        libraryGrid(items: viewModel.filteredItems, columns: columns, spacing: spacing)
+                            .padding(.horizontal, spacing.margin)
                             .padding(.bottom, 24)
                     }
                 } else {
@@ -158,8 +157,8 @@ struct LibraryView: View {
                             if group.items.isEmpty {
                                 actionableEmptyState(for: group.name)
                             } else {
-                                libraryGrid(items: group.items, columns: columns)
-                                    .padding(.horizontal, 16)
+                                libraryGrid(items: group.items, columns: columns, spacing: spacing)
+                                    .padding(.horizontal, spacing.margin)
                                     .padding(.bottom, 24)
                             }
                         } header: {
@@ -282,8 +281,8 @@ struct LibraryView: View {
         )
     }
 
-    private func libraryGrid(items: [LibraryItem], columns: [GridItem]) -> some View {
-        LazyVGrid(columns: columns, spacing: 14) {
+    private func libraryGrid(items: [LibraryItem], columns: [GridItem], spacing: LayoutSpacing) -> some View {
+        LazyVGrid(columns: columns, spacing: spacing.gridRowSpacing) {
             ForEach(items) { item in
                 LibraryItemView(
                     item: item,
@@ -430,9 +429,9 @@ struct LibraryView: View {
         }
     }
 
-    private func loadingSkeletonScrollView(columns: [GridItem]) -> some View {
+    private func loadingSkeletonScrollView(columns: [GridItem], spacing: LayoutSpacing) -> some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 14) {
+            LazyVGrid(columns: columns, spacing: spacing.gridRowSpacing) {
                 ForEach(0..<8, id: \.self) { index in
                     let fakeItem = LibraryItem(
                         id: "loading-\(index)",
@@ -459,7 +458,7 @@ struct LibraryView: View {
                     )
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, spacing.margin)
             .padding(.top, 16)
         }
         .redacted(reason: .placeholder)

@@ -71,33 +71,11 @@ final class HomePresentationTests: XCTestCase {
         XCTAssertEqual(card.id, MediaEntryIdentity(kind: .manga, key: "m"))
     }
 
-    func testLayoutModeIsWideOnlyForLandscapeSpaceInARegularHeightWindowAndTheSideBySidePreference() {
-        // The unfolded Duo held sideways: the home itself is shorter than the window (bars above it), still wide.
-        XCTAssertEqual(
-            HomeLayoutMode.make(size: CGSize(width: 951, height: 520), verticallyRegular: true, preference: .sideBySide),
-            .sideBySide
-        )
-        XCTAssertEqual(
-            HomeLayoutMode.make(size: CGSize(width: 951, height: 520), verticallyRegular: true, preference: .stacked),
-            .narrow
-        )
-        // Unfolded portrait, folded, and a phone held sideways (compact height) stay narrow.
-        XCTAssertEqual(
-            HomeLayoutMode.make(size: CGSize(width: 669, height: 800), verticallyRegular: true, preference: .sideBySide),
-            .narrow
-        )
-        XCTAssertEqual(
-            HomeLayoutMode.make(size: CGSize(width: 466, height: 600), verticallyRegular: true, preference: .sideBySide),
-            .narrow
-        )
-        XCTAssertEqual(
-            HomeLayoutMode.make(size: CGSize(width: 932, height: 330), verticallyRegular: false, preference: .sideBySide),
-            .narrow
-        )
-        XCTAssertEqual(
-            HomeLayoutMode.make(size: CGSize(width: 699, height: 500), verticallyRegular: true, preference: .sideBySide),
-            .narrow
-        )
+    func testLayoutModeIsSideBySideOnlyForTheWideWidthClassAndThePreference() {
+        XCTAssertEqual(HomeLayoutMode.make(widthClass: .wide, preference: .sideBySide), .sideBySide)
+        XCTAssertEqual(HomeLayoutMode.make(widthClass: .wide, preference: .stacked), .narrow)
+        XCTAssertEqual(HomeLayoutMode.make(widthClass: .regular, preference: .sideBySide), .narrow)
+        XCTAssertEqual(HomeLayoutMode.make(widthClass: .compact, preference: .sideBySide), .narrow)
     }
 
     func testPosterWidthScalesWithTheSpaceAndStaysWithinBounds() {
