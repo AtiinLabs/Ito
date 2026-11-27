@@ -13,6 +13,7 @@ struct ReaderView: View {
     @State private var showSettings = false
     @State private var showUI = true
     @State private var showSignIn = false
+    @State private var showsChapterList = false
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -37,11 +38,10 @@ struct ReaderView: View {
         GeometryReader { geometry in
             readerBody(
                 safeArea: geometry.safeAreaInsets,
-                showsSpread: NovelReaderLayout.showsSpread(
-                    widthClass: WidthClass.make(
-                        size: geometry.size,
-                        verticallyRegular: verticalSizeClass == .regular
-                    )
+                size: geometry.size,
+                widthClass: WidthClass.make(
+                    size: geometry.size,
+                    verticallyRegular: verticalSizeClass == .regular
                 )
             )
         }
@@ -75,6 +75,9 @@ struct ReaderView: View {
         .onChange(of: scenePhase) { phase in
             if phase != .active { viewModel.cancelGroupSwitch() }
         }
+        .onChange(of: showUI) { visible in
+            if !visible { showsChapterList = false }
+        }
         .alert(
             String(localized: "Switch groups?", comment: "Reader consent title: open one exact upload from another translation group"),
             // The buttons decide: a setter that cancelled could run before Continue's action.
@@ -88,7 +91,7 @@ struct ReaderView: View {
         }
     }
 
-    private func readerBody(safeArea: EdgeInsets, showsSpread: Bool) -> some View {
+    private func readerBody(safeArea: EdgeInsets, size: CGSize, widthClass: WidthClass) -> some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
@@ -142,6 +145,10 @@ struct ReaderView: View {
                             title: viewModel.currentChapter.title,
                             number: viewModel.currentChapter.chapterNumber
                         ),
+                        canShowChapters: viewModel.canShowChapterList,
+                        isShowingChapters: $showsChapterList,
+                        presentsAsPopover: widthClass == .regular,
+                        chapterList: chapterList(.popover),
                         onDismiss: { dismiss() }
                     )
 
@@ -173,10 +180,43 @@ struct ReaderView: View {
                 }
                 .transition(.opacity)
                 .ignoresSafeArea(edges: .bottom)
+                .padding(.trailing, showsChapterList && widthClass == .wide ? ReaderChapterListView.panelWidth(for: size) : 0)
+            }
+
+            if showsChapterList && widthClass == .wide {
+                chapterPanel(width: ReaderChapterListView.panelWidth(for: size))
+                    .transition(.move(edge: .trailing))
             }
         }
-        .onAppear { viewModel.setPagedSpreadLayout(showsSpread) }
-        .onChange(of: showsSpread) { viewModel.setPagedSpreadLayout($0) }
+        .animation(.easeInOut(duration: 0.2), value: showsChapterList)
+        .onAppear { viewModel.setPagedSpreadLayout(NovelReaderLayout.showsSpread(widthClass: widthClass)) }
+        .onChange(of: NovelReaderLayout.showsSpread(widthClass: widthClass)) { viewModel.setPagedSpreadLayout($0) }
+        .onChange(of: widthClass) { _ in showsChapterList = false }
+        .sheet(isPresented: Binding(
+            get: { showsChapterList && widthClass == .compact },
+            set: { showsChapterList = $0 }
+        )) {
+            chapterList(.sheet).modifier(PresentationDetentsModifier())
+        }
+    }
+
+    private func chapterList(_ style: ReaderChapterListView.Style) -> ReaderChapterListView {
+        ReaderChapterListView(
+            rows: viewModel.chapterListRows,
+            readerFormat: .pages,
+            style: style,
+            onSelect: { viewModel.jump(to: $0) },
+            onClose: { showsChapterList = false }
+        )
+    }
+
+    private func chapterPanel(width: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            chapterList(.panel)
+                .frame(width: width)
+                .environment(\.colorScheme, .dark)
+        }
     }
 
     // MARK: - Reader components
@@ -504,47 +544,6 @@ struct ReaderSettingsView: View {
 }
 
 // MARK: - Reader HUD Components
-
-private struct ReaderHeaderView: View {
-    let title: String
-    let chapterTitle: String
-    let onDismiss: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-
-                Text(chapterTitle)
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: Capsule())
-            .environment(\.colorScheme, .dark)
-
-            Spacer()
-
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(.body.weight(.bold))
-                    .foregroundColor(.white)
-                    .padding(12)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .environment(\.colorScheme, .dark)
-            }
-            .accessibilityLabel("Close Reader")
-        }
-        .padding(.horizontal)
-        // The header's container already keeps clear of the top safe area.
-        .padding(.top, 8)
-    }
-}
 
 private struct ReaderFooterView: View {
     let displayIndex: Int

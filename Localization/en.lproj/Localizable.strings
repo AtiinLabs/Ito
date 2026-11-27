@@ -353,7 +353,8 @@ Series page 'Up next' card: a chapter number, such as Chapter 12. */
 
 /* Download More prompt: section header for the number of chapters.
 Download More prompt: the field for the number of chapters.
-Download preset editor: the count field. */
+Download preset editor: the count field.
+Reader chapter list: heading above the list of chapters */
 "Chapters" = "Chapters";
 
 /* Compatibility key-or-number read markers, not offline coverage. */
@@ -1652,6 +1653,15 @@ Manga format: light novel */
 /* Downloaded versions sheet: the chosen saved copy is being opened */
 "Opening the saved copy…" = "Opening the saved copy…";
 
+/* Reader chapter list: hint for a chapter that opens in the page reader */
+"Opens in the page reader." = "Opens in the page reader.";
+
+/* Reader chapter list: hint for a chapter that opens in the text reader */
+"Opens in the text reader." = "Opens in the text reader.";
+
+/* Reader title chip: hint for the button that opens the chapter list */
+"Opens or closes the chapter list." = "Opens or closes the chapter list.";
+
 /* History: accessibility hint of a series row */
 "Opens the series" = "Opens the series";
 
@@ -1802,7 +1812,8 @@ History: the page a chapter was left on */
 
 "Re-link failed. Please try again." = "Re-link failed. Please try again.";
 
-/* Accessibility value of a chapter row on the series page that has been read. */
+/* Accessibility value of a chapter row on the series page that has been read.
+Reader chapter list: accessibility value for a chapter already read */
 "Read" = "Read";
 
 "Read Again" = "Read Again";
@@ -2766,7 +2777,11 @@ Reading font: the system font */
 
 "This chapter is locked on the source." = "This chapter is locked on the source.";
 
-/* Shown when a chapter has no offline copy and cannot be loaded: no installed source can load it, or the device is offline. Used as the reader's load-failure text and as a notice on the series details screen.
+/* Reader chapter list: hint for a chapter the account cannot open */
+"This chapter is locked." = "This chapter is locked.";
+
+/* Reader chapter list: hint for a chapter that is not stored for offline reading
+Shown when a chapter has no offline copy and cannot be loaded: no installed source can load it, or the device is offline. Used as the reader's load-failure text and as a notice on the series details screen.
 Shown when a chapter has no offline copy and no installed source can load it. Used as the reader's load-failure text and as a notice on the series details screen. */
 "This chapter isn't downloaded." = "This chapter isn't downloaded.";
 

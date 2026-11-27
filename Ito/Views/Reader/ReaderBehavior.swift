@@ -90,6 +90,16 @@ nonisolated enum ReaderChapterTitle {
         if let number { return String(localized: "Chapter \(number.formatted())") }
         return String(localized: "Unknown Chapter")
     }
+
+    /// "Chapter 12 - Title" when the chapter has a number and a title, "Chapter 12" when only the number is
+    /// known; without a number, the title, else "Unknown Chapter".
+    static func heading(title: String?, number: Float32?) -> String {
+        guard let number else { return title ?? String(localized: "Unknown Chapter") }
+        if let title, !title.isEmpty {
+            return String(localized: "Chapter \(number.formatted()) - \(title)", comment: "Novel chapter heading: number, then chapter title")
+        }
+        return String(localized: "Chapter \(number.formatted())")
+    }
 }
 
 /// What lies past a chapter in reading order. `locked` is a candidate the account cannot open;
