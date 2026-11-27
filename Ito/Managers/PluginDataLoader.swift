@@ -4,7 +4,7 @@ import ito_runner
 
 /// The optional image exports needed by the loader. The actor keeps WASM resolution serialized;
 /// native HTTP work starts only after these calls return.
-protocol PluginImageRunner: Sendable {
+nonisolated protocol PluginImageRunner: Sendable {
     func getImageRequest(_ locator: String, context: NetworkOperationContext) async throws -> PluginImageRequest?
     func getImageOrigins(context: NetworkOperationContext) async throws -> [String]?
     func handleImage(_ locator: String, context: NetworkOperationContext) async throws -> Data?

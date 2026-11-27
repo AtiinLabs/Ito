@@ -4,6 +4,7 @@ import Combine
 final class AppearanceSettingsViewModel: ObservableObject {
     @Published private(set) var currentTheme: AppThemePreference
     @Published private(set) var alert: SettingsAlert?
+    @Published private(set) var sourceHomeWideLayout: SourceHomeWideLayoutPreference
 
     let availableThemes = AppThemePreference.allCases
 
@@ -13,10 +14,17 @@ final class AppearanceSettingsViewModel: ObservableObject {
     init(settingsStore: AppSettingsStore) {
         self.settingsStore = settingsStore
         currentTheme = settingsStore.appTheme
+        sourceHomeWideLayout = settingsStore.sourceHomeWideLayout
 
         settingsStore.$appTheme
             .sink { [weak self] theme in
                 self?.currentTheme = theme
+            }
+            .store(in: &cancellables)
+
+        settingsStore.$sourceHomeWideLayout
+            .sink { [weak self] layout in
+                self?.sourceHomeWideLayout = layout
             }
             .store(in: &cancellables)
     }
@@ -28,6 +36,17 @@ final class AppearanceSettingsViewModel: ObservableObject {
             alert = nil
         } catch {
             currentTheme = settingsStore.appTheme
+            alert = .saveFailed
+        }
+    }
+
+    func selectSourceHomeWideLayout(_ layout: SourceHomeWideLayoutPreference) async {
+        do {
+            try await settingsStore.set(layout, for: AppPreferenceCatalog.sourceHomeWideLayout)
+            sourceHomeWideLayout = settingsStore.sourceHomeWideLayout
+            alert = nil
+        } catch {
+            sourceHomeWideLayout = settingsStore.sourceHomeWideLayout
             alert = .saveFailed
         }
     }

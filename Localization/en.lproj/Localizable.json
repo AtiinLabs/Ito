@@ -53,7 +53,7 @@
     "other": "%lld already saved or queued"
   },
   "%lld chapters": {
-    "description": "Scanlator choice: how many chapters of the series this scanlator has. The placeholder is a number, which needs plural forms.",
+    "description": "Featured carousel metadata: how many chapters the source lists.\nScanlator choice: how many chapters of the series this scanlator has. The placeholder is a number, which needs plural forms.",
     "one": "%lld chapter",
     "other": "%lld chapters"
   },
@@ -93,6 +93,7 @@
     "other": "%lld episode updates"
   },
   "%lld episodes": {
+    "description": "Featured carousel metadata: how many episodes the source lists.",
     "one": "%lld episode",
     "other": "%lld episodes"
   },

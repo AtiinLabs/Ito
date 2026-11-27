@@ -96,6 +96,9 @@ Rule sheet: how much space stored downloads use. The placeholder is a size such 
 
 "Add a repository URL to discover and install plugins." = "Add a repository URL to discover and install plugins.";
 
+/* Featured carousel button: adds the shown series to the library. */
+"Add to Library" = "Add to Library";
+
 /* Series screen: automatic downloads need the series to be in the Library */
 "Add to Library to download new chapters automatically" = "Add to Library to download new chapters automatically";
 
@@ -180,6 +183,8 @@ History: kind of media */
 
 /* Reader settings tab: colors and brightness */
 "Appearance" = "Appearance";
+
+"Applies to an unfolded iPhone Duo in landscape, iPad and Mac. Side by Side shows a source's featured title beside its shelves; Stacked keeps the phone layout." = "Applies to an unfolded iPhone Duo in landscape, iPad and Mac. Side by Side shows a source's featured title beside its shelves; Stacked keeps the phone layout.";
 
 "Apply" = "Apply";
 
@@ -1003,6 +1008,9 @@ Downloaded versions sheet: the source's identifier of a translation group. The p
 
 "Invalid URL" = "Invalid URL";
 
+/* Accessibility value for the featured carousel: which item is shown out of how many. */
+"Item %lld of %lld" = "Item %1$lld of %2$lld";
+
 "Items only in this list move to %@. Nothing is removed from your library." = "Items only in this list move to %@. Nothing is removed from your library.";
 
 "Items you read or watch\nwill appear here." = "Items you read or watch\nwill appear here.";
@@ -1071,6 +1079,8 @@ Downloaded versions sheet: the source's identifier of a translation group. The p
 
 /* Automatic downloads: when the rule was last checked. The placeholder is a relative time such as '5 minutes ago'. */
 "Last checked %@" = "Last checked %@";
+
+"Layout" = "Layout";
 
 "Layout not saved" = "Layout not saved";
 
@@ -1302,6 +1312,9 @@ Manga format */
 
 /* A request was stopped because its captured network policy is no longer current. */
 "Network settings changed. Try again." = "Network settings changed. Try again.";
+
+/* Featured badge: the series was added to the source recently. */
+"New" = "New";
 
 /* Title of the sheet where the person decides about new chapters of a rule */
 "New Chapters" = "New Chapters";
@@ -1689,6 +1702,7 @@ History: the page a chapter was left on */
 
 "Plugin settings could not be reloaded." = "Plugin settings could not be reloaded.";
 
+/* Featured badge: the series is among the most popular on the source. */
 "Popular" = "Popular";
 
 "Popular This Season" = "Popular This Season";
@@ -1797,6 +1811,8 @@ History: the page a chapter was left on */
 "Ready" = "Ready";
 
 "Recent Searches" = "Recent Searches";
+
+"Redeliver Repository Deep Link" = "Redeliver Repository Deep Link";
 
 "Refine your search." = "Refine your search.";
 
@@ -2141,6 +2157,9 @@ Downloads queue: retry a failed or paused job */
 
 "Secure credential verification failed." = "Secure credential verification failed.";
 
+/* Featured carousel link: opens the full listing the carousel comes from. */
+"See All" = "See All";
+
 "Select Audio Track" = "Select Audio Track";
 
 "Select Quality" = "Select Quality";
@@ -2201,6 +2220,9 @@ Downloads queue: retry a failed or paused job */
 "Showing saved details. They refresh when the source is available again." = "Showing saved details. They refresh when the source is available again.";
 
 "Shows what you're reading or watching on your Discord profile. Needs a Rich Presence bridge running at the server address." = "Shows what you're reading or watching on your Discord profile. Needs a Rich Presence bridge running at the server address.";
+
+/* Source home layout on wide screens: the featured carousel beside the shelves. The picker is in Settings, under Appearance. */
+"Side by Side" = "Side by Side";
 
 "Sign In" = "Sign In";
 
@@ -2265,6 +2287,8 @@ Downloads queue: retry a failed or paused job */
 
 "Source" = "Source";
 
+"Source Home on Wide Screens" = "Source Home on Wide Screens";
+
 "Source Settings" = "Source Settings";
 
 /* Automatic downloads: status of a rule paused because its series moved to another source, until the person reviews it */
@@ -2305,9 +2329,18 @@ History: the source a series was read on was removed */
 /* Anime season */
 "Spring" = "Spring";
 
+/* Source home layout on wide screens: the featured carousel above the shelves. The picker is in Settings, under Appearance. */
+"Stacked" = "Stacked";
+
 "Start" = "Start";
 
 "Start Over" = "Start Over";
+
+/* Featured carousel button: opens the series at its first unread chapter. */
+"Start Reading" = "Start Reading";
+
+/* Featured carousel button: opens the anime series at its first unwatched episode. */
+"Start Watching" = "Start Watching";
 
 "Started" = "Started";
 
@@ -2869,7 +2902,11 @@ Automatic downloads: why unread chapters cannot be listed */
 
 "Tracking succeeded, but local progress could not be saved." = "Tracking succeeded, but local progress could not be saved.";
 
+/* Featured badge: the series is trending on the source. */
 "Trending" = "Trending";
+
+/* Featured badge: the series is trending, with its rank on the source. */
+"Trending #%lld" = "Trending #%lld";
 
 "Trending Now" = "Trending Now";
 
@@ -2901,6 +2938,8 @@ Review sheet: read the waiting chapters again */
 
 /* Download preset editor: the type of preset. */
 "Type" = "Type";
+
+"UI Test Fixture" = "UI Test Fixture";
 
 "URL Open error: The plugin could not be imported." = "URL Open error: The plugin could not be imported.";
 
@@ -2997,6 +3036,9 @@ Rule sheet: the space automatic downloads may fill. The placeholder is a size su
 
 "Update failed. Please try again." = "Update failed. Please try again.";
 
+/* Featured badge: the series has new units since the source last changed it. */
+"Updated" = "Updated";
+
 /* Line under a notice about saved series details. The placeholder is a relative time such as '3 hours ago'. */
 "Updated %@" = "Updated %@";
 
@@ -3034,6 +3076,9 @@ Rule sheet: the space automatic downloads may fill. The placeholder is a size su
 
 /* Discord status button */
 "View App On GitHub" = "View App On GitHub";
+
+/* Featured carousel button: opens the series' details. */
+"View Details" = "View Details";
 
 "View on %@" = "View on %@";
 

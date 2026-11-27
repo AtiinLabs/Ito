@@ -1068,6 +1068,7 @@ struct AppPreferenceCatalogTests {
             .init(entry: .automaticDownloadQueueLimit, source: .integerNSNumber, defaultJSON: "100", accepted: [10, 100, 500].map(NSNumber.init(value:)), invalid: [NSNumber(value: 9), NSNumber(value: 501), NSNumber(value: 0), NSNumber(value: -1), NSNumber(value: 10.5), NSNumber(value: true)]),
             .init(entry: .automaticDownloadQuotaGiB, source: .integerNSNumber, defaultJSON: "5", accepted: [1, 5, 200].map(NSNumber.init(value:)), invalid: [NSNumber(value: 0), NSNumber(value: 201), NSNumber(value: -1), NSNumber(value: 2.5), NSNumber(value: true)]),
             .init(entry: .subscriptionAttentionNotifications, source: .booleanNSNumber, defaultJSON: "false", accepted: [NSNumber(value: false), NSNumber(value: true)], invalid: boolInvalid),
+            .init(entry: .sourceHomeWideLayout, source: .string, defaultJSON: "\"SideBySide\"", accepted: SourceHomeWideLayoutPreference.allCases.map(\.rawValue), invalid: ["Unknown", "sideBySide", NSNumber(value: 1)]),
             .init(entry: .diskCacheLimitGB, source: .numericNSNumber, defaultJSON: "10", accepted: [NSNumber(value: 1), NSNumber(value: 50)], invalid: numericInvalid + [NSNumber(value: 0), NSNumber(value: 2.5), NSNumber(value: 51)])
         ]
     }
@@ -1100,6 +1101,7 @@ struct AppPreferenceCatalogTests {
         case .automaticDownloadQueueLimit: AppPreferenceKeys.automaticDownloadQueueLimit
         case .automaticDownloadQuotaGiB: AppPreferenceKeys.automaticDownloadQuotaGiB
         case .subscriptionAttentionNotifications: AppPreferenceKeys.subscriptionAttentionNotifications
+        case .sourceHomeWideLayout: AppPreferenceKeys.sourceHomeWideLayout
         }
     }
 
@@ -1131,6 +1133,7 @@ struct AppPreferenceCatalogTests {
         case .automaticDownloadQueueLimit: try assertRoundTrip(AppPreferenceCatalog.automaticDownloadQueueLimit)
         case .automaticDownloadQuotaGiB: try assertRoundTrip(AppPreferenceCatalog.automaticDownloadQuotaGiB)
         case .subscriptionAttentionNotifications: try assertRoundTrip(AppPreferenceCatalog.subscriptionAttentionNotifications)
+        case .sourceHomeWideLayout: try assertRoundTrip(AppPreferenceCatalog.sourceHomeWideLayout)
         }
     }
 

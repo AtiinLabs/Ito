@@ -76,7 +76,9 @@ final class FakePluginProvider: SourceResolverPluginProviding {
     }
 }
 
-actor FakePluginSearchAdapter: PluginSearching {
+// The conformance is declared in an extension: with Xcode 27.1, a type in this main-actor-default module that conforms
+// to a nonisolated protocol in its declaration is inferred `nonisolated`, which is invalid for an actor.
+actor FakePluginSearchAdapter {
     let pluginID: String
     let pluginVersion: String?
     let mediaType: PluginMediaType
@@ -103,6 +105,8 @@ actor FakePluginSearchAdapter: PluginSearching {
         self.errorToThrow = error
     }
 }
+
+extension FakePluginSearchAdapter: PluginSearching {}
 
 @MainActor
 final class SourceResolverViewModelTests: XCTestCase {

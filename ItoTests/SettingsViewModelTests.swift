@@ -118,6 +118,19 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.alert)
     }
 
+    func testSourceHomeWideLayoutStartsFromCommittedValueAndSavesThroughTheStore() async throws {
+        let (store, _) = try await makeSettingsStore(theme: .light)
+        let viewModel = AppearanceSettingsViewModel(settingsStore: store)
+
+        XCTAssertEqual(viewModel.sourceHomeWideLayout, .sideBySide)
+
+        await viewModel.selectSourceHomeWideLayout(.stacked)
+
+        XCTAssertEqual(store.sourceHomeWideLayout, .stacked)
+        XCTAssertEqual(viewModel.sourceHomeWideLayout, .stacked)
+        XCTAssertNil(viewModel.alert)
+    }
+
     func testAppearanceModelIdentityIsStableWithinScopeAndNewAcrossScopes() {
         let firstScope = makeScope()
         let secondScope = makeScope()

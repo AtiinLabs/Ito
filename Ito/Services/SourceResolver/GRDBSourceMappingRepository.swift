@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
 
-public protocol SourceMappingRepository: Sendable {
+nonisolated public protocol SourceMappingRepository: Sendable {
     func fetchConfirmed(canonicalProvider: String, canonicalMediaId: String, mediaType: PluginMediaType) async throws -> [SourceMappingRecord]
     func fetchAll(canonicalProvider: String, canonicalMediaId: String, mediaType: PluginMediaType) async throws -> [SourceMappingRecord]
     func find(pluginId: String, pluginMediaKey: String) async throws -> [SourceMappingRecord]

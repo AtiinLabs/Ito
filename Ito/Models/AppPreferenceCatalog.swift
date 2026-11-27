@@ -128,6 +128,7 @@ nonisolated public enum AppPreferenceKeys {
     public static let automaticDownloadQueueLimit = "Ito.AutomaticDownloadQueueLimit"
     public static let automaticDownloadQuotaGiB = "Ito.AutomaticDownloadQuotaGiB"
     public static let subscriptionAttentionNotifications = "Ito.SubscriptionAttentionNotifications"
+    public static let sourceHomeWideLayout = "Ito.SourceHomeWideLayout"
 }
 
 nonisolated public enum AppPreferenceCatalog {
@@ -170,6 +171,7 @@ nonisolated public enum AppPreferenceCatalog {
     }
     /// Whether a notification may say that an automatic download rule needs a decision. Off until the person turns it on.
     public static let subscriptionAttentionNotifications = boolean(AppPreferenceKeys.subscriptionAttentionNotifications, defaultValue: false)
+    public static let sourceHomeWideLayout = AppPreferenceKey<SourceHomeWideLayoutPreference>(name: AppPreferenceKeys.sourceHomeWideLayout, defaultValue: .sideBySide) { _ in true }
 
     private static func boolean(_ name: String, defaultValue: Bool) -> AppPreferenceKey<Bool> {
         AppPreferenceKey(name: name, defaultValue: defaultValue) { _ in true }
@@ -210,6 +212,7 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
     case automaticDownloadQueueLimit = "Ito.AutomaticDownloadQueueLimit"
     case automaticDownloadQuotaGiB = "Ito.AutomaticDownloadQuotaGiB"
     case subscriptionAttentionNotifications = "Ito.SubscriptionAttentionNotifications"
+    case sourceHomeWideLayout = "Ito.SourceHomeWideLayout"
 
     public var acceptedSource: LegacyPreferenceSourceType {
         switch self {
@@ -223,7 +226,7 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
             return .integerNSNumber
         case .novelFontSize, .novelLineSpacing, .diskCacheLimitGB:
             return .numericNSNumber
-        case .discordRPCURL, .appTheme, .novelFontFamily, .novelTheme, .networkDownloadMode:
+        case .discordRPCURL, .appTheme, .novelFontFamily, .novelTheme, .networkDownloadMode, .sourceHomeWideLayout:
             return .string
         }
     }
@@ -245,6 +248,7 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
         case .preloadImageCount: encode(5)
         case .networkDownloadMode: encode(NetworkDownloadMode.unmeteredOnly.rawValue)
         case .adjacentChapterPrefetchCount: encode(AdjacentChapterPrefetchPreference.two.rawValue)
+        case .sourceHomeWideLayout: encode(SourceHomeWideLayoutPreference.sideBySide.rawValue)
         case .automaticDownloadQueueLimit: encode(AppPreferenceCatalog.automaticDownloadQueueLimit.defaultValue)
         case .automaticDownloadQuotaGiB: encode(AppPreferenceCatalog.automaticDownloadQuotaGiB.defaultValue)
         case .diskCacheLimitGB: encode(10.0)
@@ -258,7 +262,8 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
     public var hasLegacyDefaultsSource: Bool {
         switch self {
         case .networkDownloadMode, .adjacentChapterPrefetchCount, .askBeforeSwitchingGroups,
-             .automaticDownloadQueueLimit, .automaticDownloadQuotaGiB, .subscriptionAttentionNotifications: false
+             .automaticDownloadQueueLimit, .automaticDownloadQuotaGiB, .subscriptionAttentionNotifications,
+             .sourceHomeWideLayout: false
         default: true
         }
     }
@@ -268,7 +273,8 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
     public var isOptionalInBackupCatalog: Bool {
         switch self {
         case .networkDownloadMode, .adjacentChapterPrefetchCount, .askBeforeSwitchingGroups,
-             .automaticDownloadQueueLimit, .automaticDownloadQuotaGiB, .subscriptionAttentionNotifications: true
+             .automaticDownloadQueueLimit, .automaticDownloadQuotaGiB, .subscriptionAttentionNotifications,
+             .sourceHomeWideLayout: true
         default: false
         }
     }
@@ -342,6 +348,8 @@ nonisolated public enum AppPreferenceCatalogEntry: String, CaseIterable, Sendabl
             return (value as? String).map { Set(NovelFontPreference.allCases.map(\.rawValue)).contains($0) } ?? false
         case .novelTheme:
             return (value as? String).map { Set(NovelThemePreference.allCases.map(\.rawValue)).contains($0) } ?? false
+        case .sourceHomeWideLayout:
+            return (value as? String).map { SourceHomeWideLayoutPreference(rawValue: $0) != nil } ?? false
         case .diskCacheLimitGB:
             return (value as? Double).map { $0.isFinite && $0.rounded() == $0 && (1...50).contains($0) } ?? false
         case .alwaysShowCategoryPicker, .backgroundUpdatesEnabled, .skipCompleted,

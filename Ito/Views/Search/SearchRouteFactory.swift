@@ -622,10 +622,11 @@ struct SearchRouteFactory {
         }
     }
 
-    func destination(for destination: SearchDestination) -> some View {
+    func destination(for destination: SearchDestination, openIntent: MediaDetailOpenIntent? = nil) -> some View {
         SearchDestinationHost(
             route: route(for: destination),
-            mediaDetailViewFactory: mediaDetailViewFactory
+            mediaDetailViewFactory: mediaDetailViewFactory,
+            openIntent: openIntent
         )
     }
 }
@@ -654,6 +655,7 @@ enum SearchDetailRoute {
 private struct SearchDestinationHost: View {
     let route: SearchDetailRoute
     let mediaDetailViewFactory: MediaDetailViewFactory?
+    var openIntent: MediaDetailOpenIntent?
 
     @ViewBuilder
     var body: some View {
@@ -664,7 +666,8 @@ private struct SearchDestinationHost: View {
                     runner: runner,
                     media: media,
                     pluginID: pluginID,
-                    loader: loader
+                    loader: loader,
+                    openIntent: openIntent
                 )
             } else {
                 Text("Media details are unavailable.")
@@ -675,7 +678,8 @@ private struct SearchDestinationHost: View {
                     runner: runner,
                     media: media,
                     pluginID: pluginID,
-                    loader: loader
+                    loader: loader,
+                    openIntent: openIntent
                 )
             } else {
                 Text("Media details are unavailable.")
@@ -686,7 +690,8 @@ private struct SearchDestinationHost: View {
                     runner: runner,
                     media: media,
                     pluginID: pluginID,
-                    loader: loader
+                    loader: loader,
+                    openIntent: openIntent
                 )
             } else {
                 Text("Media details are unavailable.")
