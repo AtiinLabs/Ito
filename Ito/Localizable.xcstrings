@@ -1496,6 +1496,17 @@
     "Backup State" : {
 
     },
+    "Banner %lld of %lld" : {
+      "comment" : "Accessibility value for the Discover banner hero: which banner is shown out of how many.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Banner %1$lld of %2$lld"
+          }
+        }
+      }
+    },
     "Best Match" : {
 
     },
@@ -1566,7 +1577,7 @@
       "comment" : "Rule sheet: where the limits are changed"
     },
     "Chapter %@" : {
-      "comment" : "Review row: the chapter number. The placeholder is the number."
+      "comment" : "Review row: the chapter number. The placeholder is the number.\nSeries page 'Up next' card: a chapter number, such as Chapter 12."
     },
     "Chapter %@ - %@" : {
       "comment" : "Novel chapter heading: number, then chapter title",
@@ -1584,6 +1595,9 @@
     },
     "Chapter no longer listed" : {
 
+    },
+    "Chapter —" : {
+      "comment" : "Series page 'Up next' card: a chapter the source gave no number for."
     },
     "Chapters" : {
       "comment" : "Download More prompt: section header for the number of chapters.\nDownload More prompt: the field for the number of chapters.\nDownload preset editor: the count field."
@@ -2323,13 +2337,16 @@
       "comment" : "Series details: every chapter of the series is saved on this device, and the source confirmed its chapter list is complete."
     },
     "Episode %@" : {
-      "comment" : "Discord status: episode number\nHistory: an episode without a title"
+      "comment" : "Discord status: episode number\nHistory: an episode without a title\nSeries page 'Up next' card: an episode number, such as Episode 3."
     },
     "Episode locked" : {
 
     },
     "Episode no longer listed" : {
 
+    },
+    "Episode —" : {
+      "comment" : "Series page 'Up next' card: an episode the source gave no number for."
     },
     "Episodes" : {
 
@@ -3763,6 +3780,9 @@
     },
     "Re-link failed. Please try again." : {
 
+    },
+    "Read" : {
+      "comment" : "Accessibility value of a chapter row on the series page that has been read."
     },
     "Read Again" : {
 
@@ -5479,6 +5499,9 @@
     "Unnamed group" : {
       "comment" : "Downloaded versions sheet: the source gave this upload a group identifier but no name\nReader consent: shown in place of the group name when the source supplies none"
     },
+    "Unread" : {
+      "comment" : "Accessibility value of a chapter row on the series page that has not been read."
+    },
     "Unread Chapters" : {
       "comment" : "Title of the sheet where the person approves unread chapters for download"
     },
@@ -5496,6 +5519,9 @@
     },
     "Unsupported component type." : {
 
+    },
+    "Up next" : {
+      "comment" : "Accessibility value of the chapter row on the series page that Resume opens.\nHeading of the series page card for the unit that Resume opens."
     },
     "Up to %@ of space for automatic downloads" : {
       "comment" : "Automatic downloads screen: the space automatic downloads may fill. The placeholder is a size such as 5 GB.\nRule sheet: the space automatic downloads may fill. The placeholder is a size such as 5 GB."

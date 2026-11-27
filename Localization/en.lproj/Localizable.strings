@@ -274,6 +274,9 @@ Title of the sheet that sets up automatic downloads for a series */
 
 "Backup State" = "Backup State";
 
+/* Accessibility value for the Discover banner hero: which banner is shown out of how many. */
+"Banner %lld of %lld" = "Banner %1$lld of %2$lld";
+
 "Best Match" = "Best Match";
 
 "Brightness" = "Brightness";
@@ -334,7 +337,8 @@ Downloads queue: cancel one job */
 /* Rule sheet: where the limits are changed */
 "Change these limits under Downloads, Automatic Downloads." = "Change these limits under Downloads, Automatic Downloads.";
 
-/* Review row: the chapter number. The placeholder is the number. */
+/* Review row: the chapter number. The placeholder is the number.
+Series page 'Up next' card: a chapter number, such as Chapter 12. */
 "Chapter %@" = "Chapter %@";
 
 /* Novel chapter heading: number, then chapter title */
@@ -343,6 +347,9 @@ Downloads queue: cancel one job */
 "Chapter locked" = "Chapter locked";
 
 "Chapter no longer listed" = "Chapter no longer listed";
+
+/* Series page 'Up next' card: a chapter the source gave no number for. */
+"Chapter —" = "Chapter —";
 
 /* Download More prompt: section header for the number of chapters.
 Download More prompt: the field for the number of chapters.
@@ -786,12 +793,16 @@ Download preset editor: the count must be a whole number in the range. The place
 "Entire series offline" = "Entire series offline";
 
 /* Discord status: episode number
-History: an episode without a title */
+History: an episode without a title
+Series page 'Up next' card: an episode number, such as Episode 3. */
 "Episode %@" = "Episode %@";
 
 "Episode locked" = "Episode locked";
 
 "Episode no longer listed" = "Episode no longer listed";
+
+/* Series page 'Up next' card: an episode the source gave no number for. */
+"Episode —" = "Episode —";
 
 "Episodes" = "Episodes";
 
@@ -1766,6 +1777,9 @@ History: the page a chapter was left on */
 "Queued" = "Queued";
 
 "Re-link failed. Please try again." = "Re-link failed. Please try again.";
+
+/* Accessibility value of a chapter row on the series page that has been read. */
+"Read" = "Read";
 
 "Read Again" = "Read Again";
 
@@ -3000,6 +3014,9 @@ Review sheet: read the waiting chapters again */
 Reader consent: shown in place of the group name when the source supplies none */
 "Unnamed group" = "Unnamed group";
 
+/* Accessibility value of a chapter row on the series page that has not been read. */
+"Unread" = "Unread";
+
 /* Title of the sheet where the person approves unread chapters for download */
 "Unread Chapters" = "Unread Chapters";
 
@@ -3013,6 +3030,10 @@ Reader consent: shown in place of the group name when the source supplies none *
 "Unresolved legacy media" = "Unresolved legacy media";
 
 "Unsupported component type." = "Unsupported component type.";
+
+/* Accessibility value of the chapter row on the series page that Resume opens.
+Heading of the series page card for the unit that Resume opens. */
+"Up next" = "Up next";
 
 /* Automatic downloads screen: the space automatic downloads may fill. The placeholder is a size such as 5 GB.
 Rule sheet: the space automatic downloads may fill. The placeholder is a size such as 5 GB. */
