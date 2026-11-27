@@ -521,19 +521,8 @@ struct MediaDetailView<M: MediaDisplayable>: View {
         displayedChapters: [M.Chapter]
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            if viewModel.resumeChapter != nil {
-                Button {
-                    viewModel.resumeReading()
-                } label: {
-                    Label(resumeTitle, systemImage: resumeIcon)
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                }
-                .tint(viewModel.theme.map { Color(hex: $0.secondaryHex) } ?? .accentColor)
-                .buttonStyle(.borderedProminent)
-                .foregroundStyle(viewModel.theme == nil ? Color.itoOnAccent : .white)
-                .controlSize(.large)
-                .padding(.horizontal, 16)
+            if let upNext = viewModel.resumeChapter {
+                upNextCard(upNext)
             }
 
             if let anime = viewModel.media as? Anime,
@@ -553,6 +542,40 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 displayedChapterCount: displayedChapters.count
             )
         }
+    }
+
+    /// The unit Resume opens, with its number and title, so the reader sees what a tap continues before it happens.
+    private func upNextCard(_ chapter: M.Chapter) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Up next", comment: "Heading of the series page card for the unit that Resume opens.")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ChapterThreadLayout.numberLabel(for: chapter))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                if let title = chapter.title, !title.isEmpty {
+                    Text(title)
+                        .font(.headline)
+                        .lineLimit(2)
+                }
+            }
+            Button {
+                viewModel.resumeReading()
+            } label: {
+                Label(resumeTitle, systemImage: resumeIcon)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .tint(viewModel.theme.map { Color(hex: $0.secondaryHex) } ?? .accentColor)
+            .buttonStyle(.borderedProminent)
+            .foregroundStyle(viewModel.theme == nil ? Color.itoOnAccent : .white)
+            .controlSize(.large)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(.secondarySystemBackground)))
+        .padding(.horizontal, 16)
     }
 
     private var resumeTitle: String {
@@ -706,19 +729,28 @@ struct MediaDetailView<M: MediaDisplayable>: View {
 
     /// `textKeys` comes from the whole series, so a filter that leaves only text chapters keeps their marks.
     private func chapterList(chapters: [M.Chapter], textKeys: Set<String>) -> some View {
-        LazyVStack(spacing: 0) {
+        let roles = ChapterThreadLayout.roles(
+            for: chapters.map { (key: $0.key, isRead: viewModel.isRead($0)) },
+            upNextKey: viewModel.resumeChapter?.key
+        )
+        let steps = ChapterThreadLayout.steps(for: roles)
+        let stepsByKey = Dictionary(zip(chapters.map(\.key), steps), uniquingKeysWith: { first, _ in first })
+        return LazyVStack(spacing: 0) {
             ForEach(chapters, id: \.key) { chapter in
+                let thread = stepsByKey[chapter.key]
                 ChapterRowView(
                     chapter: chapter,
                     isRead: viewModel.isRead(chapter),
                     marksText: textKeys.contains(chapter.key),
                     downloadState: viewModel.downloadState(for: chapter),
-                    isSavedOnly: viewModel.isSavedOnlyRow(chapter)
+                    isSavedOnly: viewModel.isSavedOnlyRow(chapter),
+                    thread: thread
                 ) {
                     viewModel.selectChapter(chapter)
                 }
                 .modifier(downloadContextMenu(for: chapter))
-                Divider().padding(.leading, 16)
+                // Threaded rows start their divider past the thread column, so the rule follows the title.
+                Divider().padding(.leading, thread == nil ? 16 : 48)
             }
         }
     }
