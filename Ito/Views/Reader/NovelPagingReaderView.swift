@@ -37,17 +37,26 @@ struct NovelPagingReaderView: View {
 
     @State private var paginatedCache: [UUID: [NovelPaginationPage]] = [:]
     @State private var flattenedPages: [NovelPaginationPage] = []
+    /// Page index ranges shown together over `flattenedPages`: one page, or two side by side in a spread.
+    @State private var spreads: [Range<Int>] = []
+    /// The width of one page's text column for the current window and font size.
+    @State private var textWidth: CGFloat = 0
     @State private var currentPageIndex: Int = 0
+    /// The exact place last reported, so a relayout reopens at the same text.
+    @State private var readingAnchor: NovelReadingAnchor?
     @State private var pageSize: CGSize = .zero
     /// Bumped for each pagination request; a result from an older request is dropped.
     @State private var paginationGeneration = 0
     @State private var paginationTask: Task<Void, Never>?
     /// The off-main layout itself; cancelled when a newer request replaces it.
     @State private var layoutTask: Task<[NovelPaginationPage]?, Never>?
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     var body: some View {
         GeometryReader { geo in
-            let size = geo.size
+            let insets = geo.safeAreaInsets
+            // The width inside the horizontal safe-area insets, clear of the Duo status column.
+            let size = CGSize(width: geo.size.width - insets.leading - insets.trailing, height: geo.size.height)
 
             ZStack {
                 if flattenedPages.isEmpty {
@@ -58,9 +67,10 @@ struct NovelPagingReaderView: View {
                 } else {
                     PageViewController(
                         pages: flattenedPages,
+                        spreads: spreads,
                         imageSession: imageSession,
                         currentPage: $currentPageIndex,
-                        maxWidth: max(0, size.width - 32),
+                        textWidth: textWidth,
                         textColor: theme.textColor,
                         onImageVisibleLease: onInitialImageVisibleLease,
                         onPageChanged: { newIndex in
@@ -69,7 +79,7 @@ struct NovelPagingReaderView: View {
                                 if newChap.key != currentChapter.key {
                                     currentChapter = newChap
                                 }
-                                reportPosition(of: flattenedPages, at: newIndex)
+                                reportPosition(of: flattenedPages, spreads: spreads, at: newIndex)
 
                                 // Prefetch trigger
                                 if prefetchChapters && newIndex >= flattenedPages.count - 3 {
@@ -97,15 +107,15 @@ struct NovelPagingReaderView: View {
                     }
                     .allowsHitTesting(false)
 
-                    if let boundaryNotice, currentPageIndex == flattenedPages.count - 1 {
+                    if let boundaryNotice, shownPages.upperBound == flattenedPages.count {
                         noticeCapsule(boundaryNotice, onTap: onBoundaryNoticeTap)
                     }
 
-                    if let previousBoundaryNotice, currentPageIndex == 0 {
+                    if let previousBoundaryNotice, shownPages.lowerBound == 0 {
                         noticeCapsule(previousBoundaryNotice, onTap: onPreviousBoundaryNoticeTap, atTop: true)
                     }
 
-                    if appendFailed, boundaryNotice == nil, currentPageIndex >= flattenedPages.count - 3 {
+                    if appendFailed, boundaryNotice == nil, shownPages.lowerBound >= flattenedPages.count - 3 {
                         VStack {
                             Spacer()
                             HStack(spacing: 12) {
@@ -124,6 +134,8 @@ struct NovelPagingReaderView: View {
                     }
                 }
             }
+            .padding(.leading, geo.safeAreaInsets.leading)
+            .padding(.trailing, geo.safeAreaInsets.trailing)
             .onAppear {
                 if pageSize == .zero && size.width > 0 {
                     pageSize = size
@@ -136,23 +148,27 @@ struct NovelPagingReaderView: View {
                 pageSize = newSize
                 repaginate(configuration(size: newSize), discardingLayout: true)
             }
+            .onChange(of: verticalSizeClass) { _ in
+                // Two pages share a spread only in a regular vertical size class.
+                repaginate(configuration(size: size), discardingLayout: true)
+            }
             .onChange(of: loadedChapters) { _ in
-                repaginate(configuration())
+                repaginate(configuration(size: size))
             }
             .onChange(of: fontSize) { newSize in
-                repaginate(configuration(fontSize: newSize), discardingLayout: true)
+                repaginate(configuration(size: size, fontSize: newSize), discardingLayout: true)
             }
             .onChange(of: fontFamily) { newFamily in
-                repaginate(configuration(fontFamily: newFamily), discardingLayout: true)
+                repaginate(configuration(size: size, fontFamily: newFamily), discardingLayout: true)
             }
             .onChange(of: lineSpacing) { newSpacing in
-                repaginate(configuration(lineSpacing: newSpacing), discardingLayout: true)
+                repaginate(configuration(size: size, lineSpacing: newSpacing), discardingLayout: true)
             }
             .onChange(of: theme) { newTheme in
                 // Colour does not move page breaks: recolour the laid-out pages instead.
                 let color = UIColor(newTheme.textColor)
                 paginatedCache = paginatedCache.mapValues { $0.map { $0.recolored(color) } }
-                repaginate(configuration(theme: newTheme))
+                repaginate(configuration(size: size, theme: newTheme))
             }
             .onDisappear {
                 paginationTask?.cancel()
@@ -190,28 +206,52 @@ struct NovelPagingReaderView: View {
         .allowsHitTesting(isAction)
     }
 
+    /// What the pages are laid out for: the engine inputs, whether two pages share a spread, and the text width.
+    private struct PagingLayout {
+        let configuration: NovelPaginationConfiguration
+        let spread: Bool
+        let textWidth: CGFloat
+    }
+
+    /// The pagination inputs and text column for a window of `size` at the given settings.
     private func configuration(
-        size: CGSize? = nil,
+        size: CGSize,
         fontSize: Double? = nil,
         fontFamily: NovelFont? = nil,
         lineSpacing: Double? = nil,
         theme: NovelTheme? = nil
-    ) -> NovelPaginationConfiguration {
-        NovelPaginationConfiguration(
-            containerSize: size ?? pageSize,
-            fontSize: fontSize ?? self.fontSize,
-            fontFamily: fontFamily ?? self.fontFamily,
-            lineSpacing: lineSpacing ?? self.lineSpacing,
-            textColor: UIColor((theme ?? self.theme).textColor)
+    ) -> PagingLayout {
+        let resolvedFontSize = fontSize ?? self.fontSize
+        let spread = NovelReaderLayout.showsSpread(
+            windowSize: size,
+            verticallyRegular: verticalSizeClass == .regular
+        )
+        let width = NovelReaderLayout.pageTextWidth(
+            availableWidth: size.width,
+            fontSize: resolvedFontSize,
+            spread: spread
+        )
+        return PagingLayout(
+            configuration: NovelPaginationConfiguration(
+                // The engine insets each page by the page inset on both sides, so the container adds them back.
+                containerSize: CGSize(width: width + 2 * NovelReaderLayout.pageInset, height: size.height),
+                fontSize: resolvedFontSize,
+                fontFamily: fontFamily ?? self.fontFamily,
+                lineSpacing: lineSpacing ?? self.lineSpacing,
+                textColor: UIColor((theme ?? self.theme).textColor)
+            ),
+            spread: spread,
+            textWidth: width
         )
     }
 
     /// Lays out chapters that have no pages yet, off the main thread, then shows the pages at
     /// the reader's current place. `discardingLayout` lays every chapter out again.
     private func repaginate(
-        _ configuration: NovelPaginationConfiguration,
+        _ pagingLayout: PagingLayout,
         discardingLayout: Bool = false
     ) {
+        let configuration = pagingLayout.configuration
         guard configuration.containerSize.width > 0,
               configuration.containerSize.height > 0 else { return }
         if discardingLayout {
@@ -226,7 +266,7 @@ struct NovelPagingReaderView: View {
         paginationTask?.cancel()
         layoutTask?.cancel()
         guard !missing.isEmpty else {
-            showPages(of: chapters)
+            showPages(of: chapters, layout: pagingLayout)
             return
         }
         let layout = Task.detached(priority: .userInitiated) {
@@ -245,35 +285,43 @@ struct NovelPagingReaderView: View {
             for chapter in missing {
                 paginatedCache[chapter.id] = byChapter[chapter.id] ?? []
             }
-            showPages(of: chapters)
+            showPages(of: chapters, layout: pagingLayout)
         }
     }
 
-    /// Shows the laid-out pages of `chapters`, opening at the pending restore place if any,
-    /// otherwise at the text the reader was on before.
-    private func showPages(of chapters: [NovelLoadedChapter]) {
-        let place = flattenedPages.indices.contains(currentPageIndex)
-            ? NovelReadingAnchor(
-                chapterID: flattenedPages[currentPageIndex].chapterID,
-                offset: flattenedPages[currentPageIndex].startOffset
-            )
-            : nil
+    /// Shows the laid-out pages of `chapters`, opening at the pending restore place if any, then at
+    /// the place last reported, so a relayout keeps the same text on screen.
+    private func showPages(of chapters: [NovelLoadedChapter], layout: PagingLayout) {
         let loadedIDs = Set(chapters.map(\.id))
         paginatedCache = paginatedCache.filter { loadedIDs.contains($0.key) }
         let pages = chapters.flatMap { paginatedCache[$0.id] ?? [] }
+        let pageSpreads = NovelReaderLayout.spreads(count: pages.count, spread: layout.spread) { index in
+            pages[index].image == nil && pages[index + 1].image == nil
+                && pages[index].chapterID == pages[index + 1].chapterID
+        }
 
         let newIndex: Int
+        let exactOffset: Int?
         if let restoreAnchor, let index = Self.pageIndex(for: restoreAnchor, in: pages) {
             newIndex = index
+            exactOffset = restoreAnchor.offset
             onRestoreAnchorApplied(restoreAnchor)
-        } else if let place, let index = Self.pageIndex(for: place, in: pages) {
+        } else if let readingAnchor, let index = Self.pageIndex(for: readingAnchor, in: pages) {
             newIndex = index
+            exactOffset = readingAnchor.offset
         } else {
             newIndex = min(currentPageIndex, max(0, pages.count - 1))
+            exactOffset = nil
         }
+        // A spread opens at its first page. The exact offset falls within the page at `newIndex`,
+        // which lies in that spread, so the reported place is never before the one reached.
+        let shownStart = NovelReaderLayout.spreadIndex(containing: newIndex, in: pageSpreads)
+            .map { pageSpreads[$0].lowerBound } ?? newIndex
         flattenedPages = pages
-        currentPageIndex = newIndex
-        reportPosition(of: pages, at: newIndex)
+        spreads = pageSpreads
+        textWidth = layout.textWidth
+        currentPageIndex = shownStart
+        reportPosition(of: pages, spreads: pageSpreads, at: shownStart, exactOffset: exactOffset)
         if pages.indices.contains(newIndex) {
             // The pages are laid out and the requested place is the one shown.
             onInitialLayoutApplied(paginationGeneration, pages[newIndex].chapterID)
@@ -300,10 +348,27 @@ struct NovelPagingReaderView: View {
         } ?? pages.firstIndex { $0.chapterID == anchor.chapterID }
     }
 
-    private func reportPosition(of pages: [NovelPaginationPage], at index: Int) {
+    /// The pages on screen: the spread that holds the current page.
+    private var shownPages: Range<Int> {
+        NovelReaderLayout.spreadIndex(containing: currentPageIndex, in: spreads).map { spreads[$0] }
+            ?? (currentPageIndex..<(currentPageIndex + 1))
+    }
+
+    /// Reports the place as the start of the page at `index`, or as `exactOffset` when the reader is
+    /// at a known offset within that page. The reported place is never before the page's start.
+    private func reportPosition(
+        of pages: [NovelPaginationPage],
+        spreads: [Range<Int>],
+        at index: Int,
+        exactOffset: Int? = nil
+    ) {
         guard pages.indices.contains(index) else { return }
         let page = pages[index]
-        onPositionChanged(page.chapterID, page.startOffset, page.isLastInChapter)
+        let offset = max(exactOffset ?? page.startOffset, page.startOffset)
+        let lastOnScreen = NovelReaderLayout.spreadIndex(containing: index, in: spreads)
+            .map { spreads[$0].upperBound - 1 } ?? index
+        readingAnchor = NovelReadingAnchor(chapterID: page.chapterID, offset: offset)
+        onPositionChanged(page.chapterID, offset, pages[lastOnScreen].isLastInChapter)
     }
 }
 
@@ -311,13 +376,17 @@ struct NovelPagingReaderView: View {
 
 struct PageViewController: UIViewControllerRepresentable {
     let pages: [NovelPaginationPage]
+    /// Page index ranges shown together: one page, or two side by side in a spread.
+    let spreads: [Range<Int>]
     let imageSession: ReaderPageImageSession
     @Binding var currentPage: Int
-    let maxWidth: CGFloat
+    /// The width of one page's text column.
+    let textWidth: CGFloat
     /// For image pages' loading and error content.
     let textColor: Color
     /// Told with the request's key whenever an illustration page holds a visible lease on its image.
     let onImageVisibleLease: (ReaderPageImageKey) -> Void
+    /// Told with the first page index of the spread shown.
     let onPageChanged: (Int) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -334,7 +403,7 @@ struct PageViewController: UIViewControllerRepresentable {
         pvc.delegate = context.coordinator
         pvc.view.backgroundColor = .clear
 
-        if let firstVC = context.coordinator.makePageContentVC(index: currentPage) {
+        if let firstVC = context.coordinator.makePageContentVC(containingPage: currentPage) {
             pvc.setViewControllers([firstVC], direction: .forward, animated: false)
         }
 
@@ -344,18 +413,23 @@ struct PageViewController: UIViewControllerRepresentable {
     func updateUIViewController(_ pvc: UIPageViewController, context: Context) {
         let coordinator = context.coordinator
         let oldPages = coordinator.parent.pages
+        let oldSpreads = coordinator.parent.spreads
         coordinator.parent = self
 
         // Pages added after the existing ones are served by the data source, except when the
         // last page is showing: the page controller may already have been told there is no
-        // next page, so the shown page is set again. Changed pages, or a different current
-        // page, also need the shown page replaced.
+        // next page, so the shown spread is set again. Changed pages or spreads, or a current
+        // page outside the shown spread, also need the shown spread replaced. A text width change
+        // always comes with repaginated pages, so it needs no separate check.
         let existingChanged = pages.count < oldPages.count
             || zip(oldPages, pages).contains(where: { $0.0.string !== $0.1.string })
-        let shownIndex = (pvc.viewControllers?.first as? PageContentViewController)?.index
+        let spreadsChanged = spreads.count < oldSpreads.count
+            || zip(oldSpreads, spreads).contains(where: { $0.0 != $0.1 })
+        let shown = pvc.viewControllers?.first as? PageContentViewController
         let appendedAfterShownLastPage = pages.count > oldPages.count
-            && shownIndex == oldPages.count - 1
-        guard existingChanged || appendedAfterShownLastPage || shownIndex != currentPage else { return }
+            && shown?.pageRange.upperBound == oldPages.count
+        let showsCurrentPage = shown?.pageRange.contains(currentPage) == true
+        guard existingChanged || spreadsChanged || appendedAfterShownLastPage || !showsCurrentPage else { return }
         if coordinator.isTransitioning {
             // Replacing pages in the middle of a swipe confuses the page controller.
             coordinator.needsRefresh = true
@@ -373,20 +447,23 @@ struct PageViewController: UIViewControllerRepresentable {
             self.parent = parent
         }
 
-        func showPage(in pvc: UIPageViewController, at index: Int) {
+        /// Shows the spread that holds `page`, clamped to the available pages.
+        func showPage(in pvc: UIPageViewController, at page: Int) {
             needsRefresh = false
-            let target = min(index, max(0, parent.pages.count - 1))
-            if let vc = makePageContentVC(index: target) {
+            let target = min(page, max(0, parent.pages.count - 1))
+            if let vc = makePageContentVC(containingPage: target) {
                 pvc.setViewControllers([vc], direction: .forward, animated: false)
             }
         }
 
-        func makePageContentVC(index: Int) -> PageContentViewController? {
-            guard index >= 0 && index < parent.pages.count else { return nil }
+        /// A controller for the spread that holds `page`.
+        func makePageContentVC(containingPage page: Int) -> PageContentViewController? {
+            guard let spread = NovelReaderLayout.spreadIndex(containing: page, in: parent.spreads) else { return nil }
+            let range = parent.spreads[spread]
             let vc = PageContentViewController()
-            vc.index = index
-            vc.page = parent.pages[index]
-            vc.maxWidth = parent.maxWidth
+            vc.pageRange = range
+            vc.pages = Array(parent.pages[range])
+            vc.textWidth = parent.textWidth
             vc.imageSession = parent.imageSession
             vc.foreground = parent.textColor
             vc.onImageVisibleLease = parent.onImageVisibleLease
@@ -395,14 +472,14 @@ struct PageViewController: UIViewControllerRepresentable {
 
         func pageViewController(_ pageViewController: UIPageViewController,
                                 viewControllerBefore viewController: UIViewController) -> UIViewController? {
-            guard let vc = viewController as? PageContentViewController else { return nil }
-            return makePageContentVC(index: vc.index - 1)
+            guard let vc = viewController as? PageContentViewController, vc.pageRange.lowerBound > 0 else { return nil }
+            return makePageContentVC(containingPage: vc.pageRange.lowerBound - 1)
         }
 
         func pageViewController(_ pageViewController: UIPageViewController,
                                 viewControllerAfter viewController: UIViewController) -> UIViewController? {
             guard let vc = viewController as? PageContentViewController else { return nil }
-            return makePageContentVC(index: vc.index + 1)
+            return makePageContentVC(containingPage: vc.pageRange.upperBound)
         }
 
         func pageViewController(_ pageViewController: UIPageViewController,
@@ -418,9 +495,10 @@ struct PageViewController: UIViewControllerRepresentable {
             var shown = parent.currentPage
             if completed,
                let vc = pageViewController.viewControllers?.first as? PageContentViewController {
-                // After a relayout during the swipe, the page swiped to belongs to the old
+                // After a relayout during the swipe, the spread swiped to belongs to the old
                 // layout: find its text in the new one instead of trusting its old index.
-                shown = needsRefresh ? index(ofTextOn: vc) : vc.index
+                let page = needsRefresh ? index(ofTextOn: vc) : vc.pageRange.lowerBound
+                shown = spreadStart(containing: page)
                 parent.currentPage = shown
                 parent.onPageChanged(shown)
             }
@@ -429,36 +507,50 @@ struct PageViewController: UIViewControllerRepresentable {
             }
         }
 
+        /// The first page of the spread that holds `page`.
+        private func spreadStart(containing page: Int) -> Int {
+            guard let spread = NovelReaderLayout.spreadIndex(containing: page, in: parent.spreads) else { return page }
+            return parent.spreads[spread].lowerBound
+        }
+
+        /// The page in the new layout that holds the text the controller was showing.
         private func index(ofTextOn vc: PageContentViewController) -> Int {
-            guard let page = vc.page,
+            guard let page = vc.pages.first,
                   let index = NovelPagingReaderView.pageIndex(
                       for: NovelReadingAnchor(chapterID: page.chapterID, offset: page.startOffset),
                       in: parent.pages
-                  ) else { return min(vc.index, max(0, parent.pages.count - 1)) }
+                  ) else { return min(vc.pageRange.lowerBound, max(0, parent.pages.count - 1)) }
             return index
         }
     }
 }
 
 class PageContentViewController: UIViewController {
-    var index: Int = 0
+    /// The page indexes this controller shows: one page, or both pages of a spread.
+    var pageRange: Range<Int> = 0..<0
+    var pages: [NovelPaginationPage] = []
     var imageSession: ReaderPageImageSession!
-    var page: NovelPaginationPage?
-    var maxWidth: CGFloat = 0
+    var textWidth: CGFloat = 0
     var foreground: Color = .primary
     var onImageVisibleLease: ((ReaderPageImageKey) -> Void)?
-
-    private let textView = UITextView()
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
 
-        if let image = page?.image {
+        if let image = pages.first?.image {
+            // Illustration pages are never paired, so the image fills the page.
             showImage(image)
-            return
+        } else if pages.count == 2 {
+            showSpread()
+        } else if let page = pages.first {
+            showSingleText(page)
         }
+    }
 
+    /// A text column for one page. Long-press selection stays on; the built-in double tap is disabled.
+    private func makeTextView(_ string: NSAttributedString) -> UITextView {
+        let textView = UITextView()
         textView.isEditable = false
         textView.isSelectable = true
         textView.isScrollEnabled = false
@@ -468,16 +560,7 @@ class PageContentViewController: UIViewController {
         textView.showsVerticalScrollIndicator = false
         textView.showsHorizontalScrollIndicator = false
         textView.translatesAutoresizingMaskIntoConstraints = false
-
-        view.addSubview(textView)
-        NSLayoutConstraint.activate([
-            textView.topAnchor.constraint(equalTo: view.topAnchor, constant: 20),
-            textView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            textView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            textView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20)
-        ])
-
-        textView.attributedText = page?.string
+        textView.attributedText = string
 
         // Disable UITextView's built-in double tap to remove selection conflicts,
         // users can still long-press to select text.
@@ -486,6 +569,43 @@ class PageContentViewController: UIViewController {
                 tapRecognizer.isEnabled = false
             }
         }
+        return textView
+    }
+
+    /// One text column, centered at the readable width.
+    private func showSingleText(_ page: NovelPaginationPage) {
+        let textView = makeTextView(page.string)
+        view.addSubview(textView)
+        let width = textView.widthAnchor.constraint(equalToConstant: textWidth)
+        width.priority = UILayoutPriority(999)
+        NSLayoutConstraint.activate([
+            textView.topAnchor.constraint(equalTo: view.topAnchor, constant: 20),
+            textView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
+            textView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            textView.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 16),
+            textView.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -16),
+            width
+        ])
+    }
+
+    /// Two text columns side by side, centered as one block of two columns and the gutter.
+    private func showSpread() {
+        let row = UIStackView(arrangedSubviews: [makeTextView(pages[0].string), makeTextView(pages[1].string)])
+        row.axis = .horizontal
+        row.distribution = .fillEqually
+        row.spacing = NovelReaderLayout.spreadGutter
+        row.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(row)
+        let width = row.widthAnchor.constraint(equalToConstant: 2 * textWidth + NovelReaderLayout.spreadGutter)
+        width.priority = UILayoutPriority(999)
+        NSLayoutConstraint.activate([
+            row.topAnchor.constraint(equalTo: view.topAnchor, constant: 20),
+            row.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
+            row.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            row.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 16),
+            row.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -16),
+            width
+        ])
     }
 
     /// An illustration fills the page, loaded the same way as in continuous mode.
@@ -495,7 +615,7 @@ class PageContentViewController: UIViewController {
                 urlStr: image.url,
                 headers: image.headers,
                 session: imageSession,
-                pageID: "novel-paged-\(page?.chapterID.uuidString ?? "")-\(index)",
+                pageID: "novel-paged-\(pages.first?.chapterID.uuidString ?? "")-\(pageRange.lowerBound)",
                 foreground: foreground,
                 interaction: .passive,
                 onVisibleLeaseAcquired: onImageVisibleLease

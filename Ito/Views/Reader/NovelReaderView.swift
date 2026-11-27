@@ -268,6 +268,12 @@ struct NovelReaderView: View {
 
                         Color.clear.frame(height: safeAreaBottom + 80)
                     }
+                    // Wide windows keep the text to a readable line length, centered; narrow windows are unchanged.
+                    .frame(
+                        maxWidth: NovelReaderLayout.readableTextWidth(fontSize: viewModel.fontSize)
+                            + 2 * NovelReaderLayout.pageInset
+                    )
+                    .frame(maxWidth: .infinity)
                 }
                 .onAppear { applyRestoreAnchor(with: proxy) }
                 .onChange(of: viewModel.restoreAnchor) { _ in applyRestoreAnchor(with: proxy) }
