@@ -1,1 +1,20 @@
-{}
+{
+    "%@ has %lld new episodes.": "%1$@ 新增 %2$lld 集。",
+    "%lld Earlier Chapters": "更早的 %lld 章",
+    "%lld Earlier Episodes": "更早的 %lld 集",
+    "%lld Hours": "%lld 小时",
+    "%lld chapters": "%lld 章",
+    "%lld episodes": "%lld 集",
+    "%lld history entries": "%lld 条历史记录",
+    "%lld images": "%lld 张图片",
+    "%lld items affected": "影响 %lld 项",
+    "%lld items imported": "已导入 %lld 项",
+    "%lld packages": "%lld 个软件包",
+    "%lld paused": "%lld 项已暂停",
+    "%lld percent": "%lld%%",
+    "%lld sources need attention": "%lld 个来源需要处理",
+    "%lld titles have new updates, including %@": "%1$lld 部作品有更新，包括 %2$@",
+    "%lld waiting to sync": "%lld 项待同步",
+    "Failed to refresh %lld repositories.": "无法刷新 %lld 个仓库。",
+    "Score: %lld percent": "评分：%lld%%"
+}
