@@ -15,12 +15,11 @@ struct HomePresentation {
     static func make(_ layout: HomeLayout) -> HomePresentation {
         let components = layout.components
         // A native featured component is the source's own carousel. The first one with items leads the home and
-        // leaves the shelves; a BigScroller that it displaces stays a shelf.
+        // leaves the shelves; a later one stays inline as banners.
         if let index = components.firstIndex(where: { $0.value.nativeFeatured?.items.isEmpty == false }),
            let featured = components[index].value.nativeFeatured {
             return HomePresentation(
                 featured: FeaturedSection(
-                    origin: .native,
                     items: featured.items.map { FeaturedCard(item: $0) },
                     autoAdvance: FeaturedSection.autoAdvance(from: featured.autoAdvance),
                     listing: featured.listing
@@ -28,32 +27,8 @@ struct HomePresentation {
                 shelves: shelves(components, excluding: index)
             )
         }
-        // A BigScroller is the source's featured carousel today. The first one with entries leads the home and
-        // leaves the shelves; later ones stay as shelves.
-        if let index = components.firstIndex(where: { $0.value.bigScroller?.entries.isEmpty == false }),
-           let bigScroller = components[index].value.bigScroller {
-            return HomePresentation(
-                featured: FeaturedSection(
-                    origin: .legacyBigScroller,
-                    items: bigScroller.entries.map { FeaturedCard(entry: $0) },
-                    autoAdvance: FeaturedSection.autoAdvance(from: bigScroller.interval)
-                ),
-                shelves: shelves(components, excluding: index)
-            )
-        }
-        // Without a BigScroller, the first scroller or list shelf with three entries leads the home. It stays a
-        // shelf too, because it owns its listing and its order.
-        if let index = components.firstIndex(where: { ($0.value.shelfEntries?.count ?? 0) >= 3 }),
-           let entries = components[index].value.shelfEntries {
-            return HomePresentation(
-                featured: FeaturedSection(
-                    origin: .promotedShelf,
-                    items: Array(entries.prefix(FeaturedSection.promotedShelfLimit)).map { FeaturedCard(entry: $0) },
-                    autoAdvance: FeaturedSection.defaultAutoAdvance
-                ),
-                shelves: shelves(components, excluding: nil)
-            )
-        }
+        // Without a native featured component the home has no carousel. Every component is a shelf, including
+        // BigScrollers, which keep their own presentation.
         return HomePresentation(featured: nil, shelves: shelves(components, excluding: nil))
     }
 
@@ -82,27 +57,15 @@ struct HomeShelf: Identifiable {
 /// The carousel: its items and how long each one stays before the next.
 @MainActor
 struct FeaturedSection {
-    enum Origin: Equatable {
-        /// A native `.featured` component, which the source built for the home.
-        case native
-        /// The first BigScroller, which sources send as their featured carousel today.
-        case legacyBigScroller
-        /// The first scroller or list shelf with three entries, when the home has no BigScroller.
-        case promotedShelf
-    }
-
     static let defaultAutoAdvance: TimeInterval = 5
-    static let promotedShelfLimit = 5
 
-    let origin: Origin
     let items: [FeaturedCard]
     /// Seconds before the carousel turns to the next item.
     let autoAdvance: TimeInterval
     /// The target of the "See all" link, when the source gave one.
     let listing: Listing?
 
-    init(origin: Origin, items: [FeaturedCard], autoAdvance: TimeInterval, listing: Listing? = nil) {
-        self.origin = origin
+    init(items: [FeaturedCard], autoAdvance: TimeInterval, listing: Listing? = nil) {
         self.items = items
         self.autoAdvance = autoAdvance
         self.listing = listing
@@ -147,39 +110,31 @@ struct FeaturedCard: Identifiable {
     /// The image behind the item: its banner when it has one, else its cover.
     var backdrop: URL? { banner ?? cover }
 
-    init(entry: MediaEntry) {
-        self.init(entry: entry, item: nil)
-    }
-
     init(item: FeaturedItem) {
-        self.init(entry: item.entry, item: item)
-    }
-
-    private init(entry: MediaEntry, item: FeaturedItem?) {
-        switch entry {
-        case .manga(let media): self.init(entry: entry, media: media, item: item)
-        case .anime(let media): self.init(entry: entry, media: media, item: item)
-        case .novel(let media): self.init(entry: entry, media: media, item: item)
+        switch item.entry {
+        case .manga(let media): self.init(item: item, media: media)
+        case .anime(let media): self.init(item: item, media: media)
+        case .novel(let media): self.init(item: item, media: media)
         }
     }
 
-    private init<Media: MediaDisplayable>(entry: MediaEntry, media: Media, item: FeaturedItem?) {
-        self.entry = entry
-        id = entry.catalogIdentity
+    private init<Media: MediaDisplayable>(item: FeaturedItem, media: Media) {
+        entry = item.entry
+        id = item.entry.catalogIdentity
         title = media.title
         cover = media.cover.flatMap { URL(string: $0) }
-        banner = item?.banner.flatMap { URL(string: $0) }
-        logo = item?.logo.flatMap { URL(string: $0) }
-        tagline = nonEmptyText(item?.tagline)
-        summary = nonEmptyText(item?.summary) ?? nonEmptyText(media.description)
+        banner = item.banner.flatMap { URL(string: $0) }
+        logo = item.logo.flatMap { URL(string: $0) }
+        tagline = nonEmptyText(item.tagline)
+        summary = nonEmptyText(item.summary) ?? nonEmptyText(media.description)
         status = media.displayStatus
         genres = media.tags ?? []
         let listed = media.chapterList?.count ?? 0
         unitCount = listed > 0 ? listed : nil
-        badge = item?.badge.flatMap { FeaturedBadgeDisplay($0) }
-        chips = item?.chips.compactMap { FeaturedChipDisplay($0) } ?? []
-        accent = item?.accent.flatMap { Self.readableAccent($0) }
-        action = item.map { FeaturedAction(native: $0.action) } ?? .start
+        badge = item.badge.flatMap { FeaturedBadgeDisplay($0) }
+        chips = item.chips.compactMap { FeaturedChipDisplay($0) }
+        accent = item.accent.flatMap { Self.readableAccent($0) }
+        action = FeaturedAction(native: item.action)
     }
 
     /// White text must read on the tint at WCAG AA (4.5:1). A lighter tint is dropped rather than darkened, so
@@ -294,28 +249,6 @@ private func nonEmptyText(_ text: String?) -> String? {
 
 @MainActor
 private extension HomeComponentValue {
-    /// A BigScroller's entries and its interval, as the featured carousel reads them.
-    var bigScroller: (entries: [MediaEntry], interval: Float32?)? {
-        switch self {
-        case .bigScroller(let mangas, let interval): (mangas.map { MediaEntry.manga($0) }, interval)
-        case .animeBigScroller(let animes, let interval): (animes.map { MediaEntry.anime($0) }, interval)
-        case .novelBigScroller(let novels, let interval): (novels.map { MediaEntry.novel($0) }, interval)
-        case .mediaBigScroller(let entries, let interval): (entries, interval)
-        default: nil
-        }
-    }
-
-    /// The entries of a scroller or list shelf. Chapter lists are not shelves of media, so they are excluded.
-    var shelfEntries: [MediaEntry]? {
-        switch self {
-        case .scroller(let mangas, _), .mangaList(_, _, let mangas, _): mangas.map { MediaEntry.manga($0) }
-        case .animeScroller(let animes, _), .animeList(_, _, let animes, _): animes.map { MediaEntry.anime($0) }
-        case .novelScroller(let novels, _), .novelList(_, _, let novels, _): novels.map { MediaEntry.novel($0) }
-        case .mediaScroller(let entries, _), .mediaList(_, _, let entries, _): entries
-        default: nil
-        }
-    }
-
     /// The content of a native featured component.
     var nativeFeatured: FeaturedComponent? {
         switch self {

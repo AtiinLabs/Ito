@@ -5,65 +5,31 @@ import ito_runner
 
 @MainActor
 final class HomePresentationTests: XCTestCase {
-    func testFirstBigScrollerLeadsTheHomeAndLeavesTheShelvesWhileLaterOnesStay() {
+    func testBigScrollerIsAShelfAndNeverBecomesTheCarousel() {
         let layout = HomeLayout(components: [
-            HomeComponent(title: "Latest", value: .scroller([manga("latest")], nil)),
-            HomeComponent(title: "Featured", value: .bigScroller([manga("b1"), manga("b2")], nil)),
-            HomeComponent(title: "Recommended", value: .bigScroller([manga("c1")], nil))
-        ])
-
-        let presentation = HomePresentation.make(layout)
-
-        XCTAssertEqual(presentation.featured?.origin, .legacyBigScroller)
-        XCTAssertEqual(presentation.featured?.items.map(\.title), ["b1", "b2"])
-        XCTAssertEqual(presentation.shelves.map(\.id), [0, 2])
-        XCTAssertEqual(presentation.shelves.map(\.component.title), ["Latest", "Recommended"])
-    }
-
-    func testBigScrollerWithoutEntriesDoesNotLeadTheHome() {
-        let layout = HomeLayout(components: [
-            HomeComponent(title: "Empty", value: .bigScroller([], nil)),
-            HomeComponent(title: "Shelf", value: .scroller([manga("a"), manga("b"), manga("c")], nil))
-        ])
-
-        let presentation = HomePresentation.make(layout)
-
-        XCTAssertEqual(presentation.featured?.origin, .promotedShelf)
-        XCTAssertEqual(presentation.shelves.map(\.id), [0, 1])
-    }
-
-    func testWithoutBigScrollerTheFirstShelfWithThreeEntriesLeadsAndStaysAShelf() {
-        let layout = HomeLayout(components: [
-            HomeComponent(title: "Short", value: .scroller([manga("a"), manga("b")], nil)),
-            HomeComponent(title: "Anime", value: .animeList(false, nil, (1...7).map { anime("n\($0)") }, nil))
-        ])
-
-        let presentation = HomePresentation.make(layout)
-
-        XCTAssertEqual(presentation.featured?.origin, .promotedShelf)
-        XCTAssertEqual(presentation.featured?.items.map(\.title), ["n1", "n2", "n3", "n4", "n5"])
-        XCTAssertEqual(presentation.shelves.map(\.id), [0, 1])
-    }
-
-    func testFallbackHeroUsesEveryEntryWhenTheShelfHasFewerThanFive() {
-        let layout = HomeLayout(components: [
-            HomeComponent(title: "Shelf", value: .scroller([manga("a"), manga("b"), manga("c")], nil))
-        ])
-
-        let presentation = HomePresentation.make(layout)
-
-        XCTAssertEqual(presentation.featured?.items.map(\.title), ["a", "b", "c"])
-    }
-
-    func testChapterListsAreNotPromotedToTheHero() {
-        let layout = HomeLayout(components: [
-            HomeComponent(title: "Updates", value: .mangaChapterList(nil, [], nil))
+            HomeComponent(title: "Featured", value: .bigScroller([manga("b1"), manga("b2")], 8))
         ])
 
         let presentation = HomePresentation.make(layout)
 
         XCTAssertNil(presentation.featured)
         XCTAssertEqual(presentation.shelves.map(\.id), [0])
+        guard case .bigScroller(let entries, _)? = presentation.shelves.first?.component.value else {
+            return XCTFail("Expected the BigScroller to stay a shelf")
+        }
+        XCTAssertEqual(entries.map(\.key), ["b1", "b2"])
+    }
+
+    func testScrollersAndListsNeverBecomeTheCarousel() {
+        let layout = HomeLayout(components: [
+            HomeComponent(title: "Latest", value: .scroller([manga("a"), manga("b"), manga("c")], nil)),
+            HomeComponent(title: "Anime", value: .animeList(false, nil, (1...7).map { anime("n\($0)") }, nil))
+        ])
+
+        let presentation = HomePresentation.make(layout)
+
+        XCTAssertNil(presentation.featured)
+        XCTAssertEqual(presentation.shelves.map(\.id), [0, 1])
     }
 
     func testIntervalIsHonoredOnlyWhenFiniteAndBetweenTwoAndSixtySeconds() {
@@ -75,14 +41,6 @@ final class HomePresentationTests: XCTestCase {
         XCTAssertEqual(FeaturedSection.autoAdvance(from: 61), FeaturedSection.defaultAutoAdvance)
         XCTAssertEqual(FeaturedSection.autoAdvance(from: .nan), FeaturedSection.defaultAutoAdvance)
         XCTAssertEqual(FeaturedSection.autoAdvance(from: .infinity), FeaturedSection.defaultAutoAdvance)
-    }
-
-    func testBigScrollerIntervalReachesTheCarousel() {
-        let layout = HomeLayout(components: [
-            HomeComponent(title: "Featured", value: .bigScroller([manga("a"), manga("b")], 8))
-        ])
-
-        XCTAssertEqual(HomePresentation.make(layout).featured?.autoAdvance, 8)
     }
 
     func testEmptyHomeHasNoHeroAndNoShelves() {
@@ -104,7 +62,7 @@ final class HomePresentationTests: XCTestCase {
     }
 
     func testCardMetadataComesFromTheEntry() {
-        let card = FeaturedCard(entry: .manga(Manga(key: "m", title: "Title", description: "Summary", tags: ["Action"])))
+        let card = FeaturedCard(item: FeaturedItem(entry: .manga(Manga(key: "m", title: "Title", description: "Summary", tags: ["Action"]))))
 
         XCTAssertEqual(card.title, "Title")
         XCTAssertEqual(card.summary, "Summary")
@@ -156,7 +114,7 @@ final class HomePresentationTests: XCTestCase {
         XCTAssertEqual(HomeLayoutMetrics.narrowHeroHeight(forViewportHeight: 400), 248, accuracy: 0.001)
     }
 
-    func testNativeFeaturedLeadsOverBigScrollerAndTheDisplacedBigScrollerStaysAShelf() {
+    func testNativeFeaturedLeadsAndTheBigScrollerBesideItStaysAShelf() {
         let listing = Listing(id: "latest", name: "Latest", kind: 0)
         let layout = HomeLayout(components: [
             HomeComponent(title: "Featured", value: .bigScroller([manga("b1"), manga("b2")], nil)),
@@ -169,7 +127,6 @@ final class HomePresentationTests: XCTestCase {
 
         let presentation = HomePresentation.make(layout)
 
-        XCTAssertEqual(presentation.featured?.origin, .native)
         XCTAssertEqual(presentation.featured?.items.map(\.title), ["n1"])
         XCTAssertEqual(presentation.featured?.autoAdvance, 10)
         XCTAssertEqual(presentation.featured?.listing?.id, "latest")
@@ -205,7 +162,7 @@ final class HomePresentationTests: XCTestCase {
 
         let presentation = HomePresentation.make(layout)
 
-        XCTAssertEqual(presentation.featured?.origin, .promotedShelf)
+        XCTAssertNil(presentation.featured)
         XCTAssertEqual(presentation.shelves.map(\.id), [0, 1])
     }
 
@@ -262,7 +219,7 @@ final class HomePresentationTests: XCTestCase {
         let coverOnly = FeaturedCard(item: FeaturedItem(
             entry: .manga(Manga(key: "b", title: "b", cover: "https://example.com/cover.jpg"))
         ))
-        let neither = FeaturedCard(entry: .manga(Manga(key: "c", title: "c")))
+        let neither = FeaturedCard(item: FeaturedItem(entry: .manga(Manga(key: "c", title: "c"))))
 
         XCTAssertEqual(withBanner.backdrop?.absoluteString, "https://example.com/banner.jpg")
         XCTAssertEqual(coverOnly.backdrop?.absoluteString, "https://example.com/cover.jpg")
