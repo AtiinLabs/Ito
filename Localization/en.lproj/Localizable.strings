@@ -516,6 +516,15 @@ History: resume reading or watching a series */
 
 "Couldn't load trending titles: %@" = "Couldn't load trending titles: %@";
 
+/* Reader route status: a chapter picked from the chapter list failed to open in the other reader; the interpolated title is untranslated source content */
+"Couldn't open %@." = "Couldn't open %@.";
+
+/* Reader route status: a chapter without a title, picked from the chapter list, failed to open in the other reader; the number is formatted for the locale */
+"Couldn't open Chapter %@." = "Couldn't open Chapter %@.";
+
+/* Reader route status: a chapter with neither a title nor a number, picked from the chapter list, failed to open in the other reader */
+"Couldn't open the chapter." = "Couldn't open the chapter.";
+
 /* Reader: the next chapter, made for the other reader, could not be opened; the current chapter stays */
 "Couldn't open the next chapter." = "Couldn't open the next chapter.";
 
@@ -1624,6 +1633,15 @@ Manga format: light novel */
 
 /* A source needs user interaction that background work cannot perform. */
 "Open this source to continue in the foreground." = "Open this source to continue in the foreground.";
+
+/* Reader route status: a chapter picked from the chapter list is opening in the other reader; the interpolated title is untranslated source content */
+"Opening %@..." = "Opening %@...";
+
+/* Reader route status: a chapter without a title, picked from the chapter list, is opening in the other reader; the number is formatted for the locale */
+"Opening Chapter %@..." = "Opening Chapter %@...";
+
+/* Reader route status: a chapter with neither a title nor a number, picked from the chapter list, is opening in the other reader */
+"Opening the chapter..." = "Opening the chapter...";
 
 /* Reader: shown over the current chapter while the next one, made for the other reader, is being prepared */
 "Opening the next chapter…" = "Opening the next chapter…";

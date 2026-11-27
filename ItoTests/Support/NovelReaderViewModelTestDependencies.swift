@@ -150,6 +150,8 @@ final class NovelReaderProgressFake: NovelReaderProgressTracking {
     /// The series' saved position, keyed by its chapter. Like the real store it holds at most
     /// one chapter: saving another replaces it, and finishing another chapter clears it.
     var savedOffsets: [String: Int] = [:]
+    /// Chapters the progress store reports as read.
+    var readChapterKeys: Set<String> = []
     private(set) var savedOffsetWrites: [(chapterID: String, offset: Int)] = []
     private var pending: [CheckedContinuation<Void, any Error>] = []
 
@@ -216,6 +218,12 @@ final class NovelReaderProgressFake: NovelReaderProgressTracking {
         _ = media
         savedOffsetWrites.append((chapterID, offset))
         savedOffsets = [chapterID: offset]
+    }
+
+    func isChapterRead(media: MediaIdentity, chapterID: String, chapterNumber: Float?) -> Bool {
+        _ = media
+        _ = chapterNumber
+        return readChapterKeys.contains(chapterID)
     }
 
     var pendingCount: Int { pending.count }

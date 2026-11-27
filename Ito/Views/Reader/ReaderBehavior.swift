@@ -304,6 +304,52 @@ nonisolated enum ReaderChapterOrdering {
         }
         return sources.first
     }
+
+    /// Which way the list moves from `origin` to `target`: by chapter number when both have one and they differ,
+    /// else by their places in the list, newest first, so an earlier place is the next chapter. Anything unknown
+    /// reads as forward.
+    static func direction(
+        from origin: Chapter,
+        to target: Chapter,
+        in chapters: [Chapter]?
+    ) -> ReaderHandoffDirection {
+        if let originNumber = origin.chapterNumber, let targetNumber = target.chapterNumber,
+           originNumber != targetNumber {
+            return targetNumber > originNumber ? .next : .previous
+        }
+        guard let chapters,
+              let originIndex = chapters.firstIndex(where: { $0.key.utf8.elementsEqual(origin.key.utf8) }),
+              let targetIndex = chapters.firstIndex(where: { $0.key.utf8.elementsEqual(target.key.utf8) })
+        else { return .next }
+        return targetIndex < originIndex ? .next : .previous
+    }
+}
+
+/// The sentences a route status card shows for a chapter picked from the chapter list.
+nonisolated enum ReaderJumpStatusText {
+    /// "Opening <title>...", "Opening Chapter 12...", or "Opening the chapter...". The interpolated title is
+    /// untranslated source content, and the chapter opens in the other reader.
+    static func opening(_ chapter: Chapter) -> String {
+        if let title = chapter.title, !title.isEmpty {
+            return String(localized: "Opening \(title)...", comment: "Reader route status: a chapter picked from the chapter list is opening in the other reader; the interpolated title is untranslated source content")
+        }
+        if let number = chapter.chapterNumber {
+            return String(localized: "Opening Chapter \(number.formatted())...", comment: "Reader route status: a chapter without a title, picked from the chapter list, is opening in the other reader; the number is formatted for the locale")
+        }
+        return String(localized: "Opening the chapter...", comment: "Reader route status: a chapter with neither a title nor a number, picked from the chapter list, is opening in the other reader")
+    }
+
+    /// "Couldn't open <title>.", "Couldn't open Chapter 12.", or "Couldn't open the chapter.". The interpolated
+    /// title is untranslated source content, and the chapter opens in the other reader.
+    static func failed(_ chapter: Chapter) -> String {
+        if let title = chapter.title, !title.isEmpty {
+            return String(localized: "Couldn't open \(title).", comment: "Reader route status: a chapter picked from the chapter list failed to open in the other reader; the interpolated title is untranslated source content")
+        }
+        if let number = chapter.chapterNumber {
+            return String(localized: "Couldn't open Chapter \(number.formatted()).", comment: "Reader route status: a chapter without a title, picked from the chapter list, failed to open in the other reader; the number is formatted for the locale")
+        }
+        return String(localized: "Couldn't open the chapter.", comment: "Reader route status: a chapter with neither a title nor a number, picked from the chapter list, failed to open in the other reader")
+    }
 }
 
 /// What a reader says where it stops instead of opening the neighboring chapter in itself. A

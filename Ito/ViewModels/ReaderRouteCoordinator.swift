@@ -34,6 +34,13 @@ nonisolated enum ReaderPresentationMode: Equatable, Sendable {
     var isLive: Bool { self == .live }
 }
 
+/// Which kind of crossing an event describes: the neighbour the reader steps to, or a chapter the user
+/// picked from the chapter list.
+enum ReaderHandoffTarget: Equatable {
+    case adjacent
+    case chosen(ChapterToken)
+}
+
 /// One user-directed crossing of a chapter boundary, as the source reader saw it.
 struct ReaderHandoffEvent: Equatable {
     let sourceVisitID: UUID
@@ -48,6 +55,8 @@ struct ReaderHandoffEvent: Equatable {
     let boundaryEntryID: UUID
     /// The user already confirmed this exact group switch in the reader that is handing off.
     var groupSwitchApproved = false
+    /// A user-picked chapter crosses with this target; neighbour steps keep `.adjacent`.
+    var target: ReaderHandoffTarget = .adjacent
 }
 
 nonisolated enum ReaderHandoffFailure: Equatable, Sendable {
@@ -150,7 +159,8 @@ protocol ReaderRouteModel: AnyObject {
     /// Whether `event` still describes the reader's own state: live visit, session, content generation,
     /// and the chapter it left from being current or the edge of what is loaded.
     func isCurrentHandoffSource(_ event: ReaderHandoffEvent) -> Bool
-    /// What lies past the event's origin now, resolved by the reader's own ordering and offline rules.
+    /// What lies past the event's origin now for an adjacent crossing, or the picked chapter for a chosen one,
+    /// resolved by the reader's own ordering and offline rules.
     func handoffBoundary(for event: ReaderHandoffEvent) -> ReaderChapterBoundary<Chapter>?
     func setPresentationMode(_ mode: ReaderPresentationMode)
     /// The image the destination shows first, as its own renderer requests it; nil when it opens on text.
@@ -169,6 +179,8 @@ protocol ReaderRouteModel: AnyObject {
 /// How a reader reports a crossing to its route.
 @MainActor
 protocol ReaderHandoffRouting: AnyObject {
+    /// Whether a crossing is being prepared or staged, so a user's pick waits for it.
+    var isHandoffPending: Bool { get }
     func requestHandoff(_ event: ReaderHandoffEvent)
     /// For an event whose chapter was already loaded by the source reader and turned out to be made for
     /// the other one. Never creates an event by itself.
@@ -269,6 +281,11 @@ final class ReaderRouteSession {
         openedChapters.insert(ExactChapterKey(chapter.key)).inserted
     }
 
+    /// Lets the next visit of the chapter record History again, as a user's pick of it does.
+    func reopenHistory(for chapter: Chapter) {
+        openedChapters.remove(ExactChapterKey(chapter.key))
+    }
+
     func claimCompletion(_ chapter: Chapter) -> Bool {
         completedChapters.insert(ExactChapterKey(chapter.key)).inserted
     }
@@ -324,6 +341,8 @@ final class ReaderRouteCoordinator: ObservableObject, ReaderHandoffRouting {
 
     @Published private(set) var active: ReaderRoutePresentation?
     @Published private(set) var phase: ReaderRoutePhase = .opening
+    /// Whether a crossing is being prepared or staged, so a user's pick waits for it.
+    var isHandoffPending: Bool { phase.isBusy }
 
     let preparer: any ReaderChapterPreparing
     private let presentations: any ReaderRoutePresentationMaking
@@ -927,5 +946,12 @@ extension ChapterToken {
             && same(key, other.key) && same(title, other.title) && same(scanlator, other.scanlator)
             && same(url, other.url) && same(language, other.language) && same(scanlatorID, other.scanlatorID)
             && same(logicalUnitID, other.logicalUnitID) && same(revision, other.revision)
+    }
+}
+
+extension MediaEntry {
+    /// The chapter in this entry's list that the token names, matched byte for byte.
+    func listedChapter(identicalTo token: ChapterToken) -> Chapter? {
+        chapters?.first { ChapterToken($0).isByteIdentical(to: token) }
     }
 }

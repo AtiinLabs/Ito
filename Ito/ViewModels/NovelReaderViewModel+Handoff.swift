@@ -12,6 +12,7 @@ struct NovelTransitionSnapshot {
     let direction: ReaderHandoffDirection
     let trigger: ReaderHandoffTrigger
     let groupSwitchApproved: Bool
+    let target: ReaderHandoffTarget
 }
 
 /// The text reader's side of the route: its crossings, the chapters it holds for them, and how it is
@@ -34,7 +35,7 @@ extension NovelReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
         let origin = atLoadedEdge && direction == .next ? (loadedChapters.last?.chapter ?? currentChapter) : currentChapter
         let token = ChapterToken(origin)
         // The view reporting the same boundary again is one crossing; only a user's own control repeats.
-        if trigger != .chapterControl, let latch = handoffLatch,
+        if trigger != .chapterControl, let latch = handoffLatch, latch.target == .adjacent,
            latch.direction == direction, latch.origin.isByteIdentical(to: token) { return }
         handoffLatch = ReaderHandoffLatch(origin: token, direction: direction)
         emit(
@@ -73,6 +74,40 @@ extension NovelReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
         handoffRouter?.handoffBoundaryLeft(visitID: routeVisitID)
     }
 
+    /// Asks the route to open a chapter picked from the list in the other reader. The pick is the consent,
+    /// as on the series page, so no group question is asked and the route opens the picked chapter.
+    @discardableResult
+    func requestChosenHandoff(to target: Novel.Chapter) -> Bool {
+        guard isActive, presentationMode.isLive, loadPhase == .content, let router = handoffRouter else { return false }
+        let origin = ChapterToken(currentChapter)
+        let picked = ChapterToken(target)
+        let direction = ReaderChapterOrdering.direction(from: currentChapter, to: target, in: entry.chapters)
+        handoffLatch = ReaderHandoffLatch(origin: origin, direction: direction, target: .chosen(picked))
+        let event = ReaderHandoffEvent(
+            sourceVisitID: routeVisitID,
+            sourceSessionID: sessionID,
+            sourceContentGeneration: contentGeneration,
+            origin: origin,
+            direction: direction,
+            position: .resume,
+            trigger: .chapterControl,
+            boundaryEntryID: UUID(),
+            target: .chosen(picked)
+        )
+        if let held = heldPayloads[ExactChapterKey(target.key)] {
+            router.requestHandoff(event, prepared: held)
+        } else {
+            router.requestHandoff(event)
+        }
+        return true
+    }
+
+    /// A pick ends any crossing this reader had started, and tells the route so a failure shown for it goes away.
+    func endCrossingForJump() {
+        handoffLatch = nil
+        handoffRouter?.handoffBoundaryLeft(visitID: routeVisitID)
+    }
+
     var routeHasContent: Bool { loadPhase == .content }
 
     /// The row after the last loaded chapter came into view. Reaching it by the user's own scrolling, with
@@ -87,7 +122,7 @@ extension NovelReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
 
     private func handoffOrigin(for event: ReaderHandoffEvent) -> Novel.Chapter? {
         if ChapterToken(currentChapter).isByteIdentical(to: event.origin) { return currentChapter }
-        guard event.direction == .next, let last = loadedChapters.last?.chapter,
+        guard event.target == .adjacent, event.direction == .next, let last = loadedChapters.last?.chapter,
               ChapterToken(last).isByteIdentical(to: event.origin) else { return nil }
         return last
     }
@@ -104,6 +139,10 @@ extension NovelReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
 
     func handoffBoundary(for event: ReaderHandoffEvent) -> ReaderChapterBoundary<Chapter>? {
         guard let origin = handoffOrigin(for: event) else { return nil }
+        if case .chosen(let token) = event.target {
+            guard let picked = entry.listedChapter(identicalTo: token) else { return nil }
+            return jumpBoundary(to: picked)
+        }
         return event.direction == .next ? boundaryAfter(origin) : boundaryBefore(origin)
     }
 
@@ -124,7 +163,8 @@ extension NovelReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
     func beginTransitionSnapshot(
         direction: ReaderHandoffDirection,
         trigger: ReaderHandoffTrigger,
-        approved: Bool
+        approved: Bool,
+        target handoffTarget: ReaderHandoffTarget = .adjacent
     ) {
         guard loadPhase == .content, !loadedChapters.isEmpty else {
             transition = nil
@@ -133,7 +173,8 @@ extension NovelReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
         // The place the reader really is at, not whatever the view has left of an anchor it already applied.
         transition = NovelTransitionSnapshot(
             chapter: currentChapter, loadPhase: loadPhase, loadedChapters: loadedChapters,
-            restoreAnchor: currentReadingAnchor, direction: direction, trigger: trigger, groupSwitchApproved: approved
+            restoreAnchor: currentReadingAnchor, direction: direction, trigger: trigger, groupSwitchApproved: approved,
+            target: handoffTarget
         )
     }
 
@@ -144,10 +185,10 @@ extension NovelReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
         transition = nil
         restoreTransition(snapshot)
         if hasPresentedPresence { presentPresence(for: currentChapter, resetTimer: false) }
-        holdForHandoff(prepared)
+        if snapshot.target == .adjacent { holdForHandoff(prepared) }
         guard let router = handoffRouter else { return }
         let token = ChapterToken(snapshot.chapter)
-        handoffLatch = ReaderHandoffLatch(origin: token, direction: snapshot.direction)
+        handoffLatch = ReaderHandoffLatch(origin: token, direction: snapshot.direction, target: snapshot.target)
         router.requestHandoff(
             ReaderHandoffEvent(
                 sourceVisitID: routeVisitID,
@@ -159,7 +200,8 @@ extension NovelReaderViewModel: ReaderRouteModel, DownloadedCopyReopening {
                     ? .resume : (snapshot.direction == .next ? .start : .end),
                 trigger: snapshot.trigger,
                 boundaryEntryID: UUID(),
-                groupSwitchApproved: snapshot.groupSwitchApproved
+                groupSwitchApproved: snapshot.groupSwitchApproved,
+                target: snapshot.target
             ),
             prepared: prepared
         )

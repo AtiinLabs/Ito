@@ -1865,6 +1865,15 @@
     "Couldn't load trending titles: %@" : {
 
     },
+    "Couldn't open %@." : {
+      "comment" : "Reader route status: a chapter picked from the chapter list failed to open in the other reader; the interpolated title is untranslated source content"
+    },
+    "Couldn't open Chapter %@." : {
+      "comment" : "Reader route status: a chapter without a title, picked from the chapter list, failed to open in the other reader; the number is formatted for the locale"
+    },
+    "Couldn't open the chapter." : {
+      "comment" : "Reader route status: a chapter with neither a title nor a number, picked from the chapter list, failed to open in the other reader"
+    },
     "Couldn't open the next chapter." : {
       "comment" : "Reader: the next chapter, made for the other reader, could not be opened; the current chapter stays"
     },
@@ -3525,6 +3534,15 @@
     },
     "Open this source to continue in the foreground." : {
       "comment" : "A source needs user interaction that background work cannot perform."
+    },
+    "Opening %@..." : {
+      "comment" : "Reader route status: a chapter picked from the chapter list is opening in the other reader; the interpolated title is untranslated source content"
+    },
+    "Opening Chapter %@..." : {
+      "comment" : "Reader route status: a chapter without a title, picked from the chapter list, is opening in the other reader; the number is formatted for the locale"
+    },
+    "Opening the chapter..." : {
+      "comment" : "Reader route status: a chapter with neither a title nor a number, picked from the chapter list, is opening in the other reader"
     },
     "Opening the next chapter…" : {
       "comment" : "Reader: shown over the current chapter while the next one, made for the other reader, is being prepared"

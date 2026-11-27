@@ -127,6 +127,8 @@ final class MangaReaderProgressFake: MangaReaderProgressTracking {
     var onPageSaved: ((String, Int) -> Void)?
     var savedViewer: Manga.Viewer?
     private(set) var savedViewerWrites: [Manga.Viewer] = []
+    /// Chapters the progress store reports as read.
+    var readChapterKeys: Set<String> = []
 
     init(events: MangaReaderEventRecorder) {
         self.events = events
@@ -186,6 +188,12 @@ final class MangaReaderProgressFake: MangaReaderProgressTracking {
         _ = chapterID
         savedViewerWrites.append(viewer)
         savedViewer = viewer
+    }
+
+    func isChapterRead(media: MediaIdentity, chapterID: String, chapterNumber: Float?) -> Bool {
+        _ = media
+        _ = chapterNumber
+        return readChapterKeys.contains(chapterID)
     }
 }
 

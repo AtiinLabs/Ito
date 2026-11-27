@@ -37,6 +37,8 @@ protocol NovelReaderProgressTracking: PluginCompletionScopeCapturing, AnyObject 
     /// last chapter read.
     func savedNovelOffset(media: MediaIdentity, chapterID: String) -> Int?
     func saveNovelOffset(_ offset: Int, media: MediaIdentity, chapterID: String) async throws
+    /// Whether the chapter is marked read, by exact key or by number, as the series page shows it.
+    func isChapterRead(media: MediaIdentity, chapterID: String, chapterNumber: Float?) -> Bool
 }
 
 extension ReadProgressManager: NovelReaderProgressTracking {
@@ -298,6 +300,10 @@ private final class UnavailableNovelReaderDependencies:
     NovelReaderSettingsAccessing,
     NovelReaderPresencePresenting,
     NovelReaderPluginMetadataProviding {
+    func isChapterRead(media: MediaIdentity, chapterID: String, chapterNumber: Float?) -> Bool {
+        false
+    }
+
     private let settings = NovelReaderSettingsSnapshot(
         fontSize: AppPreferenceCatalog.novelFontSize.defaultValue,
         lineSpacing: AppPreferenceCatalog.novelLineSpacing.defaultValue,
