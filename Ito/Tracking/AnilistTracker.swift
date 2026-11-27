@@ -139,16 +139,24 @@ public class AnilistTracker: TrackerProvider {
         }
 
         if let progress {
+            let entry: TrackerMediaEntry?
             do {
-                if let entry = try await getMediaListEntry(mediaId: mediaId),
-                   let currentProgress = entry.progress,
-                   currentProgress >= progress && (status == nil || entry.status == status) {
-                    return
-                }
+                entry = try await getMediaListEntry(mediaId: mediaId)
             } catch let outcome as HostNetworkPolicyOutcome {
                 throw outcome
             } catch {
                 AppLogger.auth.error("Failed to fetch existing entry before updating.")
+                // Automatic sync never writes blind: without a fresh read it could lower progress.
+                if status == nil { throw error }
+                entry = nil
+            }
+            if let entry {
+                // Automatic sync never writes over a baseline it cannot see; the server reply lacks progress.
+                if status == nil, entry.progress == nil { throw URLError(.cannotParseResponse) }
+                if let currentProgress = entry.progress,
+                   currentProgress >= progress && (status == nil || entry.status == status) {
+                    return
+                }
             }
         }
 
