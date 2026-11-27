@@ -1,3 +1,5 @@
+[English](RELEASING.md) | [简体中文](zh-Hans/RELEASING.md)
+
 # Unsigned release process
 
 Ito currently distributes unsigned device IPAs. AltStore and SideStore can re-sign them with the user's Apple account; TrollStore and jailbreak installation depend on the target device and environment. App Store/TestFlight signing remains a separate future workflow.

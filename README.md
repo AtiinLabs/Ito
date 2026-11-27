@@ -1,3 +1,5 @@
+[English](README.md) | [简体中文](README.zh-Hans.md)
+
 <div align="center">
   <img src="Ito/Assets.xcassets/AppIcon.appiconset/app.png" alt="Ito app icon" width="144" />
 

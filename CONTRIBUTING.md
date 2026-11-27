@@ -1,3 +1,5 @@
+[English](CONTRIBUTING.md) | [简体中文](CONTRIBUTING.zh-Hans.md)
+
 # Contributing to Ito
 
 Ito uses a trunk flow: all work merges to protected `main` through reviewed pull requests, every push to `main` publishes a Dev build, and an annotated `vX.Y.Z` tag on `main` publishes a Stable build.

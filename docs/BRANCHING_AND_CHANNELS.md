@@ -1,3 +1,5 @@
+[English](BRANCHING_AND_CHANNELS.md) | [简体中文](zh-Hans/BRANCHING_AND_CHANNELS.md)
+
 # Branching and binary channels
 
 ## Development and release graph
