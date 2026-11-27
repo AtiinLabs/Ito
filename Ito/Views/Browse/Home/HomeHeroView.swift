@@ -5,7 +5,7 @@ import Nuke
 import ito_runner
 
 /// The featured carousel: a page per item with its artwork, title, actions and summary. It turns on its own timer,
-/// which runs only while the carousel is visible and the user is not touching it.
+/// which runs only while the carousel is visible, and waits a full interval after the person changes the page.
 struct HomeHeroView<Destination: View>: View {
     let section: FeaturedSection
     let layoutMode: HomeLayoutMode
@@ -23,12 +23,14 @@ struct HomeHeroView<Destination: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @State private var selection = 0
-    @State private var isTouched = false
     @State private var isVoiceOverRunning = UIAccessibility.isVoiceOverRunning
 
-    /// Restarts the timer whenever what it depends on changes, so no timer outlives a layout change.
+    /// Restarts the timer whenever what it depends on changes, so no timer outlives a layout change. The selection is
+    /// part of it: a page the person swiped to stays for a full interval. Touches are not tracked with a gesture,
+    /// because a drag gesture over the carousel keeps its buttons and links from firing.
     private struct AutoAdvanceKey: Equatable {
         let ids: [MediaEntryIdentity]
+        let selection: Int
         let interval: TimeInterval
         let isEnabled: Bool
     }
@@ -36,6 +38,7 @@ struct HomeHeroView<Destination: View>: View {
     private var autoAdvanceKey: AutoAdvanceKey {
         AutoAdvanceKey(
             ids: section.items.map(\.id),
+            selection: selection,
             interval: section.autoAdvance,
             // Reduce Motion and VoiceOver users page by hand; the timer never moves a focused page.
             isEnabled: section.items.count > 1
@@ -43,7 +46,6 @@ struct HomeHeroView<Destination: View>: View {
                 && !isVoiceOverRunning
                 && scenePhase == .active
                 && isOnScreen
-                && !isTouched
         )
     }
 
@@ -58,11 +60,6 @@ struct HomeHeroView<Destination: View>: View {
         .frame(width: width, height: height)
         .background(Color(.systemBackground))
         .clipped()
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in isTouched = true }
-                .onEnded { _ in isTouched = false }
-        )
         .accessibilityAdjustableAction { direction in
             let count = section.items.count
             guard count > 1 else { return }
@@ -93,16 +90,14 @@ struct HomeHeroView<Destination: View>: View {
         }
         .task(id: autoAdvanceKey) {
             guard autoAdvanceKey.isEnabled else { return }
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(nanoseconds: UInt64(section.autoAdvance * 1_000_000_000))
-                } catch {
-                    return
-                }
-                let count = section.items.count
-                withAnimation(.easeInOut) {
-                    selection = (selection + 1) % count
-                }
+            do {
+                try await Task.sleep(nanoseconds: UInt64(section.autoAdvance * 1_000_000_000))
+            } catch {
+                return
+            }
+            let count = section.items.count
+            withAnimation(.easeInOut) {
+                selection = (selection + 1) % count
             }
         }
     }
