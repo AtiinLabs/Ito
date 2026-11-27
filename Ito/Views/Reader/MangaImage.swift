@@ -32,6 +32,9 @@ struct MangaImage: View {
     /// first image it showed over to the renderer's own lease with it.
     var onVisibleLeaseAcquired: ((ReaderPageImageKey) -> Void)?
 
+    /// Reports the image's pixel size as it becomes known; the paged reader pairs pages by shape.
+    var onPixelSize: ((CGSize) -> Void)?
+
     @State private var imageState = ReaderPageImageState(phase: .idle, pixelSize: nil, revision: 0)
     @State private var lease: ReaderImageLease?
     @State private var observation: ReaderImageObservation?
@@ -152,9 +155,11 @@ struct MangaImage: View {
         imageState = session.state(for: key)
         observation = session.observe(key) { state in
             imageState = state
+            if let size = state.pixelSize { onPixelSize?(size) }
         }
         lease = session.acquire(descriptor, consumer: .visible)
         imageState = session.state(for: key)
+        if let size = imageState.pixelSize { onPixelSize?(size) }
         onVisibleLeaseAcquired?(key)
     }
 
