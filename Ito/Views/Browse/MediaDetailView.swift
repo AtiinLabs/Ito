@@ -24,6 +24,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     @State private var displayedAlternativeID: UUID?
     @State private var replacementPreview: DownloadReplacementPreview?
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     init(
         viewModel: MediaDetailViewModel<M>,
@@ -184,12 +185,48 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     }
 
     private var mediaScroll: some View {
+        GeometryReader { proxy in
+            switch MediaDetailLayout.make(size: proxy.size, verticallyRegular: verticalSizeClass == .regular) {
+            case .singleColumn:
+                singleColumnScroll
+            case .twoColumns(let leadingWidth):
+                twoColumnContent(leadingWidth: leadingWidth)
+            }
+        }
+    }
+
+    private var singleColumnScroll: some View {
         ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: 0) {
                 heroHeader
                 detailControls
                 chapterSection
             }
+        }
+    }
+
+    /// The header and controls scroll in their own column, and the chapters scroll beside them, so a wide window
+    /// shows both at once. The columns are sized from the width GeometryReader gives, so an unfolded or rotated
+    /// window reflows without reading the screen.
+    private func twoColumnContent(leadingWidth: CGFloat) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 0) {
+                    heroHeader
+                    detailControls
+                }
+            }
+            .frame(width: leadingWidth)
+
+            Divider()
+
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 0) {
+                    chapterSection
+                }
+                .padding(.top, 12)
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 

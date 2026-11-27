@@ -55,7 +55,7 @@ public struct SharedHeroHeader: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
         }
-        .frame(maxWidth: UIScreen.main.bounds.width)
+        .frame(maxWidth: .infinity)
         .frame(height: heroHeight)
         .clipped()
         .ignoresSafeArea(edges: .top)
@@ -75,10 +75,10 @@ public struct SharedHeroHeader: View {
                 }
             }
             .processors([.resize(width: 400)])
-            .frame(maxWidth: UIScreen.main.bounds.width, maxHeight: heroHeight)
+            .frame(maxWidth: .infinity, maxHeight: heroHeight)
             .blur(radius: 28, opaque: true)
             .padding(-28)
-            .frame(maxWidth: UIScreen.main.bounds.width, maxHeight: heroHeight)
+            .frame(maxWidth: .infinity, maxHeight: heroHeight)
             .clipped()
             .ignoresSafeArea(edges: .top)
             .overlay(Color.black.opacity(0.35))

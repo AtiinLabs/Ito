@@ -176,7 +176,7 @@ struct DiscoverDetailView: View {
         }
         .padding(.bottom, 24)
         .background(Color.clear)
-        .frame(maxWidth: UIScreen.main.bounds.width)
+        .frame(maxWidth: .infinity)
         .clipped()
     }
 
