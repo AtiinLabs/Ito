@@ -1,3 +1,5 @@
+[English](LOCALIZATION.md) | [简体中文](zh-Hans/LOCALIZATION.md)
+
 # Localization
 
 Help translate Ito on [Weblate](https://hosted.weblate.org/projects/ito/).
