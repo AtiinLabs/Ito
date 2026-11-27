@@ -61,4 +61,11 @@ nonisolated final class PolicyRedirectDelegate: NSObject, URLSessionTaskDelegate
         }
         completionHandler(redirected)
     }
+
+    /// Every task of the session ends here, including `session.data(for:)` calls inside the tracker SDKs, so a failed
+    /// tracker request is logged without a hook in their code.
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
+        guard let error else { return }
+        NetworkFailureDiagnostics.record(error, host: task.originalRequest?.url?.host, transport: "tracker")
+    }
 }

@@ -29,8 +29,15 @@ public final class NukeDiagnosticDelegate: ImagePipelineDelegate, @unchecked Sen
                 let scheme = task.request.url?.scheme ?? "unknown-scheme"
                 let fileExtension = task.request.url?.pathExtension ?? "none"
                 let reason = Self.failureSummary(for: error)
+                let descriptors = NetworkFailureDiagnostics.descriptors()
 
-                AppLogger.network.error("[Nuke] Image load failed scheme=\(scheme) host=\(host) ext=\(fileExtension) \(reason)")
+                AppLogger.network.error(
+                    """
+                    [Nuke] Image load failed scheme=\(scheme) host=\(host) ext=\(fileExtension) \(reason) \
+                    fds=\(descriptors.open, privacy: .public)/\(descriptors.limit, privacy: .public) \
+                    sockets=\(descriptors.sockets, privacy: .public)
+                    """
+                )
             }
         }
     }

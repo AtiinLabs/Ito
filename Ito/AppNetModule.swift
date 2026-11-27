@@ -218,6 +218,7 @@ actor AppNetModule: NetModule {
             if Task.isCancelled { throw CancellationError() }
             if refusesLateResult, let refusal = redirects.policyError { throw refusal }
             if let trustError = redirects.trustError { throw trustError }
+            NetworkFailureDiagnostics.record(error, host: url.host, transport: "plugin")
             if (error as? URLError)?.code == .timedOut { throw ItoError.hostCallTimedOut(.net) }
             throw error
         }
