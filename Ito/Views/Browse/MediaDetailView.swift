@@ -749,6 +749,10 @@ struct MediaDetailView<M: MediaDisplayable>: View {
         )
         let steps = ChapterThreadLayout.steps(for: roles)
         let stepsByKey = Dictionary(zip(chapters.map(\.key), steps), uniquingKeysWith: { first, _ in first })
+        let languagesByKey = Dictionary(
+            zip(chapters.map(\.key), ChapterUploadLanguage.labels(for: chapters)),
+            uniquingKeysWith: { first, _ in first }
+        )
         return LazyVStack(spacing: 0) {
             ForEach(chapters, id: \.key) { chapter in
                 let thread = stepsByKey[chapter.key]
@@ -758,7 +762,8 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                     marksText: textKeys.contains(chapter.key),
                     downloadState: viewModel.downloadState(for: chapter),
                     isSavedOnly: viewModel.isSavedOnlyRow(chapter),
-                    thread: thread
+                    thread: thread,
+                    uploadLanguage: languagesByKey[chapter.key] ?? nil
                 ) {
                     viewModel.selectChapter(chapter)
                 }

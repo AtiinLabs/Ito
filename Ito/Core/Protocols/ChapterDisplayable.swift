@@ -16,6 +16,9 @@ public protocol ChapterDisplayable: Identifiable {
     var logicalUnitID: String? { get }
     /// The source's reading position, meaningful only within the response it came from.
     var readingOrder: Int64? { get }
+    /// The language of this upload, as the source gives it. Nil when unknown, or for a kind that already shows its
+    /// language as its scanlator.
+    var uploadLanguage: String? { get }
 }
 
 extension ChapterDisplayable {
@@ -24,6 +27,7 @@ extension ChapterDisplayable {
     public var scanlatorID: String? { nil }
     public var logicalUnitID: String? { nil }
     public var readingOrder: Int64? { nil }
+    public var uploadLanguage: String? { nil }
 }
 
 /// String's canonical Unicode equality must not merge distinct source keys.
@@ -82,6 +86,7 @@ extension Sequence where Element: ChapterDisplayable {
 /// Manga and novel chapters (`Manga.Chapter`, `Novel.Chapter`). Readers take numbers from
 /// `chapterNumber` and `volumeNumber`, never from the runner's `chapter` or `volume`.
 nonisolated extension Chapter: ChapterDisplayable {
+    public var uploadLanguage: String? { lang }
     public nonisolated var chapterNumber: Float? { chapter.map { Float($0) } }
     public nonisolated var volumeNumber: Float? { volume.map { Float($0) } }
     public var dateUpload: String? {

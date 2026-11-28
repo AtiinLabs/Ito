@@ -13,6 +13,8 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
     let isSavedOnly: Bool
     /// The row's place on the series page's reading thread. Nil draws no thread, as for the other callers.
     let thread: ChapterThreadStep?
+    /// The language that tells this upload apart from a duplicate of its chapter. Nil when nothing needs telling apart.
+    let uploadLanguage: String?
 
     @State private var isPressed = false
 
@@ -27,6 +29,7 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
         downloadState: ChapterDownloadState?,
         isSavedOnly: Bool = false,
         thread: ChapterThreadStep? = nil,
+        uploadLanguage: String? = nil,
         onTap: @escaping () -> Void
     ) {
         self.chapter = chapter
@@ -35,6 +38,7 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
         self.downloadState = downloadState
         self.isSavedOnly = isSavedOnly
         self.thread = thread
+        self.uploadLanguage = uploadLanguage
         self.onTap = onTap
     }
 
@@ -125,13 +129,22 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
                 Text(dateUpload)
                     .font(.caption).foregroundStyle(subtitleColor)
             }
-            if let scanlator = chapter.scanlator, !scanlator.isEmpty {
+            let scanlator = chapter.scanlator.flatMap { $0.isEmpty ? nil : $0 }
+            if let scanlator {
                 if chapter.dateUpload != nil {
                     Text("·").font(.caption).foregroundStyle(subtitleColor)
                 }
                 Text(scanlator)
                     .font(chapter is Anime.Episode ? .caption2.weight(.semibold) : .caption)
                     .foregroundStyle(subtitleColor)
+                    .lineLimit(1)
+            }
+            if let uploadLanguage {
+                if chapter.dateUpload != nil || scanlator != nil {
+                    Text("·").font(.caption).foregroundStyle(subtitleColor)
+                }
+                Text(uploadLanguage)
+                    .font(.caption).foregroundStyle(subtitleColor)
                     .lineLimit(1)
             }
         }

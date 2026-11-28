@@ -76,7 +76,7 @@ struct ReaderChapterListView: View {
                     Text(ReaderChapterTitle.heading(title: row.chapter.title, number: row.chapter.chapterNumber))
                         .font(.body.weight(row.availability == .current ? .bold : .regular))
                         .lineLimit(1)
-                    uploadCaption(for: row.chapter)
+                    uploadCaption(for: row)
                 }
 
                 Spacer()
@@ -92,19 +92,22 @@ struct ReaderChapterListView: View {
         .buttonStyle(.plain)
         .disabled(!row.isSelectable)
         .listRowBackground(row.availability == .current ? Color.accentColor.opacity(0.15) : nil)
+        // The panel is laid out over the reader without the list's usual leading inset, so it sets its own.
+        .listRowInsets(style == .panel ? EdgeInsets(top: 10, leading: 20, bottom: 10, trailing: 16) : nil)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(row.availability == .current ? .isSelected : [])
         .accessibilityValue(row.isRead ? String(localized: "Read", comment: "Reader chapter list: accessibility value for a chapter already read") : "")
         .accessibilityHint(hint(for: row))
     }
 
-    /// The upload's date and group, in the series page row's order and separator, so the two uploads of one
-    /// number read the same way in both lists.
+    /// The upload's date, group and language, in the series page row's order and separator, so the two uploads of
+    /// one number read the same way in both lists.
     @ViewBuilder
-    private func uploadCaption(for chapter: Chapter) -> some View {
-        let date = chapter.dateUpload
-        let scanlator = chapter.scanlator.flatMap { $0.isEmpty ? nil : $0 }
-        if date != nil || scanlator != nil {
+    private func uploadCaption(for row: ReaderChapterListRow) -> some View {
+        let date = row.chapter.dateUpload
+        let scanlator = row.chapter.scanlator.flatMap { $0.isEmpty ? nil : $0 }
+        let language = row.uploadLanguage
+        if date != nil || scanlator != nil || language != nil {
             HStack(spacing: 4) {
                 if let date {
                     Text(date).font(.caption).foregroundColor(.secondary)
@@ -114,6 +117,12 @@ struct ReaderChapterListView: View {
                         Text("·").font(.caption).foregroundColor(.secondary)
                     }
                     Text(scanlator).font(.caption).foregroundColor(.secondary).lineLimit(1)
+                }
+                if let language {
+                    if date != nil || scanlator != nil {
+                        Text("·").font(.caption).foregroundColor(.secondary)
+                    }
+                    Text(language).font(.caption).foregroundColor(.secondary).lineLimit(1)
                 }
             }
             .lineLimit(1)

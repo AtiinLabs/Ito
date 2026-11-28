@@ -16,6 +16,8 @@ struct ReaderChapterListRow: Identifiable {
     let chapter: Chapter
     let isRead: Bool
     let availability: Availability
+    /// The label that tells this upload apart from a duplicate of its chapter. Nil when nothing needs telling apart.
+    var uploadLanguage: String?
 
     var isSelectable: Bool {
         switch availability {
@@ -40,6 +42,7 @@ enum ReaderChapterList {
         let order = chapters.indices.sorted { lhs, rhs in
             precedes(chapters[lhs], at: lhs, chapters[rhs], at: rhs)
         }
+        let languages = ChapterUploadLanguage.labels(for: chapters)
         return order.map { index in
             let chapter = chapters[index]
             let availability: ReaderChapterListRow.Availability =
@@ -50,7 +53,8 @@ enum ReaderChapterList {
                 id: index,
                 chapter: chapter,
                 isRead: isRead(chapter),
-                availability: availability
+                availability: availability,
+                uploadLanguage: languages[index]
             )
         }
     }
