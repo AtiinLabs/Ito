@@ -12,8 +12,10 @@ final class DeferredPluginPaneLifecycleTests: XCTestCase {
     private var viewModel: DeferredPluginViewModel!
     private var registry: PaneLifecycleRegistry!
 
-    override func setUp() {
-        super.setUp()
+    // The async forms run on the class's main actor; the synchronous overrides are nonisolated, which Xcode 26
+    // rejects for the main-actor decoder conformance.
+    override func setUp() async throws {
+        try await super.setUp()
         registry = PaneLifecycleRegistry()
         let item = Ito.LibraryItem(
             id: "item.exact",
@@ -43,10 +45,10 @@ final class DeferredPluginPaneLifecycleTests: XCTestCase {
         )
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         viewModel = nil
         registry = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     /// Mirrors `PaneLifecycleModifier`: `.onAppear` installs, `.onDisappear` uninstalls.
