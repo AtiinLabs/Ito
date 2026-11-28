@@ -103,6 +103,10 @@ final class LibraryViewModel: ObservableObject {
     @Published private(set) var offlineFacet: LibraryOfflineFacet = .all
     /// True while saved payloads are being decoded for the entire-series filter.
     @Published private(set) var isPreparingOfflineFacet = false
+    /// Read progress of each series with some reading and a known total, keyed by Library item ID.
+    @Published private(set) var seriesProgress: [String: LibrarySeriesProgress] = [:]
+    /// The series the Continue card resumes: History's latest read, when that series is in the Library.
+    @Published private(set) var continueEntry: LibraryContinueEntry?
 
     private let dependencies: PreparedLibraryDependencies
     private let tabRouter: any LibraryTabRouting
@@ -125,6 +129,16 @@ final class LibraryViewModel: ObservableObject {
     private var lastPresentedDiscordCategoryName: String?
     private var hasPresentedDiscord = false
     private var cancellables: Set<AnyCancellable> = []
+    private var recentHistoryEntries: [HistoryEntry] = []
+    private var seriesReferenceCache: [String: CachedSeriesReferences] = [:]
+    private var seriesProgressTask: Task<Void, Never>?
+
+    /// A series' decoded chapter references, reused while its stored payload is unchanged. Nil when the payload
+    /// cannot be decoded, so that failure is not retried until the payload changes.
+    private struct CachedSeriesReferences {
+        let payload: Data
+        let references: [LibraryChapterReference]?
+    }
 
     /// Everything a proof is judged from, apart from the clock. Equal inputs always give the same proof.
     private struct ProofInputs: Equatable {
@@ -216,6 +230,19 @@ final class LibraryViewModel: ObservableObject {
                 self?.recomputeOfflineProofs()
             }
             .store(in: &cancellables)
+        dependencies.readProgress.progressPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.scheduleSeriesProgressRefresh()
+            }
+            .store(in: &cancellables)
+        dependencies.recentHistory.historySnapshotPublisher
+            .sink { [weak self] entries in
+                self?.recentHistoryEntries = entries
+                self?.recomputeContinueEntry()
+            }
+            .store(in: &cancellables)
+        scheduleSeriesProgressRefresh()
     }
 
     deinit {
@@ -226,6 +253,7 @@ final class LibraryViewModel: ObservableObject {
         exportTask?.cancel()
         prepareTask?.cancel()
         expiryTask?.cancel()
+        seriesProgressTask?.cancel()
     }
 
     var phase: Phase {
@@ -761,6 +789,63 @@ final class LibraryViewModel: ObservableObject {
             presentDiscordIfNeeded()
         }
         recomputeOfflineProofs()
+        scheduleSeriesProgressRefresh()
+        recomputeContinueEntry()
+    }
+
+    /// Recounts every series' read progress after the Library, its payloads or its reads change. A newer request
+    /// cancels the one in flight, so a stale count never publishes.
+    private func scheduleSeriesProgressRefresh() {
+        seriesProgressTask?.cancel()
+        seriesProgressTask = Task { @MainActor [weak self] in
+            await self?.refreshSeriesProgress()
+        }
+    }
+
+    private func refreshSeriesProgress() async {
+        let items = snapshot.items
+        var nextCache: [String: CachedSeriesReferences] = [:]
+        var nextProgress: [String: LibrarySeriesProgress] = [:]
+        for item in items {
+            guard !Task.isCancelled else { return }
+            let references: [LibraryChapterReference]?
+            if let cached = seriesReferenceCache[item.id], cached.payload == item.rawPayload {
+                references = cached.references
+            } else {
+                references = await chapterReferences(for: item)
+            }
+            nextCache[item.id] = CachedSeriesReferences(payload: item.rawPayload, references: references)
+            let identity = item.mediaIdentity
+            let progress = LibrarySeriesProgressCalculator.progress(references: references ?? []) { reference in
+                dependencies.readProgress.isRead(
+                    media: identity,
+                    chapterID: reference.key,
+                    chapterNumber: reference.chapterNumber
+                )
+            }
+            if progress.isVisible { nextProgress[item.id] = progress }
+            await Task.yield()
+        }
+        guard !Task.isCancelled else { return }
+        seriesReferenceCache = nextCache
+        if seriesProgress != nextProgress { seriesProgress = nextProgress }
+    }
+
+    /// Decodes one series' chapter references from its stored payload. A payload that fails to decode has none.
+    private func chapterReferences(for item: LibraryItem) async -> [LibraryChapterReference]? {
+        guard let media = try? await dependencies.payloadDecoder.decode(item) else { return nil }
+        return LibraryChapterReference.references(in: media)
+    }
+
+    /// The Continue card resumes the series of History's latest read, when that series is in the Library.
+    private func recomputeContinueEntry() {
+        guard let record = LibraryContinueSelection.latestRecord(in: recentHistoryEntries),
+              let resolved = dependencies.historyLookup.libraryItem(for: record),
+              let item = snapshot.items.first(where: { $0.id == resolved.id }) else {
+            continueEntry = nil
+            return
+        }
+        continueEntry = LibraryContinueEntry(item: item, record: record)
     }
 
     private func applyAuthoritativeLayout(_ rawValue: Int) {

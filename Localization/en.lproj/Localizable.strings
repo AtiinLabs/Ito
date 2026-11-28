@@ -469,7 +469,8 @@ Rule sheet: close without changing anything */
 "Content Not Found" = "Content Not Found";
 
 /* Download More prompt: continue to the preview with the entered count.
-History: resume reading or watching a series */
+History: resume reading or watching a series
+Library Continue card: resume reading or watching the most recent series from its latest chapter or episode. */
 "Continue" = "Continue";
 
 /* History: resume button, with the series title */
@@ -1828,6 +1829,12 @@ History: the page a chapter was left on */
 Reader chapter list: accessibility value for a chapter already read */
 "Read" = "Read";
 
+/* Accessibility value for a Library card's reading progress for a manga or novel series. The placeholders are the number of chapters read and the total number of chapters. Plural-aware: the total can be 1. */
+"Read %lld of %lld chapters" = "Read %1$lld of %2$lld chapters";
+
+/* Accessibility value for a Library card's reading progress for an anime series. The placeholders are the number of episodes read and the total number of episodes. Plural-aware: the total can be 1. */
+"Read %lld of %lld episodes" = "Read %1$lld of %2$lld episodes";
+
 "Read Again" = "Read Again";
 
 /* Reader error: reopen this chapter from its saved copy after reading it online failed */
@@ -1868,6 +1875,9 @@ Reader chapter list: accessibility value for a chapter already read */
 "Reading history" = "Reading history";
 
 "Reading history \"%@\" matches multiple imported items." = "Reading history \"%@\" matches multiple imported items.";
+
+/* Accessibility label for the reading progress line under a Library card's cover. */
+"Reading progress" = "Reading progress";
 
 "Ready" = "Ready";
 

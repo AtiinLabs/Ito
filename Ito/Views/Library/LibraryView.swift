@@ -154,15 +154,36 @@ struct LibraryView: View {
             } else {
                 WidthClassReader { widthClass, size in
                     // The grid width comes from the container this view is given, so the column count follows the layout.
-                    libraryScrollView(columns: widthClass.spacing.gridColumns(forWidth: size.width), spacing: widthClass.spacing)
+                    libraryScrollView(columns: widthClass.spacing.gridColumns(forWidth: size.width), spacing: widthClass.spacing, isCompact: widthClass == .compact)
                 }
             }
         }
     }
 
-    private func libraryScrollView(columns: [GridItem], spacing: LayoutSpacing) -> some View {
+    private func libraryScrollView(columns: [GridItem], spacing: LayoutSpacing, isCompact: Bool) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
+                if let entry = viewModel.continueEntry {
+                    LibraryContinueSlot(
+                        isCompact: isCompact,
+                        entry: entry,
+                        isPluginInstalled: viewModel.isPluginInstalled(for: entry.item),
+                        onCoverLoaded: { image in viewModel.coverLoaded(for: entry.item, image: image) },
+                        loadDurableCover: { await viewModel.durableCover(for: entry.item) },
+                        onContinue: {
+                            navigator.select(
+                                .opened(
+                                    entry.item,
+                                    intent: .resume(
+                                        preferredScanlator: entry.record.scanlator,
+                                        preferredScanlatorID: entry.record.scanlatorID
+                                    )
+                                )
+                            )
+                        },
+                        spacing: spacing
+                    )
+                }
                 updateFailureSection
                 if viewModel.layoutStyle == .tabbed && viewModel.selectedCategoryID == nil {
                     Section {
@@ -310,6 +331,7 @@ struct LibraryView: View {
                     isPluginInstalled: viewModel.isPluginInstalled(for: item),
                     isEditing: viewModel.isEditing,
                     isSelected: navigator.selection?.item.id == item.id,
+                    progress: viewModel.seriesProgress[item.id],
                     onOpen: {
                         viewModel.itemSelected(item)
                         navigator.select(.plain(item))
@@ -603,7 +625,6 @@ struct SectionHeaderView: View {
 }
 
 struct LibraryItemView: View {
-    @Environment(\.sourceCoverRequests) private var coverRequests
     @Environment(\.paneShowsSelection) private var showsSelection
     let item: LibraryItem
     let badgeCount: Int
@@ -612,6 +633,7 @@ struct LibraryItemView: View {
     let isPluginInstalled: Bool
     let isEditing: Bool
     let isSelected: Bool
+    var progress: LibrarySeriesProgress?
     let onOpen: () -> Void
     /// Told when the card's cover finished loading, with the image it displays.
     let onCoverLoaded: (UIImage) -> Void
@@ -620,7 +642,6 @@ struct LibraryItemView: View {
     let onAssignCategories: () -> Void
     let onRemove: () -> Void
 
-    @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var wiggleAngle = Double.random(in: -1.2...1.2)
     @State private var isWiggling = false
@@ -676,13 +697,16 @@ struct LibraryItemView: View {
 
     private var cardContent: some View {
         VStack(alignment: .leading, spacing: 6) {
-            coverImageView
-                .overlay {
-                    if isSelected && showsSelection {
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.accentColor, lineWidth: 3)
+            VStack(alignment: .leading, spacing: 0) {
+                coverImageView
+                    .overlay {
+                        if isSelected && showsSelection {
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.accentColor, lineWidth: 3)
+                        }
                     }
-                }
+                progressLine
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
                     .font(.footnote)
@@ -701,43 +725,72 @@ struct LibraryItemView: View {
     }
 
     private var coverImageView: some View {
-        GeometryReader { geometry in
-            let width = geometry.size.width
-            let targetSize = CGSize(
-                width: width * displayScale,
-                height: width * 1.5 * displayScale
-            )
-            ZStack(alignment: .topTrailing) {
-                coverContent(width: width, targetSize: targetSize)
-                if !isPluginInstalled {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.orange, Color(.systemBackground))
-                        .padding(5)
-                } else if badgeCount > 0 && !isEditing {
-                    Text("\(badgeCount)")
-                        .font(.caption2.weight(.bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(Color.red))
-                        .overlay(
-                            Capsule().stroke(Color(UIColor.systemBackground), lineWidth: 1.5)
-                        )
-                        .padding(4)
-                        .transition(.scale.combined(with: .opacity))
-                        .accessibilityLabel(updateBadgeAccessibilityLabel)
-                }
+        LibraryCoverImageView(
+            item: item,
+            isPluginInstalled: isPluginInstalled,
+            onCoverLoaded: onCoverLoaded,
+            loadDurableCover: loadDurableCover
+        )
+        .overlay(alignment: .topTrailing) {
+            if !isPluginInstalled {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.orange, Color(.systemBackground))
+                    .padding(5)
+            } else if badgeCount > 0 && !isEditing {
+                Text("\(badgeCount)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(Color.red))
+                    .overlay(
+                        Capsule().stroke(Color(UIColor.systemBackground), lineWidth: 1.5)
+                    )
+                    .padding(4)
+                    .transition(.scale.combined(with: .opacity))
+                    .accessibilityLabel(updateBadgeAccessibilityLabel)
             }
         }
-        .aspectRatio(2 / 3, contentMode: .fit)
         .overlay(alignment: .bottomLeading) {
             if savedCount > 0 {
                 savedChip
             }
         }
-        .cornerRadius(8)
-        .clipped()
+    }
+
+    /// Reading progress under the cover: an accent line over a neutral track. It is absent until something is read.
+    @ViewBuilder
+    private var progressLine: some View {
+        if let progress, progress.isVisible {
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.secondary.opacity(0.25))
+                GeometryReader { geometry in
+                    Capsule()
+                        .fill(Color.accentColor)
+                        .frame(width: geometry.size.width * progress.fraction)
+                }
+            }
+            .frame(height: 3)
+            .padding(.top, 4)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text("Reading progress", comment: "Accessibility label for the reading progress line under a Library card's cover."))
+            .accessibilityValue(readProgressValue(progress))
+        }
+    }
+
+    private func readProgressValue(_ progress: LibrarySeriesProgress) -> String {
+        if item.isAnime {
+            return String(
+                localized: "Read \(progress.readCount) of \(progress.totalCount) episodes",
+                comment: "Accessibility value for a Library card's reading progress for an anime series. The placeholders are the number of episodes read and the total number of episodes. Plural-aware: the total can be 1."
+            )
+        }
+        return String(
+            localized: "Read \(progress.readCount) of \(progress.totalCount) chapters",
+            comment: "Accessibility value for a Library card's reading progress for a manga or novel series. The placeholders are the number of chapters read and the total number of chapters. Plural-aware: the total can be 1."
+        )
     }
 
     /// Verified saved chapters of the series. It is not shown for zero, so a damaged or queued copy never
@@ -757,65 +810,6 @@ struct LibraryItemView: View {
         .padding(4)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("\(savedCount) chapters saved", comment: "Accessibility label for a count of chapters saved on this device, on a Library card and in a series' details header. The placeholder is the number of saved chapters."))
-    }
-
-    @ViewBuilder
-    private func coverContent(width: CGFloat, targetSize: CGSize) -> some View {
-        if let coverURL = item.coverUrl, let url = URL(string: coverURL) {
-            LazyImage(request: coverRequests.request(url, pluginID: item.pluginId)) { state in
-                if let image = state.image {
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: width)
-                        .saturation(isPluginInstalled ? 1.0 : 0.35)
-                } else {
-                    // One view for both states, so the saved cover found while loading is not dropped when the
-                    // load then fails.
-                    durableCover(width: width, failed: state.error != nil) { failed in
-                        if failed {
-                            coverPlaceholder(icon: "exclamationmark.triangle")
-                        } else {
-                            ShimmerView()
-                        }
-                    }
-                }
-            }
-            // The image is the processed one the card shows; keeping it costs no request.
-            .onCompletion { result in
-                if case .success(let response) = result {
-                    onCoverLoaded(response.image)
-                }
-            }
-            .processors([.resize(size: targetSize)])
-        } else {
-            coverPlaceholder(icon: "photo.on.rectangle.angled")
-        }
-    }
-
-    /// The cover saved on this device, while the network cache has none to show.
-    private func durableCover<Placeholder: View>(
-        width: CGFloat,
-        failed: Bool,
-        @ViewBuilder placeholder: @escaping (Bool) -> Placeholder
-    ) -> some View {
-        DurableCoverFallback(
-            loadKey: "\(item.id)\u{1F}\(item.coverUrl ?? "")",
-            load: loadDurableCover,
-            width: width,
-            saturation: isPluginInstalled ? 1.0 : 0.35,
-            failed: failed,
-            placeholder: placeholder
-        )
-    }
-
-    private func coverPlaceholder(icon: String) -> some View {
-        ZStack {
-            Color.itoCardBackground
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(.tertiary)
-        }
     }
 }
 
@@ -891,4 +885,160 @@ struct UpdateProgressBanner: View {
 
 private struct LibraryCategoryAssignmentIntent: Identifiable {
     let id: String
+}
+
+/// A Library cover: the network image, the cover kept on this device while it loads or fails, and a placeholder.
+struct LibraryCoverImageView: View {
+    @Environment(\.sourceCoverRequests) private var coverRequests
+    @Environment(\.displayScale) private var displayScale
+    let item: LibraryItem
+    let isPluginInstalled: Bool
+    /// Told when the cover finished loading, with the image it displays.
+    let onCoverLoaded: (UIImage) -> Void
+    /// Reads the cover saved on this device.
+    let loadDurableCover: () async -> UIImage?
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let targetSize = CGSize(
+                width: width * displayScale,
+                height: width * 1.5 * displayScale
+            )
+            coverContent(width: width, targetSize: targetSize)
+        }
+        .aspectRatio(2 / 3, contentMode: .fit)
+        .cornerRadius(8)
+        .clipped()
+    }
+
+    @ViewBuilder
+    private func coverContent(width: CGFloat, targetSize: CGSize) -> some View {
+        if let coverURL = item.coverUrl, let url = URL(string: coverURL) {
+            LazyImage(request: coverRequests.request(url, pluginID: item.pluginId)) { state in
+                if let image = state.image {
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: width)
+                        .saturation(isPluginInstalled ? 1.0 : 0.35)
+                } else {
+                    // One view for both states, so the saved cover found while loading is not dropped when the
+                    // load then fails.
+                    durableCover(width: width, failed: state.error != nil) { failed in
+                        if failed {
+                            coverPlaceholder(icon: "exclamationmark.triangle")
+                        } else {
+                            ShimmerView()
+                        }
+                    }
+                }
+            }
+            // The image is the processed one the card shows; keeping it costs no request.
+            .onCompletion { result in
+                if case .success(let response) = result {
+                    onCoverLoaded(response.image)
+                }
+            }
+            .processors([.resize(size: targetSize)])
+        } else {
+            coverPlaceholder(icon: "photo.on.rectangle.angled")
+        }
+    }
+
+    /// The cover saved on this device, while the network cache has none to show.
+    private func durableCover<Placeholder: View>(
+        width: CGFloat,
+        failed: Bool,
+        @ViewBuilder placeholder: @escaping (Bool) -> Placeholder
+    ) -> some View {
+        DurableCoverFallback(
+            loadKey: "\(item.id)\u{1F}\(item.coverUrl ?? "")",
+            load: loadDurableCover,
+            width: width,
+            saturation: isPluginInstalled ? 1.0 : 0.35,
+            failed: failed,
+            placeholder: placeholder
+        )
+    }
+
+    private func coverPlaceholder(icon: String) -> some View {
+        ZStack {
+            Color.itoCardBackground
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+/// The Library's Continue card for compact width: History's latest series, the chapter or episode it reached, and the action that resumes it.
+struct LibraryContinueCard: View {
+    let entry: LibraryContinueEntry
+    let isPluginInstalled: Bool
+    /// Told when the cover finished loading, with the image it displays.
+    let onCoverLoaded: (UIImage) -> Void
+    /// Reads the cover saved on this device.
+    let loadDurableCover: () async -> UIImage?
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                LibraryCoverImageView(
+                    item: entry.item,
+                    isPluginInstalled: isPluginInstalled,
+                    onCoverLoaded: onCoverLoaded,
+                    loadDurableCover: loadDurableCover
+                )
+                .frame(width: 112)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(entry.item.title)
+                        .font(.headline)
+                        .lineLimit(2)
+                        .foregroundStyle(isPluginInstalled ? .primary : .secondary)
+                    Text(HistoryViewModel.chapterLabel(for: entry.record))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Button(action: onContinue) {
+                Text("Continue", comment: "Library Continue card: resume reading or watching the most recent series from its latest chapter or episode.")
+                    .frame(maxWidth: .infinity)
+            }
+            .itoProminentButtonStyle()
+            .controlSize(.large)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.itoCardBackground))
+    }
+}
+
+/// The Continue card's slot in the Library list. It reads the pane arrangement that PaneHost gives its list content,
+/// so it must be rendered inside that content, not in the view that hosts PaneHost.
+private struct LibraryContinueSlot: View {
+    @Environment(\.paneArrangement) private var arrangement
+    let isCompact: Bool
+    let entry: LibraryContinueEntry
+    let isPluginInstalled: Bool
+    let onCoverLoaded: (UIImage) -> Void
+    let loadDurableCover: () async -> UIImage?
+    let onContinue: () -> Void
+    let spacing: LayoutSpacing
+
+    var body: some View {
+        if LibraryContinueVisibility.isShown(isCompact: isCompact, arrangement: arrangement) {
+            LibraryContinueCard(
+                entry: entry,
+                isPluginInstalled: isPluginInstalled,
+                onCoverLoaded: onCoverLoaded,
+                loadDurableCover: loadDurableCover,
+                onContinue: onContinue
+            )
+            .padding(.horizontal, spacing.margin)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
+        }
+    }
 }

@@ -531,6 +531,12 @@ struct PreparedLibraryDependencies {
     var downloads: any LibraryDownloadServing = UnavailableLibraryDownloads()
     /// No entire-series proofs unless the composition root passes the live library manager.
     var offlineProofs: any LibraryOfflineProofServing = UnavailableLibraryOfflineProofs()
+    /// No read progress unless the composition root passes the live read-progress manager.
+    var readProgress: any LibraryReadProgressServing = UnavailableLibraryReadProgress()
+    /// No Continue card unless the composition root passes the live history manager.
+    var recentHistory: any LibraryRecentHistoryServing = UnavailableLibraryRecentHistory()
+    /// Resolves History records to Library items; without it the Continue card stays hidden.
+    var historyLookup: any HistoryLibraryLookup = UnavailableHistoryLibraryLookup()
 
     static func production(
         libraryManager: LibraryManager,
@@ -542,7 +548,10 @@ struct PreparedLibraryDependencies {
         repoManager: RepoManager,
         connectivity: any ConnectivityServing = UnavailableConnectivity(),
         coverThumbnails: any LibraryCoverThumbnailServing = UnavailableLibraryCoverThumbnails(),
-        downloads: any LibraryDownloadServing = UnavailableLibraryDownloads()
+        downloads: any LibraryDownloadServing = UnavailableLibraryDownloads(),
+        readProgress: any LibraryReadProgressServing,
+        recentHistory: any LibraryRecentHistoryServing,
+        historyLookup: any HistoryLibraryLookup
     ) -> Self {
         Self(
             library: libraryManager,
@@ -556,7 +565,10 @@ struct PreparedLibraryDependencies {
             connectivity: connectivity,
             coverThumbnails: coverThumbnails,
             downloads: downloads,
-            offlineProofs: libraryManager
+            offlineProofs: libraryManager,
+            readProgress: readProgress,
+            recentHistory: recentHistory,
+            historyLookup: historyLookup
         )
     }
 
@@ -577,6 +589,41 @@ struct PreparedLibraryDependencies {
 
 private enum UnavailableLibraryDependencyError: Error {
     case unavailable
+}
+
+/// Read progress for Library series. The publisher fires before a read is stored, so observers recount on the next
+/// run loop turn.
+@MainActor
+protocol LibraryReadProgressServing: AnyObject {
+    var progressPublisher: AnyPublisher<Void, Never> { get }
+    func isRead(media: MediaIdentity, chapterID: String, chapterNumber: Float?) -> Bool
+}
+
+extension ReadProgressManager: LibraryReadProgressServing {}
+
+/// The History entries, newest first, that the Library's Continue card reads from.
+@MainActor
+protocol LibraryRecentHistoryServing: AnyObject {
+    var historySnapshotPublisher: AnyPublisher<[HistoryEntry], Never> { get }
+}
+
+extension HistoryManager: LibraryRecentHistoryServing {}
+
+@MainActor
+private final class UnavailableLibraryReadProgress: LibraryReadProgressServing {
+    var progressPublisher: AnyPublisher<Void, Never> { Empty().eraseToAnyPublisher() }
+
+    func isRead(media: MediaIdentity, chapterID: String, chapterNumber: Float?) -> Bool { false }
+}
+
+@MainActor
+private final class UnavailableLibraryRecentHistory: LibraryRecentHistoryServing {
+    var historySnapshotPublisher: AnyPublisher<[HistoryEntry], Never> { Just([]).eraseToAnyPublisher() }
+}
+
+@MainActor
+private final class UnavailableHistoryLibraryLookup: HistoryLibraryLookup {
+    func libraryItem(for record: ReadingHistoryRecord) -> LibraryItem? { nil }
 }
 
 @MainActor

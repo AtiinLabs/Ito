@@ -1770,7 +1770,7 @@
 
     },
     "Continue" : {
-      "comment" : "Download More prompt: continue to the preview with the entered count.\nHistory: resume reading or watching a series"
+      "comment" : "Download More prompt: continue to the preview with the entered count.\nHistory: resume reading or watching a series\nLibrary Continue card: resume reading or watching the most recent series from its latest chapter or episode."
     },
     "Continue %@" : {
       "comment" : "History: resume button, with the series title"
@@ -3829,6 +3829,28 @@
     "Read" : {
       "comment" : "Accessibility value of a chapter row on the series page that has been read.\nReader chapter list: accessibility value for a chapter already read"
     },
+    "Read %lld of %lld chapters" : {
+      "comment" : "Accessibility value for a Library card's reading progress for a manga or novel series. The placeholders are the number of chapters read and the total number of chapters. Plural-aware: the total can be 1.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Read %1$lld of %2$lld chapters"
+          }
+        }
+      }
+    },
+    "Read %lld of %lld episodes" : {
+      "comment" : "Accessibility value for a Library card's reading progress for an anime series. The placeholders are the number of episodes read and the total number of episodes. Plural-aware: the total can be 1.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Read %1$lld of %2$lld episodes"
+          }
+        }
+      }
+    },
     "Read Again" : {
 
     },
@@ -3887,6 +3909,9 @@
     },
     "Reading history \"%@\" matches multiple imported items." : {
 
+    },
+    "Reading progress" : {
+      "comment" : "Accessibility label for the reading progress line under a Library card's cover."
     },
     "Ready" : {
 

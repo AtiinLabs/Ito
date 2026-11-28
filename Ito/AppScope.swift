@@ -229,7 +229,10 @@ struct PreparedApplicationDependencies {
                 repoManager: repoManager,
                 connectivity: connectivity ?? UnavailableConnectivity(),
                 coverThumbnails: covers,
-                downloads: downloads?.center ?? UnavailableLibraryDownloads()
+                downloads: downloads?.center ?? UnavailableLibraryDownloads(),
+                readProgress: readProgressManager,
+                recentHistory: historyManager,
+                historyLookup: libraryManager
             ),
             categoryHistory: .production(
                 libraryManager: libraryManager,
