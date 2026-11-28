@@ -794,46 +794,61 @@ final class LibraryViewModel: ObservableObject {
     }
 
     /// Recounts every series' read progress after the Library, its payloads or its reads change. A newer request
-    /// cancels the one in flight, so a stale count never publishes.
+    /// cancels the one in flight, so a stale count never publishes. The count runs on copies of what it needs and
+    /// reaches the model only to publish, so a slow decode never keeps a dismissed Library alive.
     private func scheduleSeriesProgressRefresh() {
         seriesProgressTask?.cancel()
+        let items = snapshot.items
+        let cache = seriesReferenceCache
+        let decoder = dependencies.payloadDecoder
+        let readProgress = dependencies.readProgress
         seriesProgressTask = Task { @MainActor [weak self] in
-            await self?.refreshSeriesProgress()
+            guard let counted = await Self.countSeriesProgress(
+                items: items,
+                cache: cache,
+                decoder: decoder,
+                readProgress: readProgress
+            ), let self else { return }
+            seriesReferenceCache = counted.cache
+            if seriesProgress != counted.progress { seriesProgress = counted.progress }
         }
     }
 
-    private func refreshSeriesProgress() async {
-        let items = snapshot.items
+    /// Each series' progress, reusing cached references while a payload is unchanged. Nil when cancelled.
+    private static func countSeriesProgress(
+        items: [LibraryItem],
+        cache: [String: CachedSeriesReferences],
+        decoder: any DeferredPluginPayloadDecoding,
+        readProgress: any LibraryReadProgressServing
+    ) async -> (cache: [String: CachedSeriesReferences], progress: [String: LibrarySeriesProgress])? {
         var nextCache: [String: CachedSeriesReferences] = [:]
         var nextProgress: [String: LibrarySeriesProgress] = [:]
         for item in items {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return nil }
             let references: [LibraryChapterReference]?
-            if let cached = seriesReferenceCache[item.id], cached.payload == item.rawPayload {
+            if let cached = cache[item.id], cached.payload == item.rawPayload {
                 references = cached.references
             } else {
-                references = await chapterReferences(for: item)
+                references = await chapterReferences(for: item, decoder: decoder)
             }
             nextCache[item.id] = CachedSeriesReferences(payload: item.rawPayload, references: references)
             let identity = item.mediaIdentity
             let progress = LibrarySeriesProgressCalculator.progress(references: references ?? []) { reference in
-                dependencies.readProgress.isRead(
-                    media: identity,
-                    chapterID: reference.key,
-                    chapterNumber: reference.chapterNumber
-                )
+                readProgress.isRead(media: identity, chapterID: reference.key, chapterNumber: reference.chapterNumber)
             }
             if progress.isVisible { nextProgress[item.id] = progress }
             await Task.yield()
         }
-        guard !Task.isCancelled else { return }
-        seriesReferenceCache = nextCache
-        if seriesProgress != nextProgress { seriesProgress = nextProgress }
+        guard !Task.isCancelled else { return nil }
+        return (nextCache, nextProgress)
     }
 
     /// Decodes one series' chapter references from its stored payload. A payload that fails to decode has none.
-    private func chapterReferences(for item: LibraryItem) async -> [LibraryChapterReference]? {
-        guard let media = try? await dependencies.payloadDecoder.decode(item) else { return nil }
+    private static func chapterReferences(
+        for item: LibraryItem,
+        decoder: any DeferredPluginPayloadDecoding
+    ) async -> [LibraryChapterReference]? {
+        guard let media = try? await decoder.decode(item) else { return nil }
         return LibraryChapterReference.references(in: media)
     }
 
