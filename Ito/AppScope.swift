@@ -229,7 +229,10 @@ struct PreparedApplicationDependencies {
                 repoManager: repoManager,
                 connectivity: connectivity ?? UnavailableConnectivity(),
                 coverThumbnails: covers,
-                downloads: downloads?.center ?? UnavailableLibraryDownloads()
+                downloads: downloads?.center ?? UnavailableLibraryDownloads(),
+                readProgress: readProgressManager,
+                recentHistory: historyManager,
+                historyLookup: libraryManager
             ),
             categoryHistory: .production(
                 libraryManager: libraryManager,
@@ -313,6 +316,7 @@ final class RootModelStore {
     init(
         preparedDependencies: PreparedApplicationDependencies,
         repositoryIntentRouter: any BrowseRepositoryIntentRouting,
+        browseDetailRouter: any BrowseDetailRouting,
         libraryTabRouter: any LibraryTabRouting,
         browseMessagePresenter: any BrowseMessagePresenting,
         debugLogMessagePresenter: any DebugLogMessagePresenting,
@@ -340,7 +344,8 @@ final class RootModelStore {
                 pluginManager: preparedDependencies.browsePluginManager,
                 fileOperations: preparedDependencies.browseFileOperations,
                 messagePresenter: browseMessagePresenter,
-                repositoryIntentRouter: repositoryIntentRouter
+                repositoryIntentRouter: repositoryIntentRouter,
+                detailRouter: browseDetailRouter
             )
         }
         makeDiscoverViewModel = {
@@ -555,6 +560,7 @@ final class AppScope {
         let rootModels = RootModelStore(
             preparedDependencies: preparedDependencies,
             repositoryIntentRouter: router,
+            browseDetailRouter: router.panes.browse,
             libraryTabRouter: router,
             browseMessagePresenter: AppMessageBrowseMessagePresenter(messageCenter: messageCenter),
             debugLogMessagePresenter: debugLogMessagePresenter,
@@ -592,7 +598,8 @@ final class AppScope {
             downloadsThumbnails: preparedDependencies.downloadsThumbnails,
             downloadPresets: preparedDependencies.downloadPresets,
             automaticDownloads: preparedDependencies.automaticDownloads,
-            settingsDependencies: preparedDependencies.settings
+            settingsDependencies: preparedDependencies.settings,
+            panes: router.panes
         )
     }
 

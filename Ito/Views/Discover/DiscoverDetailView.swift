@@ -17,6 +17,7 @@ struct DiscoverDetailView: View {
     private let viewFactory: AppViewFactory
     @State private var isDescriptionExpanded = false
     @State private var showNavTitle = false
+    @Environment(\.layoutDirection) private var layoutDirection
 
     init(viewModel: DiscoverDetailViewModel, viewFactory: AppViewFactory) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -89,6 +90,8 @@ struct DiscoverDetailView: View {
                 }
             }
             .background(Color.clear)
+            // Its rows scroll sideways and would draw into the trailing inset, under iOS 27's side tab pill.
+            .clipShape(TrailingEdgeClip(layoutDirection: layoutDirection))
 
             // Top-level, stable navigation host
             NavigationLink(
@@ -176,7 +179,7 @@ struct DiscoverDetailView: View {
         }
         .padding(.bottom, 24)
         .background(Color.clear)
-        .frame(maxWidth: UIScreen.main.bounds.width)
+        .frame(maxWidth: .infinity)
         .clipped()
     }
 

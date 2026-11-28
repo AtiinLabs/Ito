@@ -104,6 +104,8 @@ final class RoutePresentationFake: ReaderRoutePresentationMaking {
     let novel: NovelReaderTestSubject
     /// The pipeline the destination's image session uses, when a test needs real image states.
     var imagePipeline: ImagePipeline?
+    /// The offline facts each reader this presentation builds reads; nil means nothing is stored.
+    var offline: (any ReaderOfflineAvailability)?
     private(set) var created: [ReaderRoutePresentation] = []
 
     init(manga: MangaReaderTestSubject, novel: NovelReaderTestSubject) {
@@ -147,13 +149,15 @@ final class RoutePresentationFake: ReaderRoutePresentationMaking {
             presentation = .text(visitID: visitID, NovelReaderViewModel(
                 chapterPreparer: preparer, routeSession: session, routeVisitID: visitID, presentationMode: mode,
                 pluginID: "plugin.test", entry: entry, initialChapter: chapter,
-                dependencies: novelDependencies, offline: ReaderOfflineContext()
+                dependencies: novelDependencies,
+                offline: ReaderOfflineContext(availability: offline ?? UnavailableReaderOfflineAvailability())
             ))
         case .pages, .video:
             presentation = .pages(visitID: visitID, MangaReaderViewModel(
                 chapterPreparer: preparer, routeSession: session, routeVisitID: visitID, presentationMode: mode,
                 pluginID: "plugin.test", entry: entry, initialChapter: chapter,
-                dependencies: mangaDependencies, offline: ReaderOfflineContext()
+                dependencies: mangaDependencies,
+                offline: ReaderOfflineContext(availability: offline ?? UnavailableReaderOfflineAvailability())
             ))
         }
         created.append(presentation)
@@ -229,15 +233,22 @@ func makeRouteFixture(
     preparer: ScriptedChapterPreparer = ScriptedChapterPreparer(),
     imagePipeline: ImagePipeline? = nil,
     epoch: String? = "epoch",
-    preloadImageCount: Int = 5
+    preloadImageCount: Int = 5,
+    offline: (any ReaderOfflineAvailability)? = nil,
+    configureSource: (MangaReaderTestSubject) -> Void = { _ in }
 ) async -> RouteFixture {
-    let manga = makeMangaReaderSubject(entry: entry, initialChapter: chapter, preloadImageCount: preloadImageCount)
-    let novel = makeNovelReaderSubject(entry: entry, initialChapter: chapter)
+    let availability = offline ?? UnavailableReaderOfflineAvailability()
+    let manga = makeMangaReaderSubject(
+        entry: entry, initialChapter: chapter, preloadImageCount: preloadImageCount, offlineAvailability: availability
+    )
+    configureSource(manga)
+    let novel = makeNovelReaderSubject(entry: entry, initialChapter: chapter, offlineAvailability: availability)
     manga.progress.originatingEpoch = epoch
     novel.progress.originatingEpoch = epoch
     let session = makeReaderRouteSession(entry: entry, scope: manga.progress)
     let presentations = RoutePresentationFake(manga: manga, novel: novel)
     presentations.imagePipeline = imagePipeline
+    presentations.offline = offline
     let network = RouteNetworkFake()
     let route = ReaderRouteCoordinator(
         rootID: UUID(), pluginID: "plugin.test", entry: entry, chapter: chapter, format: format,
@@ -266,6 +277,7 @@ final class RecordingHandoffRouter: ReaderHandoffRouting {
     private(set) var corrections: [(key: String, position: ReaderEntryPosition)] = []
     var acceptsCorrections = true
     private(set) var boundaryLeaves = 0
+    var isHandoffPending = false
     /// Called after each event is recorded, so a test can wait on the renderer's delivery.
     var onEvent: (() -> Void)?
 

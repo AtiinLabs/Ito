@@ -283,7 +283,7 @@ final class NovelReaderViewModel: ObservableObject {
     }
 
     /// Whether the chapter reads in this reader: declared as text, and not found to be saved as pages.
-    private func opensHere(_ chapter: Novel.Chapter) -> Bool {
+    func opensHere(_ chapter: Novel.Chapter) -> Bool {
         textChapter(chapter) != nil && heldPayloads[ExactChapterKey(chapter.key)] == nil
     }
 
@@ -334,13 +334,14 @@ final class NovelReaderViewModel: ObservableObject {
         _ chapter: Novel.Chapter,
         direction: ReaderHandoffDirection = .next,
         trigger: ReaderHandoffTrigger = .chapterControl,
-        approved: Bool = false
+        approved: Bool = false,
+        target: ReaderHandoffTarget = .adjacent
     ) {
         appendWaitsForBoundary = false
-        let chapter = entry.chapters?.first { $0.key == chapter.key } ?? chapter
+        let chapter = entry.chapters?.first { $0.key.utf8.elementsEqual(chapter.key.utf8) } ?? chapter
         guard isActive, presentationMode.isLive, !chapter.isPaywalled else { return }
         // What the reader holds now, until the chapter proves to be made for this reader.
-        beginTransitionSnapshot(direction: direction, trigger: trigger, approved: approved)
+        beginTransitionSnapshot(direction: direction, trigger: trigger, approved: approved, target: target)
         endHandoffCrossing()
         changeCurrentChapter(to: chapter)
         loadedChapters = []

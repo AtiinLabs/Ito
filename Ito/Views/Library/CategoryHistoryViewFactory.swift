@@ -53,7 +53,7 @@ struct CategoryHistoryViewFactory {
         )
     }
 
-    func makeHistoryView(viewFactory: AppViewFactory) -> HistoryView {
-        HistoryView(viewModel: makeHistoryViewModel(), viewFactory: viewFactory)
+    func makeHistoryView(navigator: PaneNavigator<LibraryDetailSelection>) -> HistoryView {
+        HistoryView(viewModel: makeHistoryViewModel(), navigator: navigator)
     }
 }

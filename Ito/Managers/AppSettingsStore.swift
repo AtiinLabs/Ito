@@ -11,7 +11,7 @@ public struct AppSettingsLoadIssue: Equatable, Sendable {
     public let reason: Reason
 }
 
-public protocol AppSettingsPersistence: Sendable {
+nonisolated public protocol AppSettingsPersistence: Sendable {
     func readPreferences() async throws -> [AppPreference]
     func writePreferences(_ preferences: [AppPreference]) async throws -> [AppPreference]
     func insertAbsentNetworkPreferences() async throws -> [AppPreference]
@@ -76,6 +76,7 @@ public final class AppSettingsStore: ObservableObject {
     @Published public private(set) var automaticDownloadQueueLimit = AppPreferenceCatalog.automaticDownloadQueueLimit.defaultValue
     @Published public private(set) var automaticDownloadQuotaGiB = AppPreferenceCatalog.automaticDownloadQuotaGiB.defaultValue
     @Published public private(set) var subscriptionAttentionNotifications = AppPreferenceCatalog.subscriptionAttentionNotifications.defaultValue
+    @Published public private(set) var sourceHomeWideLayout = AppPreferenceCatalog.sourceHomeWideLayout.defaultValue
     @Published public private(set) var loadIssues: [AppSettingsLoadIssue] = []
 
     private let persistence: any AppSettingsPersistence
@@ -238,6 +239,7 @@ public final class AppSettingsStore: ObservableObject {
         automaticDownloadQueueLimit = snapshot.automaticDownloadQueueLimit
         automaticDownloadQuotaGiB = snapshot.automaticDownloadQuotaGiB
         subscriptionAttentionNotifications = snapshot.subscriptionAttentionNotifications
+        sourceHomeWideLayout = snapshot.sourceHomeWideLayout
         loadIssues = issues
         // The configuration is published only here, after persistence acknowledged it, so the live policy
         // revision never runs ahead of what is stored.
@@ -309,6 +311,7 @@ private struct AppSettingsSnapshot: Sendable {
     let automaticDownloadQueueLimit: Int
     let automaticDownloadQuotaGiB: Int
     let subscriptionAttentionNotifications: Bool
+    let sourceHomeWideLayout: SourceHomeWideLayoutPreference
 
     var networkConfiguration: NetworkPolicyConfiguration {
         NetworkPolicyConfiguration(
@@ -367,7 +370,8 @@ private struct AppSettingsSnapshot: Sendable {
                 adjacentChapterPrefetchCount: value(AppPreferenceCatalog.adjacentChapterPrefetchCount),
                 automaticDownloadQueueLimit: value(AppPreferenceCatalog.automaticDownloadQueueLimit),
                 automaticDownloadQuotaGiB: value(AppPreferenceCatalog.automaticDownloadQuotaGiB),
-                subscriptionAttentionNotifications: value(AppPreferenceCatalog.subscriptionAttentionNotifications)
+                subscriptionAttentionNotifications: value(AppPreferenceCatalog.subscriptionAttentionNotifications),
+                sourceHomeWideLayout: value(AppPreferenceCatalog.sourceHomeWideLayout)
             ),
             repairs,
             issues

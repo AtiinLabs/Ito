@@ -927,6 +927,7 @@ final class MediaDetailViewModel<M: MediaDisplayable>: ObservableObject {
             case .locked: messagePresenter.present(.chapterLocked(isEpisode: media.mediaKind == .anime))
             case .unavailable: messagePresenter.present(.chapterUnavailable(isEpisode: media.mediaKind == .anime))
             }
+        case .save: if !isSaved { Task { await toggleSave() } }
         }
     }
 

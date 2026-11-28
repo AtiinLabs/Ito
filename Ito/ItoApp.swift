@@ -223,6 +223,7 @@ private struct DurableApplicationView: View {
     var body: some View {
         MainTabView(appScope: appScope)
             .preferredColorScheme(settingsStore.appTheme.colorScheme)
+            .environment(\.sourceHomeWideLayout, settingsStore.sourceHomeWideLayout)
             .onOpenURL { url in
                 appScope.router.handleRepositoryDeepLink(url)
             }

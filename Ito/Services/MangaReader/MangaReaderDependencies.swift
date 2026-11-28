@@ -39,9 +39,15 @@ protocol MangaReaderProgressTracking: PluginCompletionScopeCapturing, AnyObject 
     /// The reading mode chosen for the series, if one was chosen.
     func savedViewer(media: MediaIdentity) -> Manga.Viewer?
     func saveViewer(_ viewer: Manga.Viewer, media: MediaIdentity, chapterID: String) async throws
+    /// Whether the chapter is marked read, by exact key or by number, as the series page shows it.
+    func isChapterRead(media: MediaIdentity, chapterID: String, chapterNumber: Float?) -> Bool
 }
 
 extension ReadProgressManager: MangaReaderProgressTracking {
+    func isChapterRead(media: MediaIdentity, chapterID: String, chapterNumber: Float?) -> Bool {
+        isRead(media: media, chapterId: chapterID, chapterNum: chapterNumber)
+    }
+
     func markChapterRead(
         context: PluginCompletionContext,
         chapterID: String,
@@ -284,6 +290,10 @@ private final class UnavailableMangaReaderDependencies:
     MangaReaderPresencePresenting,
     MangaReaderPluginMetadataProviding,
     MangaReaderImagePrefetching {
+    func isChapterRead(media: MediaIdentity, chapterID: String, chapterNumber: Float?) -> Bool {
+        false
+    }
+
     let imageSession = ReaderPageImageSession()
     var mangaReaderPreloadImageCount: Int {
         AppPreferenceCatalog.preloadImageCount.defaultValue.rawValue

@@ -60,6 +60,7 @@ struct PrivacySettingsView: View {
         }
         .navigationTitle("Privacy")
         .navigationBarTitleDisplayMode(.inline)
+        .paneHold(viewModel.alert != nil)
         .onDisappear {
             Task { await viewModel.commitDiscordRPCURLDraft(discardingInvalid: true) }
         }

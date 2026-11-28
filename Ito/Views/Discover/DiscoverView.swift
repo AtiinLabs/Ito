@@ -6,6 +6,7 @@ struct DiscoverView: View {
     @StateObject private var viewModel: DiscoverViewModel
     private let viewFactory: AppViewFactory
     @State private var showFilters = false
+    @Environment(\.layoutDirection) private var layoutDirection
 
     init(viewModel: DiscoverViewModel, viewFactory: AppViewFactory) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -21,6 +22,8 @@ struct DiscoverView: View {
                     searchResultsView
                 }
             }
+            // The shelves scroll sideways and would draw into the trailing inset, under iOS 27's side tab pill.
+            .clipShape(TrailingEdgeClip(layoutDirection: layoutDirection))
             .navigationTitle("Discover")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -199,41 +202,80 @@ struct DiscoverView: View {
     }
 }
 
+private extension DiscoverShelfKind {
+    var title: LocalizedStringKey {
+        switch self {
+        case .trending: "Trending Now"
+        case .seasonal: "Popular This Season"
+        case .popular: "All-Time Popular"
+        case .topRated: "Top Rated"
+        }
+    }
+}
+
 // MARK: - Discover Home View
 
 private struct DiscoverHomeView: View {
     @ObservedObject var viewModel: DiscoverViewModel
     let viewFactory: AppViewFactory
+    @State private var heroIsOnScreen = true
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                typePicker
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .padding(.bottom, 16)
+        WidthClassReader { widthClass, size in
+            ScrollView {
+                VStack(spacing: 0) {
+                    heroSection(widthClass: widthClass, viewport: size)
 
-                if isInitialLoading {
-                    ProgressView("Loading...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.top, 100)
-                } else if viewModel.currentHomeContent.primarySectionsAreEmpty {
-                    DiscoverErrorView(
-                        errorMessage: homeFailure?.message,
-                        isOutage: homeFailure?.isAniListOutage == true,
-                        onRetry: viewModel.retryHome
-                    )
-                    .padding(.top, 60)
-                } else {
-                    homeSections
+                    typePicker
+                        .padding(.horizontal, widthClass.spacing.margin)
+                        .padding(.top, 8)
+                        .padding(.bottom, 16)
+
+                    if isInitialLoading {
+                        ProgressView("Loading...")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(.top, 100)
+                    } else if viewModel.currentHomeContent.primarySectionsAreEmpty {
+                        DiscoverErrorView(
+                            errorMessage: homeFailure?.message,
+                            isOutage: homeFailure?.isAniListOutage == true,
+                            onRetry: viewModel.retryHome
+                        )
+                        .padding(.top, 60)
+                    } else {
+                        homeSections(widthClass: widthClass)
+                    }
+                }
+                .onPreferenceChange(DiscoverHeroVisibilityKey.self) { isOnScreen in
+                    heroIsOnScreen = isOnScreen
                 }
             }
+            .coordinateSpace(name: DiscoverHeroMetrics.coordinateSpaceName)
+            .refreshable {
+                await viewModel.refreshHome()
+            }
+            .task {
+                await viewModel.loadInitialHomeIfNeeded()
+            }
         }
-        .refreshable {
-            await viewModel.refreshHome()
-        }
-        .task {
-            await viewModel.loadInitialHomeIfNeeded()
+    }
+
+    /// The banner hero for regular and wide width classes. Compact keeps the home without it.
+    @ViewBuilder
+    private func heroSection(widthClass: WidthClass, viewport: CGSize) -> some View {
+        let heroItems: [DiscoverMedia] = widthClass == .compact
+            ? []
+            : DiscoverHeroSelection.items(from: viewModel.currentHomeContent.trending)
+        if !heroItems.isEmpty {
+            DiscoverHeroCarousel(
+                items: heroItems,
+                width: viewport.width - 2 * widthClass.spacing.margin,
+                viewport: viewport,
+                isOnScreen: heroIsOnScreen,
+                makeDestination: viewFactory.makeDiscoverDetailView
+            )
+            .padding(.horizontal, widthClass.spacing.margin)
+            .padding(.bottom, 8)
         }
     }
 
@@ -266,20 +308,17 @@ private struct DiscoverHomeView: View {
         return failure
     }
 
-    private var homeSections: some View {
-        LazyVStack(spacing: 24) {
-            let content = viewModel.currentHomeContent
-            if !content.trending.isEmpty {
-                discoverSection(title: "Trending Now", items: content.trending)
-            }
-            if viewModel.selectedType == .anime && !content.seasonal.isEmpty {
-                discoverSection(title: "Popular This Season", items: content.seasonal)
-            }
-            if !content.popular.isEmpty {
-                discoverSection(title: "All-Time Popular", items: content.popular)
-            }
-            if !content.topRated.isEmpty {
-                discoverSection(title: "Top Rated", items: content.topRated)
+    private func homeSections(widthClass: WidthClass) -> some View {
+        let shelves = DiscoverShelfLayout.shelves(for: viewModel.currentHomeContent, mediaType: viewModel.selectedType)
+        let rows = DiscoverShelfLayout.rows(shelves, columns: DiscoverShelfLayout.columns(for: widthClass))
+        return LazyVStack(spacing: 24) {
+            ForEach(rows.indices, id: \.self) { index in
+                HStack(alignment: .top, spacing: widthClass.spacing.gridSpacing) {
+                    ForEach(rows[index]) { shelf in
+                        discoverSection(title: shelf.kind.title, items: shelf.items)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
             }
         }
         .padding(.bottom, 24)

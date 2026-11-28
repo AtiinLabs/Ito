@@ -22,9 +22,26 @@ struct AppearanceSettingsView: View {
                 }
                 .pickerStyle(SegmentedPickerStyle())
             }
+
+            Section(
+                header: Text("Layout"),
+                footer: Text("Applies to an unfolded iPhone Duo in landscape, iPad and Mac. Side by Side shows a source's featured title beside its shelves; Stacked keeps the phone layout.")
+            ) {
+                Picker("Source Home on Wide Screens", selection: Binding(
+                    get: { viewModel.sourceHomeWideLayout },
+                    set: { value in
+                        Task { await viewModel.selectSourceHomeWideLayout(value) }
+                    }
+                )) {
+                    ForEach(SourceHomeWideLayoutPreference.allCases, id: \.self) { layout in
+                        Text(layout.localizedTitle).tag(layout)
+                    }
+                }
+            }
         }
         .navigationTitle("Appearance")
         .navigationBarTitleDisplayMode(.inline)
+        .paneHold(viewModel.alert != nil)
         .alert(item: Binding(
             get: { viewModel.alert },
             set: { alert in

@@ -1,4 +1,5 @@
 import Combine
+import SwiftUI
 import XCTest
 @testable import Ito
 import ito_runner
@@ -88,6 +89,45 @@ final class AppScopeIdentityTests: XCTestCase {
 
         XCTAssertTrue(first === second)
         XCTAssertTrue(second === third)
+    }
+
+    func testDeferredPluginSessionBuildsDestinationOncePerRoute() {
+        let scope = makeScope()
+        let item = Ito.LibraryItem(
+            id: "item",
+            title: "Item",
+            coverUrl: nil,
+            pluginId: "plugin",
+            isAnime: false,
+            pluginType: .manga,
+            rawPayload: Data(),
+            anilistId: nil
+        )
+        let session = DeferredPluginSession(viewModel: scope.viewFactory.makeDeferredPluginViewModel(item: item))
+        var builds = 0
+        let route = UUID()
+
+        _ = session.destination(for: route) {
+            builds += 1
+            return AnyView(EmptyView())
+        }
+        _ = session.destination(for: route) {
+            builds += 1
+            return AnyView(EmptyView())
+        }
+        XCTAssertEqual(builds, 1)
+
+        _ = session.destination(for: UUID()) {
+            builds += 1
+            return AnyView(EmptyView())
+        }
+        XCTAssertEqual(builds, 2)
+
+        _ = session.destination(for: route) {
+            builds += 1
+            return AnyView(EmptyView())
+        }
+        XCTAssertEqual(builds, 3)
     }
 
     func testNewPreparedRuntimeEpochReceivesNewSearchViewModel() {
@@ -262,6 +302,22 @@ final class AppScopeIdentityTests: XCTestCase {
         XCTAssertFalse(scope.rootModels.hasLoadedPrivacySettingsViewModel)
         XCTAssertFalse(scope.rootModels.hasLoadedStorageSettingsViewModel)
         XCTAssertFalse(scope.rootModels.hasLoadedDebugLogViewModel)
+    }
+
+    func testSettingsFactoryAndRouterShareOnePaneNavigator() {
+        let scope = makeScope()
+
+        XCTAssertTrue(scope.viewFactory.panes === scope.router.panes)
+    }
+
+    func testPaneNavigatorAndRouterNeverReachIntoViewModelsOrSessions() throws {
+        let navigator = try sourceFile("Ito/PaneNavigator.swift")
+        let router = try sourceFile("Ito/AppRouter.swift")
+
+        for source in [navigator, router] {
+            XCTAssertFalse(source.contains("ViewModel"))
+            XCTAssertFalse(source.contains("Session"))
+        }
     }
 
     func testAppScopeIsUnavailableBeforeRuntimePreparation() async throws {

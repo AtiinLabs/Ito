@@ -7,12 +7,17 @@ public struct MediaCardView<M: MediaDisplayable, Destination: View>: View {
     @Environment(\.sourceCoverRequests) private var coverRequests
     @Environment(\.imageSourceID) private var imageSourceID
     let media: M
+    /// The cover is 11:16 at any width, so shelves can scale their posters with the screen.
+    let width: CGFloat
     let destination: () -> Destination
 
-    public init(media: M, @ViewBuilder destination: @escaping () -> Destination) {
+    public init(media: M, width: CGFloat = 110, @ViewBuilder destination: @escaping () -> Destination) {
         self.media = media
+        self.width = width
         self.destination = destination
     }
+
+    private var height: CGFloat { width * 16 / 11 }
 
     public var body: some View {
         NavigationLink(destination: destination()) {
@@ -23,23 +28,23 @@ public struct MediaCardView<M: MediaDisplayable, Destination: View>: View {
                             image
                                 .resizable()
                                 .scaledToFill()
-                                .frame(width: 110, height: 160)
+                                .frame(width: width, height: height)
                                 .cornerRadius(8)
                                 .clipped()
                         } else if state.error != nil {
                             Color.red.opacity(0.3)
-                                .frame(width: 110, height: 160)
+                                .frame(width: width, height: height)
                                 .cornerRadius(8)
                         } else {
                             Color.gray.opacity(0.3)
-                                .frame(width: 110, height: 160)
+                                .frame(width: width, height: height)
                                 .cornerRadius(8)
                         }
                     }
                     .processors([.resize(width: 220)])
                 } else {
                     Color.gray.opacity(0.3)
-                        .frame(width: 110, height: 160)
+                        .frame(width: width, height: height)
                         .cornerRadius(8)
                 }
 
@@ -48,7 +53,7 @@ public struct MediaCardView<M: MediaDisplayable, Destination: View>: View {
                     .fontWeight(.medium)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                    .frame(width: 110, alignment: .leading)
+                    .frame(width: width, alignment: .leading)
             }
         }
         .buttonStyle(.plain)

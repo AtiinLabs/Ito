@@ -25,7 +25,6 @@ public final class BrowseViewModel: ObservableObject {
     }
 
     @Published public var showDeleteConfirmation = false
-    @Published public var showRepositories = false
     @Published public private(set) var isInstallingUpdate: String?
     @Published public private(set) var isRefreshing = false
     @Published public private(set) var isProcessingPluginFile = false
@@ -38,6 +37,7 @@ public final class BrowseViewModel: ObservableObject {
     private let fileOperations: any BrowsePluginFileOperating
     private let messagePresenter: any BrowseMessagePresenting
     private let repositoryIntentRouter: any BrowseRepositoryIntentRouting
+    private let detailRouter: any BrowseDetailRouting
     private var pendingDeletePlugin: InstalledPlugin?
     private var repositoryIntentDrainTask: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
@@ -47,19 +47,22 @@ public final class BrowseViewModel: ObservableObject {
         pluginManager: any BrowsePluginManaging,
         fileOperations: any BrowsePluginFileOperating,
         messagePresenter: any BrowseMessagePresenting,
-        repositoryIntentRouter: any BrowseRepositoryIntentRouting
+        repositoryIntentRouter: any BrowseRepositoryIntentRouting,
+        detailRouter: any BrowseDetailRouting
     ) {
         self.repositoryManager = repositoryManager
         self.pluginManager = pluginManager
         self.fileOperations = fileOperations
         self.messagePresenter = messagePresenter
         self.repositoryIntentRouter = repositoryIntentRouter
+        self.detailRouter = detailRouter
         installedPlugins = pluginManager.installedPlugins
         repositories = repositoryManager.repositories
 
         pluginManager.installedPluginsPublisher
             .sink { @MainActor [weak self] plugins in
                 self?.installedPlugins = plugins
+                self?.detailRouter.installedSourcesDidChange(Set(plugins.keys))
             }
             .store(in: &cancellables)
 
@@ -135,8 +138,12 @@ public final class BrowseViewModel: ObservableObject {
         return updates.sorted { ($0.pkg.name, $0.pkg.id) < ($1.pkg.name, $1.pkg.id) }
     }
 
+    public func installedPlugin(id: String) -> InstalledPlugin? {
+        installedPlugins[id]
+    }
+
     public func openRepositories() {
-        showRepositories = true
+        detailRouter.showRepositories()
     }
 
     public func refreshRepositories() async {
@@ -269,7 +276,7 @@ public final class BrowseViewModel: ObservableObject {
                 repositoryManager: repositoryManager,
                 messagePresenter: messagePresenter,
                 repositoryIntentRouter: repositoryIntentRouter,
-                showRepositoryList: { self?.showRepositories = true }
+                showRepositoryList: { self?.detailRouter.showRepositories() }
             )
             self?.repositoryIntentDrainTask = nil
         }

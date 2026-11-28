@@ -35,13 +35,15 @@ final class LibraryDependencyBoundaryTests: XCTestCase {
     func testRootAndScreenOwnershipAreExplicitInComposition() throws {
         let appScope = try sourceFile("Ito/AppScope.swift")
         let factory = try sourceFile("Ito/Views/Search/SearchRouteFactory.swift")
-        let view = try sourceFile("Ito/Views/Library/LibraryView.swift")
+        let deferredView = try sourceFile("Ito/Views/Library/DeferredPluginView.swift")
 
         XCTAssertTrue(appScope.contains("private var storedLibraryViewModel: LibraryViewModel?"))
         XCTAssertTrue(appScope.contains("var libraryViewModel: LibraryViewModel"))
         XCTAssertFalse(appScope.contains("storedDeferredPluginViewModel"))
+        XCTAssertFalse(appScope.contains("DeferredPluginSession"))
         XCTAssertTrue(factory.contains("viewModel: rootModels.libraryViewModel"))
-        XCTAssertTrue(view.contains("@StateObject private var viewModel: DeferredPluginViewModel"))
+        // The deferred series model is screen-owned, through the session the Library detail keeps per selection.
+        XCTAssertTrue(deferredView.contains("@StateObject private var session: DeferredPluginSession"))
     }
 
     func testDeferredDestinationDelegatesToPR10MediaDetailFactoryWithoutPluginLookup() throws {

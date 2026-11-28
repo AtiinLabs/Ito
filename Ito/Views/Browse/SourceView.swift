@@ -19,6 +19,9 @@ struct SourceView: View {
     private let viewFactory: AppViewFactory
     @Environment(\.dismiss) private var dismiss
     @State private var trustAction: TrustCertificateAction?
+    @Environment(\.sourceHomeWideLayout) private var sourceHomeWideLayout
+    @Environment(\.layoutDirection) private var layoutDirection
+    @State private var isHeroVisible = true
 
     init(viewModel: SourceViewModel, viewFactory: AppViewFactory) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -109,9 +112,18 @@ struct SourceView: View {
             .task {
                 await viewModel.loadIfNeeded()
             }
-            .onDisappear {
-                viewModel.cancelActiveOperations()
-            }
+            .paneLifecycle(
+                owner: viewModel,
+                onAppear: {},
+                onDisappear: { viewModel.cancelActiveOperations() }
+            )
+            .paneHold(
+                viewModel.showSettings
+                    || viewModel.showSearchFilters
+                    || viewModel.showSignIn
+                    || trustAction != nil
+                    || viewModel.showArchivedPluginDeleteConfirmation
+            )
     }
 
     @ViewBuilder
@@ -142,24 +154,107 @@ struct SourceView: View {
     }
 
     private var homeContent: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                if viewModel.plugin.info.isArchived {
-                    archivedPluginBanner
-                }
+        WidthClassReader { widthClass, size in
+            switch HomeLayoutMode.make(widthClass: widthClass, preference: sourceHomeWideLayout) {
+            case .narrow:
+                narrowHome(viewport: size)
+            case .sideBySide:
+                sideBySideHome(viewport: size)
+            }
+        }
+        // The home lays out inside the safe area, but its horizontal scroll views would still draw into the trailing
+        // inset, under iOS 27's side tab pill. Only that edge is clipped, so content keeps scrolling under the bars.
+        .clipShape(TrailingEdgeClip(layoutDirection: layoutDirection))
+        .coordinateSpace(name: HomeLayoutMetrics.coordinateSpaceName)
+        .onPreferenceChange(HomeHeroVisibilityKey.self) { isHeroVisible = $0 }
+        .accessibilityIdentifier("source-home-layout")
+    }
 
-                if let layout = viewModel.homeLayout {
-                    ForEach(layout.components.indices, id: \.self) { index in
-                        let component = layout.components[index]
-                        Section(header: sectionHeader(component)) {
-                            renderComponent(component.value)
+    /// One column: the hero across the top of the scroll view, then the shelves below it.
+    private func narrowHome(viewport: CGSize) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if let featured = viewModel.homePresentation?.featured {
+                    heroView(
+                        featured,
+                        layoutMode: .narrow,
+                        width: viewport.width,
+                        height: HomeLayoutMetrics.narrowHeroHeight(forViewportHeight: viewport.height),
+                        viewport: viewport
+                    )
+                }
+                shelves(posterWidth: HomeLayoutMetrics.posterWidth(forWidth: viewport.width))
+                    .padding(.vertical)
+            }
+        }
+    }
+
+    /// Two columns: the hero pinned at full height on the left, and the shelves scrolling on the right.
+    private func sideBySideHome(viewport: CGSize) -> some View {
+        let heroWidth = viewModel.homePresentation?.featured == nil
+            ? 0 : HomeLayoutMetrics.heroColumnWidth(forWidth: viewport.width)
+        return HStack(spacing: 0) {
+            if let featured = viewModel.homePresentation?.featured {
+                heroView(featured, layoutMode: .sideBySide, width: heroWidth, height: viewport.height, viewport: viewport)
+            }
+            ScrollView {
+                shelves(posterWidth: HomeLayoutMetrics.posterWidth(forWidth: viewport.width - heroWidth))
+                    .padding(.vertical)
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func heroView(
+        _ section: FeaturedSection,
+        layoutMode: HomeLayoutMode,
+        width: CGFloat,
+        height: CGFloat,
+        viewport: CGSize
+    ) -> some View {
+        HomeHeroView(
+            section: section,
+            layoutMode: layoutMode,
+            width: width,
+            height: height,
+            viewport: viewport,
+            isOnScreen: isHeroVisible,
+            seeAll: seeAllDestination(for: section)
+        ) { entry, intent in
+            mediaDestination(entry, openIntent: intent)
+        }
+    }
+
+    /// The carousel's "See all" link, built from the listing the native featured component names.
+    private func seeAllDestination(for section: FeaturedSection) -> AnyView? {
+        guard let listing = section.listing,
+              let destination = viewModel.listingDestination(listing: listing, title: listing.name) else {
+            return nil
+        }
+        return AnyView(viewFactory.makeListingView(destination: destination))
+    }
+
+    /// The archived notice, then every shelf the presentation keeps, in source order.
+    @ViewBuilder
+    private func shelves(posterWidth: CGFloat) -> some View {
+        VStack(spacing: 16) {
+            if viewModel.plugin.info.isArchived {
+                archivedPluginBanner
+            }
+            if let presentation = viewModel.homePresentation {
+                ForEach(presentation.shelves) { shelf in
+                    Section(header: sectionHeader(shelf.component)) {
+                        if case .featured = shelf.component.value {
+                            HomeBannerRow(banners: shelf.banners, bannerWidth: posterWidth * 2.4) { entry in
+                                mediaDestination(entry)
+                            }
+                        } else {
+                            renderComponent(shelf.component.value, posterWidth: posterWidth)
                         }
                     }
                 }
             }
-            .padding(.vertical)
         }
-        .accessibilityIdentifier("source-home-layout")
     }
 
     private var archivedPluginBanner: some View {
@@ -250,13 +345,13 @@ struct SourceView: View {
     }
 
     @ViewBuilder
-    private func renderComponent(_ value: HomeComponentValue) -> some View {
+    private func renderComponent(_ value: HomeComponentValue, posterWidth: CGFloat) -> some View {
         switch value {
             case .scroller(let mangas, _):
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(mangas, id: \.key) { manga in
-                            MediaCardView(media: manga) { mediaDestination(manga) }
+                            MediaCardView(media: manga, width: posterWidth) { mediaDestination(manga) }
                         }
                     }
                     .padding(.horizontal)
@@ -303,7 +398,7 @@ struct SourceView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(animes, id: \.key) { anime in
-                            MediaCardView(media: anime) { mediaDestination(anime) }
+                            MediaCardView(media: anime, width: posterWidth) { mediaDestination(anime) }
                         }
                     }
                     .padding(.horizontal)
@@ -350,7 +445,7 @@ struct SourceView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(novels, id: \.key) { novel in
-                            MediaCardView(media: novel) { mediaDestination(novel) }
+                            MediaCardView(media: novel, width: posterWidth) { mediaDestination(novel) }
                         }
                     }
                     .padding(.horizontal)
@@ -418,7 +513,7 @@ struct SourceView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(entries, id: \.catalogIdentity) { entry in
-                            mediaCard(entry)
+                            mediaCard(entry, width: posterWidth)
                         }
                     }
                     .padding(.horizontal)
@@ -577,14 +672,14 @@ struct SourceView: View {
     }
 
     @ViewBuilder
-    private func mediaCard(_ entry: MediaEntry) -> some View {
+    private func mediaCard(_ entry: MediaEntry, width: CGFloat) -> some View {
         switch entry {
         case .manga(let manga):
-            MediaCardView(media: manga) { mediaDestination(entry) }
+            MediaCardView(media: manga, width: width) { mediaDestination(entry) }
         case .anime(let anime):
-            MediaCardView(media: anime) { mediaDestination(entry) }
+            MediaCardView(media: anime, width: width) { mediaDestination(entry) }
         case .novel(let novel):
-            MediaCardView(media: novel) { mediaDestination(entry) }
+            MediaCardView(media: novel, width: width) { mediaDestination(entry) }
         }
     }
 
@@ -613,9 +708,9 @@ struct SourceView: View {
     }
 
     @ViewBuilder
-    private func mediaDestination(_ entry: MediaEntry) -> some View {
+    private func mediaDestination(_ entry: MediaEntry, openIntent: MediaDetailOpenIntent? = nil) -> some View {
         if let destination = viewModel.destination(for: entry) {
-            viewFactory.searchRouteFactory.destination(for: destination)
+            viewFactory.searchRouteFactory.destination(for: destination, openIntent: openIntent)
         } else {
             EmptyView()
         }
@@ -728,6 +823,7 @@ extension HomeComponentValue {
         case .novelChapterList(_, _, let listing): return listing
         case .mediaScroller(_, let listing): return listing
         case .mediaList(_, _, _, let listing): return listing
+        case .featured(let featured): return featured.listing
         default: return nil
         }
     }

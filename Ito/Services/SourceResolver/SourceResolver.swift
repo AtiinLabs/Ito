@@ -23,7 +23,7 @@ public struct SourceSearchRequest: Sendable {
     }
 }
 
-public protocol PluginSearching: Sendable {
+nonisolated public protocol PluginSearching: Sendable {
     var pluginID: String { get async }
     var pluginVersion: String? { get async }
     var mediaType: PluginMediaType { get async }

@@ -23,7 +23,9 @@ final class MangaReaderViewModel: ObservableObject {
     /// The request of the first image the destination shows, for handing the route's lease over.
     var preparedImageKey: ReaderPageImageKey?
 
-    @Published private(set) var currentChapter: Manga.Chapter
+    @Published private(set) var currentChapter: Manga.Chapter {
+        didSet { refreshPagedSpreads() }
+    }
     @Published private(set) var loadPhase: MangaReaderLoadPhase = .idle
     @Published private(set) var overrideViewer: Manga.Viewer = .Default
     @Published private(set) var preloadImageCount: Int
@@ -31,9 +33,20 @@ final class MangaReaderViewModel: ObservableObject {
     var askBeforeSwitchingGroups: Bool { dependencies.settings.askBeforeSwitchingGroups }
 
     @Published private(set) var pagedPages: [Page] = [] {
-        didSet { retainImageRequestsForChapterWindow() }
+        didSet {
+            retainImageRequestsForChapterWindow()
+            refreshPagedSpreads()
+        }
     }
     @Published private(set) var pagedIndex = 0
+    /// Whether the paged reader shows two pages side by side. The reader view sets it from its window.
+    @Published private(set) var pagedSpreadLayout = false
+    /// The pages shown together in the paged reader, in order. One page each unless the spread layout is on.
+    @Published private(set) var pagedSpreads: [Range<Int>] = []
+    /// Changes only when `pagedSpreads` changes, so the pager re-pairs without animating across a stale layout.
+    @Published private(set) var pagedSpreadsRevision = 0
+    /// Width over height of each paged page's image, keyed by page ID, once its size is known.
+    @Published private(set) var pagedPixelAspects: [String: CGFloat] = [:]
     @Published private(set) var prefetchedChapters: [String: [Page]] = [:] {
         didSet { retainImageRequestsForChapterWindow() }
     }
@@ -436,6 +449,46 @@ final class MangaReaderViewModel: ObservableObject {
 
     // MARK: - Chapter and page navigation
 
+    /// Opens `chapter`, picked from the chapter list, in place of the current one: here when it reads
+    /// here, else in the other reader through the route. As on the series page, the pick is the consent:
+    /// no group question is asked, and Next and Previous then follow the picked chapter's group.
+    /// Returns whether the pick was taken; a refused pick changes nothing.
+    @discardableResult
+    func jump(to chapter: Manga.Chapter) -> Bool {
+        guard isActive, presentationMode.isLive, handoffRouter?.isHandoffPending != true,
+              let target = entry.listedChapter(identicalTo: ChapterToken(chapter)) else { return false }
+        if ChapterToken(target).isByteIdentical(to: ChapterToken(currentChapter)) {
+            if case .failure = loadPhase { retry() }
+            return true
+        }
+        switch jumpBoundary(to: target) {
+        case .chapter:
+            break
+        case .handoff where loadPhase == .content:
+            setGroupSwitchConsent(nil)
+            routeSession.reopenHistory(for: target)
+            return requestChosenHandoff(to: target)
+        case .handoff:
+            // Nothing on screen to keep: this reader loads it, and the route corrects the format.
+            break
+        case .locked, .notAvailableOffline, .end, .groupConsent:
+            return false
+        }
+        setGroupSwitchConsent(nil)
+        endCrossingForJump()
+        routeSession.reopenHistory(for: target)
+        let direction = ReaderChapterOrdering.direction(from: currentChapter, to: target, in: entry.chapters)
+        let chosen = ReaderHandoffTarget.chosen(ChapterToken(target))
+        if isPaged {
+            pagedGoToChapter(target, direction: direction, trigger: .chapterControl, target: chosen)
+            // Pages fetched ahead for the old place are no longer neighbors.
+            prefetchedChapters = prefetchedChapters.filter { adjacentNeighborKeys.contains($0.key) }
+        } else {
+            continuousGoToChapter(target, direction: direction, trigger: .chapterControl, target: chosen)
+        }
+        return true
+    }
+
     func setPagedIndex(_ newIndex: Int) {
         guard isActive, presentationMode.isLive else { return }
         // The other reader's chapter: the pager rests on its notice and the route takes the crossing.
@@ -471,11 +524,87 @@ final class MangaReaderViewModel: ObservableObject {
         }
     }
 
+    /// The spread that holds the current page, or nil before the first page or past the last one.
+    private var pagedSpreadIndex: Int? {
+        NovelReaderLayout.spreadIndex(containing: pagedIndex, in: pagedSpreads)
+    }
+
+    /// The pager's position: the spread holding the current page, -1 on the previous chapter's notice,
+    /// and `pagedSpreads.count` on the next chapter's notice.
+    var pagedSpreadPosition: Int {
+        if pagedIndex < 0 { return -1 }
+        if pagedIndex >= pagedPages.count { return pagedSpreads.count }
+        return pagedSpreadIndex ?? 0
+    }
+
+    /// Whether a paged position is in the spread the reader shows, so the pager gives it page images.
+    func pagedPageIsShown(_ position: Int) -> Bool {
+        guard let index = pagedSpreadIndex else { return false }
+        return pagedSpreads[index].contains(position)
+    }
+
+    /// Moves the paged reader to a position from `pagedSpreadPosition`. A spread reports its last page as the
+    /// current page, so progress shows the last page the reader has reached.
+    func setPagedSpreadPosition(_ position: Int) {
+        if pagedSpreads.indices.contains(position) {
+            setPagedIndex(pagedSpreads[position].upperBound - 1)
+        } else {
+            setPagedIndex(position < 0 ? -1 : pagedPages.count)
+        }
+    }
+
+    /// Turns the spread layout on or off. The reader view sets it from its window size.
+    func setPagedSpreadLayout(_ enabled: Bool) {
+        guard enabled != pagedSpreadLayout else { return }
+        pagedSpreadLayout = enabled
+        refreshPagedSpreads()
+        advanceToShownSpreadEnd()
+    }
+
+    /// The width over height of a paged page, or nil until its image size is known.
+    func pagedPixelAspect(at position: Int) -> CGFloat? {
+        pagedPixelAspects[FlatPage.id(chapterKey: currentChapter.key, position: position)]
+    }
+
+    /// Records a paged page's image size. Pairing is recomputed only when a page's shape changes.
+    func setPagedPixelSize(_ size: CGSize, pageID: String) {
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else { return }
+        let aspect = size.width / size.height
+        guard pagedPixelAspects[pageID] != aspect else { return }
+        pagedPixelAspects[pageID] = aspect
+        refreshPagedSpreads()
+        advanceToShownSpreadEnd()
+    }
+
+    /// Recomputes the spreads from the current chapter's pages and their shapes. The revision changes only
+    /// when the spreads change. Pairing never moves `pagedIndex`, so re-pairing cannot move progress.
+    private func refreshPagedSpreads() {
+        let spreads = MangaSpreadLayout.spreads(count: pagedPages.count, paired: pagedSpreadLayout) { position in
+            pagedPixelAspect(at: position)
+        }
+        guard spreads != pagedSpreads else { return }
+        pagedSpreads = spreads
+        pagedSpreadsRevision &+= 1
+    }
+
+    /// Moves progress to the last page of the spread the reader is on, so re-pairing keeps that page
+    /// visible and never moves progress backwards.
+    private func advanceToShownSpreadEnd() {
+        guard let index = pagedSpreadIndex else { return }
+        let end = pagedSpreads[index].upperBound - 1
+        if pagedIndex < end { setPagedIndex(end) }
+    }
+
     func previousPage() {
         guard isActive else { return }
         if isPaged {
             guard pagedIndex > 0 else { return }
-            setPagedIndex(pagedIndex - 1)
+            guard let spread = pagedSpreadIndex else {
+                setPagedIndex(pagedIndex - 1)
+                return
+            }
+            let first = pagedSpreads[spread].lowerBound - 1
+            if first >= 0 { setPagedIndex(first) }
         } else {
             guard continuousChapterPage.index > 0 else { return }
             continuousPageIndex -= 1
@@ -490,7 +619,12 @@ final class MangaReaderViewModel: ObservableObject {
         guard isActive else { return }
         if isPaged {
             guard pagedIndex < pagedPages.count - 1 else { return }
-            setPagedIndex(pagedIndex + 1)
+            guard let spread = pagedSpreadIndex else {
+                setPagedIndex(pagedIndex + 1)
+                return
+            }
+            let next = spread + 1
+            if pagedSpreads.indices.contains(next) { setPagedIndex(pagedSpreads[next].upperBound - 1) }
         } else {
             let chapterPage = continuousChapterPage
             guard chapterPage.index < chapterPage.count - 1 else { return }
@@ -641,11 +775,12 @@ final class MangaReaderViewModel: ObservableObject {
         opensAtEnd: Bool = false,
         direction: ReaderHandoffDirection = .next,
         trigger: ReaderHandoffTrigger = .chapterControl,
-        approved: Bool = false
+        approved: Bool = false,
+        target: ReaderHandoffTarget = .adjacent
     ) {
         // What the reader holds now, until the chapter proves to be made for this reader.
         if prefetchedChapters[chapter.key] == nil {
-            beginTransitionSnapshot(direction: direction, trigger: trigger, approved: approved)
+            beginTransitionSnapshot(direction: direction, trigger: trigger, approved: approved, target: target)
         } else {
             transition = nil
         }
@@ -676,14 +811,15 @@ final class MangaReaderViewModel: ObservableObject {
         _ chapter: Manga.Chapter,
         direction: ReaderHandoffDirection = .next,
         trigger: ReaderHandoffTrigger = .chapterControl,
-        approved: Bool = false
+        approved: Bool = false,
+        target: ReaderHandoffTarget = .adjacent
     ) {
         // Already loaded: scroll to it rather than throwing the loaded chapters away.
         if let first = flatPages.first(where: { $0.chapter.key == chapter.key }) {
             scrollTarget = MangaScrollRequest(pageID: first.id, animated: false)
             return
         }
-        beginTransitionSnapshot(direction: direction, trigger: trigger, approved: approved)
+        beginTransitionSnapshot(direction: direction, trigger: trigger, approved: approved, target: target)
         endHandoffCrossing()
         invalidateContentOperations()
         changeCurrentChapter(to: chapter)

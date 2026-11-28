@@ -43,7 +43,7 @@ struct ReaderRouteView: View {
             guard id != nil, case .failed(let request, let failure) = coordinator.phase else { return }
             UIAccessibility.post(
                 notification: .announcement,
-                argument: message(for: failure, direction: request.event.direction)
+                argument: message(for: failure, request: request)
             )
         }
         .alert(
@@ -125,15 +125,13 @@ struct ReaderRouteView: View {
             statusCard {
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text(request.event.direction == .next
-                        ? String(localized: "Opening the next chapter…", comment: "Reader: shown over the current chapter while the next one, made for the other reader, is being prepared")
-                        : String(localized: "Opening the previous chapter…", comment: "Reader: shown over the current chapter while the previous one, made for the other reader, is being prepared"))
+                    Text(progressMessage(for: request))
                 }
                 Button("Cancel") { coordinator.cancelHandoff() }
             }
         case .failed(let request, let failure):
             statusCard {
-                Text(message(for: failure, direction: request.event.direction))
+                Text(message(for: failure, request: request))
                 HStack(spacing: 16) {
                     if failure == .needsSignIn, signIn.target(pluginID: pluginID) != nil {
                         Button("Sign In") {
@@ -171,7 +169,19 @@ struct ReaderRouteView: View {
         .accessibilityElement(children: .contain)
     }
 
-    private func message(for failure: ReaderHandoffFailure, direction: ReaderHandoffDirection) -> String {
+    /// The status while a handoff is being prepared or staged: the chosen chapter's name, or the neighbor's direction.
+    private func progressMessage(for request: ReaderHandoffRequest) -> String {
+        switch request.event.target {
+        case .chosen:
+            ReaderJumpStatusText.opening(request.chapter)
+        case .adjacent:
+            request.event.direction == .next
+                ? String(localized: "Opening the next chapter…", comment: "Reader: shown over the current chapter while the next one, made for the other reader, is being prepared")
+                : String(localized: "Opening the previous chapter…", comment: "Reader: shown over the current chapter while the previous one, made for the other reader, is being prepared")
+        }
+    }
+
+    private func message(for failure: ReaderHandoffFailure, request: ReaderHandoffRequest) -> String {
         switch failure {
         case .unavailableOffline:
             OfflineReadError.notDownloaded.errorDescription ?? ""
@@ -182,9 +192,14 @@ struct ReaderRouteView: View {
         case .needsSignIn:
             String(localized: "Sign in to this source to continue.")
         case .loadFailed, .presentationFailed:
-            direction == .next
-                ? String(localized: "Couldn't open the next chapter.", comment: "Reader: the next chapter, made for the other reader, could not be opened; the current chapter stays")
-                : String(localized: "Couldn't open the previous chapter.", comment: "Reader: the previous chapter, made for the other reader, could not be opened; the current chapter stays")
+            switch request.event.target {
+            case .chosen:
+                ReaderJumpStatusText.failed(request.chapter)
+            case .adjacent:
+                request.event.direction == .next
+                    ? String(localized: "Couldn't open the next chapter.", comment: "Reader: the next chapter, made for the other reader, could not be opened; the current chapter stays")
+                    : String(localized: "Couldn't open the previous chapter.", comment: "Reader: the previous chapter, made for the other reader, could not be opened; the current chapter stays")
+            }
         }
     }
 }

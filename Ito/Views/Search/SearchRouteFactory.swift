@@ -30,6 +30,7 @@ struct AppViewFactory {
     private let downloadPresets: DownloadPresetStore?
     private let automaticDownloads: any AutomaticDownloadServing
     private let settingsDependencies: PreparedSettingsDependencies?
+    let panes: AppPaneNavigators
 
     var hasDownloads: Bool { downloadsOverview != nil }
     /// Whether the management screen of automatic downloads is offered: they are composed with the offline store.
@@ -67,7 +68,8 @@ struct AppViewFactory {
         downloadsThumbnails: any DownloadsThumbnailServing = UnavailableDownloadsThumbnails(),
         downloadPresets: DownloadPresetStore? = nil,
         automaticDownloads: any AutomaticDownloadServing = UnavailableAutomaticDownloads(),
-        settingsDependencies: PreparedSettingsDependencies? = nil
+        settingsDependencies: PreparedSettingsDependencies? = nil,
+        panes: AppPaneNavigators
     ) {
         self.rootModels = rootModels
         self.repositoryManagement = repositoryManagement
@@ -98,6 +100,7 @@ struct AppViewFactory {
         self.downloadPresets = downloadPresets
         self.automaticDownloads = automaticDownloads
         self.settingsDependencies = settingsDependencies
+        self.panes = panes
         let categoryHistoryViewFactory = CategoryHistoryViewFactory(
             dependencies: categoryHistoryDependencies,
             messagePresenter: categoryHistoryMessagePresenter,
@@ -148,6 +151,7 @@ struct AppViewFactory {
     func makeLibraryView() -> LibraryView {
         LibraryView(
             viewModel: rootModels.libraryViewModel,
+            navigator: panes.library,
             viewFactory: self
         )
     }
@@ -161,7 +165,7 @@ struct AppViewFactory {
     }
 
     func makeHistoryView() -> HistoryView {
-        categoryHistoryViewFactory.makeHistoryView(viewFactory: self)
+        categoryHistoryViewFactory.makeHistoryView(navigator: panes.library)
     }
 
     @ViewBuilder
@@ -208,10 +212,14 @@ struct AppViewFactory {
 
     func makeDeferredPluginView(item: LibraryItem, openIntent: MediaDetailOpenIntent? = nil) -> DeferredPluginView {
         DeferredPluginView(
-            item: item,
-            openIntent: openIntent,
+            session: DeferredPluginSession(viewModel: makeDeferredPluginViewModel(item: item, openIntent: openIntent)),
             viewFactory: self
         )
+    }
+
+    /// The detail column for a series selected in the library pane.
+    func makeLibraryDetail(_ selection: LibraryDetailSelection) -> DeferredPluginView {
+        makeDeferredPluginView(item: selection.item, openIntent: selection.openIntent)
     }
 
     @ViewBuilder
@@ -287,6 +295,7 @@ struct AppViewFactory {
     func makeBrowseView() -> BrowseView {
         BrowseView(
             viewModel: rootModels.browseViewModel,
+            navigator: panes.browse,
             makeRepositoriesView: makeRepositoriesView,
             makeSourceView: makeSourceView
         )
@@ -508,7 +517,7 @@ struct AppViewFactory {
     }
 
     func makeSettingsView() -> SettingsView {
-        SettingsView(viewFactory: self)
+        SettingsView(viewFactory: self, navigator: panes.settings)
     }
 
     @ViewBuilder
@@ -622,10 +631,11 @@ struct SearchRouteFactory {
         }
     }
 
-    func destination(for destination: SearchDestination) -> some View {
+    func destination(for destination: SearchDestination, openIntent: MediaDetailOpenIntent? = nil) -> some View {
         SearchDestinationHost(
             route: route(for: destination),
-            mediaDetailViewFactory: mediaDetailViewFactory
+            mediaDetailViewFactory: mediaDetailViewFactory,
+            openIntent: openIntent
         )
     }
 }
@@ -654,6 +664,7 @@ enum SearchDetailRoute {
 private struct SearchDestinationHost: View {
     let route: SearchDetailRoute
     let mediaDetailViewFactory: MediaDetailViewFactory?
+    var openIntent: MediaDetailOpenIntent?
 
     @ViewBuilder
     var body: some View {
@@ -664,7 +675,8 @@ private struct SearchDestinationHost: View {
                     runner: runner,
                     media: media,
                     pluginID: pluginID,
-                    loader: loader
+                    loader: loader,
+                    openIntent: openIntent
                 )
             } else {
                 Text("Media details are unavailable.")
@@ -675,7 +687,8 @@ private struct SearchDestinationHost: View {
                     runner: runner,
                     media: media,
                     pluginID: pluginID,
-                    loader: loader
+                    loader: loader,
+                    openIntent: openIntent
                 )
             } else {
                 Text("Media details are unavailable.")
@@ -686,7 +699,8 @@ private struct SearchDestinationHost: View {
                     runner: runner,
                     media: media,
                     pluginID: pluginID,
-                    loader: loader
+                    loader: loader,
+                    openIntent: openIntent
                 )
             } else {
                 Text("Media details are unavailable.")

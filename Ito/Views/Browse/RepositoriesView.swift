@@ -48,6 +48,7 @@ struct RepositoriesView: View {
         } message: {
             Text("This repository and all its associated data will be removed.")
         }
+        .paneHold(viewModel.showingAddRepository || viewModel.showDeleteConfirmation)
         .refreshable {
             await viewModel.refreshRepositories()
         }

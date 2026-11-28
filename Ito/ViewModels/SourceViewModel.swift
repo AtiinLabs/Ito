@@ -52,6 +52,8 @@ final class SourceViewModel: ObservableObject {
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var searchPhase: SearchPhase = .idle
     @Published private(set) var homeLayout: HomeLayout?
+    /// The layout as the screen lays it out, computed once when the layout is published.
+    @Published private(set) var homePresentation: HomePresentation?
     @Published private(set) var settingsSurface: SettingsSurface?
     /// Why the plugin's settings can't be shown, when it has settings but they couldn't be read.
     @Published private(set) var settingsUnavailableReason: String?
@@ -495,6 +497,7 @@ final class SourceViewModel: ObservableObject {
         loadOperationID = operationID
         phase = .loading
         homeLayout = nil
+        homePresentation = nil
         failureNeedsSettings = false
         failureNeedsLogin = false
         failurePendingTrust = nil
@@ -548,6 +551,7 @@ final class SourceViewModel: ObservableObject {
                 guard isCurrentLoad(operationID) else { return }
                 guard context?.runnerIdentity == nextContext.runnerIdentity else { continue }
                 homeLayout = layout
+                homePresentation = HomePresentation.make(layout)
                 phase = layout.components.isEmpty ? .empty : .content
                 finishLoad(operationID)
                 return

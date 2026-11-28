@@ -86,6 +86,7 @@ struct StorageSettingsView: View {
         }
         .navigationTitle("Storage")
         .navigationBarTitleDisplayMode(.inline)
+        .paneHold(isConfirmingClearCache || isConfirmingClearDownloads || viewModel.alert != nil)
         .task {
             await viewModel.refreshCacheUsage()
             await viewModel.refreshDownloadsUsage()

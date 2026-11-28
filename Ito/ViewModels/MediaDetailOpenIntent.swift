@@ -7,6 +7,8 @@ enum MediaDetailOpenIntent: Equatable {
     case resume(preferredScanlator: String?, preferredScanlatorID: String? = nil)
     /// One chapter or episode as history recorded it.
     case chapter(MediaDetailChapterReference)
+    /// Adds the series to the library once its details load, without opening a chapter.
+    case save
 }
 
 extension MediaDetailOpenIntent {
@@ -23,6 +25,7 @@ extension MediaDetailOpenIntent {
         switch self {
         case .resume(let scanlator, _): scanlator
         case .chapter(let reference): reference.scanlator
+        case .save: nil
         }
     }
 
@@ -30,6 +33,7 @@ extension MediaDetailOpenIntent {
         switch self {
         case .resume(_, let id): id
         case .chapter(let reference): reference.scanlatorID
+        case .save: nil
         }
     }
 

@@ -11,6 +11,10 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
     let downloadState: ChapterDownloadState?
     /// A saved edition the source's current list does not have: it stays readable from this device.
     let isSavedOnly: Bool
+    /// The row's place on the series page's reading thread. Nil draws no thread, as for the other callers.
+    let thread: ChapterThreadStep?
+    /// The language that tells this upload apart from a duplicate of its chapter. Nil when nothing needs telling apart.
+    let uploadLanguage: String?
 
     @State private var isPressed = false
 
@@ -24,6 +28,8 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
         marksText: Bool = false,
         downloadState: ChapterDownloadState?,
         isSavedOnly: Bool = false,
+        thread: ChapterThreadStep? = nil,
+        uploadLanguage: String? = nil,
         onTap: @escaping () -> Void
     ) {
         self.chapter = chapter
@@ -31,12 +37,17 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
         self.marksText = marksText
         self.downloadState = downloadState
         self.isSavedOnly = isSavedOnly
+        self.thread = thread
+        self.uploadLanguage = uploadLanguage
         self.onTap = onTap
     }
 
     public var body: some View {
         Button(action: onTap) {
             HStack(alignment: .center, spacing: 12) {
+                if let thread {
+                    ChapterThreadMark(step: thread)
+                }
                 VStack(alignment: .leading, spacing: 3) {
                     chapterTitle
                     chapterSubtitle
@@ -61,7 +72,15 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
         }
         .buttonStyle(PressRecordingButtonStyle(isPressed: $isPressed))
         .disabled(chapter.isPaywalled)
-        .accessibilityValue(downloadState?.progressValue ?? Text(verbatim: ""))
+        .accessibilityValue(accessibilityValue)
+    }
+
+    /// The row's spoken value: its thread role first, then the download state where there is one.
+    private var accessibilityValue: Text {
+        let download = downloadState?.progressValue
+        guard let thread else { return download ?? Text(verbatim: "") }
+        guard let download else { return Text(thread.role.accessibilityValue) }
+        return Text(thread.role.accessibilityValue) + Text(verbatim: ", ") + download
     }
 
     /// The foreground color for the chapter title, respecting paywalled, read, and default states.
@@ -110,13 +129,22 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
                 Text(dateUpload)
                     .font(.caption).foregroundStyle(subtitleColor)
             }
-            if let scanlator = chapter.scanlator, !scanlator.isEmpty {
+            let scanlator = chapter.scanlator.flatMap { $0.isEmpty ? nil : $0 }
+            if let scanlator {
                 if chapter.dateUpload != nil {
                     Text("·").font(.caption).foregroundStyle(subtitleColor)
                 }
                 Text(scanlator)
                     .font(chapter is Anime.Episode ? .caption2.weight(.semibold) : .caption)
                     .foregroundStyle(subtitleColor)
+                    .lineLimit(1)
+            }
+            if let uploadLanguage {
+                if chapter.dateUpload != nil || scanlator != nil {
+                    Text("·").font(.caption).foregroundStyle(subtitleColor)
+                }
+                Text(uploadLanguage)
+                    .font(.caption).foregroundStyle(subtitleColor)
                     .lineLimit(1)
             }
         }
@@ -134,6 +162,59 @@ public struct ChapterRowView<C: ChapterDisplayable>: View {
              Image(systemName: "play.circle.fill")
                         .font(.title3)
                         .foregroundStyle(Color.accentColor)
+        }
+    }
+}
+
+/// The reading thread on a row's leading edge: a thread segment above and below a dot whose size and fill follow the role.
+private struct ChapterThreadMark: View {
+    let step: ChapterThreadStep
+
+    private static let width: CGFloat = 20
+    private static let threadWidth: CGFloat = 2
+
+    var body: some View {
+        VStack(spacing: 0) {
+            segment(isFilled: step.leadingFilled, isShown: step.hasLeadingThread)
+            dot
+            segment(isFilled: step.trailingFilled, isShown: step.hasTrailingThread)
+        }
+        .frame(width: Self.width)
+        .frame(maxHeight: .infinity)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func segment(isFilled: Bool, isShown: Bool) -> some View {
+        if isShown {
+            Rectangle()
+                .fill(isFilled ? Color.accentColor : Color(.systemGray4))
+                .frame(width: Self.threadWidth)
+                .frame(maxHeight: .infinity)
+        } else {
+            Color.clear
+                .frame(width: Self.threadWidth)
+                .frame(maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private var dot: some View {
+        switch step.role {
+        case .read:
+            Circle()
+                .fill(Color.accentColor)
+                .frame(width: 8, height: 8)
+        case .unread:
+            Circle()
+                .stroke(Color.secondary, lineWidth: 1.5)
+                .background(Circle().fill(Color(.systemBackground)))
+                .frame(width: 8, height: 8)
+        case .upNext:
+            Circle()
+                .fill(Color.accentColor)
+                .frame(width: 14, height: 14)
+                .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 2))
         }
     }
 }

@@ -78,6 +78,7 @@ struct NetworkSettingsView: View {
         }
         .navigationTitle("Network")
         .navigationBarTitleDisplayMode(.inline)
+        .paneHold(showingClearConfirmation || showingResetConfirmation || viewModel.alert != nil)
         .confirmationDialog(
             String(localized: "Reset Network and Prefetch Settings?", comment: "Confirmation of scoped settings reset"),
             isPresented: $showingResetConfirmation, titleVisibility: .visible

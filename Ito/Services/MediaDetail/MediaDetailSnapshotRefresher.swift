@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-protocol MediaDetailSnapshotEncoding: Sendable {
+nonisolated protocol MediaDetailSnapshotEncoding: Sendable {
     func encode<Value: Encodable & Sendable>(_ value: Value) async throws -> Data
 }
 

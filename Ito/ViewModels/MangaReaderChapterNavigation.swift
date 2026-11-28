@@ -54,9 +54,33 @@ extension MangaReaderViewModel {
         ).requiringGroupConsent(from: chapter, enabled: askBeforeSwitching)
     }
 
+    /// What opening `chapter` from the chapter list does in this reader: a chapter it opens, one the other
+    /// reader opens, or why it cannot open. Like a row on the series page, it asks nothing about the group.
+    func jumpBoundary(to chapter: Manga.Chapter) -> ReaderChapterBoundary<Manga.Chapter> {
+        offline.resolving(chapter.isPaywalled ? .locked(chapter) : .chapter(chapter), opensHere: { opensHere($0) })
+    }
+
     /// The keys of the neighbors this reader can open, which a paged reader prefetches.
     var adjacentNeighborKeys: Set<String> {
         Set([boundaryAfter(currentChapter).chapter, boundaryBefore(currentChapter).chapter].compactMap { $0?.key })
+    }
+
+    /// Whether the series has another chapter to go to.
+    var canShowChapterList: Bool { (entry.chapters?.count ?? 0) > 1 }
+
+    /// The chapter list, as the reader would open each row now.
+    var chapterListRows: [ReaderChapterListRow] {
+        ReaderChapterList.rows(
+            chapters: entry.chapters ?? [currentChapter],
+            current: currentChapter,
+            isRead: { chapter in
+                routeSession.hasClaimedCompletion(chapter.key)
+                    || dependencies.progress.isChapterRead(
+                        media: mediaIdentity, chapterID: chapter.key, chapterNumber: chapter.chapterNumber
+                    )
+            },
+            boundary: { jumpBoundary(to: $0) }
+        )
     }
 
     /// The page the footer shows in paged mode. The pager rests one past either end on a chapter's

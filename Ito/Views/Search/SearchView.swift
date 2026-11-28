@@ -11,6 +11,7 @@ struct SearchView: View {
     @State private var settingsPlugin: SettingsPlugin?
     @State private var signInPlugin: PluginSignInTarget?
     @State private var activeTrustAction: TrustCertificateAction?
+    @Environment(\.layoutDirection) private var layoutDirection
 
     private struct SettingsPlugin: Identifiable {
         let id: String
@@ -36,17 +37,21 @@ struct SearchView: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                scopePicker
-                searchContent
+            GeometryReader { proxy in
+                ScrollView {
+                    scopePicker
+                    searchContent(width: proxy.size.width)
+                }
+                .navigationTitle("Search")
+                .searchable(
+                    text: $viewModel.searchText,
+                    placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Manga, Anime, and Novels"
+                )
+                .disableAutocorrection(true)
             }
-            .navigationTitle("Search")
-            .searchable(
-                text: $viewModel.searchText,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Manga, Anime, and Novels"
-            )
-            .disableAutocorrection(true)
+            // The shelves scroll sideways and would draw into the trailing inset, under iOS 27's side tab pill.
+            .clipShape(TrailingEdgeClip(layoutDirection: layoutDirection))
         }
         .navigationViewStyle(.stack)
         .sheet(item: $settingsPlugin, onDismiss: {
@@ -84,7 +89,7 @@ struct SearchView: View {
     }
 
     @ViewBuilder
-    private var searchContent: some View {
+    private func searchContent(width: CGFloat) -> some View {
         if viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             idleContent
         } else {
@@ -95,18 +100,18 @@ struct SearchView: View {
                 if results.isEmpty {
                     loadingContent
                 } else {
-                    resultsContent(results)
+                    resultsContent(results, width: width)
                     loadingMoreContent
                 }
             case .content(let results):
-                resultsContent(results)
+                resultsContent(results, width: width)
             case .empty:
                 emptyContent
             case .partialFailure(let results, _):
                 if results.isEmpty {
                     partialFailureContent
                 } else {
-                    resultsContent(results)
+                    resultsContent(results, width: width)
                     partialFailureContent
                 }
             case .failure:
@@ -190,22 +195,24 @@ struct SearchView: View {
         .padding(.top, 100)
     }
 
-    private func resultsContent(_ results: SearchResults) -> some View {
-        LazyVStack(alignment: .leading, spacing: 24) {
+    private func resultsContent(_ results: SearchResults, width: CGFloat) -> some View {
+        // One shelf per source, as on a source's home, with posters sized like the home's shelves.
+        let cardWidth = HomeLayoutMetrics.posterWidth(forWidth: width)
+        return LazyVStack(alignment: .leading, spacing: 24) {
             ForEach(results.keys.sorted(), id: \.self) { pluginName in
                 if let pluginResults = results[pluginName], !pluginResults.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
                         sectionHeader(pluginName: pluginName)
 
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
+                            HStack(alignment: .top, spacing: 12) {
                                 ForEach(pluginResults, id: \.catalogIdentity) { result in
                                     NavigationLink(
                                         destination: routeFactory.destination(
                                             for: result.destination
                                         )
                                     ) {
-                                        SearchCardView(result: result)
+                                        SearchCardView(result: result, width: cardWidth)
                                     }
                                     .buttonStyle(.plain)
                                 }

@@ -76,6 +76,7 @@ struct LibrarySettingsView: View {
         }
         .navigationTitle("Library")
         .navigationBarTitleDisplayMode(.inline)
+        .paneHold(viewModel.alert != nil)
         .alert(item: Binding(
             get: { viewModel.alert },
             set: { alert in

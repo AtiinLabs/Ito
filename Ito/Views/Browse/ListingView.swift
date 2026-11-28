@@ -50,35 +50,54 @@ struct ListingView: View {
     }
 
     private var resultsList: some View {
-        List {
-            ForEach(viewModel.entries, id: \.catalogIdentity) { entry in
-                entryRow(entry)
-                    .onAppear {
-                        loadMoreIfNeeded(
-                            lastIdentity: viewModel.entries.last?.catalogIdentity,
-                            identity: entry.catalogIdentity
-                        )
-                    }
-            }
-
-            paginationFooter
+        WidthClassReader { widthClass, size in
+            resultsGrid(width: size.width, spacing: widthClass.spacing)
         }
-        .listStyle(.plain)
+    }
+
+    /// Columns follow the width this list is given; the grid is inset by the width class's margin on each side.
+    private func resultsGrid(width: CGFloat, spacing: LayoutSpacing) -> some View {
+        let contentWidth = width - 2 * spacing.margin
+        let columns = AdaptiveGridMetrics.columns(forWidth: contentWidth, spacing: spacing.gridSpacing)
+        let cardWidth = AdaptiveGridMetrics.cellWidth(
+            forWidth: contentWidth,
+            columns: columns.count,
+            spacing: spacing.gridSpacing
+        )
+        return ScrollView {
+            VStack(spacing: 0) {
+                LazyVGrid(columns: columns, spacing: spacing.gridRowSpacing) {
+                    ForEach(viewModel.entries, id: \.catalogIdentity) { entry in
+                        entryCard(entry, width: cardWidth)
+                            .onAppear {
+                                loadMoreIfNeeded(
+                                    lastIdentity: viewModel.entries.last?.catalogIdentity,
+                                    identity: entry.catalogIdentity
+                                )
+                            }
+                    }
+                }
+                .padding(.horizontal, spacing.margin)
+                .padding(.top, 16)
+
+                paginationFooter
+            }
+        }
     }
 
     @ViewBuilder
-    private func entryRow(_ entry: MediaEntry) -> some View {
+    private func entryCard(_ entry: MediaEntry, width: CGFloat) -> some View {
         switch entry {
         case .manga(let manga):
-            MediaRowView(media: manga) {
+            MediaCardView(media: manga, width: width) {
                 routeFactory.destination(for: viewModel.destination(for: entry))
             }
         case .anime(let anime):
-            MediaRowView(media: anime) {
+            MediaCardView(media: anime, width: width) {
                 routeFactory.destination(for: viewModel.destination(for: entry))
             }
         case .novel(let novel):
-            MediaRowView(media: novel) {
+            MediaCardView(media: novel, width: width) {
                 routeFactory.destination(for: viewModel.destination(for: entry))
             }
         }

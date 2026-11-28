@@ -12,21 +12,37 @@ extension UTType {
 // MARK: - BrowseView
 
 // This wrapper deliberately does not observe the model. AppScope owns the stable
-// model while the child content view observes it, preserving NavigationView identity.
+// model while the child content view observes it, preserving PaneHost identity.
 struct BrowseView: View {
     let viewModel: BrowseViewModel
+    @ObservedObject var navigator: PaneNavigator<BrowseDetailSelection>
     let makeRepositoriesView: () -> RepositoriesView
     let makeSourceView: (InstalledPlugin) -> SourceView
 
     var body: some View {
-        NavigationView {
-            BrowseContentView(
-                viewModel: viewModel,
-                makeRepositoriesView: makeRepositoriesView,
-                makeSourceView: makeSourceView
-            )
+        PaneHost(
+            navigator: navigator,
+            placeholder: PanePlaceholder(
+                systemImage: "globe",
+                title: Text("No Source Selected", comment: "Title shown in the Browse detail column when no source or repositories page is selected"),
+                message: Text("Choose a source, or manage repositories.", comment: "Message shown in the Browse detail column when no source or repositories page is selected")
+            ),
+            listWidthRule: .browse,
+            list: { BrowseContentView(viewModel: viewModel, navigator: navigator) },
+            detail: { browseDetail(for: $0) }
+        )
+    }
+
+    @ViewBuilder
+    private func browseDetail(for selection: BrowseDetailSelection) -> some View {
+        switch selection {
+        case let .source(pluginID):
+            if let plugin = viewModel.installedPlugin(id: pluginID) {
+                makeSourceView(plugin)
+            }
+        case .repositories:
+            makeRepositoriesView()
         }
-        .navigationViewStyle(.stack)
     }
 }
 
@@ -34,25 +50,17 @@ struct BrowseView: View {
 
 private struct BrowseContentView: View {
     @ObservedObject var viewModel: BrowseViewModel
-    let makeRepositoriesView: () -> RepositoriesView
-    let makeSourceView: (InstalledPlugin) -> SourceView
+    @ObservedObject var navigator: PaneNavigator<BrowseDetailSelection>
 
     var body: some View {
         ZStack {
-            NavigationLink(
-                destination: makeRepositoriesView(),
-                isActive: $viewModel.showRepositories
-            ) {
-                EmptyView()
-            }
-            .hidden()
-
             if viewModel.sortedPlugins.isEmpty {
                 emptyStateView
             } else {
                 pluginListView
             }
         }
+        .paneDetailLink(isEnabled: true)
         .contentShape(Rectangle())
         .onDrop(of: [.item, .fileURL, .ito], isTargeted: nil) { providers in
             handleDrop(providers: providers)
@@ -141,7 +149,10 @@ private struct BrowseContentView: View {
 
             Section {
                 ForEach(viewModel.sortedPlugins, id: \.id) { plugin in
-                    NavigationLink(destination: makeSourceView(plugin)) {
+                    PaneSelectionButton(
+                        isSelected: navigator.selection == .source(pluginID: plugin.id),
+                        action: { navigator.select(.source(pluginID: plugin.id)) }
+                    ) {
                         PluginRowView(plugin: plugin)
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -292,6 +303,21 @@ struct PluginRowView: View {
     let plugin: InstalledPlugin
 
     var body: some View {
+        if #available(iOS 16.0, *) {
+            // Keeps the name on one line for as long as possible: titled badges beside it,
+            // then icon-only badges, and only then badges moved below the name.
+            ViewThatFits(in: .horizontal) {
+                row(showsBadgeTitles: true, badgesBelowName: false)
+                row(showsBadgeTitles: false, badgesBelowName: false)
+                row(showsBadgeTitles: true, badgesBelowName: true)
+            }
+        } else {
+            row(showsBadgeTitles: true, badgesBelowName: false)
+        }
+    }
+
+    @ViewBuilder
+    private func row(showsBadgeTitles: Bool, badgesBelowName: Bool) -> some View {
         HStack(spacing: 12) {
             if let iconData = plugin.iconData, let uiImage = UIImage(data: iconData) {
                 Image(uiImage: uiImage)
@@ -309,26 +335,37 @@ struct PluginRowView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(plugin.info.name)
                     .font(.headline)
+                    .lineLimit(1)
                 Text("v\(plugin.info.version) • \(plugin.info.author ?? String(localized: "Unknown"))")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 if plugin.info.archived ?? false {
                     Label("Archived", systemImage: "archivebox.fill")
                         .font(.caption2)
                         .foregroundStyle(.orange)
                         .padding(.top, 2)
                 }
+                if badgesBelowName {
+                    badges(showsTitles: true)
+                        .padding(.top, 2)
+                }
             }
 
-            Spacer()
-
-            HStack(spacing: 4) {
-                ForEach(plugin.info.distinctKinds, id: \.self) { kind in
-                    PluginTypeBadge(type: kind)
-                }
+            if !badgesBelowName {
+                Spacer(minLength: 8)
+                badges(showsTitles: showsBadgeTitles)
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private func badges(showsTitles: Bool) -> some View {
+        HStack(spacing: 4) {
+            ForEach(plugin.info.distinctKinds, id: \.self) { kind in
+                PluginTypeBadge(type: kind, showsTitle: showsTitles)
+            }
+        }
     }
 }
 
@@ -336,6 +373,7 @@ struct PluginRowView: View {
 
 struct PluginTypeBadge: View {
     let type: MediaKind
+    var showsTitle = true
 
     private var style: (title: String, icon: String, color: Color) {
         switch type {
@@ -346,14 +384,23 @@ struct PluginTypeBadge: View {
     }
 
     var body: some View {
-        Label(style.title, systemImage: style.icon)
-            .font(.caption2.weight(.semibold))
-            .labelStyle(.titleAndIcon)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(style.color.opacity(0.15))
-            .foregroundStyle(style.color)
-            .clipShape(RoundedRectangle(cornerRadius: 5))
+        Group {
+            if showsTitle {
+                Label(style.title, systemImage: style.icon)
+                    .labelStyle(.titleAndIcon)
+            } else {
+                Image(systemName: style.icon)
+                    .accessibilityLabel(style.title)
+            }
+        }
+        .font(.caption2.weight(.semibold))
+        .lineLimit(1)
+        .fixedSize()
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(style.color.opacity(0.15))
+        .foregroundStyle(style.color)
+        .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 }
 

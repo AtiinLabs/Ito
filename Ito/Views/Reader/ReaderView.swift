@@ -13,9 +13,11 @@ struct ReaderView: View {
     @State private var showSettings = false
     @State private var showUI = true
     @State private var showSignIn = false
+    @State private var showsChapterList = false
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     /// The route owns the reader; this view only draws it and reports what the route asked to be told.
     init(
@@ -35,9 +37,12 @@ struct ReaderView: View {
     var body: some View {
         GeometryReader { geometry in
             readerBody(
-                safeAreaBottom: geometry.safeAreaInsets.bottom > 0
-                    ? geometry.safeAreaInsets.bottom
-                    : 34
+                safeArea: geometry.safeAreaInsets,
+                size: geometry.size,
+                widthClass: WidthClass.make(
+                    size: geometry.size,
+                    verticallyRegular: verticalSizeClass == .regular
+                )
             )
         }
         .navigationBarHidden(true)
@@ -70,6 +75,9 @@ struct ReaderView: View {
         .onChange(of: scenePhase) { phase in
             if phase != .active { viewModel.cancelGroupSwitch() }
         }
+        .onChange(of: showUI) { visible in
+            if !visible { showsChapterList = false }
+        }
         .alert(
             String(localized: "Switch groups?", comment: "Reader consent title: open one exact upload from another translation group"),
             // The buttons decide: a setter that cancelled could run before Continue's action.
@@ -83,7 +91,7 @@ struct ReaderView: View {
         }
     }
 
-    private func readerBody(safeAreaBottom: CGFloat) -> some View {
+    private func readerBody(safeArea: EdgeInsets, size: CGSize, widthClass: WidthClass) -> some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
@@ -125,7 +133,7 @@ struct ReaderView: View {
                 }
                 .padding(32)
             case .content:
-                readComponent
+                readComponent()
                     .ignoresSafeArea()
             }
 
@@ -137,6 +145,10 @@ struct ReaderView: View {
                             title: viewModel.currentChapter.title,
                             number: viewModel.currentChapter.chapterNumber
                         ),
+                        canShowChapters: viewModel.canShowChapterList,
+                        isShowingChapters: $showsChapterList,
+                        presentsAsPopover: widthClass == .regular,
+                        chapterList: chapterList(.popover),
                         onDismiss: { dismiss() }
                     )
 
@@ -155,7 +167,7 @@ struct ReaderView: View {
                             get: { viewModel.overrideViewer },
                             set: { viewModel.setViewerOverride($0) }
                         ),
-                        safeAreaBottom: safeAreaBottom,
+                        safeAreaBottom: safeArea.bottom > 0 ? safeArea.bottom : 34,
                         // Paged right-to-left turns pages leftwards; the footer follows.
                         isRightToLeft: viewModel.isPaged
                             && (viewModel.activeViewer == .Rtl || viewModel.activeViewer == .Default),
@@ -168,16 +180,51 @@ struct ReaderView: View {
                 }
                 .transition(.opacity)
                 .ignoresSafeArea(edges: .bottom)
+                .padding(.trailing, showsChapterList && widthClass == .wide ? ReaderChapterListView.panelWidth(for: size) : 0)
             }
+
+            if showsChapterList && widthClass == .wide {
+                chapterPanel(width: ReaderChapterListView.panelWidth(for: size))
+                    .transition(.move(edge: .trailing))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showsChapterList)
+        .onAppear { viewModel.setPagedSpreadLayout(NovelReaderLayout.showsSpread(widthClass: widthClass)) }
+        .onChange(of: NovelReaderLayout.showsSpread(widthClass: widthClass)) { viewModel.setPagedSpreadLayout($0) }
+        .onChange(of: widthClass) { _ in showsChapterList = false }
+        .sheet(isPresented: Binding(
+            get: { showsChapterList && widthClass == .compact },
+            set: { showsChapterList = $0 }
+        )) {
+            chapterList(.sheet).modifier(PresentationDetentsModifier())
+        }
+    }
+
+    private func chapterList(_ style: ReaderChapterListView.Style) -> ReaderChapterListView {
+        ReaderChapterListView(
+            rows: viewModel.chapterListRows,
+            readerFormat: .pages,
+            style: style,
+            onSelect: { viewModel.jump(to: $0) },
+            onClose: { showsChapterList = false }
+        )
+    }
+
+    private func chapterPanel(width: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            chapterList(.panel)
+                .frame(width: width)
+                .environment(\.colorScheme, .dark)
         }
     }
 
     // MARK: - Reader components
 
     @ViewBuilder
-    private var readComponent: some View {
+    private func readComponent() -> some View {
         if viewModel.isPaged {
-            pagedReader
+            pagedReader()
         } else {
             continuousReader
         }
@@ -187,48 +234,99 @@ struct ReaderView: View {
 
     /// Each page view owns its tap: a SwiftUI tap around a page's UIKit zoom view would also
     /// fire for the taps the page already handles, toggling the controls twice.
-    private var pagedReader: some View {
+    private func pagedReader() -> some View {
         let chapter = viewModel.currentChapter
         let pages = viewModel.pagedPages
+        let spreads = viewModel.pagedSpreads
         let previous = viewModel.boundaryBefore(chapter)
         let next = viewModel.boundaryAfter(chapter)
         let isRightToLeft = viewModel.activeViewer == .Rtl || viewModel.activeViewer == .Default
         return MangaPagedReaderView(
             chapterKey: chapter.key,
-            pageCount: pages.count,
+            pageCount: spreads.count,
             hasPrevious: !previous.isEnd,
             hasNext: !next.isEnd,
-            index: viewModel.pagedIndex,
+            index: viewModel.pagedSpreadPosition,
             isRightToLeft: isRightToLeft,
             content: { position in
                 // Pages keep a left-to-right layout: the reading direction only orders them, and
                 // a right-to-left environment would mirror the page's UIKit zoom view.
-                pagedPosition(position, chapter: chapter, pages: pages, previous: previous, next: next)
+                pagedPosition(
+                    position,
+                    chapter: chapter,
+                    pages: pages,
+                    spreads: spreads,
+                    isRightToLeft: isRightToLeft,
+                    previous: previous,
+                    next: next
+                )
             },
-            onIndexChange: { viewModel.setPagedIndex($0) }
+            onIndexChange: { viewModel.setPagedSpreadPosition($0) }
         )
     }
 
     /// A pager position: the previous chapter's loading page (-1) or where reading stops before it, a
-    /// page, or the same for the next chapter.
+    /// spread of pages, or the same for the next chapter.
     @ViewBuilder
     private func pagedPosition(
         _ position: Int,
         chapter: Manga.Chapter,
         pages: [Page],
+        spreads: [Range<Int>],
+        isRightToLeft: Bool,
         previous: ReaderChapterBoundary<Manga.Chapter>,
         next: ReaderChapterBoundary<Manga.Chapter>
     ) -> some View {
         if position < 0 {
             neighborView(previous, isNext: false)
-        } else if pages.indices.contains(position) {
-            pageImage(
-                for: pages[position],
-                number: position + 1,
-                pageID: FlatPage.id(chapterKey: chapter.key, position: position)
+        } else if spreads.indices.contains(position) {
+            pagedSpread(
+                spreads[position],
+                chapter: chapter,
+                pages: pages,
+                isRightToLeft: isRightToLeft
             )
         } else {
             neighborView(next, isNext: true)
+        }
+    }
+
+    /// One pager position: a spread when the spread layout is on, its pages side by side in reading
+    /// order, centered in the space the pager gives this view; otherwise the position's single page.
+    @ViewBuilder
+    private func pagedSpread(
+        _ range: Range<Int>,
+        chapter: Manga.Chapter,
+        pages: [Page],
+        isRightToLeft: Bool
+    ) -> some View {
+        if viewModel.pagedSpreadLayout {
+            let positions = MangaSpreadLayout.order(range, isRightToLeft: isRightToLeft)
+            let aspects = positions.map { MangaSpreadLayout.aspect(viewModel.pagedPixelAspect(at: $0)) }
+            GeometryReader { geometry in
+                // Each page gets an explicit x, so the order on screen does not depend on the layout
+                // direction the spread is hosted in. The block is centered in the space this view is given.
+                let frames = MangaSpreadLayout.frames(aspects: aspects, in: geometry.size)
+                ZStack(alignment: .topLeading) {
+                    ForEach(Array(positions.enumerated()), id: \.offset) { offset, position in
+                        pageImage(
+                            for: pages[position],
+                            number: position + 1,
+                            pageID: FlatPage.id(chapterKey: chapter.key, position: position)
+                        )
+                        .frame(width: frames[offset].width, height: frames[offset].height)
+                        .offset(x: frames[offset].minX, y: frames[offset].minY)
+                    }
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+            }
+            .environment(\.layoutDirection, .leftToRight)
+        } else {
+            pageImage(
+                for: pages[range.lowerBound],
+                number: range.lowerBound + 1,
+                pageID: FlatPage.id(chapterKey: chapter.key, position: range.lowerBound)
+            )
         }
     }
 
@@ -335,7 +433,8 @@ struct ReaderView: View {
                 pageID: pageID,
                 interaction: .pagedZoom(onTap: toggleUI),
                 imageLabel: String(localized: "Page \(number)", comment: "Accessibility label of a manga page; number is its position in the chapter"),
-                onVisibleLeaseAcquired: { key in reportInitialImage(key, position: number - 1) }
+                onVisibleLeaseAcquired: { key in reportInitialImage(key, position: number - 1) },
+                onPixelSize: { viewModel.setPagedPixelSize($0, pageID: pageID) }
             )
         case .text(let text):
             Text(text)
@@ -351,7 +450,7 @@ struct ReaderView: View {
     /// A destination built behind the visible reader reports that its first page is on screen.
     private func reportInitialLayout(position: Int) {
         guard case .staged(let requestID, let visitID) = viewModel.presentationMode,
-              position == viewModel.pagedIndex else { return }
+              viewModel.pagedPageIsShown(position) else { return }
         onPresentationReady(requestID, visitID)
     }
 
@@ -445,47 +544,6 @@ struct ReaderSettingsView: View {
 }
 
 // MARK: - Reader HUD Components
-
-private struct ReaderHeaderView: View {
-    let title: String
-    let chapterTitle: String
-    let onDismiss: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-
-                Text(chapterTitle)
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: Capsule())
-            .environment(\.colorScheme, .dark)
-
-            Spacer()
-
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(.body.weight(.bold))
-                    .foregroundColor(.white)
-                    .padding(12)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .environment(\.colorScheme, .dark)
-            }
-            .accessibilityLabel("Close Reader")
-        }
-        .padding(.horizontal)
-        // The header's container already keeps clear of the top safe area.
-        .padding(.top, 8)
-    }
-}
 
 private struct ReaderFooterView: View {
     let displayIndex: Int

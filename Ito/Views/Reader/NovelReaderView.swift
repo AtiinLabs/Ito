@@ -10,11 +10,13 @@ struct NovelReaderView: View {
     @State private var showUI = true
     @State private var showSettings = false
     @State private var showSignIn = false
+    @State private var showsChapterList = false
     /// Screen brightness before the reader's slider first changed it; put back on close.
     @State private var brightnessBeforeReading: CGFloat?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     /// The route owns the reader; this view only draws it and reports what the route asked to be told.
     init(
@@ -36,7 +38,12 @@ struct NovelReaderView: View {
             readerBody(
                 safeAreaBottom: geometry.safeAreaInsets.bottom > 0
                     ? geometry.safeAreaInsets.bottom
-                    : 34
+                    : 34,
+                size: geometry.size,
+                widthClass: WidthClass.make(
+                    size: geometry.size,
+                    verticallyRegular: verticalSizeClass == .regular
+                )
             )
         }
         .navigationBarHidden(true)
@@ -52,6 +59,12 @@ struct NovelReaderView: View {
         }
         .onChange(of: scenePhase) { phase in
             if phase != .active { viewModel.cancelGroupSwitch() }
+        }
+        .onChange(of: showUI) { visible in
+            if !visible { showsChapterList = false }
+        }
+        .onChange(of: showsChapterList) { isShowing in
+            if isShowing { closeSettings() }
         }
         .alert(
             String(localized: "Switch groups?", comment: "Reader consent title: open one exact upload from another translation group"),
@@ -75,7 +88,9 @@ struct NovelReaderView: View {
     }
 
     private func readerBody(
-        safeAreaBottom: CGFloat
+        safeAreaBottom: CGFloat,
+        size: CGSize,
+        widthClass: WidthClass
     ) -> some View {
         ZStack {
             viewModel.theme.backgroundColor.edgesIgnoringSafeArea(.all)
@@ -125,9 +140,16 @@ struct NovelReaderView: View {
 
             if showUI {
                 VStack {
-                    NovelReaderHeaderView(
+                    ReaderHeaderView(
                         title: viewModel.entry.title,
-                        chapterTitle: chapterTitle(viewModel.currentChapter),
+                        chapterTitle: ReaderChapterTitle.heading(
+                            title: viewModel.currentChapter.title,
+                            number: viewModel.currentChapter.chapterNumber
+                        ),
+                        canShowChapters: viewModel.canShowChapterList,
+                        isShowingChapters: $showsChapterList,
+                        presentsAsPopover: widthClass == .regular,
+                        chapterList: chapterList(.popover),
                         onDismiss: { dismiss() }
                     )
 
@@ -148,11 +170,44 @@ struct NovelReaderView: View {
                 }
                 .transition(.opacity)
                 .ignoresSafeArea(edges: .bottom)
+                .padding(.trailing, showsChapterList && widthClass == .wide ? ReaderChapterListView.panelWidth(for: size) : 0)
+            }
+
+            if showsChapterList && widthClass == .wide {
+                chapterPanel(width: ReaderChapterListView.panelWidth(for: size))
+                    .transition(.move(edge: .trailing))
             }
 
             if showSettings {
                 settingsOverlay(safeAreaBottom: safeAreaBottom)
             }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showsChapterList)
+        .onChange(of: widthClass) { _ in showsChapterList = false }
+        .sheet(isPresented: Binding(
+            get: { showsChapterList && widthClass == .compact },
+            set: { showsChapterList = $0 }
+        )) {
+            chapterList(.sheet).modifier(PresentationDetentsModifier())
+        }
+    }
+
+    private func chapterList(_ style: ReaderChapterListView.Style) -> ReaderChapterListView {
+        ReaderChapterListView(
+            rows: viewModel.chapterListRows,
+            readerFormat: .text,
+            style: style,
+            onSelect: { viewModel.jump(to: $0) },
+            onClose: { showsChapterList = false }
+        )
+    }
+
+    private func chapterPanel(width: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            chapterList(.panel)
+                .frame(width: width)
+                .environment(\.colorScheme, .dark)
         }
     }
 
@@ -215,7 +270,7 @@ struct NovelReaderView: View {
                     // Paragraphs are a line apart, like the blank line between them in paged mode.
                     LazyVStack(alignment: .leading, spacing: CGFloat(viewModel.fontSize)) {
                         ForEach(viewModel.loadedChapters) { loadedChapter in
-                            Text(chapterTitle(loadedChapter.chapter))
+                            Text(ReaderChapterTitle.heading(title: loadedChapter.chapter.title, number: loadedChapter.chapter.chapterNumber))
                                 .font(
                                     viewModel.fontFamily.swiftUIFont(
                                         size: CGFloat(viewModel.fontSize) + 6,
@@ -268,6 +323,12 @@ struct NovelReaderView: View {
 
                         Color.clear.frame(height: safeAreaBottom + 80)
                     }
+                    // Wide windows keep the text to a readable line length, centered; narrow windows are unchanged.
+                    .frame(
+                        maxWidth: NovelReaderLayout.readableTextWidth(fontSize: viewModel.fontSize)
+                            + 2 * NovelReaderLayout.pageInset
+                    )
+                    .frame(maxWidth: .infinity)
                 }
                 .onAppear { applyRestoreAnchor(with: proxy) }
                 .onChange(of: viewModel.restoreAnchor) { _ in applyRestoreAnchor(with: proxy) }
@@ -294,7 +355,7 @@ struct NovelReaderView: View {
                     Text(notice.text)
                         .font(.subheadline)
                     if let candidate = boundary.candidate {
-                        Text(chapterTitle(candidate))
+                        Text(ReaderChapterTitle.heading(title: candidate.title, number: candidate.chapterNumber))
                             .font(.footnote)
                             .opacity(0.7)
                     }
@@ -336,7 +397,7 @@ struct NovelReaderView: View {
                             Text("Next Chapter")
                                 .font(.caption.weight(.semibold))
                                 .textCase(.uppercase)
-                            Text(chapterTitle(next))
+                            Text(ReaderChapterTitle.heading(title: next.title, number: next.chapterNumber))
                                 .font(.headline)
                                 .multilineTextAlignment(.center)
                         }
@@ -500,60 +561,9 @@ struct NovelReaderView: View {
                 .padding(.horizontal)
         }
     }
-
-    private func chapterTitle(_ chapter: Novel.Chapter) -> String {
-        if let number = chapter.chapterNumber {
-            if let title = chapter.title, !title.isEmpty {
-                return String(localized: "Chapter \(number.formatted()) - \(title)", comment: "Novel chapter heading: number, then chapter title")
-            }
-            return String(localized: "Chapter \(number.formatted())")
-        }
-        return chapter.title ?? String(localized: "Unknown Chapter")
-    }
 }
 
 // MARK: - Novel Reader HUD Components
-
-private struct NovelReaderHeaderView: View {
-    let title: String
-    let chapterTitle: String
-    let onDismiss: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-
-                Text(chapterTitle)
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: Capsule())
-            .environment(\.colorScheme, .dark)
-
-            Spacer()
-
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(.body.weight(.bold))
-                    .foregroundColor(.white)
-                    .padding(12)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .environment(\.colorScheme, .dark)
-            }
-            .accessibilityLabel("Close Reader")
-        }
-        .padding(.horizontal)
-        // The header's container already keeps clear of the top safe area.
-        .padding(.top, 8)
-    }
-}
 
 private struct NovelReaderFooterView: View {
     let hasPrev: Bool

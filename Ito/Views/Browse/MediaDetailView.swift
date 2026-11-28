@@ -24,6 +24,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     @State private var displayedAlternativeID: UUID?
     @State private var replacementPreview: DownloadReplacementPreview?
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.layoutDirection) private var layoutDirection
 
     init(
         viewModel: MediaDetailViewModel<M>,
@@ -49,12 +50,11 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             .task {
                 viewModel.start()
             }
-            .onAppear {
-                viewModel.appear()
-            }
-            .onDisappear {
-                viewModel.disappear()
-            }
+            .paneLifecycle(
+                owner: viewModel,
+                onAppear: { viewModel.appear() },
+                onDisappear: { viewModel.disappear() }
+            )
             .refreshable {
                 await viewModel.refresh()
             }
@@ -152,6 +152,18 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             } message: { preview in
                 Text(preview.message)
             }
+            .paneHold(
+                viewModel.showSignIn
+                    || viewModel.trackerSheetIntent != nil
+                    || viewModel.readerDestination != nil
+                    || viewModel.categoryAssignmentIntent != nil
+                    || viewModel.relinkPresentation != nil
+                    || viewModel.automaticRule.presentation != nil
+                    || viewModel.downloadSheet != nil
+                    || viewModel.downloadBatch.meteredPrompt != nil
+                    || viewModel.groupSwitchConsent != nil
+                    || replacementPreview != nil
+            )
     }
 
     private var navigationContent: some View {
@@ -184,12 +196,50 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     }
 
     private var mediaScroll: some View {
+        WidthClassReader { widthClass, size in
+            switch MediaDetailLayout.make(widthClass: widthClass, width: size.width) {
+            case .singleColumn:
+                singleColumnScroll
+            case .twoColumns(let leadingWidth):
+                twoColumnContent(leadingWidth: leadingWidth)
+            }
+        }
+        // The tag row scrolls sideways and would draw into the trailing inset, under iOS 27's side tab pill.
+        .clipShape(TrailingEdgeClip(layoutDirection: layoutDirection))
+    }
+
+    private var singleColumnScroll: some View {
         ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: 0) {
                 heroHeader
                 detailControls
                 chapterSection
             }
+        }
+    }
+
+    /// The header and controls scroll in their own column, and the chapters scroll beside them, so a wide window
+    /// shows both at once. The columns are sized from the width GeometryReader gives, so an unfolded or rotated
+    /// window reflows without reading the screen.
+    private func twoColumnContent(leadingWidth: CGFloat) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 0) {
+                    heroHeader
+                    detailControls
+                }
+            }
+            .frame(width: leadingWidth)
+
+            Divider()
+
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 0) {
+                    chapterSection
+                }
+                .padding(.top, 12)
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -485,19 +535,8 @@ struct MediaDetailView<M: MediaDisplayable>: View {
         displayedChapters: [M.Chapter]
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            if viewModel.resumeChapter != nil {
-                Button {
-                    viewModel.resumeReading()
-                } label: {
-                    Label(resumeTitle, systemImage: resumeIcon)
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                }
-                .tint(viewModel.theme.map { Color(hex: $0.secondaryHex) } ?? .accentColor)
-                .buttonStyle(.borderedProminent)
-                .foregroundStyle(viewModel.theme == nil ? Color.itoOnAccent : .white)
-                .controlSize(.large)
-                .padding(.horizontal, 16)
+            if let upNext = viewModel.resumeChapter {
+                upNextCard(upNext)
             }
 
             if let anime = viewModel.media as? Anime,
@@ -517,6 +556,40 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 displayedChapterCount: displayedChapters.count
             )
         }
+    }
+
+    /// The unit Resume opens, with its number and title, so the reader sees what a tap continues before it happens.
+    private func upNextCard(_ chapter: M.Chapter) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Up next", comment: "Heading of the series page card for the unit that Resume opens.")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ChapterThreadLayout.numberLabel(for: chapter))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                if let title = chapter.title, !title.isEmpty {
+                    Text(title)
+                        .font(.headline)
+                        .lineLimit(2)
+                }
+            }
+            Button {
+                viewModel.resumeReading()
+            } label: {
+                Label(resumeTitle, systemImage: resumeIcon)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .tint(viewModel.theme.map { Color(hex: $0.secondaryHex) } ?? .accentColor)
+            .buttonStyle(.borderedProminent)
+            .foregroundStyle(viewModel.theme == nil ? Color.itoOnAccent : .white)
+            .controlSize(.large)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(.secondarySystemBackground)))
+        .padding(.horizontal, 16)
     }
 
     private var resumeTitle: String {
@@ -670,19 +743,33 @@ struct MediaDetailView<M: MediaDisplayable>: View {
 
     /// `textKeys` comes from the whole series, so a filter that leaves only text chapters keeps their marks.
     private func chapterList(chapters: [M.Chapter], textKeys: Set<String>) -> some View {
-        LazyVStack(spacing: 0) {
+        let roles = ChapterThreadLayout.roles(
+            for: chapters.map { (key: $0.key, isRead: viewModel.isRead($0)) },
+            upNextKey: viewModel.resumeChapter?.key
+        )
+        let steps = ChapterThreadLayout.steps(for: roles)
+        let stepsByKey = Dictionary(zip(chapters.map(\.key), steps), uniquingKeysWith: { first, _ in first })
+        let languagesByKey = Dictionary(
+            zip(chapters.map(\.key), ChapterUploadLanguage.labels(for: chapters)),
+            uniquingKeysWith: { first, _ in first }
+        )
+        return LazyVStack(spacing: 0) {
             ForEach(chapters, id: \.key) { chapter in
+                let thread = stepsByKey[chapter.key]
                 ChapterRowView(
                     chapter: chapter,
                     isRead: viewModel.isRead(chapter),
                     marksText: textKeys.contains(chapter.key),
                     downloadState: viewModel.downloadState(for: chapter),
-                    isSavedOnly: viewModel.isSavedOnlyRow(chapter)
+                    isSavedOnly: viewModel.isSavedOnlyRow(chapter),
+                    thread: thread,
+                    uploadLanguage: languagesByKey[chapter.key] ?? nil
                 ) {
                     viewModel.selectChapter(chapter)
                 }
                 .modifier(downloadContextMenu(for: chapter))
-                Divider().padding(.leading, 16)
+                // Threaded rows start their divider past the thread column, so the rule follows the title.
+                Divider().padding(.leading, thread == nil ? 16 : 48)
             }
         }
     }
