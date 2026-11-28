@@ -138,6 +138,10 @@ struct AnilistTrackerScoreTests {
         }
     }
 
+    private func mutationPayloads() throws -> [[String: Any]] {
+        try payloads().filter { ($0["query"] as? String)?.contains("SaveMediaListEntry") == true }
+    }
+
     @Test(arguments: TrackerScoreFormat.allCases.filter { $0 != .numeric100 })
     func loadsNativeFormat(format: TrackerScoreFormat) async throws {
         try await withTracker(viewer: Self.viewer(format)) { tracker in
@@ -220,6 +224,38 @@ struct AnilistTrackerScoreTests {
             #expect(variables["progress"] as? Int == 21)
             try await tracker.updateProgress(mediaId: "42", progress: 7, status: "CURRENT")
             #expect(AniListScoreURLProtocol.requests.count == 3)
+        }
+    }
+
+    @Test func automaticProgressIsNotWrittenWhenTheEntryCannotBeRead() async throws {
+        try await withTracker(viewer: "null") { tracker in
+            AniListScoreURLProtocol.respondToEntry(status: 500, body: "{\"errors\":[{\"message\":\"Unavailable\"}]}")
+            await #expect(throws: (any Error).self) {
+                try await tracker.updateProgress(mediaId: "42", progress: 3, status: nil)
+            }
+            let mutations = try mutationPayloads()
+            #expect(mutations.isEmpty)
+        }
+    }
+
+    @Test func automaticProgressIsNotWrittenOverAnUnknownProgress() async throws {
+        try await withTracker(viewer: "null") { tracker in
+            AniListScoreURLProtocol.respondToEntry(
+                body: "{\"data\":{\"MediaList\":{\"id\":1,\"mediaId\":42,\"score\":8.5,\"progress\":null,\"status\":\"CURRENT\"}}}"
+            )
+            await #expect(throws: (any Error).self) {
+                try await tracker.updateProgress(mediaId: "42", progress: 3, status: nil)
+            }
+            let mutations = try mutationPayloads()
+            #expect(mutations.isEmpty)
+        }
+    }
+
+    @Test func automaticProgressNeverLowersAReadEntry() async throws {
+        try await withTracker(viewer: "null") { tracker in
+            try await tracker.updateProgress(mediaId: "42", progress: 3, status: nil)
+            let mutations = try mutationPayloads()
+            #expect(mutations.isEmpty)
         }
     }
 

@@ -444,6 +444,8 @@ private nonisolated final class AniListAdmissionProtocol: URLProtocol {
         if query.contains("SaveMediaListEntry") {
             Self.lock.withLock { Self.mutationCount += 1 }
             body = "{\"data\":{\"SaveMediaListEntry\":{\"id\":1,\"mediaId\":42,\"score\":0,\"progress\":7,\"status\":\"CURRENT\"}}}"
+        } else if query.contains("Viewer {") {
+            body = "{\"data\":{\"Viewer\":{\"id\":1,\"name\":\"fixture-user\"}}}"
         } else {
             let hook = Self.lock.withLock { () -> (() -> Void)? in
                 Self.readCount += 1
