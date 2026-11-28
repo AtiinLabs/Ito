@@ -54,6 +54,16 @@ final class PaneNavigatorTests: XCTestCase {
         XCTAssertEqual(first.item, second.item)
     }
 
+    func testHistorySeriesOpenWithoutIntentMintsFreshTokenEachTime() {
+        let item = makeLibraryItem("a")
+        let first = LibraryDetailSelection.opened(item, intent: nil)
+        let second = LibraryDetailSelection.opened(item, intent: nil)
+
+        XCTAssertNil(first.openIntent)
+        XCTAssertNotEqual(first, second)
+        XCTAssertEqual(first.item, second.item)
+    }
+
     func testClosingHistoryClearsSelectionOnlyInStackArrangement() {
         XCTAssertTrue(LibraryPaneRules.clearsSelection(afterClosing: .history, arrangement: .stack))
         XCTAssertFalse(LibraryPaneRules.clearsSelection(afterClosing: .history, arrangement: .split))
@@ -66,6 +76,45 @@ final class PaneNavigatorTests: XCTestCase {
         XCTAssertNil(LibraryPaneRules.screenAfterCollapse(.downloads))
         XCTAssertNil(LibraryPaneRules.screenAfterCollapse(.lists))
         XCTAssertNil(LibraryPaneRules.screenAfterCollapse(nil))
+    }
+
+    func testBrowseSourceSelectionIsClearedWhenItsPluginIsRemoved() {
+        let navigator = PaneNavigator<BrowseDetailSelection>()
+        navigator.select(.source(pluginID: "a"))
+
+        navigator.installedSourcesDidChange(["b"])
+
+        XCTAssertNil(navigator.selection)
+    }
+
+    func testBrowseSourceSelectionIsKeptWhilePluginIsInstalled() {
+        let navigator = PaneNavigator<BrowseDetailSelection>()
+        navigator.select(.source(pluginID: "a"))
+
+        navigator.installedSourcesDidChange(["a", "b"])
+
+        XCTAssertEqual(navigator.selection, .source(pluginID: "a"))
+    }
+
+    func testBrowseRepositoriesSelectionSurvivesInstalledSourceChanges() {
+        let navigator = PaneNavigator<BrowseDetailSelection>()
+        navigator.showRepositories()
+
+        navigator.installedSourcesDidChange([])
+
+        XCTAssertEqual(navigator.selection, .repositories)
+    }
+
+    func testBrowseShowRepositoriesSelectsRepositoriesAndIsIdempotent() {
+        let navigator = PaneNavigator<BrowseDetailSelection>()
+        var published: [BrowseDetailSelection?] = []
+        let cancellable = navigator.$selection.sink { published.append($0) }
+
+        navigator.showRepositories()
+        navigator.showRepositories()
+
+        XCTAssertEqual(published, [nil, .repositories])
+        withExtendedLifetime(cancellable) {}
     }
 
     private func makeLibraryItem(_ id: String) -> Ito.LibraryItem {

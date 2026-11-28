@@ -165,7 +165,7 @@ struct AppViewFactory {
     }
 
     func makeHistoryView() -> HistoryView {
-        categoryHistoryViewFactory.makeHistoryView(viewFactory: self)
+        categoryHistoryViewFactory.makeHistoryView(navigator: panes.library)
     }
 
     @ViewBuilder
@@ -295,6 +295,7 @@ struct AppViewFactory {
     func makeBrowseView() -> BrowseView {
         BrowseView(
             viewModel: rootModels.browseViewModel,
+            navigator: panes.browse,
             makeRepositoriesView: makeRepositoriesView,
             makeSourceView: makeSourceView
         )

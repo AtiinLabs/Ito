@@ -405,6 +405,9 @@ Reader chapter list: heading above the list of chapters */
 /* Message of the Library detail placeholder shown when no series is selected */
 "Choose a series to see its details." = "Choose a series to see its details.";
 
+/* Message shown in the Browse detail column when no source or repositories page is selected */
+"Choose a source, or manage repositories." = "Choose a source, or manage repositories.";
+
 "Choose a valid score for your scoring format." = "Choose a valid score for your scoring format.";
 
 "Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports." = "Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports.";
@@ -1431,6 +1434,9 @@ Manga format */
 
 /* Title shown in the Settings detail column when no category is selected */
 "No Setting Selected" = "No Setting Selected";
+
+/* Title shown in the Browse detail column when no source or repositories page is selected */
+"No Source Selected" = "No Source Selected";
 
 "No Trackers Authenticated" = "No Trackers Authenticated";
 

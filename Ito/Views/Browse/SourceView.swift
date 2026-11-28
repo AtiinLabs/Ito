@@ -112,9 +112,18 @@ struct SourceView: View {
             .task {
                 await viewModel.loadIfNeeded()
             }
-            .onDisappear {
-                viewModel.cancelActiveOperations()
-            }
+            .paneLifecycle(
+                owner: viewModel,
+                onAppear: {},
+                onDisappear: { viewModel.cancelActiveOperations() }
+            )
+            .paneHold(
+                viewModel.showSettings
+                    || viewModel.showSearchFilters
+                    || viewModel.showSignIn
+                    || trustAction != nil
+                    || viewModel.showArchivedPluginDeleteConfirmation
+            )
     }
 
     @ViewBuilder

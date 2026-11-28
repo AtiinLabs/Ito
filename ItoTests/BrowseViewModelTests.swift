@@ -686,17 +686,19 @@ final class BrowseViewModelTests: XCTestCase {
         let messages = BrowseMessagePresenterSpy()
         let router = AppRouter()
         router.handleRepositoryDeepLink(repositoryDeepLink("https://existing.example"))
+        let detailRouter = BrowseDetailRoutingSpy()
         let viewModel = makeViewModel(
             repositories: repositories,
             messages: messages,
-            router: router
+            router: router,
+            detailRouter: detailRouter
         )
 
         await viewModel.consumePendingRepositoryIntents()
 
         XCTAssertEqual(repositories.addInvocations.count, 1)
         XCTAssertEqual(messages.messages, [.repositoryAlreadyAdded])
-        XCTAssertTrue(viewModel.showRepositories)
+        XCTAssertEqual(detailRouter.showRepositoriesCount, 1)
         XCTAssertNil(router.repositoryIntentDelivery)
     }
 
@@ -705,16 +707,18 @@ final class BrowseViewModelTests: XCTestCase {
         let messages = BrowseMessagePresenterSpy()
         let router = AppRouter()
         router.handleRepositoryDeepLink(repositoryDeepLink("https://new.example"))
+        let detailRouter = BrowseDetailRoutingSpy()
         let viewModel = makeViewModel(
             repositories: repositories,
             messages: messages,
-            router: router
+            router: router,
+            detailRouter: detailRouter
         )
 
         await viewModel.consumePendingRepositoryIntents()
 
         XCTAssertEqual(messages.messages, [.repositoryAdded])
-        XCTAssertTrue(viewModel.showRepositories)
+        XCTAssertEqual(detailRouter.showRepositoriesCount, 1)
     }
 
     func testStaleRepositoryRefreshRunsOnlyWhenAnIndexIsOlderThanMaxAge() async {
@@ -821,8 +825,8 @@ final class BrowseViewModelTests: XCTestCase {
         let rootStart = try XCTUnwrap(viewSource.range(of: "struct BrowseView: View"))
         let contentStart = try XCTUnwrap(viewSource.range(of: "private struct BrowseContentView: View"))
         let rootSource = String(viewSource[rootStart.lowerBound..<contentStart.lowerBound])
-        XCTAssertTrue(rootSource.contains("NavigationView"))
-        XCTAssertFalse(rootSource.contains("@ObservedObject"))
+        XCTAssertTrue(rootSource.contains("PaneHost("))
+        XCTAssertFalse(rootSource.contains("@ObservedObject var viewModel"))
         XCTAssertTrue(viewSource.contains(".confirmationDialog("))
         XCTAssertTrue(viewSource.contains("await viewModel.confirmDelete()"))
 
@@ -839,15 +843,28 @@ final class BrowseViewModelTests: XCTestCase {
         repositories: BrowseRepositoryManagerSpy = BrowseRepositoryManagerSpy(),
         files: BrowsePluginFileOperationsSpy = BrowsePluginFileOperationsSpy(),
         messages: BrowseMessagePresenterSpy = BrowseMessagePresenterSpy(),
-        router: AppRouter = AppRouter()
+        router: AppRouter = AppRouter(),
+        detailRouter: BrowseDetailRoutingSpy = BrowseDetailRoutingSpy()
     ) -> BrowseViewModel {
         BrowseViewModel(
             repositoryManager: repositories,
             pluginManager: plugins,
             fileOperations: files,
             messagePresenter: messages,
-            repositoryIntentRouter: router
+            repositoryIntentRouter: router,
+            detailRouter: detailRouter
         )
+    }
+
+    @MainActor
+    private final class BrowseDetailRoutingSpy: BrowseDetailRouting {
+        private(set) var showRepositoriesCount = 0
+
+        func showRepositories() {
+            showRepositoriesCount += 1
+        }
+
+        func installedSourcesDidChange(_: Set<String>) {}
     }
 
     private func makeScope() -> AppScope {

@@ -174,6 +174,15 @@ final class PaneArrangementTests: XCTestCase {
         XCTAssertEqual(wide.listContentWidth, 420)
     }
 
+    func testBrowseListColumnClampsToItsOwnBand() {
+        let narrow = PaneMetrics.frames(for: .split, containerWidth: 951, leadingInset: 0, trailingInset: 71, listWidthRule: .browse)
+        let wide = PaneMetrics.frames(for: .split, containerWidth: 1366, leadingInset: 0, trailingInset: 71, listWidthRule: .browse)
+
+        XCTAssertEqual(narrow.listContentWidth, 400)
+        XCTAssertGreaterThanOrEqual(narrow.detailContentWidth, 450)
+        XCTAssertEqual(wide.listContentWidth, 460)
+    }
+
     func testLibraryDuoSplitKeepsThreeGridColumnsAndDetailRoom() {
         let frames = PaneMetrics.frames(
             for: .split,

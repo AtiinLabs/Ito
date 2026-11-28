@@ -2,25 +2,17 @@ import NukeUI
 import SwiftUI
 import ito_runner
 
-/// A series to open from History, with what to open once its screen has loaded.
-private struct HistoryRoute: Identifiable {
-    let id = UUID()
-    let item: LibraryItem
-    let openIntent: MediaDetailOpenIntent?
-}
-
 struct HistoryView: View {
     @StateObject private var viewModel: HistoryViewModel
-    let viewFactory: AppViewFactory
-    /// The series opened last. It stays set while the screen pops back so the outgoing screen
-    /// keeps its content; `isRouteActive` drives the navigation.
-    @State private var route: HistoryRoute?
-    @State private var isRouteActive = false
+    @ObservedObject var navigator: PaneNavigator<LibraryDetailSelection>
     @State private var expandedSeries = Set<HistorySeriesKey>()
 
-    init(viewModel: @autoclosure @escaping () -> HistoryViewModel, viewFactory: AppViewFactory) {
+    init(
+        viewModel: @autoclosure @escaping () -> HistoryViewModel,
+        navigator: PaneNavigator<LibraryDetailSelection>
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel())
-        self.viewFactory = viewFactory
+        self.navigator = navigator
     }
 
     var body: some View {
@@ -43,7 +35,7 @@ struct HistoryView: View {
                     }
                 }
             }
-            .background(routeLink)
+            .paneDetailLink(isEnabled: true)
             .onAppear { viewModel.refreshDates() }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
                 viewModel.refreshDates()
@@ -107,6 +99,7 @@ struct HistoryView: View {
     private func seriesRows(_ series: HistorySeries) -> some View {
         HistorySeriesRow(
             series: series,
+            isSelected: isSelected(viewModel.libraryItem(for: series)),
             chapterLabel: viewModel.chapterLabel(for: series.latest),
             isFinished: viewModel.isFinished(series.latest),
             position: viewModel.positionLabel(for: series.latest),
@@ -224,29 +217,19 @@ struct HistoryView: View {
 
     private func open(_ item: LibraryItem?, intent: MediaDetailOpenIntent?) {
         guard let item else { return }
-        route = HistoryRoute(item: item, openIntent: intent)
-        isRouteActive = true
+        navigator.select(.opened(item, intent: intent))
+    }
+
+    /// Whether `item` is the series the Library detail is showing.
+    private func isSelected(_ item: LibraryItem?) -> Bool {
+        guard let item else { return false }
+        return navigator.selection?.item.id == item.id
     }
 
     /// Joins the parts that are present with " · ".
     private static func joined(_ parts: [String?]) -> String? {
         let present = parts.compactMap { $0 }
         return present.isEmpty ? nil : present.joined(separator: " · ")
-    }
-
-    private var routeLink: some View {
-        NavigationLink(destination: routeDestination, isActive: $isRouteActive) {
-            EmptyView()
-        }
-        .hidden()
-    }
-
-    @ViewBuilder
-    private var routeDestination: some View {
-        if let route {
-            viewFactory.makeDeferredPluginView(item: route.item, openIntent: route.openIntent)
-                .id(route.id)
-        }
     }
 
     private func message(systemImage: String, title: Text, detail: Text) -> some View {
@@ -301,10 +284,12 @@ struct HistoryView: View {
 /// A series' most recent chapter: tapping it opens the series, Continue resumes reading.
 private struct HistorySeriesRow: View {
     @Environment(\.sourceCoverRequests) private var coverRequests
+    @Environment(\.paneShowsSelection) private var showsSelection
     static let coverSize = CGSize(width: 50, height: 75)
     static let textInset: CGFloat = coverSize.width + 12
 
     let series: HistorySeries
+    let isSelected: Bool
     let chapterLabel: String
     let isFinished: Bool
     /// Where an unfinished chapter was left, such as "Page 13".
@@ -364,6 +349,7 @@ private struct HistorySeriesRow: View {
             .buttonStyle(.plain)
             .accessibilityElement(children: .combine)
             .accessibilityHint(Text("Opens the series", comment: "History: accessibility hint of a series row"))
+            .accessibilityAddTraits(marksSelection ? .isSelected : [])
 
             Button(action: resume) {
                 Text("Continue", comment: "History: resume reading or watching a series")
@@ -374,6 +360,12 @@ private struct HistorySeriesRow: View {
             .accessibilityLabel(Text("Continue \(series.title)", comment: "History: resume button, with the series title"))
         }
         .padding(.vertical, 4)
+        .listRowBackground(marksSelection ? Color.accentColor.opacity(0.2) : nil)
+    }
+
+    /// Marks the row the Library detail shows, when the split arrangement shows a selection.
+    private var marksSelection: Bool {
+        isSelected && showsSelection
     }
 
     @ViewBuilder

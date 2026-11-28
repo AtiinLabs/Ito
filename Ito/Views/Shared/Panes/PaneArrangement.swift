@@ -76,6 +76,10 @@ nonisolated struct PaneListWidthRule: Equatable, Sendable {
     /// Settings: 40% of the usable width, clamped to 340...420 points.
     static let settings = PaneListWidthRule(fraction: 0.4, minimum: 340, maximum: 420)
 
+    /// Browse: 42% of the usable width, clamped to 400...460 points, so source names fit on one
+    /// line and the source home keeps room beside the list.
+    static let browse = PaneListWidthRule(fraction: 0.42, minimum: 400, maximum: 460)
+
     /// Library: half the usable width, never narrower than the narrowest list width at which the
     /// compact grid lays out three columns. That floor is derived from `AdaptiveGridMetrics`, so it
     /// follows the grid's own column choice.

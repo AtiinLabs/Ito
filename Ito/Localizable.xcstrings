@@ -1685,6 +1685,9 @@
     "Choose a series to see its details." : {
       "comment" : "Message of the Library detail placeholder shown when no series is selected"
     },
+    "Choose a source, or manage repositories." : {
+      "comment" : "Message shown in the Browse detail column when no source or repositories page is selected"
+    },
     "Choose a valid score for your scoring format." : {
 
     },
@@ -3289,6 +3292,9 @@
     },
     "No Setting Selected" : {
       "comment" : "Title shown in the Settings detail column when no category is selected"
+    },
+    "No Source Selected" : {
+      "comment" : "Title shown in the Browse detail column when no source or repositories page is selected"
     },
     "No Trackers Authenticated" : {
 
