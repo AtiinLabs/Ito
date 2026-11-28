@@ -24,6 +24,7 @@ struct MediaDetailView<M: MediaDisplayable>: View {
     @State private var displayedAlternativeID: UUID?
     @State private var replacementPreview: DownloadReplacementPreview?
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.layoutDirection) private var layoutDirection
 
     init(
         viewModel: MediaDetailViewModel<M>,
@@ -49,12 +50,11 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             .task {
                 viewModel.start()
             }
-            .onAppear {
-                viewModel.appear()
-            }
-            .onDisappear {
-                viewModel.disappear()
-            }
+            .paneLifecycle(
+                owner: viewModel,
+                onAppear: { viewModel.appear() },
+                onDisappear: { viewModel.disappear() }
+            )
             .refreshable {
                 await viewModel.refresh()
             }
@@ -152,6 +152,18 @@ struct MediaDetailView<M: MediaDisplayable>: View {
             } message: { preview in
                 Text(preview.message)
             }
+            .paneHold(
+                viewModel.showSignIn
+                    || viewModel.trackerSheetIntent != nil
+                    || viewModel.readerDestination != nil
+                    || viewModel.categoryAssignmentIntent != nil
+                    || viewModel.relinkPresentation != nil
+                    || viewModel.automaticRule.presentation != nil
+                    || viewModel.downloadSheet != nil
+                    || viewModel.downloadBatch.meteredPrompt != nil
+                    || viewModel.groupSwitchConsent != nil
+                    || replacementPreview != nil
+            )
     }
 
     private var navigationContent: some View {
@@ -192,6 +204,8 @@ struct MediaDetailView<M: MediaDisplayable>: View {
                 twoColumnContent(leadingWidth: leadingWidth)
             }
         }
+        // The tag row scrolls sideways and would draw into the trailing inset, under iOS 27's side tab pill.
+        .clipShape(TrailingEdgeClip(layoutDirection: layoutDirection))
     }
 
     private var singleColumnScroll: some View {

@@ -151,6 +151,7 @@ struct AppViewFactory {
     func makeLibraryView() -> LibraryView {
         LibraryView(
             viewModel: rootModels.libraryViewModel,
+            navigator: panes.library,
             viewFactory: self
         )
     }
@@ -211,10 +212,14 @@ struct AppViewFactory {
 
     func makeDeferredPluginView(item: LibraryItem, openIntent: MediaDetailOpenIntent? = nil) -> DeferredPluginView {
         DeferredPluginView(
-            item: item,
-            openIntent: openIntent,
+            session: DeferredPluginSession(viewModel: makeDeferredPluginViewModel(item: item, openIntent: openIntent)),
             viewFactory: self
         )
+    }
+
+    /// The detail column for a series selected in the library pane.
+    func makeLibraryDetail(_ selection: LibraryDetailSelection) -> DeferredPluginView {
+        makeDeferredPluginView(item: selection.item, openIntent: selection.openIntent)
     }
 
     @ViewBuilder

@@ -1682,6 +1682,9 @@
         }
       }
     },
+    "Choose a series to see its details." : {
+      "comment" : "Message of the Library detail placeholder shown when no series is selected"
+    },
     "Choose a valid score for your scoring format." : {
 
     },
@@ -3280,6 +3283,9 @@
     },
     "No Saved Chapters" : {
       "comment" : "Library filter: series with no chapter saved on this device. Series whose downloads are only queued, damaged or failed count here."
+    },
+    "No Series Selected" : {
+      "comment" : "Title of the Library detail placeholder shown when no series is selected"
     },
     "No Setting Selected" : {
       "comment" : "Title shown in the Settings detail column when no category is selected"

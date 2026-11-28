@@ -28,6 +28,7 @@ struct SettingsView: View {
                 title: Text("No Setting Selected", comment: "Title shown in the Settings detail column when no category is selected"),
                 message: Text("Choose a category.", comment: "Message shown in the Settings detail column when no category is selected")
             ),
+            listWidthRule: .settings,
             list: { settingsList },
             detail: { viewFactory.makeSettingsDestination(for: $0) }
         )

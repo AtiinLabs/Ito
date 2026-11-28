@@ -66,19 +66,57 @@ nonisolated struct PaneColumnFrames: Equatable, Sendable {
     let detailContentWidth: CGFloat
 }
 
+/// How a split arrangement divides usable width between its list and detail columns.
+nonisolated struct PaneListWidthRule: Equatable, Sendable {
+    /// Share of the usable width given to the list column before clamping.
+    let fraction: CGFloat
+    let minimum: CGFloat
+    let maximum: CGFloat
+
+    /// Settings: 40% of the usable width, clamped to 340...420 points.
+    static let settings = PaneListWidthRule(fraction: 0.4, minimum: 340, maximum: 420)
+
+    /// Library: half the usable width, never narrower than the narrowest list width at which the
+    /// compact grid lays out three columns. That floor is derived from `AdaptiveGridMetrics`, so it
+    /// follows the grid's own column choice.
+    static let library = PaneListWidthRule(
+        fraction: 0.5,
+        minimum: narrowestListWidth(
+            forColumns: 3,
+            spacing: LayoutSpacing.compact.gridSpacing,
+            margin: LayoutSpacing.compact.margin
+        ),
+        maximum: .infinity
+    )
+
+    /// The narrowest list width at which the grid, inset by `margin` on each side, has `columns` columns.
+    /// The search starts at the narrowest grid that could hold `columns` cells at the minimum size
+    /// and steps up one point at a time.
+    private static func narrowestListWidth(forColumns columns: Int, spacing: CGFloat, margin: CGFloat) -> CGFloat {
+        let start = (CGFloat(columns) * AdaptiveGridMetrics.minimumCellWidth + spacing * CGFloat(columns - 1)).rounded(.up)
+        for offset in 0...1000 {
+            let grid = start + CGFloat(offset)
+            if AdaptiveGridMetrics.columnCount(forWidth: grid, spacing: spacing) == columns {
+                return grid + 2 * margin
+            }
+        }
+        preconditionFailure("No list width lays out \(columns) grid columns")
+    }
+
+    func listWidth(forUsableWidth usableWidth: CGFloat) -> CGFloat {
+        min(max(usableWidth * fraction, minimum), maximum)
+    }
+}
+
 nonisolated enum PaneMetrics {
     static let dividerWidth: CGFloat = 1
-
-    /// The list column is 40% of the usable width, clamped to 340...420 points.
-    static func listColumnWidth(forUsableWidth usableWidth: CGFloat) -> CGFloat {
-        min(max(usableWidth * 0.4, 340), 420)
-    }
 
     static func frames(
         for arrangement: PaneArrangement,
         containerWidth: CGFloat,
         leadingInset: CGFloat,
-        trailingInset: CGFloat
+        trailingInset: CGFloat,
+        listWidthRule: PaneListWidthRule
     ) -> PaneColumnFrames {
         let usableWidth = max(containerWidth - leadingInset - trailingInset, 0)
         switch arrangement {
@@ -91,7 +129,7 @@ nonisolated enum PaneMetrics {
                 detailContentWidth: 0
             )
         case .split, .detailOnly:
-            let listContentWidth = listColumnWidth(forUsableWidth: usableWidth)
+            let listContentWidth = listWidthRule.listWidth(forUsableWidth: usableWidth)
             let listWidth = leadingInset + listContentWidth
             let detailLeading: CGFloat
             let detailWidth: CGFloat

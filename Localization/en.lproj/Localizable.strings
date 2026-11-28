@@ -402,6 +402,9 @@ Reader chapter list: heading above the list of chapters */
 /* Choose the translation group normally used for this series. */
 "Choose a preferred group" = "Choose a preferred group";
 
+/* Message of the Library detail placeholder shown when no series is selected */
+"Choose a series to see its details." = "Choose a series to see its details.";
+
 "Choose a valid score for your scoring format." = "Choose a valid score for your scoring format.";
 
 "Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports." = "Choose the Ito plugin that matches \"%@\". This mapping will be remembered for future imports.";
@@ -1422,6 +1425,9 @@ Manga format */
 
 /* Library filter: series with no chapter saved on this device. Series whose downloads are only queued, damaged or failed count here. */
 "No Saved Chapters" = "No Saved Chapters";
+
+/* Title of the Library detail placeholder shown when no series is selected */
+"No Series Selected" = "No Series Selected";
 
 /* Title shown in the Settings detail column when no category is selected */
 "No Setting Selected" = "No Setting Selected";

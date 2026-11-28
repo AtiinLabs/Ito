@@ -108,7 +108,8 @@ final class PaneArrangementTests: XCTestCase {
             for: .split,
             containerWidth: 951,
             leadingInset: 0,
-            trailingInset: 71
+            trailingInset: 71,
+            listWidthRule: .settings
         )
 
         XCTAssertEqual(frames.listWidth, 352)
@@ -123,7 +124,8 @@ final class PaneArrangementTests: XCTestCase {
             for: .split,
             containerWidth: 951,
             leadingInset: 0,
-            trailingInset: 71
+            trailingInset: 71,
+            listWidthRule: .settings
         )
 
         XCTAssertEqual(
@@ -141,7 +143,8 @@ final class PaneArrangementTests: XCTestCase {
             for: .stack,
             containerWidth: 951,
             leadingInset: 0,
-            trailingInset: 71
+            trailingInset: 71,
+            listWidthRule: .settings
         )
 
         XCTAssertEqual(frames.listWidth, 951)
@@ -154,7 +157,8 @@ final class PaneArrangementTests: XCTestCase {
             for: .detailOnly,
             containerWidth: 951,
             leadingInset: 0,
-            trailingInset: 71
+            trailingInset: 71,
+            listWidthRule: .settings
         )
 
         XCTAssertEqual(frames.detailWidth, 951)
@@ -162,12 +166,56 @@ final class PaneArrangementTests: XCTestCase {
         XCTAssertEqual(frames.detailContentWidth, 880)
     }
 
-    func testListColumnClampsToMinimumAndMaximum() {
-        let narrow = PaneMetrics.frames(for: .split, containerWidth: 700, leadingInset: 0, trailingInset: 71)
-        let wide = PaneMetrics.frames(for: .split, containerWidth: 1366, leadingInset: 0, trailingInset: 71)
+    func testSettingsListColumnClampsToMinimumAndMaximum() {
+        let narrow = PaneMetrics.frames(for: .split, containerWidth: 700, leadingInset: 0, trailingInset: 71, listWidthRule: .settings)
+        let wide = PaneMetrics.frames(for: .split, containerWidth: 1366, leadingInset: 0, trailingInset: 71, listWidthRule: .settings)
 
         XCTAssertEqual(narrow.listContentWidth, 340)
         XCTAssertEqual(wide.listContentWidth, 420)
+    }
+
+    func testLibraryDuoSplitKeepsThreeGridColumnsAndDetailRoom() {
+        let frames = PaneMetrics.frames(
+            for: .split,
+            containerWidth: 951,
+            leadingInset: 0,
+            trailingInset: 71,
+            listWidthRule: .library
+        )
+
+        XCTAssertEqual(frames.listContentWidth, 440)
+        XCTAssertEqual(frames.detailLeading, 441)
+        XCTAssertEqual(frames.detailContentWidth, 439)
+        XCTAssertGreaterThanOrEqual(frames.detailContentWidth, 420)
+
+        let listClass = WidthClass.make(size: CGSize(width: frames.listContentWidth, height: 393), verticallyRegular: true)
+        XCTAssertEqual(listClass.spacing.gridColumns(forWidth: frames.listContentWidth).count, 3)
+    }
+
+    func testLibraryListFloorKeepsThreeGridColumnsAtNarrowWidths() {
+        let floorWidth = PaneListWidthRule.library.minimum
+        // Three compact columns win over two only from a 329 pt grid (cells of about 101.7 pt and 158.5 pt), plus 2 * 16 pt margins.
+        XCTAssertEqual(floorWidth, 361)
+        XCTAssertEqual(PaneListWidthRule.library.listWidth(forUsableWidth: 629), floorWidth)
+
+        let floor = WidthClass.make(size: CGSize(width: floorWidth, height: 393), verticallyRegular: true)
+        XCTAssertEqual(floor.spacing.gridColumns(forWidth: floorWidth).count, 3)
+
+        let belowFloor = WidthClass.make(size: CGSize(width: floorWidth - 1, height: 393), verticallyRegular: true)
+        XCTAssertEqual(belowFloor.spacing.gridColumns(forWidth: floorWidth - 1).count, 2)
+    }
+
+    func testLibraryListUsesHalfOfWideContainer() {
+        let frames = PaneMetrics.frames(
+            for: .split,
+            containerWidth: 1366,
+            leadingInset: 0,
+            trailingInset: 71,
+            listWidthRule: .library
+        )
+
+        XCTAssertEqual(frames.listContentWidth, 647.5)
+        XCTAssertGreaterThanOrEqual(frames.detailContentWidth, 420)
     }
 
     func testLeadingInsetShiftsSplitBoundary() {
@@ -175,7 +223,8 @@ final class PaneArrangementTests: XCTestCase {
             for: .split,
             containerWidth: 951,
             leadingInset: 59,
-            trailingInset: 71
+            trailingInset: 71,
+            listWidthRule: .settings
         )
 
         XCTAssertEqual(frames.listWidth, 59 + frames.listContentWidth)

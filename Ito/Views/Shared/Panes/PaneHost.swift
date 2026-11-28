@@ -172,12 +172,14 @@ struct PaneHost<Selection: Hashable, ListRoot: View, Detail: View>: View {
 
     private let placeholder: PanePlaceholder
     private let willCollapse: () -> Void
+    private let listWidthRule: PaneListWidthRule
     private let list: () -> ListRoot
     private let detail: (Selection) -> Detail
 
     init(
         navigator: PaneNavigator<Selection>,
         placeholder: PanePlaceholder,
+        listWidthRule: PaneListWidthRule,
         willCollapse: @escaping () -> Void = {},
         @ViewBuilder list: @escaping () -> ListRoot,
         detail: @escaping (Selection) -> Detail
@@ -185,6 +187,7 @@ struct PaneHost<Selection: Hashable, ListRoot: View, Detail: View>: View {
         _navigator = ObservedObject(wrappedValue: navigator)
         self.placeholder = placeholder
         self.willCollapse = willCollapse
+        self.listWidthRule = listWidthRule
         self.list = list
         self.detail = detail
     }
@@ -207,7 +210,8 @@ struct PaneHost<Selection: Hashable, ListRoot: View, Detail: View>: View {
             for: arrangement,
             containerWidth: proxy.size.width,
             leadingInset: insets.leading,
-            trailingInset: insets.trailing
+            trailingInset: insets.trailing,
+            listWidthRule: listWidthRule
         )
         let widthClass = WidthClass.make(
             size: CGSize(
@@ -436,6 +440,13 @@ private extension EnvironmentValues {
         set { self[PaneStackLinkKey.self] = newValue }
     }
 
+    var paneHoldSink: PaneHoldSink {
+        get { self[PaneHoldSinkKey.self] }
+        set { self[PaneHoldSinkKey.self] = newValue }
+    }
+}
+
+extension EnvironmentValues {
     var paneArrangement: PaneArrangement {
         get { self[PaneArrangementKey.self] }
         set { self[PaneArrangementKey.self] = newValue }
@@ -444,10 +455,5 @@ private extension EnvironmentValues {
     var paneShowsSelection: Bool {
         get { self[PaneShowsSelectionKey.self] }
         set { self[PaneShowsSelectionKey.self] = newValue }
-    }
-
-    var paneHoldSink: PaneHoldSink {
-        get { self[PaneHoldSinkKey.self] }
-        set { self[PaneHoldSinkKey.self] = newValue }
     }
 }
